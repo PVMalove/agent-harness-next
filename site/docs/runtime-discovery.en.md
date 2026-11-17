@@ -4,15 +4,16 @@ This page describes skill discovery in Claude Code and Codex. The installed set 
 stored in `.harness/skills/`; the links in the project point to the same files. The paths
 and hook wiring for these two runtimes are described below.
 
-| Runtime | Project path | Global `start-project` |
+| Runtime | Project path | Global `start-project` and `integrate-project` |
 | --- | --- | --- |
-| Claude Code | `.claude/skills` → `.harness/skills` | `~/.claude/skills/start-project` |
-| Codex | `.agents/skills` → `.harness/skills` | `~/.agents/skills/start-project` |
+| Claude Code | `.claude/skills` → `.harness/skills` | `~/.claude/skills/start-project`, `~/.claude/skills/integrate-project` |
+| Codex | `.agents/skills` → `.harness/skills` | `~/.agents/skills/start-project`, `~/.agents/skills/integrate-project` |
 
 `harness init`, `adopt`, and `update` create or check the project links and write
 `.harness/skills/REGISTRY.md` with the names, paths, and descriptions of the installed set.
 `harness health` checks the integrity of the files and links. `bin/install-global.py` creates
-the global profile and the link to `global-skills/start-project` for the selected runtime.
+the global profile and the links to `global-skills/start-project` and `global-skills/integrate-project`
+for the selected runtime.
 
 Skill discovery does not load the full body of a skill in every session: the runtime uses
 the metadata to choose, and then reads the matching `SKILL.md`. The pinned

@@ -485,9 +485,10 @@ def _latest_developer_candidate(repo: Path, root: Path, batch: JsonObject) -> st
         # Legacy dispatch ledger entries predate the explicit ``purpose`` field.
         # They are developer work dispatches unless they explicitly identify another
         # purpose (currently only publish), so candidate history must retain them.
-        # A conflict-resolver (issue #534) produces the candidate of its own resolver batch.
+        # A conflict-resolver (issue #534) produces the candidate of its own resolver batch, and a
+        # rebaser (issue #1010) the rebased copy of the accepted candidate.
         if (
-            item.get("role") in {"developer", "conflict-resolver"}
+            item.get("role") in {"developer", "conflict-resolver", "rebaser"}
             and item.get("purpose", "work") == "work"
         ):
             report = _pending_report(root, batch, item)
@@ -1339,6 +1340,8 @@ _DISPATCH_OPTIONAL_FIELDS = frozenset(
     {
         # The conflict-resolver brief's resolver section (issue #534).
         "resolver",
+        # The rebaser brief's commits to carry onto the rebase target (issue #1010).
+        "rebaser",
         # The image digests a docker brief pins (issue #704); they need its access plan.
         "runtime_images",
         "preserved_progress",
@@ -1459,13 +1462,17 @@ def _validate_dispatch(
     if target is not None and (
         not isinstance(target, str)
         or re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", target) is None
-        or (dispatch.get("role"), dispatch.get("purpose")) != ("developer", "work")
         or not isinstance(dispatch.get("transition"), dict)
-        or dispatch["transition"].get("next_action") != "developer-retry"
+        or (
+            dispatch.get("role"),
+            dispatch.get("purpose"),
+            dispatch["transition"].get("next_action"),
+        )
+        not in {("developer", "work", "developer-retry"), ("rebaser", "work", "rebase")}
     ):
         raise CoordinatorError(
-            "dispatch rebase_target_commit must be null or, on a developer-retry work brief, "
-            "a full commit SHA",
+            "dispatch rebase_target_commit must be null or, on a developer-retry or rebaser "
+            "work brief, a full commit SHA",
             remedy="the dispatch record's rebase_target_commit is malformed -- "
             + INTERNAL_INVARIANT_REMEDY,
         )

@@ -22,6 +22,27 @@ pub const FIXED_ENV: [(&str, &str); 5] = [
     ("GIT_CONFIG_VALUE_0", "*"),
     ("HARNESS_EXECUTOR", "docker"),
 ];
+/// Every name a launch sets itself, the QA run settings included: a plan cache variable may not
+/// take one (ADR 0032).
+pub const RUNTIME_SET_NAMES: [&str; 17] = [
+    "HOME",
+    "GIT_CONFIG_COUNT",
+    "GIT_CONFIG_KEY_0",
+    "GIT_CONFIG_VALUE_0",
+    "HARNESS_EXECUTOR",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "NO_PROXY",
+    "no_proxy",
+    "TMPDIR",
+    "TMP",
+    "TEMP",
+    "GIT_CEILING_DIRECTORIES",
+    "HARNESS_VERIFY_COLD",
+    "CARGO_TARGET_DIR",
+];
 /// The egress sidecar listens here; its allowlist reaches it in this variable.
 pub const PROXY_PORT: u16 = 3128;
 pub const ALLOWED_HOSTS_ENV: &str = "HARNESS_EGRESS_ALLOWED_HOSTS";
@@ -143,7 +164,8 @@ pub fn identity_argv(
 }
 
 /// The exact `<engine> create` of the approved worker: plan roots only, no direct network, and
-/// every plan environment name as `--env NAME` without a value.
+/// every plan environment name as `--env NAME` without a value, and every cache variable as
+/// `--env NAME=<pinned cache path>`.
 pub fn create_argv(spec: &Spec<'_>) -> Vec<String> {
     let plan = spec.plan;
     let dispatch = &spec.labels.dispatch;
@@ -186,6 +208,9 @@ pub fn create_argv(spec: &Spec<'_>) -> Vec<String> {
     }
     for name in &plan.environment {
         argv.extend(["--env".to_owned(), name.clone()]);
+    }
+    for (name, path) in plan.cache_variables() {
+        argv.extend(["--env".to_owned(), format!("{name}={path}")]);
     }
     argv.extend(labels_argv(spec.labels));
     argv.push("--workdir".to_owned());
@@ -329,7 +354,12 @@ pub fn qa_run_argv(run: &QaRun<'_>, stage_id: &str, command: &QaCommand) -> Vec<
             argv.extend(["--env".to_owned(), format!("{name}={PROXY_BYPASS}")]);
         }
     }
-    for name in run.environment {
+    // A name the run sets itself keeps the run's value, never the host's.
+    for name in run
+        .environment
+        .iter()
+        .filter(|name| !run.settings.iter().any(|(set, _)| set == *name))
+    {
         argv.extend(["--env".to_owned(), name.clone()]);
     }
     for (name, value) in run.settings {

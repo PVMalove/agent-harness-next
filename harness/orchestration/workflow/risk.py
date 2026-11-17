@@ -53,6 +53,7 @@ from harness.orchestration.ledger.lifecycle import (
 )
 from harness.orchestration.ledger.recovery_chain import active_dispatches
 from harness.orchestration.workflow import rebase
+from harness.orchestration.workflow import rebaser
 from harness.orchestration.workflow.carried_items import (
     open_coordinator_findings,
     open_incomplete_items,
@@ -378,7 +379,12 @@ def _accepted_review_covers(
 ) -> bool:
     """Whether an active, accepted code review of ``candidate`` was made against an assessment of
     the same diff whose triggers include every trigger ``matched`` now.  Assessing such a candidate
-    again adds no review obligation, so the handoff stays QA instead of looping back to review."""
+    again adds no review obligation, so the handoff stays QA instead of looping back to review.
+
+    A candidate an accepted rebase carried (issue #1010) is covered by the review of its origin
+    when that review's triggers include every trigger ``matched`` now: the rebaser added no code,
+    and its ``rebase_check`` is the evidence for the carried diff."""
+    origins = rebaser.rebased_origins(batch, candidate)
     for item in active_dispatches(batch):
         if (
             item.get("role") != "code-review"
@@ -388,7 +394,14 @@ def _accepted_review_covers(
             continue
         brief = _load_dispatch(root, item["dispatch_id"])
         risk_id = brief.get("risk_assessment_id")
-        if brief.get("candidate_commit") != candidate or not isinstance(risk_id, str):
+        if not isinstance(risk_id, str):
+            continue
+        if brief.get("candidate_commit") in origins:
+            origin_risk = _load_risk(root, risk_id)
+            if set(matched) <= set(origin_risk.get("matched_triggers", [])):
+                return True
+            continue
+        if brief.get("candidate_commit") != candidate:
             continue
         reviewed = _load_risk(root, risk_id)
         if (

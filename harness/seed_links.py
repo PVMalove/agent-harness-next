@@ -26,7 +26,7 @@ def _reachable(connected: set[Path], transitions: dict[Path, set[Path]]) -> set[
 
 def propose_contract_links(repo: Path, templates: Path) -> list[dict[str, str]]:
     """Return additive diffs; never change seeds or traverse arbitrary project files."""
-    contract = (repo / ".harness/docs/technical-english.md").resolve()
+    contract = (repo / ".harness/instructions/technical-english.md").resolve()
     entries = [repo / "AGENTS.md", repo / "CLAUDE.md"]
     entries.extend(
         repo / ".claude/agents" / template.name

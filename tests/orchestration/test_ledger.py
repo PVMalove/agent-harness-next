@@ -48,6 +48,7 @@ from harness.orchestration.ledger.lifecycle import (
     LedgerLockBusy,
 )
 from harness.orchestration.workflow import history
+from tests.orchestration.legacy_state import seed_file_ledger
 
 
 class ValueObjectRoundTripTests(unittest.TestCase):
@@ -80,7 +81,7 @@ class ValueObjectRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             original = BatchRecord(
@@ -123,7 +124,7 @@ class ValueObjectRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             original = DispatchRecord(
@@ -189,7 +190,7 @@ class ValueObjectRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             for original, relative in cases:
@@ -270,7 +271,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             record = DispatchStatusRecord(
                 dispatch_id="dispatch-1", state=DispatchState.APPROVED
@@ -288,7 +289,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             ledger.write_record(
                 DispatchStatusRecord(
@@ -310,7 +311,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             ledger.write_record(PlanRecord(batch_id="batch-1"))
             ledger.write_record(
@@ -337,7 +338,7 @@ class RecordApiTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             ledger.write_record(PlanRecord(batch_id="batch-1"))
 
             def batch(state: str) -> BatchRecord:
@@ -390,7 +391,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             for bad_id in ("../evil", "a/b", "a\\b", "", "."):
                 with self.assertRaises(LedgerError):
@@ -625,7 +626,7 @@ class StructuralValidationCharacterizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             batch: JsonObject = {
@@ -648,7 +649,7 @@ class StructuralValidationCharacterizationTests(unittest.TestCase):
     def test_abandoned_requires_operator_refusal_and_is_terminal(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
             batch: JsonObject = {
                 "batch_id": "batch-1",
@@ -700,13 +701,13 @@ class RecordsRootLenientTests(unittest.TestCase):
 
             self.assertIsNone(ledger.records_root_lenient())
 
-    def test_returns_same_path_as_records_root_once_ensure_selected_a_generation(
+    def test_returns_same_path_as_records_root_once_a_generation_is_selected(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             self.assertEqual(ledger.records_root_lenient(), ledger.records_root())
 
@@ -716,7 +717,7 @@ class RecordsRootLenientTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             ledger.pointer_path.write_text("not json {{{", encoding="utf-8")
 
             self.assertIsNone(ledger.records_root_lenient())
@@ -729,7 +730,7 @@ class RecordsRootLenientTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             pointer = json.loads(ledger.pointer_path.read_text(encoding="utf-8"))
             pointer["generation"] = "generation-deadbeef"
             ledger.pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
@@ -742,7 +743,7 @@ class RecordsRootLenientTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
             pointer = json.loads(ledger.pointer_path.read_text(encoding="utf-8"))
             pointer["version"] = 1
@@ -978,7 +979,7 @@ class RecoveryRouteVersioningTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             ledger.write_record(PlanRecord(batch_id="batch-1"))
             ledger.write_record(BatchRecord.from_dict(batch))
 
@@ -1038,7 +1039,7 @@ class ContextPackageSchemaCompatibilityTests(unittest.TestCase):
         package.update(extra_package_fields or {})
         root = Path(temporary) / "state"
         ledger = LifecycleLedger(root)
-        ledger.ensure()
+        seed_file_ledger(ledger.root)
         generation = ledger.records_root()
         ledger.write_immutable(
             generation

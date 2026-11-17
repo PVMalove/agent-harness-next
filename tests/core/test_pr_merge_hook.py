@@ -15,7 +15,12 @@ import pytest
 from harness.orchestration.hook_policy import parse_hook_response
 
 HOOKS = Path(__file__).resolve().parents[2] / "harness" / "project" / "hooks"
-HOOK_FILES = ("block-pr-merge.sh", "pr_commands.py", "hook_response.py")
+HOOK_FILES = (
+    "block-pr-merge.sh",
+    "pr_commands.py",
+    "hook-envelope.sh",
+    "hook_response.py",
+)
 BASH = shutil.which("bash")
 PROFILES = ("minimal", "standard", "strict")
 # Split, so that a shell search of this file does not trip the hook it tests.
@@ -292,6 +297,7 @@ def _verdict(hook: Path, command: str) -> tuple[int, str, str, str]:
         input=json.dumps({"tool_input": {"command": command}}),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env={**os.environ, "CLAUDE_PROJECT_DIR": str(project)},
         cwd=project,
         check=False,

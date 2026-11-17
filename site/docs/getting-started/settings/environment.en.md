@@ -142,8 +142,8 @@ harness health .
 ```
 
 From the harness source checkout, use `python3 harness/bin/harness.py health <repo>`.
-Health checks individual environment properties; a green report does not mean all project QA
-commands have already run.
+Health checks individual environment properties; a green report does not mean the project QA
+commands will succeed: health does not run them.
 
 ## Rust runtime and the service environment
 
@@ -200,6 +200,18 @@ For orchestration, `qa_preparation` can prepare dependencies before `verificatio
 Optional `qa_environment_probes` and `qa_project_file_checks` run only after failed preparation to
 collect independent diagnostics. See the [backend orchestration guide](../../backend-orchestration.md)
 for the exact sequence.
+
+Before QA starts, `harness health` warns (`warn`) when the environment cannot run the required QA
+commands. These checks only read the environment and run nothing:
+
+| Check | Warns when |
+| --- | --- |
+| `environment.qa_executables` | The executable of a `qa_gate_commands` entry (the first word after `VAR=...` assignments) is not on `PATH`. A path with `/` is resolved from the repository root; a command that starts with a shell builtin (`cd`, `export`) is not checked. |
+| `environment.c_linker` | The project builds Rust (`cargo` in `qa_gate_commands` or `native/**/Cargo.toml`) and the `cc` C linker is not on `PATH`. |
+| `environment.runtime_socket_path` | The runtime socket path is longer than 100 bytes with the current `XDG_RUNTIME_DIR` (without it, `/tmp/harness-<uid>`; the runtime ignores `TMPDIR`). Checked with backend orchestration; skipped on Windows. |
+
+Run health in the environment where the agent runs QA, for example inside distrobox. See
+[Container](container.md) and the installed `.harness/instructions/container-executor.md`.
 
 The `.harness/.venv` directory created by `make bootstrap` in **this repository's source checkout**
 contains harness development dependencies. It does not replace the target project's environment.

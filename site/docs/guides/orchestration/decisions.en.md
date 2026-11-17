@@ -186,6 +186,22 @@ A fetch error rejects `batch decide --decision retry` with a remedy. `decision-p
 in `route_preview.retry`.
 The decision only proposes the target: the `integration_base_commit` of the batch does not change before accept.
 
+The `rebase` route (ADR 0034) carries an already accepted candidate without a developer. The
+coordinator chooses it when the base moved forward and nothing needs a fix: an accept of a
+code-review or qa report without incomplete items, or a retry of a code-review, qa, or publish
+report with `--reason-category candidate-change`, no carried items, and no `--retry-role developer`.
+The `rebaser` role must be installed and assignable (zero-config or an `assignment_plans.rebaser`
+entry); otherwise the route stays `rebase-fix-forward`. The routing record sets `next_action: rebase`
+instead of `qa` or `publish`; `decision-packet` shows it in advance in `route_preview.accept` or
+`route_preview.retry`. The `rebaser` dispatch carries the commits onto `rebase_target_commit` without
+new changes and spends no `retry_policy.max_developer_retries`. Its report must carry a
+`rebase_check` block (pairs by `patch-id`, `dropped`, `resolved_conflicts`, `generated_files`, and
+`range_diff` when a `patch-id` differs); `report submit` recomputes it from Git. The accepted report
+pins the target as `integration_base_commit` and leads to risk assessment, and the accepted review of
+the previous candidate covers the new one, so QA follows without a new code-review. A rebaser does
+not resolve a conflict about meaning: its `blocked` report goes to a developer-retry on the
+`rebase-fix-forward` route.
+
 The target enters a brief only through a dispatch with an explicit approval under any `approval_policy` except
 `auto`. The approval of another policy is rejected for it. `dispatch propose` shows the transition with the field
 `rebase_target_sha`, and the brief gets `rebase_target_commit`. Besides this, the brief field is filled
@@ -302,12 +318,12 @@ reports in the agent inbox and QA-queue records of dispatches that will no longe
 is still released only by `qa clear-stale-lease`). The batch records `abandoned.last_accepted`, the
 latest accepted stage and its candidate. From it, you can create a fresh batch on the same branch and the same
 candidate. `abandon` never serves as an automatic fallback for `block`, `fail`, or `retry`.
-The `batch abandon` command for a batch that will never have a report stays as before. It
-ends such a batch in `failed`.
+The `batch abandon` command for a batch that will never have a report also moves it to
+`abandoned` and records `abandoned.last_accepted`.
 
 ### Superseding batch: `batch create --supersedes`
 
-If a batch is closed by the `batch decide --decision abandon` decision after a dead end (for example, a code-review
+If a batch is closed by the `batch decide --decision abandon` decision or by the `batch abandon` command after a dead end (for example, a code-review
 blocker with an exhausted retry budget), a superseding batch continues the work. It is created for
 the same ticket and the same issue branch and starts from `abandoned.last_accepted`, not from a new architect
 and a manual cherry-pick of the accepted commits:
@@ -327,7 +343,7 @@ an ordinary batch is approved through `batch approve`. A superseding batch also 
 `batch approve` after creation. The command names a remedy and writes nothing in these cases: the source is not in the current
 generation of the ledger; its state is not `abandoned`; `abandoned.last_accepted` is `null`; the ticket or
 issue branch differs; the latest accepted candidate does not resolve to a commit. A batch closed by
-`batch abandon` stays in `failed` without `last_accepted`. With `null`, nothing was accepted. In both
+an earlier version of `batch abandon` stays in `failed` without `last_accepted`. With `null`, nothing was accepted. In both
 cases, an ordinary batch is needed. The exception is a source with `null` that itself superseded a batch. Then the
 remedy suggests passing that batch (the `supersedes.batch_id` of the source) to `--supersedes` again, because its
 `last_accepted` is still the latest. An abandoned batch does not hold the ticket, branch, or worktree. But
@@ -361,6 +377,36 @@ What is carried over:
   requires an explicit approval with a transition digest under any `approval_policy` except `auto`. The target
   stays in the brief until the snapshot being continued contains it. This happens, for example, after a retry of
   a report that was not yet rebased.
+
+An architect report that was never accepted can be carried too, without a new architect, once a
+human confirms that exact report:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . batch create ... \
+  --supersedes <abandoned-batch-id> --approved-by 'approver name' \
+  --approved-at <approval-time-utc> \
+  --carry-architect <architect-dispatch-id> --architect-report-sha256 <report_sha256> \
+  --architect-confirmed-by 'confirmer name' --architect-confirmed-at <confirmation-time-utc>
+```
+
+The confirmation is a separate human decision bound to the report bytes through `report_sha256`.
+It is checked like an approval: the TTL and a separate terminal prompt under
+`human_approval_gate: tty`. A confirmer with the `policy:` prefix is rejected. The report may carry
+any decision, `retry` or `reject` included. The command names a remedy and writes nothing when the
+confirmation is incomplete, the carry flags come without `--supersedes`, the dispatch is not a
+`reported` architect of the source, the report outcome is not `completed`, the SHA-256 differs from
+the recorded `report_sha256`, the Definition of Done differs, the source has an
+`abandoned.last_accepted` record (the ordinary carry applies then), or a path of the report's
+`commit_plan` lies outside the new batch's `allowed_paths`.
+
+The `supersedes` link gets `last_accepted: null`, `start_commit: null` and a
+`supersedes.architect` with `confirmed_by` and `confirmed_at`. The batch starts with
+`next_action: developer` from its base. The report's `commit_plan` is checked against the new
+batch's Definition of Done and `allowed_paths` and pinned as on an accept. A superseding batch can
+therefore be planned with a wider scope and keep the architect report. Widening the scope of a live
+batch without a new batch is a separate route (#1017). A source that itself carried a confirmed
+report hands it on: `--carry-architect` names the same dispatch, and the reference points at the
+batch that holds the report.
 
 What is never carried over: the risk assessment, code-review, QA, carried items, candidate registrations,
 and operator decisions. They stay evidence of the abandoned batch and are available only through
@@ -399,8 +445,17 @@ conditions or does not record them at all:
 - `rebase-fix-forward` is recorded by a `retry` that leads to `developer-retry` while the integration base
   has moved forward (see above); its routing record additionally names `rebase_target_commit` and
   `integration_base_commit`.
+- `rebase` is recorded by an accept of a code-review or qa report, or by a `candidate-change` retry,
+  while the integration base has moved forward and nothing needs a fix (see above); its routing
+  record names `rebase_target_commit`, `integration_base_commit`, and `candidate_commit`.
 - `batch decide` does not record `supersede`: `batch create --supersedes` records it in the
   `coordinator_decisions` of the new batch (see "Superseding batch" above).
+- `batch decide` does not record `environmental-restart` and `rewind`. `batch resume-stop` records
+  `environmental-restart` if it restarts the source dispatch, otherwise `rewind`. `batch rewind`
+  records `rewind`. The routing record contains `candidate_commit` and `recovery_event_sha256` (see
+  ["Recovery"](recovery.md#manual-recovery-and-stage-repeat)).
+- `accept-conditional` is recorded by `batch decide --decision accept-conditional`. The routing record
+  contains `stage` and `candidate_commit` (see ["Recovery"](recovery.md#manual-recovery-and-stage-repeat)).
 
 Every routing record with `next_action: developer-retry` (`developer-retry`, `fix-forward`,
 `rebase-fix-forward`, and the developer `tooling-retry`) additionally names `retry_item_ids`. The route
@@ -420,6 +475,40 @@ next dispatch, `route_preview` is `null`:
 python .harness/orchestration/coordinator.py --repo . batch decision-packet \
   --batch <batch-id> --reason-category verification-infrastructure
 ```
+
+The preview does not check `retry_policy.max_developer_retries`. With an exhausted budget, it still
+shows the `developer-retry`, `fix-forward`, or `rebase-fix-forward` route, and
+`batch decide --decision retry` rejects that decision. Like `batch decide`, the preview fetches
+`origin/<integration_ref>` and therefore shows the proposed `rebase_target_commit`. If the retry
+route cannot be computed (for example, a configured retry reason classifier extension failed), the packet is
+still built. Then `route_preview.retry` is `{"route": null, "refused": ..., "remedy": ...}`
+with the error that `batch decide --decision retry` would refuse with.
+
+With `--findings-file <path>`, the packet adds `route_preview["carry-over"]`. This is the record that
+`batch decide --findings-file` would write on a pending developer report, or, without such a report,
+`batch carry-over`. If no record would be written, it holds a refusal of the same shape
+`{"route": null, "refused": ..., "remedy": ...}`. Without the flag, `route_preview` does not change.
+
+Every `batch decide` decision stores a `decision` detail in the batch's transition audit record:
+
+- `dispatch_id`;
+- `decision`;
+- `route`: `carry-over` for `accept` and `override-warning` with `--findings-file` or
+  `--carry-incomplete`, `null` for a decision without a route (the other `accept`, `override-warning`,
+  `block`, `fail`);
+- `evidence`: `dispatch_id`, the `report` path, and the `report_sha256` of the immutable report;
+- `approver`: `{"kind": "policy", "name": "low_risk" | "milestone" | "auto" | "infrastructure-retry"}`
+  for a policy decision or `{"kind": "human", "name": <--approved-by>}` for an explicit decision;
+- `approved_at`.
+
+The `batch carry-over` decision writes the same detail with `route: "carry-over"` and
+`{"kind": "policy", "name": "carry-over"}`. `batch create --supersedes` writes a detail with
+`"dispatch_id": null`, `decision` and `route` `supersede`, a reference to the abandoned batch in `evidence`
+(`batch_id`, `last_accepted`, `architect`), and `{"kind": "human", ...}`. The approver kind is set by the path
+through which the decision was approved, not by the name string. The detail is part of the same audit record and the same
+checksum as the batch transition. The coordinator rejects a route outside `RECOVERY_ROUTES` with a
+remedy on write and on batch read.
+
 ## Automatic path `approval_policy: auto` {#automatic-path-approval_policy-auto}
 
 The `auto` policy applies while the project configuration and the batch plan select `auto` and the batch has no
@@ -427,7 +516,7 @@ The `auto` policy applies while the project configuration and the batch plan sel
 
 - `batch approve`: `coordinator_approval.approved_by` equals `policy:auto`;
 - `dispatch create`, including the milestones `publish`, `risk-trigger`, `risk-reassessment-required`,
-  `bypass-rerun`, `rebase-fix-forward`, and `rebase-target`;
+  `bypass-rerun`, `rebase-fix-forward`, `rebase-target`, and `rebase`;
 - `dispatch resume --trigger` for a planned continuation, except `human-decision`;
 - `batch carry-over`: the decision is written as `policy:auto`, not as `policy:carry-over`.
 
@@ -464,11 +553,12 @@ The closed list of stops:
 
 | `category` | `reason` |
 | --- | --- |
-| `integrity-failure` | `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed`, `operational-hold` |
+| `integrity-failure` | `runtime-unavailable`, `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed`, `operational-hold` |
 | `budget-exhausted` | `retry_policy.max_developer_retries`, `continuation_policy.max_continuations`, `continuation_policy.max_rate_limit_resumes`, `attention_policy.max_infrastructure_retries`, `tooling-retry-repeated` |
 | `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure` |
 
 `batch auto-decide` and `batch auto-report` find a stop in this order: integrity, budget, route.
+`runtime-unavailable` means that the runtime failed after the worker started or refused before its start.
 The coordinator writes the stop once in `batch.auto_stop`, together with the final report.
 The command only prints `ledger-validation-failed`: the ledger is untrustworthy. The policy writes the
 `operational-hold` stop when the runtime store holds the batch: the policy does not decide the report and does not

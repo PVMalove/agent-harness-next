@@ -373,6 +373,45 @@ the lock. If the lock could not be released after the record was written, a seco
 does not detect a record replaced together with its checksum, or a deleted file. In the console, the same action is
 the command "Release ledger lock" with a confirmation.
 
+## Runtime autostart {#runtime-autostart}
+
+In Claude Code, the `runtime-autostart` hook starts `harness-runtime serve` (ADR 0031), not the
+developer and not the agent. The hook runs outside the agent sandbox, so serve can reach Docker.
+
+- **Start.** Before every `.harness/orchestration/coordinator.py` command, the hook calls
+  `harness-runtime ensure` for the main checkout. If no runtime answers, ensure starts its own serve
+  and waits up to 40 s until it is ready; the developer sees a message with the pid and the journal.
+- **Reuse.** A running serve, started by hand or by another session, is reused silently; no second
+  instance starts.
+- **Owners.** An own serve keeps its owners: the session (`<session_id>`) and subagents
+  (`<session_id>/<agent_id>`). `Stop` and `SubagentStop` release the owner. An owner also leaves when
+  the Claude Code process (`CLAUDE_PID`) ended or the owner was not renewed for an hour (TTL).
+- **Stop.** An own serve stops itself when no owner is left, no connection is open and the store is
+  idle: no dispatch in `dispatched` or `working`, no held QA lease, no QA queue and no unfinished
+  execution. A store that cannot be read counts as busy. A manual serve never stops by itself.
+- **Journal.** `<runtime directory>/<repo-id>.serve.log` (mode `0600`); the hook message names it.
+- **Stale build.** The hook starts only `native/harness-runtime/target/release/harness-runtime` that
+  is fresh by the dep-info `harness-runtime.d`, `Cargo.lock` and `Cargo.toml`. It never starts a
+  stale build: it only attaches to a running serve and otherwise warns that the build is stale.
+  Rebuild with `cargo build --release --manifest-path native/harness-runtime/Cargo.toml`.
+- **Environment.** Serve gets the environment of Claude Code without the variables the application
+  adds only for hooks (`CLAUDECODE`, `CLAUDE_PID`, `CLAUDE_PROJECT_DIR` and the others of ADR 0031).
+- **Failure.** A serve refusal (exit code 2), a timeout, a missing binary or the sandbox give the
+  warning `[runtime-autostart-failed]` with the cause and the journal. The hook never blocks.
+- **Foreign checkout.** The hook starts only the binary of the main checkout of the session project
+  (`CLAUDE_PROJECT_DIR`). The coordinator of another repository, a path to it that a command only
+  mentions, or an empty `CLAUDE_PROJECT_DIR` give the warning `[runtime-autostart-failed]
+  coordinator репозитория … не относится к основному checkout проекта сессии` (the coordinator of
+  the repository does not belong to the main checkout of the session project); no binary starts.
+  Start the serve of that repository by hand.
+- **Build trust.** The hook runs `native/harness-runtime/target/release/harness-runtime` of the main
+  checkout outside the agent sandbox. The dep-info check rejects a stale build but not a replaced
+  file. Do not let the agent write to `target/release` of the main checkout (ADR 0031, section 5).
+
+Codex and Windows get no autostart: start `harness-runtime serve --repo <repo>` by hand outside the
+agent sandbox. The remedy of the `[runtime_unavailable]` error says the same. The hook reaches a
+project with `harness update`, which a person runs.
+
 ## Lifecycle writes in the runtime store epoch {#lifecycle-writes-in-the-runtime-store-epoch}
 
 After `harness-runtime migrate` (`ledger.json` version 4), the Rust runtime accepts every batch and dispatch
@@ -410,7 +449,7 @@ code 2 and `[runtime_unavailable]`, and creates and changes nothing.
 |---|---|---|---|
 | `revision_conflict` | another command changed the row after the read | yes | `[revision_conflict]` repeat the command: it reads the store again and applies the policy to the current state |
 | `store_busy` | the store is busy longer than 5 seconds | yes | `[store_busy]` repeat the command |
-| `runtime_unavailable` | the runtime does not respond | yes | `[runtime_unavailable]` start `harness-runtime serve --repo <repo>` |
+| `runtime_unavailable` | the runtime does not respond; the `orchestration.runtime` check of `harness health` and the "Runtime" indicator of the web console show the same | yes | `[runtime_unavailable]` start `harness-runtime serve --repo <repo>`, see [Quick start "Runtime"](../../getting-started/index.md#runtime) |
 | `idempotency_conflict` | `operation_id` is already taken by another request | no | `[idempotency_conflict]` repeat the command: it derives a new id from the current revision |
 | `invariant_violation` | the change breaks a store invariant or the audit chain does not converge | no | `[invariant_violation]` stop the writers and run `ledger validate --full` |
 
@@ -474,7 +513,7 @@ baseline from `playbook.md` ("Baseline metrics") stays, in the same way, a guide
 
 A write role (developer, database-migrations, messaging-integration, conflict-resolver) may stretch one dispatch
 over several worker sessions if the whole TDD cycle in one session inflates its context. A read-only role
-(architect, qa, code-review) may not: a checkpoint attempt for it is rejected at once.
+(architect, verification, qa, code-review) may not: a checkpoint attempt for it is rejected at once.
 
 Instead of a completion report, the current worker session records a non-final checkpoint: a separate, hashed
 ledger record that cannot be mistaken for a report:
@@ -512,7 +551,10 @@ A `--termination-reason` recognized as a rate limit (`rate_limit`/`rate-limit`/`
 automatically. No new human or coordinator decision is required. Any other reason, including a missing or
 unrecognized one, is treated as a planned trigger. This is a safe default toward approval, not away from it:
 
-- `--trigger` is required and must be one of `context-limit`, `tdd-cycles`, `failure-log`, `vertical-slice`.
+- `--trigger` is required. The planned triggers are `context-limit`, `tdd-cycles`, `failure-log`, `vertical-slice`, and
+  `human-decision` (a human answer to a resolver, see
+  ["Publish and PR"](publish.md#integration-accounting-after-publish)). A separate `startup-failure` trigger follows
+  its own rules (see ["Recovery"](recovery.md#manual-recovery-and-stage-repeat)).
 - for `context-limit`/`tdd-cycles`/`failure-log`, `--measured-value` must be not less than its
   `adaptive_continuation_policy` threshold (`context_limit`/`tdd_cycle_count`/`failure_log_bytes`) from
   `.harness/orchestration.json`. Without an explicit configuration, the documented default values are used

@@ -52,11 +52,14 @@ sys.path[:] = [
 sys.path.insert(0, str(ROOT))
 from harness.errors import HarnessError, print_and_exit
 from harness.cleanup import apply_cleanup, plan_cleanup, plan_digest, remove_worktree
+from harness.worktree_venv import WorktreeVenvError, link_worktree_venv
+from harness.source_checkout import SourceCheckoutError, update_source_checkout
 from harness.uninstall import (
     CLAUDE_MD_SEED,
     CONFIRM_WORD,
     GITIGNORE_LINES as RUNTIME_GITIGNORE_LINES,
     SEED_FOLDERS,
+    seed_sources,
     apply_uninstall,
     plan_uninstall,
 )
@@ -67,13 +70,18 @@ from harness.memory import (
     rebuild as memory_rebuild,
     sync as memory_sync,
 )
+from harness import runtime_cutover
 from harness.storage import storage_path
 from harness.runtime_adapters import adapter_problem, is_adapter
 from harness.seed_links import propose_contract_links, print_contract_proposals
 from harness.health import registry as health_registry
 from harness.health import render as health_render
 from harness.health import report_json as health_report_json
-from harness.health.checks.hooks import recorded_managed_entries
+from harness.health.checks.hooks import (
+    ENVELOPE_REL,
+    recorded_managed_entries,
+    unregistered_envelope_scripts,
+)
 from harness.health.hook_settings import (
     ADAPTERS,
     RuntimeAdapter,
@@ -81,6 +89,7 @@ from harness.health.hook_settings import (
     critical_wiring,
     merge_hooks,
     template_digests,
+    without_scripts,
 )
 from harness.health.model import JsonObject
 from harness.health.project_files import (
@@ -328,13 +337,26 @@ def _packageable(path: Path) -> bool:
     return path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
 
 
+# Managed agent instructions: the source in the project templates, the target in `.harness/` (#814).
+INSTRUCTIONS_SOURCE = PACKAGE / "project" / "instructions"
+INSTRUCTIONS_TARGET = ".harness/instructions"
+
+
+def _resource_target(source: Path) -> Path:
+    """Where a capability resource file is installed: an instruction into `.harness/instructions/`,
+    any other file at its path below `.harness/`."""
+    if source.parent == INSTRUCTIONS_SOURCE:
+        return Path(INSTRUCTIONS_TARGET) / source.name
+    return Path(".harness") / source.relative_to(PACKAGE)
+
+
 def package_files(names: list[str]) -> dict[str, bytes]:
     """Сформировать словарь относительных целевых путей и байтового содержимого файлов пакета."""
     # Общий контракт технического английского ставится в любую установку, вне каталога capability:
     # он не зависит от optional backend-orchestration.
     result: dict[str, bytes] = {
-        ".harness/docs/technical-english.md": (
-            PACKAGE / "docs/technical-english.md"
+        f"{INSTRUCTIONS_TARGET}/technical-english.md": (
+            INSTRUCTIONS_SOURCE / "technical-english.md"
         ).read_bytes(),
     }
     for source in selected_skills(names):
@@ -347,8 +369,7 @@ def package_files(names: list[str]) -> dict[str, bytes]:
     for source in selected_resources(names):
         if source.is_file():
             if _packageable(source):
-                target = Path(".harness") / source.relative_to(PACKAGE)
-                result[target.as_posix()] = source.read_bytes()
+                result[_resource_target(source).as_posix()] = source.read_bytes()
             continue
         for path in sorted(source.rglob("*")):
             if not _packageable(path):
@@ -679,6 +700,7 @@ ENGINEERING_CAPABILITY = "engineering-suite"
 PROJECT_TEMPLATE_DIR = PACKAGE / "project"
 HARNESS_RUNTIME_GITIGNORE = """# Generated harness runtime data
 .sandboxes/
+.venv
 config_versions/
 config-versions/
 """
@@ -864,9 +886,8 @@ def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str,
     """Seed-файлы, которые `update` может перезаписать: путь от корня проекта -> эталон из шаблона."""
     files: dict[str, bytes] = {}
     for folder, target, suffixes in SEED_FOLDERS:
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if source.is_file() and source.suffix in suffixes:
-                files[f"{target}/{source.name}"] = source.read_bytes()
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
+            files[f"{target}/{source.name}"] = source.read_bytes()
     scratch = storage_path(repo, "scratch", ".gitignore")
     # A linked checkout shares scratch with its main checkout. Seeding this worker must not
     # turn a shared path into a ../ write or fail while relativizing that outside path.
@@ -893,9 +914,8 @@ def hook_template_files() -> dict[str, bytes]:
     for folder, target, suffixes in SEED_FOLDERS:
         if folder != "hooks":
             continue
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if source.is_file() and source.suffix in suffixes:
-                files[f"{target}/{source.name}"] = source.read_bytes()
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
+            files[f"{target}/{source.name}"] = source.read_bytes()
     for adapter in ADAPTERS:
         files[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
     return files
@@ -1117,14 +1137,25 @@ def _install_hook_config(
     """Записать или слить файл hooks runtime, напечатать отчёт и зарегистрировать интеграцию.
 
     Нет файла или он forced — байты шаблона. Иначе managed hook-записи сливаются по пути команды
-    скрипта, записи пользователя не меняются; файл, который нельзя разобрать, остаётся как есть."""
+    скрипта, записи пользователя не меняются; файл, который нельзя разобрать, остаётся как есть.
+    Скрипт, чей hook_id не знает установленный `hook_response.py`, не подключается (новые записи
+    не добавляются и не заменяются), пока конверт не обновлён; существующие записи остаются."""
     config = Path(adapter.config)
-    template_bytes = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
-    template_document = json.loads(template_bytes.decode("utf-8"))
+    full_bytes = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
+    full_document = json.loads(full_bytes.decode("utf-8"))
+    withheld = unregistered_envelope_scripts(repo) or ()
+    template_document = without_scripts(full_document, withheld)
+    template_bytes = (
+        full_bytes
+        if template_document == full_document
+        else (json.dumps(template_document, indent=2, ensure_ascii=False) + "\n").encode(
+            "utf-8"
+        )
+    )
     target = repo / config
     written: list[str] = []
     recorded = recorded_managed_entries(repo, adapter.integration_id)
-    baseline = set(template_digests(template_document)) | set(recorded or [])
+    baseline = set(template_digests(full_document)) | set(recorded or [])
     if not target.exists() or seeds.forced(adapter.config):
         if target.exists() and target.read_bytes() != template_bytes:
             seeds.overwrite(adapter.config, FORCED_REASON)
@@ -1171,8 +1202,17 @@ def _install_hook_config(
                     f"После просмотра: --force-seed-file {adapter.config} "
                     "(заменит весь файл шаблоном)"
                 )
-        if target.read_bytes() != template_bytes:
+        if target.read_bytes() != template_bytes and not withheld:
             seeds.modified.append(adapter.config)
+    if template_document != full_document:
+        print(
+            f"[WARNING] {adapter.config}: hooks не подключены, их hook_id не регистрирует "
+            f"{ENVELOPE_REL}: {', '.join(withheld)}"
+        )
+        print(
+            f"Исправление: harness update {repo} --force-seed-file {ENVELOPE_REL} "
+            "(прежний конверт сохранится в .harness/.sandboxes/seed-backups/)"
+        )
     try:
         final: object = json.loads(target.read_text(encoding="utf-8"))
     except JSON_READ_ERRORS:
@@ -1231,9 +1271,7 @@ def scaffold_engineering_extras(
     seeds = SeedInstall(repo, args, orchestration_enabled=orchestration_enabled)
 
     for folder, target, suffixes in SEED_FOLDERS:
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if not source.is_file() or source.suffix not in suffixes:
-                continue
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
             result = seeds.install(
                 f"{target}/{source.name}", executable=folder == "hooks"
             )
@@ -1503,6 +1541,9 @@ def cmd_update(args: argparse.Namespace) -> int:
                 "run it without --force, --force-managed-files and --force-seed-file(s)"
             )
         return record_seed_baseline(repo, lock)
+    # Harness 2.0.0 runs only on the runtime store: a version-3 ledger is cut over by this update,
+    # and every refusal comes before the first installed file (ADR 0020, section 6).
+    cutover = runtime_cutover.prepare(repo, args)
     selected = selected_capabilities(args.capability or lock.get("capabilities"))
     result = snapshot_diff(repo, selected)
     current_files = package_files(selected)
@@ -1565,6 +1606,8 @@ def cmd_update(args: argparse.Namespace) -> int:
     print(f"updated agent-harness to {version()} in {repo}")
     print(f"managed files: {len(written)}")
     print_contract_proposals(propose_contract_links(repo, PROJECT_TEMPLATE_DIR))
+    if cutover is not None:
+        runtime_cutover.run(repo, cutover)
     return 0
 
 
@@ -1805,6 +1848,30 @@ def cmd_worktree_remove(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_worktree_venv(args: argparse.Namespace) -> int:
+    """Link an issue worktree's .harness/.venv to the main checkout's venv when locks match."""
+    try:
+        result = link_worktree_venv(Path(args.repo), Path(args.worktree))
+    except WorktreeVenvError as exc:
+        result = {"status": "refused", "reason": str(exc), "remedy": exc.remedy}
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 1
+    except OSError as exc:
+        fail(f"cannot link the worktree venv: {exc}")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_self_update(args: argparse.Namespace) -> int:
+    """Move this harness source checkout to the latest commit of an `origin` branch."""
+    try:
+        result = update_source_checkout(ROOT, args.ref)
+    except SourceCheckoutError as exc:
+        fail(str(exc))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_uninstall(args: argparse.Namespace) -> int:
     """Показать план полного удаления харнесса или применить его с подтверждением."""
     repo = Path(args.repo).expanduser().resolve()
@@ -1941,6 +2008,23 @@ def parser() -> argparse.ArgumentParser:
     worktree.add_argument("worktree")
     worktree.set_defaults(func=cmd_worktree_remove)
 
+    worktree_venv = commands.add_parser(
+        "worktree-venv",
+        help="link an issue worktree's .harness/.venv to the main checkout's venv",
+    )
+    worktree_venv.add_argument("repo")
+    worktree_venv.add_argument("worktree")
+    worktree_venv.set_defaults(func=cmd_worktree_venv)
+
+    self_update = commands.add_parser(
+        "self-update",
+        help="fetch an origin branch and detach the harness checkout this CLI runs from at it",
+    )
+    self_update.add_argument(
+        "--ref", help="origin branch to follow (default: the branch of origin/HEAD)"
+    )
+    self_update.set_defaults(func=cmd_self_update)
+
     uninstall = commands.add_parser(
         "uninstall", help="preview or remove everything the harness installed"
     )
@@ -2004,6 +2088,7 @@ def parser() -> argparse.ArgumentParser:
         help="only record a seed_files baseline for seed files without one; change no file",
     )
     _add_engineering_args(update)
+    runtime_cutover.add_arguments(update)
     update.set_defaults(func=cmd_update)
 
     registry = commands.add_parser("registry")

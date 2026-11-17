@@ -5,7 +5,7 @@ import { describe, expect, test } from "vitest";
 
 const REPO = resolve(__dirname, "../..");
 const DIST = join(REPO, "harness/console/frontend/dist");
-const MOCKUP_CSS = join(REPO, "docs/design/web-console-mockups/execution-console.css");
+const MOCKUP_CSS = join(REPO, "harness/console/frontend/legacy/execution-console.css");
 
 /** URL-like strings in the bundle that are identifiers, never loaded: XML namespaces, React's
  * error-decoder link, React Router's URL-parsing base and doc link in a warning text, and the
@@ -127,11 +127,9 @@ describe("the build in harness/console/frontend/dist", () => {
   });
 
   test("scripts carry none of the mockup's demo data", () => {
-    // Values that exist only in the mockup's demo constants (execution-console.js): a runtime
-    // uptime, a Repo Map generation and parser, a lock date, demo outputs and the mockup notes.
-    const mockup = readFileSync(join(REPO, "docs/design/web-console-mockups/execution-console.js"), "utf-8");
+    // Values that existed only in the mockup's demo constants (the removed execution-console.js):
+    // a runtime uptime, a Repo Map generation and parser, a lock date, demo outputs and the notes.
     const DEMO = ["4 ч 12 мин", "map-36", "Python 3.14 · Linux x86_64", "04.11.2026 · 21:00 UTC", "DEMO · ", "В макете ничего не запускается"];
-    for (const marker of DEMO) expect(mockup, marker).toContain(marker);
     for (const path of ofType(".js")) {
       expect(DEMO.filter((marker) => text(path).includes(marker)), path).toEqual([]);
     }

@@ -2,7 +2,6 @@
 name: test-author
 description: Writes one behavior test for the developer's next TDD Red step, then runs that test through the protected project runner. Use only after test-author-preflight.sh returns {"status":"ok"}.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: inherit
 maxTurns: 20
 hooks:
   PreToolUse:

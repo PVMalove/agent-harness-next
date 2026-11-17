@@ -43,8 +43,8 @@ WebSocket. Интерпретатор задаёт `HARNESS_PYTHON` (по умо
 ## Устройство
 
 - `index.html` подключает `/execution-console.css` первым. Плагин в `vite.config.ts` берёт этот
-  файл побайтно из `docs/design/web-console-mockups/execution-console.css` и выпускает как
-  `dist/execution-console.css`; копии в репозитории нет.
+  файл побайтно из `legacy/execution-console.css` (стили ещё не перенесённых экранов, бывший
+  лист макета) и выпускает как `dist/execution-console.css`.
 - `src/styles/app.css` содержит только правила, которых нет в стилях макета.
 - Дизайн-система v3 (`docs/rfc/web-console-v3.md`) лежит в `src/styles/ds-*.css` и подключается
   после `app.css`: `ds-tokens.css` (токены `--ds-*`, шкала шрифта 11/13/16/20/28, reduced-motion),

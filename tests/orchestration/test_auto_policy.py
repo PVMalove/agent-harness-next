@@ -368,6 +368,7 @@ class AutoDispatchApprovalTests(unittest.TestCase):
                 None,
             ),
             ("rebase-target", {}, "developer", "work", None, "a" * 40),
+            ("rebase", {"route": "rebase"}, "rebaser", "work", None, None),
         ]
 
     def _mode(
@@ -937,6 +938,24 @@ class AutoDecisionTableTests(unittest.TestCase):
             stop.evidence["classification"]["category"], "socket-path-too-long"
         )
         self.assertIn("XDG_RUNTIME_DIR", stop.evidence["remedy"])
+        self.assertIn("batch rewind --to qa", stop.evidence["remedy"])
+
+    def test_a_qa_gate_command_missing_from_the_image_stops_with_the_image_remedy(
+        self,
+    ) -> None:
+        report = self._failed_gate("sh: cargo: not found")
+        stages = report["qa_stages"]
+        stages["stages"][0].update(exit_code=127, domain="tooling")
+        report["outcome"] = "blocked"
+        stop = auto_policy.environment_stop("qa", report, Path("/work/repo"))
+        assert stop is not None
+        self.assertEqual(
+            (stop.category, stop.reason), ("no-automatic-route", "qa-environment-failure")
+        )
+        self.assertEqual(stop.evidence["command"], "make verify")
+        self.assertEqual(stop.evidence["failure"]["domain"], "tooling")
+        self.assertEqual(stop.evidence["failure"]["method"], "structured")
+        self.assertIn("QA image", stop.evidence["remedy"])
         self.assertIn("batch rewind --to qa", stop.evidence["remedy"])
 
     def test_a_qa_gate_failed_on_the_code_keeps_the_developer_retry(self) -> None:

@@ -93,7 +93,7 @@ fn preconditions(state: &Path) -> Result<LegacyState> {
             refused(
                 ErrorCode::NotFound,
                 "nothing_to_migrate: the state directory holds no ledger",
-                "run the migration on a repository that has orchestration state",
+                "a repository without orchestration state gets its store from 'harness-runtime init --repo <repo> --approved-by <human> --approved-at <RFC 3339> --reason <text>'",
             )
         });
     };
@@ -168,7 +168,7 @@ fn remove_if_exists(path: &Path) -> io::Result<()> {
 
 /// Remove what an interrupted attempt left of the store. Only called while `ledger.json` is the
 /// authority, so none of it is trusted by anyone.
-fn remove_store_leftovers(state: &Path) -> Result<()> {
+pub(crate) fn remove_store_leftovers(state: &Path) -> Result<()> {
     for name in [
         STORE_NAME,
         "runtime.db-wal",
@@ -187,7 +187,7 @@ fn remove_store_leftovers(state: &Path) -> Result<()> {
 }
 
 /// A store a rollback kept for analysis is evidence: migrate does not delete it.
-fn refuse_a_rolled_back_store(state: &Path) -> Result<()> {
+pub(crate) fn refuse_a_rolled_back_store(state: &Path) -> Result<()> {
     if let Some((authority, _)) = crate::authority::read(state)?
         && authority != RUNTIME_STORE
         && authority != String::new()
@@ -217,8 +217,9 @@ fn legacy_matches_snapshot(legacy: &LegacyState, snapshot: &Snapshot) -> Result<
     Ok(())
 }
 
-/// Step 6: rename the store into place, write `AUTHORITY.json`, replace the pointer.
-fn commit(state: &Path, legacy: &LegacyState, authority: &Authority) -> Result<()> {
+/// Step 6: rename the store into place, write `AUTHORITY.json`, replace the pointer. `init`
+/// commits its empty store the same way.
+pub(crate) fn commit(state: &Path, generation: &str, authority: &Authority) -> Result<()> {
     let importing = state.join(IMPORTING_NAME);
     for sidecar in ["-wal", "-shm", "-journal"] {
         if state.join(format!("{IMPORTING_NAME}{sidecar}")).exists() {
@@ -239,7 +240,7 @@ fn commit(state: &Path, legacy: &LegacyState, authority: &Authority) -> Result<(
     hooks::reach("authority")?;
     let pointer = canonical_json(&json!({
         "version": STORE_VERSION,
-        "generation": legacy.pointer.generation,
+        "generation": generation,
         "selected_at": authority.cutover_at,
     }));
     // The rename of the pointer is the commit point. Whatever fails after it cannot be undone.
@@ -293,7 +294,7 @@ fn import_and_commit(repo: &Path, state: &Path, approval: &Approval) -> Result<A
         cutover_at: iso_now(),
         approval: approval.clone(),
     };
-    commit(state, &legacy, &authority)?;
+    commit(state, &legacy.pointer.generation, &authority)?;
     Ok(authority)
 }
 
@@ -347,4 +348,38 @@ pub fn run(repo: &Path, approval: &Approval) -> Result<Outcome> {
         already_cut_over: false,
         authority,
     })
+}
+
+/// `harness-runtime migrate --check` (#814): step 1 of [`run`] without the approval and without a
+/// write, so `harness update` can refuse before it installs anything (ADR 0020, section 6).
+/// A state that is cut over answers `ready: false, already_cut_over: true`.
+///
+/// # Errors
+/// The refusal [`run`] would give in step 1, or for a store a rollback kept (exit code 2);
+/// `Error::Invariant` (4) for a cut-over state that is inconsistent.
+pub fn check(repo: &Path) -> Result<serde_json::Value> {
+    let state: PathBuf = repo.join(STATE_REL);
+    match epoch(&state) {
+        Epoch::Store(authority) => {
+            return Ok(json!({
+                "ready": false,
+                "already_cut_over": true,
+                "store_id": authority.store_id,
+            }));
+        }
+        Epoch::Inconsistent(reason) => {
+            return Err(Error::invariant(format!(
+                "the state directory is cut over but inconsistent: {reason}"
+            )));
+        }
+        Epoch::FileLedger => {}
+    }
+    let legacy = preconditions(&state)?;
+    refuse_a_rolled_back_store(&state)?;
+    Ok(json!({
+        "ready": true,
+        "already_cut_over": false,
+        "ledger_version": legacy.pointer.version,
+        "generation": legacy.pointer.generation,
+    }))
 }

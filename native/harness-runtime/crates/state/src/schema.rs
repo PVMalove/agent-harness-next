@@ -31,6 +31,7 @@ use serde_json::{Map, Value, json};
 use crate::audit;
 use crate::authority::{Epoch, STORE_NAME, epoch};
 use crate::error::{Error, Result};
+use crate::store_error::RESTORE_REMEDY;
 use crate::time::iso_now;
 
 /// The schema version this build writes and the newest it serves.
@@ -527,7 +528,7 @@ fn check_version(version: i64) -> Result<()> {
         return Err(Error::refused(
             ErrorCode::Internal,
             format!("runtime.db has the schema version {version}, which no runtime release wrote"),
-            "restore the state directory from the snapshot named in AUTHORITY.json",
+            RESTORE_REMEDY,
         ));
     }
     Ok(())

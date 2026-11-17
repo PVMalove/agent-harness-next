@@ -11,6 +11,7 @@ from harness.memory import build
 from harness.orchestration.core.utils import JsonObject
 from harness.orchestration.ledger.lifecycle import LifecycleLedger
 from harness.orchestration.workflow.context_package import _persist_context_package
+from tests.orchestration.legacy_state import seed_file_ledger
 from .test_build import configure, git, source
 
 
@@ -26,8 +27,9 @@ def prepare(repo: Path, **policy: object) -> tuple[Path, LifecycleLedger, JsonOb
         ["git", "rev-parse", "HEAD"], cwd=repo, text=True
     ).strip()
     root = repo / "state"
-    ledger = LifecycleLedger(root)
-    ledger.ensure()
+    # The memory index and the Context Package read records as files of a generation: a 1.x
+    # ledger (ADR 0036, section 5, rules 2 and 3).
+    ledger = seed_file_ledger(root)
     batch: JsonObject = {
         "batch_id": "batch-memory",
         "base_commit": snapshot,

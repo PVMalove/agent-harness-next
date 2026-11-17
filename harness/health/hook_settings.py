@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import ast
 import copy
 import hashlib
 import json
@@ -72,6 +73,72 @@ def script_name(handler: object) -> str | None:
     command = handler.get("command")
     match = _SCRIPT_PATH.search(command) if isinstance(command, str) else None
     return match.group(1) if match else None
+
+
+# hook_id, который скрипт передаёт конверту: `hook_response.py" run <hook_id> ` или, через общий
+# фрагмент, `. "$(dirname "$0")/hook-envelope.sh" <hook_id>` в конце строки.
+_ENVELOPE_RUN = re.compile(
+    r'hook_response\.py" run ([a-z][a-z0-9-]*) '
+    r'|hook-envelope\.sh" ([a-z][a-z0-9-]*)(?=\s|$)'
+)
+
+
+def envelope_hook_ids(source: str) -> frozenset[str] | None:
+    """Ключи-строки верхнеуровневого `HOOKS` модуля конверта; код модуля не исполняется.
+
+    None — модуль не разбирается или `HOOKS` со словарём в нём нет."""
+    try:
+        tree = ast.parse(source)
+    except (SyntaxError, ValueError):
+        return None
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names = [node.target.id]
+        else:
+            continue
+        if "HOOKS" in names and isinstance(node.value, ast.Dict):
+            return frozenset(
+                key.value
+                for key in node.value.keys
+                if isinstance(key, ast.Constant) and isinstance(key.value, str)
+            )
+    return None
+
+
+def script_envelope_id(source: str) -> str | None:
+    """hook_id, с которым hook-скрипт вызывает конверт; None — скрипт конверт не вызывает."""
+    match = _ENVELOPE_RUN.search(source)
+    return (match.group(1) or match.group(2)) if match else None
+
+
+def without_scripts(template: JsonObject, scripts: Collection[str]) -> JsonObject:
+    """Копия шаблона без handler-ов скриптов `scripts`; опустевшие группы и события удаляются."""
+    result = copy.deepcopy(template)
+    hooks = result.get("hooks")
+    if not scripts or not isinstance(hooks, dict):
+        return result
+    for event in list(hooks):
+        groups = hooks[event]
+        if not isinstance(groups, list):
+            continue
+        kept: list[object] = []
+        for group in groups:
+            if isinstance(group, dict) and isinstance(group.get("hooks"), list):
+                group["hooks"] = [
+                    handler
+                    for handler in group["hooks"]
+                    if script_name(handler) not in scripts
+                ]
+                if not group["hooks"]:
+                    continue
+            kept.append(group)
+        if kept:
+            hooks[event] = kept
+        else:
+            del hooks[event]
+    return result
 
 
 def _groups(document: JsonObject) -> dict[str, list[JsonObject]] | str:
@@ -241,7 +308,8 @@ class HookSpec:
     None — столбец «Проверка вне hook» равен «нет». `wiring` — где hook подключён: в файле
     настроек runtime или во frontmatter агента. `apply_patch` — hook понимает payload
     `apply_patch` (адаптер `apply_patch_payload.py`), поэтому runtime, который доставляет только
-    `apply_patch`, доставляет ему и Write/Edit (`PATCH_TOOLS`).
+    `apply_patch`, доставляет ему и Write/Edit (`PATCH_TOOLS`). `runtimes` — runtime, которым hook
+    поставляется: `runtime-autostart` (ADR 0031) только у Claude Code, остальные — у обоих.
     """
 
     hook_id: str
@@ -252,6 +320,7 @@ class HookSpec:
     out_of_hook: str | None = None
     wiring: Literal["settings", "agent"] = "settings"
     apply_patch: bool = False
+    runtimes: tuple[str, ...] = ("claude", "codex")
 
 
 # Инструменты первого runtime, которые второй runtime присылает одним `apply_patch`.
@@ -391,6 +460,23 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         False,
         "сверка checks_run",
     ),
+    # Автозапуск runtime (ADR 0031): только Claude Code; вне hook — remedy `[runtime_unavailable]`.
+    *(
+        HookSpec(
+            "runtime-autostart",
+            "runtime-autostart.sh",
+            event,
+            tools,
+            False,
+            "remedy [runtime_unavailable]",
+            runtimes=("claude",),
+        )
+        for event, tools in (
+            ("PreToolUse", ("Bash",)),
+            ("Stop", ("*",)),
+            ("SubagentStop", ("*",)),
+        )
+    ),
 )
 
 EventTool = tuple[str, str]
@@ -504,14 +590,17 @@ def is_wired(document: JsonObject, spec: HookSpec, tool: str) -> bool:
 
 
 def supported_tools(
-    spec: HookSpec, support: frozenset[EventTool] | None
+    spec: HookSpec,
+    support: frozenset[EventTool] | None,
+    runtime: str | None = None,
 ) -> tuple[str, ...]:
     """Инструменты `spec`, на которых runtime доставляет событие hook-а.
 
     Write и Edit считаются доставленными и тогда, когда runtime доставляет `apply_patch`, а hook
-    понимает его payload (`spec.apply_patch`).
+    понимает его payload (`spec.apply_patch`). Runtime `runtime`, которому hook не поставляется
+    (`spec.runtimes`), не получает ни одного инструмента.
     """
-    if support is None:
+    if support is None or (runtime is not None and runtime not in spec.runtimes):
         return ()
     patch = spec.apply_patch and (spec.event, "apply_patch") in support
     return tuple(

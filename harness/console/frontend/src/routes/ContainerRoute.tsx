@@ -1,5 +1,5 @@
 /* Container route (hidden route #/container-route?batch=&role=&runtime=): the dispatch container
-   executor route of harness/console/kernel/container_route.py, as the TUI ContainerRouteScreen
+   executor route of harness/console/kernel/container_route/, as the TUI ContainerRouteScreen
    draws it, read from container_route.view. Six stage tabs only switch the pane; every row, tab
    state, blocker and action availability is the kernel's.
 

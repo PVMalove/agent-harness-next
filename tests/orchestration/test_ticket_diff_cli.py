@@ -10,9 +10,9 @@ ignore and a flag-off plan answers with a full pytest stage.
 from __future__ import annotations
 
 import json
+import shlex
 import subprocess
 import sys
-from pathlib import Path
 
 from harness.gate_runner import stage_evidence
 from harness.gate_runner.gate_runner import parse_evidence_trailer
@@ -31,17 +31,21 @@ CLI_POLICY: JsonObject = {
         {
             "stage_id": "lint",
             "kind": "lint",
-            "argv": [sys.executable, "-c", "pass"],
+            "argv": ["python", "-c", "pass"],
             "timeout_seconds": 600,
         },
         {
             "stage_id": "tests",
             "kind": "pytest",
-            "argv": [sys.executable, "-c", "pass"],
+            "argv": ["python", "-c", "pass"],
             "timeout_seconds": 1800,
         },
     ],
 }
+
+
+# A bare launcher lets the gate select the checkout's Python on either platform.
+PASS = shlex.join(["python", "-c", "pass"])
 
 
 class TicketDiffCliTests(TicketDiffFixture):
@@ -95,8 +99,8 @@ class TicketDiffCliTests(TicketDiffFixture):
                 self.assertEqual(
                     proposal["transition"]["verification_commands"],
                     [
-                        f"{sys.executable} -c pass",
-                        f"{sys.executable} -c pass services/test_y.py",
+                        PASS,
+                        f"{PASS} services/test_y.py",
                     ],
                 )
 
@@ -152,7 +156,7 @@ class TicketDiffCliTests(TicketDiffFixture):
         self.assertEqual((tests["selection"], tests["nodeids"]), ("ticket-diff", []))
         self.assertEqual(
             proposal["transition"]["verification_commands"],
-            [f"{sys.executable} -c pass"],
+            [PASS],
         )
 
     def test_the_impact_gate_accepts_the_real_plan_through_dispatch_create(
@@ -187,7 +191,7 @@ class TicketDiffCliTests(TicketDiffFixture):
         code, out, err = self._process("qa", "run", "--dispatch", brief["dispatch_id"])
 
         self.assertEqual(code, 0, err)
-        log = Path(json.loads(out)["artifact"])
+        log = self.fx._stored(json.loads(out)["artifact"])
         linked = parse_evidence_trailer(log.read_text(encoding="utf-8").splitlines())
         assert linked is not None
         document = log.parent.parent / linked[0]

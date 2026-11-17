@@ -61,6 +61,11 @@ Choose a route for your task or find a chapter by title. Installation and projec
         <b>Troubleshooting</b>
         <span>Refusal reasons and next actions.</span>
       </a>
+      <a class="ah-card" data-ah-entry href="upgrade-2-0/">
+        <span class="i">⇪</span>
+        <b>Upgrade to 2.0</b>
+        <span>Moving from 1.x, migrate, and rollback.</span>
+      </a>
     </div>
   </section>
 

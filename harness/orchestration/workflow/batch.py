@@ -60,6 +60,7 @@ from harness.orchestration.core.workspace import (
     _reject_non_english,
     _runtime_snapshot_root,
     _store_runtime_snapshot,
+    _require_writable_worktree,
     _required_base_branch,
     _validate_branch,
     _validate_worktree,
@@ -410,6 +411,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
             remedy="pass --allowed-path one or more times (for example --allowed-path 'src/orders/**', or '**' for the whole repository)",
         )
     _validate_worktree(repo, worktree)
+    _require_writable_worktree(worktree)
     _reject_role_ceiling_overflow(repo, config, allowed_paths)
     # Nullable for epic-less tasks: falls back to the project's base_branch, the same field
     # `_validate_branch` falls back to, rather than inventing a second convention.
@@ -491,10 +493,15 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
             repo_map_policy if isinstance(repo_map_policy, dict) else {}
         )
     _reject_sensitive(record, "batch")
+    ledger = LifecycleLedger(root)
+    try:
+        # Before the snapshot of the runtime: a refused batch leaves nothing behind.
+        ledger.refuse_new_project(repo)
+    except LedgerError as exc:
+        raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
     _store_runtime_snapshot(
         root, _runtime_snapshot_root(repo).parent, record["harness_runtime_sha256"]
     )
-    ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         try:
             ledger.ensure()
@@ -885,7 +892,8 @@ def mark_batch_not_required(args: argparse.Namespace) -> JsonObject:
                 / DispatchStatusRecord.directory
                 / f"{_safe_id(entry['dispatch_id'], 'dispatch')}.json"
             )
-            if status_path.exists():
+            # The store epoch has no file behind the path: ask the view.
+            if state_view.exists(status_path):
                 status = _load_dispatch_status(root, entry["dispatch_id"])
                 status.update({"state": "cancelled", "updated_at": moment})
                 _replace_record(ledger, DispatchStatusRecord.from_dict(status))

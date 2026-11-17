@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import shlex
 import shutil
 import subprocess
 import sys
@@ -12,6 +13,7 @@ from types import ModuleType
 
 import pytest
 
+from harness.health.hook_settings import script_envelope_id
 from harness.orchestration.contract import ContractError
 from harness.orchestration import hook_policy
 from harness.orchestration.hook_policy import parse_hook_response
@@ -206,7 +208,7 @@ def test_an_advisory_hook_body_runs_only_in_its_active_profiles(
         project = _project(tmp_path / profile, {"profile": profile})
         marker = project / "ran"
 
-        done = _wrapper(project, hook_id, f"touch {marker}; echo '[x] noise' >&2")
+        done = _wrapper(project, hook_id, f"touch {shlex.quote(marker.as_posix())}; echo '[x] noise' >&2")
 
         assert done.returncode == 0
         verdict = parse_hook_response(done.stderr)
@@ -371,6 +373,7 @@ def _wrapper(
         input=stdin,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=env,
         check=False,
         timeout=30,
@@ -507,6 +510,7 @@ def test_a_command_that_cannot_start_is_an_internal_error(tmp_path: Path) -> Non
             input="",
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=30,
         )
@@ -548,6 +552,47 @@ def test_the_timeout_is_below_the_runtime_hook_timeout() -> None:
     assert 0 < hook_response.INNER_TIMEOUT_SECONDS < 60
     advisory = hook_response.ADVISORY_TIMEOUT_SECONDS
     assert 0 < advisory < hook_response.INNER_TIMEOUT_SECONDS
+
+
+def test_the_runtime_autostart_waits_longer_than_ensure_and_never_blocks() -> None:
+    # `harness-runtime ensure` waits up to 40 s for a runtime it started (ADR 0031, section 5).
+    assert 40 < hook_response.TIMEOUTS["runtime-autostart"] < 60
+    assert hook_response.HOOKS["runtime-autostart"] == ("runtime-autostart-failed", False)
+    assert hook_response.ACTIVE_PROFILES["runtime-autostart"] == hook_response.PROFILES
+    for profile in hook_response.PROFILES:
+        warned = hook_response.decide(
+            "runtime-autostart", profile, 0, "[runtime-autostart-failed] stale build\n"
+        )
+        assert (warned["decision"], warned["reason_code"]) == (
+            "warn",
+            "runtime-autostart-failed",
+        )
+
+
+@needs_bash
+def test_a_hook_with_its_own_timeout_is_cut_at_that_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import io
+
+    project = _project(tmp_path, {"profile": "standard"})
+    script = project / "inner.sh"
+    script.write_text("echo '{}'; sleep 2; exit 0", encoding="utf-8")
+    monkeypatch.setattr(hook_response, "ADVISORY_TIMEOUT_SECONDS", 20)
+    monkeypatch.setattr(hook_response, "TIMEOUTS", {"runtime-autostart": 0.5})
+    monkeypatch.setattr(hook_response, "project_root", lambda: project)
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(b"payload")))
+
+    returned = hook_response.main(["run", "runtime-autostart", str(BASH), str(script)])
+
+    assert returned == 0
+    captured = capsys.readouterr()
+    verdict = parse_hook_response(captured.err)
+    assert (verdict["decision"], verdict["reason_code"]) == ("warn", "internal-error")
+    assert "тайм-аут" in str(verdict["remedy"])
+    assert captured.out == ""
 
 
 @needs_bash
@@ -629,6 +674,7 @@ def test_an_unknown_hook_or_usage_is_refused(tmp_path: Path) -> None:
             input="",
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=30,
         )
@@ -647,6 +693,7 @@ def test_the_real_merge_hook_answers_through_the_envelope(tmp_path: Path) -> Non
             input=json.dumps({"tool_input": {"command": command}}),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=30,
         )
@@ -678,6 +725,7 @@ def test_a_hook_without_the_helper_decides_alone(tmp_path: Path) -> None:
         input=json.dumps({"tool_input": {"command": "gh pr merge 1"}}),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
         timeout=30,
     )
@@ -693,7 +741,7 @@ def test_a_hook_without_the_helper_decides_alone(tmp_path: Path) -> None:
 def test_every_managed_event_hook_runs_through_the_envelope(hook_id: str) -> None:
     text = (HOOKS / f"{hook_id}.sh").read_text(encoding="utf-8")
 
-    assert f'hook_response.py" run {hook_id} ' in text
+    assert script_envelope_id(text) == hook_id
 
 
 def test_a_shell_write_refusal_becomes_ask_only_where_the_runtime_understands_it(

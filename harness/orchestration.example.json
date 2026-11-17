@@ -110,7 +110,7 @@
             "claude-profile"
           ],
           "model": "claude-sonnet-5-5",
-          "effort": "xhigh"
+          "effort": "medium"
         },
         "codex": {
           "profiles": [
@@ -133,7 +133,7 @@
             "claude-profile"
           ],
           "model": "claude-sonnet-5-5",
-          "effort": "xhigh"
+          "effort": "medium"
         },
         "codex": {
           "profiles": [
@@ -209,6 +209,29 @@
             "codex-profile"
           ],
           "model": "gpt-6.1-sol",
+          "effort": "xhigh"
+        }
+      }
+    },
+    "rebaser": {
+      "transport": "in-process",
+      "write_paths": [
+        "**"
+      ],
+      "default_runtime": "claude",
+      "runtimes": {
+        "claude": {
+          "profiles": [
+            "claude-profile"
+          ],
+          "model": "claude-sonnet-5-5",
+          "effort": "medium"
+        },
+        "codex": {
+          "profiles": [
+            "codex-profile"
+          ],
+          "model": "gpt-6-luna",
           "effort": "xhigh"
         }
       }

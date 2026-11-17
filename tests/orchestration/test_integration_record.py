@@ -27,6 +27,7 @@ from harness.orchestration.ledger import (
 from harness.orchestration.ledger import JsonObject as LedgerObject
 from harness.orchestration.workflow import history, integration
 from tests.orchestration import test_coordinator as coordinator_tests
+from tests.orchestration.legacy_state import seed_file_ledger
 
 SHA_A = "a" * 40
 SHA_B = "b" * 40
@@ -110,8 +111,8 @@ class IntegrationRecordModelTests(unittest.TestCase):
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
-            ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            # The file ledger itself (generation, audit, clean, migrate): a 1.x ledger.
+            ledger = seed_file_ledger(Path(temporary) / "state")
             record = IntegrationRecord(
                 integration_record_id=IntegrationRecord.derive_id(IDENTITY),
                 extra={"identity": dict(IDENTITY)},
@@ -154,8 +155,8 @@ class IntegrationRecordModelTests(unittest.TestCase):
 
     def test_nested_records_survive_clean_and_migrate(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
-            ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            # The file ledger itself (generation, audit, clean, migrate): a 1.x ledger.
+            ledger = seed_file_ledger(Path(temporary) / "state")
             record = IntegrationRecord(
                 integration_record_id=IntegrationRecord.derive_id(IDENTITY),
                 extra={"identity": dict(IDENTITY)},
@@ -237,8 +238,8 @@ class BatchesForTicketBranchTests(unittest.TestCase):
     def test_missing_batches_directory_and_no_match_are_refused(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             root = Path(temporary) / "state"
-            ledger = LifecycleLedger(root)
-            ledger.ensure()
+            # A state directory outside a repository: a 1.x ledger (ADR 0036, section 5).
+            seed_file_ledger(root)
             with self.assertRaises(CoordinatorError) as raised:
                 history._batches_for_ticket_branch(root, "#1", "feature/issue-1-x")
             self.assertRegex(raised.exception.message, re.compile("no orchestration"))
@@ -256,17 +257,25 @@ class PublishedBranch:
         fixture: coordinator_tests.CoordinatorRetryRoutingTests | None = None,
         integration_ref: str | None = None,
     ) -> None:
-        """``fixture`` is a coordinator fixture its caller already set up (and tears down);
+        """``fixture`` is a coordinator fixture its caller already set up (and tears down) on a
+        1.x file ledger (``file_ledger = True`` before ``setUp``): ``publish`` needs it.
         ``integration_ref`` is the target its batches name, ``master`` when it is ``None``."""
         self.owned = fixture is None
         if fixture is None:
             fixture = coordinator_tests.CoordinatorRetryRoutingTests()
+            # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+            fixture.file_ledger = True
             fixture.setUp()
         self.fixture = fixture
         self.integration_ref = integration_ref
         self.repo = self.fixture.repo
         self.branch = self.fixture.branch
         self.ticket = "#244"
+
+    def keep_state_in_repo(self) -> None:
+        """Move the 1.x ledger into the repository's own state directory, before any batch."""
+        self.fixture.state_dir = self.repo / ".harness/orchestration/state"
+        seed_file_ledger(self.fixture.state_dir)
 
     def close(self) -> None:
         if self.owned:
@@ -402,6 +411,42 @@ class IntegrationPrepareTests(unittest.TestCase):
     def setUp(self) -> None:
         self.branch = PublishedBranch()
         self.addCleanup(self.branch.close)
+
+    def test_prepare_records_a_batch_whose_moved_base_the_rebaser_carried(
+        self,
+    ) -> None:
+        fx = self.branch.fixture
+        candidate = fx._reviewed_candidate()
+        batch_id = fx.batch_id
+        upstream = fx._push_upstream()
+        fx._decide(batch_id, "accept")
+        brief = fx._dispatch(batch_id, "rebaser")["brief"]
+        fx._start(brief["dispatch_id"])
+        head = fx._rebased(brief, conflict=False)
+        fx._submit(brief["dispatch_id"], fx._rebaser_report(brief, head))
+        fx._decide(batch_id, "accept")
+        fx._assess(
+            batch_id,
+            head,
+            git_utils._changed_files_between(self.branch.repo, upstream, head),
+        )
+        fx._reported_qa(batch_id, head)
+        fx._decide(batch_id, "accept")
+        publish = fx._dispatch(
+            batch_id, "developer", purpose="publish", candidate=head
+        )["brief"]
+        coordinator.publish_dispatch(
+            self.branch.args(dispatch=publish["dispatch_id"], remote="origin")
+        )
+        fx._decide(batch_id, "accept")
+
+        result = self.branch.prepare()
+
+        self.assertNotEqual(candidate, head)
+        self.assertTrue(result["created"])
+        self.assertEqual(
+            (result["candidate_sha"], result["target_sha"]), (head, upstream)
+        )
 
     def test_prepare_links_ticket_branch_batch_candidate_and_target(self) -> None:
         published = self.branch.publish()

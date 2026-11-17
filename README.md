@@ -25,7 +25,8 @@ Agent Harness Next разворачивает в проект скиллы, hook
 | `engineering-suite` | Эпики и тикеты, триаж, двухосевое review, `qa-gate` и подготовка PR. |
 | `backend-orchestration` | Роли и coordinator для распределённых систем: briefs, worktrees и ledger. |
 
-Старое имя `pvmalove-suite` поддерживается как совместимый alias.
+Старое имя `pvmalove-suite` поддерживается как совместимый alias во всех выпусках 2.x и будет
+удалено в 3.0.0.
 
 ## Быстрый старт
 
@@ -47,17 +48,25 @@ python3 harness/bin/harness.py health /path/to/repository
 Без `--capability` устанавливается `project-foundation`. `harness diff` показывает изменения
 управляемого snapshot, `harness update` обновляет его и сохраняет локальные правки.
 
+`install-global.py --cli` ставит команду `harness` в `~/.local/bin`; она запускает CLI клона, из
+которого запущен установщик. `harness self-update [--ref <ветка>]` переводит этот клон на последний
+коммит ветки `origin`. Чтобы агент мог запускать `harness update`, добавьте в
+`sandbox.excludedCommands` шаблоны `harness update *`, `harness health *` и `harness self-update *`.
+Исключённая команда всё равно проходит проверку разрешений runtime. Подробнее — в
+[быстром старте](https://pvmalove.github.io/agent-harness-next/getting-started/).
+
 ## Состав `engineering-suite`
 
 В `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
 
 Сборка разворачивает проектные руководства `docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`
-и общий контракт `.harness/docs/technical-english.md`. Корневой `docs/` остаётся документацией
+и общий контракт `.harness/instructions/technical-english.md`. Корневой `docs/` остаётся документацией
 исходного репозитория и в целевой проект не переносится.
 
 ## Документация
 
 - [Быстрый старт](https://pvmalove.github.io/agent-harness-next/getting-started/) — требования, установка и `health`.
+- [Миграция на 2.0](https://pvmalove.github.io/agent-harness-next/guides/upgrade-2-0/) — переход с 1.x, `harness-runtime migrate` и откат.
 - [Архитектура](https://pvmalove.github.io/agent-harness-next/architecture/) — слои, runtime, store и безопасность.
 - [Справочник](https://pvmalove.github.io/agent-harness-next/reference/) — CLI, конфигурация, hooks и агенты.
 - [Демо](https://pvmalove.github.io/agent-harness-next/demo/) — веб-консоль на демонстрационных данных.
@@ -73,10 +82,14 @@ coordinator лишь нормализует enum-поля в памяти с п�
 `resume` доступны и в разделе Orchestration консоли. Recovery не перезапускает принятые этапы и не восстанавливает потерянный
 контекст модели и незакоммиченные файлы. Подробности:
 [руководство по backend-оркестрации](./site/docs/backend-orchestration.md#удержание-batch-и-команды-recovery).
+Пока идёт оркестрация, `harness-runtime serve` должен работать. Без него команды coordinator
+`batch`, `dispatch`, `qa` и `recovery` отказывают с `[runtime_unavailable]`, `harness worktree-remove`
+отказывает, а `harness cleanup` оставляет worktree на месте. Как держать процесс запущенным и
+проверять его, описано в разделе [«Runtime» быстрого старта](./site/docs/getting-started/index.md#runtime).
 
 При любой capability установщик ставит общий
-[контракт технического английского](./harness/docs/technical-english.md) как
-`.harness/docs/technical-english.md` и обновляет его в составе управляемого snapshot. `diff` и
+[контракт технического английского](./harness/project/instructions/technical-english.md) как
+`.harness/instructions/technical-english.md` и обновляет его в составе управляемого snapshot. `diff` и
 `update` показывают отдельный unified diff недостающих обязательных ссылок для существующих
 `AGENTS.md`, `CLAUDE.md` и установленных agent seeds. Команды сохраняют пользовательские инструкции.
 После просмотра и явного согласования человек или уполномоченный агент применяет только эти

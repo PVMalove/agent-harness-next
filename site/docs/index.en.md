@@ -8,7 +8,7 @@ hide:
 
 <div class="ah-hero">
   <div class="ah-hero-head">
-    <span class="ah-eyebrow"><i></i> Agent Harness Next · beta</span>
+    <span class="ah-eyebrow"><i></i> Agent Harness Next · 2.0</span>
     <h1>A harness for coding agents</h1>
   </div>
   <div class="ah-hero-copy">
@@ -268,7 +268,7 @@ hide:
           ['dim', '== Skills =='],
           ['ok', '✓ project-foundation: 5 key skills'],
           ['ok', '✓ snapshot: managed files in place'],
-          ['info', 'ℹ orchestration: not selected — no coordinator needed'],
+          ['info', 'ℹ orchestration: backend-orchestration capability not selected'],
           ['dim', '== Summary =='],
           ['sum', '<span class="ah-t-ok">ok=12</span> <span class="ah-t-warn">warn=1</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=2</span>']
         ]
@@ -280,7 +280,7 @@ hide:
           ['dim', '== Skills =='],
           ['ok', '✓ upstream: 25 skills pinned'],
           ['ok', '✓ snapshot: v1.2.3 · 6acc160'],
-          ['info', 'ℹ orchestration: not selected — no coordinator needed'],
+          ['info', 'ℹ orchestration: backend-orchestration capability not selected'],
           ['dim', '== Summary =='],
           ['sum', '<span class="ah-t-ok">ok=18</span> <span class="ah-t-warn">warn=2</span> <span class="ah-t-fail">fail=0</span> <span class="ah-t-dim">skipped=3</span>']
         ]

@@ -1,15 +1,15 @@
-# improve-codebase-architecture — Углубление архитектуры
+# improve-codebase-architecture: углубление архитектуры
 
 ## 1. Название и локализация
 
 - **Английское название:** `improve-codebase-architecture`
 - **Русский перевод:** Углубление архитектуры.
-- **Исходный skill:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/improve-codebase-architecture/SKILL.md)
+- **Исходный скилл:** [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/vendor/mattpocock/engineering/improve-codebase-architecture/SKILL.md)
 
 ## 2. Русское описание
 
-Ищет в кодовой базе возможности укрепить границы модулей, показывает их в визуальном отчёте и обсуждает выбранную.
+Ищет в кодовой базе места, где модули можно сделать глубже, показывает их в визуальном HTML-отчёте и разбирает вопросами выбранный вариант.
 
 ## 3. Применение
 
-Точный порядок шагов, входные условия и ограничения задаёт исходный `SKILL.md`. Эта страница служит русским указателем на закреплённую upstream-версию.
+Порядок шагов, входные условия и ограничения задаёт исходный `SKILL.md`. Эта страница только кратко описывает по-русски закреплённую upstream-версию.

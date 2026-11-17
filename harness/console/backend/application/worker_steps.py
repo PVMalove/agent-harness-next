@@ -10,16 +10,22 @@ import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from pathlib import Path
 
-from ..domain.live_steps import DispatchTiming, dispatch_timing
+from ..domain.live_steps import (
+    DispatchTiming,
+    InProcessObservation,
+    dispatch_timing,
+    in_process_observation,
+)
 from ..domain.worker_steps import (
     STEP_BUDGET_BYTES,
     StepsPage,
+    in_process,
     no_log_page,
     page_from_reading,
     select_source,
     worth_sending,
 )
-from .ports import StepsLogReader, WorkerFactsReader
+from .ports import CheckpointsReader, StepsLogReader, WorkerFactsReader
 
 POLL_SECONDS = 1.0
 
@@ -37,6 +43,7 @@ class WorkerStepsQuery:
         *,
         facts: WorkerFactsReader,
         log: StepsLogReader,
+        checkpoints: CheckpointsReader,
         budget: int = STEP_BUDGET_BYTES,
         poll_seconds: float = POLL_SECONDS,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -44,6 +51,7 @@ class WorkerStepsQuery:
         self.repo = repo.resolve()
         self._facts = facts
         self._log = log
+        self._checkpoints = checkpoints
         self._budget = budget
         self._poll = poll_seconds
         self._sleep = sleep
@@ -53,6 +61,15 @@ class WorkerStepsQuery:
         ledger record."""
         facts = await asyncio.to_thread(self._facts, self.repo, dispatch_id)
         return dispatch_timing(facts.dispatch, facts.status) if facts else None
+
+    async def observation(self, dispatch_id: str) -> InProcessObservation | None:
+        """The ledger facts of an in-process dispatch, which has no step log; None for another
+        transport or without a ledger record."""
+        facts = await asyncio.to_thread(self._facts, self.repo, dispatch_id)
+        if facts is None or not in_process(facts):
+            return None
+        checkpoints = await asyncio.to_thread(self._checkpoints, self.repo, facts)
+        return in_process_observation(facts.status, checkpoints)
 
     async def read(self, dispatch_id: str, offset: int) -> StepsPage:
         facts = await asyncio.to_thread(self._facts, self.repo, dispatch_id)

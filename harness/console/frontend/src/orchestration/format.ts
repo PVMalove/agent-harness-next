@@ -301,11 +301,12 @@ export function lockLines(lock: Record<string, unknown> | null, error: string | 
 
 /* -- Live step and the blocks after the diagram ------------------------------------------------ */
 
-/** The diagram node of each role (`conflict-resolver` works as a developer). */
+/** The diagram node of each role (`conflict-resolver` and `rebaser` work as a developer). */
 export const ROLE_NODE: Readonly<Record<string, string>> = {
   architect: "Архитектор",
   developer: "Разработчик",
   "conflict-resolver": "Разработчик",
+  rebaser: "Разработчик",
   review: "Code review",
   "code-review": "Code review",
   qa: "QA · clean-room",
@@ -343,7 +344,7 @@ export function liveSteps(ledger: Ledger): LiveStep[] {
 /** The five steps of a batch card: done when the role reported, current at the live step. */
 export function miniSteps(ledger: Ledger, batch: BatchSummary, live: LiveStep | undefined): ("done" | "current" | "")[] {
   const stages = ledger.stages.filter((stage) => stage.batch_id === batch.batch_id);
-  const roles: string[][] = [["architect"], ["developer", "conflict-resolver"], ["review", "code-review"], ["qa"]];
+  const roles: string[][] = [["architect"], ["developer", "conflict-resolver", "rebaser"], ["review", "code-review"], ["qa"]];
   const steps = roles.map((names): "done" | "current" | "" => {
     if (live?.kind === "role" && names.includes(live.role)) return "current";
     return stages.some((stage) => names.includes(stage.role) && stage.report) ? "done" : "";

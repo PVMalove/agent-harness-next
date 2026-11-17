@@ -49,10 +49,12 @@ Both files live in `.harness/`.
 | [project.json](project.md) | Created from a template during `harness init`, `adopt`, or `update` if absent; maintained by the project afterward. Read by qa-gate, pr-composer, code-review, to-guide, test-author, and hooks. Health: `files.project_json`. |
 | [orchestration.json](orchestration/index.md) | Appears with the `backend-orchestration` capability: an absent file is copied from `.harness/orchestration.example.json`; maintained by the project afterward. Read by the coordinator, `harness-runtime`, and the console setup wizard. Health: `files.orchestration_config`. |
 
-The installer does not overwrite existing values: `project.json` is created once, and
-`orchestration.json` only when it is absent. `harness update` refreshes the managed
-`.harness/orchestration.example.json`, but not the project config; overwriting the project file
-requires an explicit `--force-seed-file`.
+The installer creates `project.json` once and never overwrites it. It also creates
+`orchestration.json` only when the file is absent. `harness update` refreshes the managed
+`.harness/orchestration.example.json`. It replaces the project `orchestration.json` with the new
+version only if you have not changed the file: its content matches the baseline recorded in
+`harness.lock`. A changed file is overwritten only by the explicit flags
+`--force-seed-file .harness/orchestration.json`, `--force-seed-files`, or `--force`.
 
 ## What else settings include
 

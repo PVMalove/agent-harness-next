@@ -46,12 +46,8 @@ For every closed ticket in the period, apply the same rules:
 Record the following before closing the batch record:
 
 - the batch and ticket IDs, the roles that ran, the dispatch IDs, and whether a repeat dispatch happened;
-- the number of worker sessions per dispatch, including the coordinator-recorded reason for any compaction/restart;
 - the token count of each dispatch only when provider or runtime telemetry exists, with its source and a note on missing data;
-- cache read/write tokens, when the runtime/provider observes them;
 - the start and result timestamps of the quality gate, and the queue time when it is available;
-- the share of review diff files outside the declared task scope;
-- the QA decisions and the computed QA failure rate;
 - the integration timestamp and all linked defect IDs observed in the declared window.
 
 #### Measuring the quality gate
@@ -68,10 +64,6 @@ During the declared observation window, record every defect that can be linked t
 | --- | --- | --- |
 | Agent starts per closed ticket | Starts and retries for each closed ticket | Batch records and dispatch IDs |
 | Tokens per batch | Observed provider or runtime input and output tokens for each dispatch | Telemetry or execution records; otherwise a note on missing data |
-| Cache read/write tokens | Observed cache read/write tokens per dispatch | Provider/runtime telemetry; otherwise a note on missing data |
-| Worker sessions per dispatch | First run plus checkpoint/resume and the reason for each restart | Ledger and coordinator decision; a role's self-report is not suitable |
-| Review diff scope excess | Share of review diff files outside the task scope | Immutable dispatch and risk records |
-| QA failure rate | Share of QA dispatches whose coordinator decision is not `accept` | Coordinator decisions |
 | Quality gate wall time | From the gate start to the result, with the queue separate | Quality gate timestamps |
 | Post-integration defects | Linked defects in the declared window under the severity rule | Issue tracker and defect records |
 
@@ -82,7 +74,7 @@ The resulting baseline is evidence for future decisions. This guide prescribes n
 ## 3. Contracts
 
 - **Input (Input/Brief):** the observation period, the closed batches/tickets, the completion reports, the quality gate logs, the tracker, and the defect severity rule.
-- **Process (Process):** collect the same observations without estimates for missing data, and separate queue time from execution time.
+- **Process (Process):** the coordinator collects the same observations without estimates for missing data, and separate queue time from execution time.
 - **Output (Output/Report):** a baseline worksheet with four measurements and the data gaps marked.
 
 ## Source

@@ -1,4 +1,4 @@
-/* Only what docs/design/web-console-mockups/execution-console.css lacks; never overrides it. */
+/* Only what legacy/execution-console.css lacks; never overrides it. */
 /* Harness · Commands: the run panel over the mockup's harness-command rows and board dialog. */
 .command-panel { display: flex; flex-direction: column; gap: 12px; }
 .command-busy { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-color: var(--warn); color: var(--warn); font: var(--fs-1) var(--mono); }
@@ -333,6 +333,12 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 @media (prefers-reduced-motion: reduce) {
   .work-flow-node.current, .work-flow-node.current .work-flow-icon, .work-flow-edge.active::after { animation: none; }
 }
+/* Agent activity (#1051): an in-process worker's ledger facts in place of its absent event stream. */
+.work-observation-reason, .work-observation-title, .work-observation-facts, .work-observation-checkpoints { margin: 0; padding: 0 16px 12px; }
+.work-observation-title { font-size: var(--fs-1); }
+.work-observation-facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+.work-observation-facts dd { margin: 0; }
+.work-observation-checkpoints { list-style: none; display: grid; gap: 4px; font: var(--fs-1) var(--mono); }
 /* Orchestration (#1066): long lists scroll inside their block; chart rows fit long role names. */
 #orch-dispatch-list, .orch-tickets { max-height: min(480px, calc(100dvh - 240px)); overflow-y: auto; }
 .orch-analytics .orch-row { grid-template-columns: minmax(120px, auto) minmax(48px, 1fr) 40px; }
@@ -391,7 +397,17 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
    takes the hero's own type (eyebrow, h2 at --fs-4, muted paragraph) without the section padding. */
 #branch { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 #branch .hi { width: 13px; height: 13px; }
-/* Sweep fixes: the JSON editor and its file line fit a 390 px panel. */
+.runtime-state { white-space: nowrap; font-size: var(--fs-1); }
+.runtime-state.ok { color: var(--ok); }
+.runtime-state.err { color: var(--err); }
+.runtime-down { display: flex; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--err); border-radius: var(--radius); font-size: var(--fs-1); }
+.runtime-down code { overflow-wrap: anywhere; }
+.help-hero-head .help-markdown { padding: 0; }
+.help-hero-head .help-markdown h1, .help-hero-head .help-markdown h2 { margin: 4px 0; font-size: var(--fs-4); }
+.help-hero-head .help-markdown p { margin: 0; max-width: 72ch; color: var(--muted); }
+/* Sweep fixes: the selected symbol's caption keeps AA contrast on the selection background; the
+   JSON editor and its file line fit a 390 px panel. */
+.repo-symbol-row.on .repo-symbol-main small { color: var(--fg); }
 .settings-editor .field { display: block; min-width: 0; }
 .settings-editor .settings-textarea { max-width: 100%; }
 .settings-file-line { flex-wrap: wrap; min-width: 0; }

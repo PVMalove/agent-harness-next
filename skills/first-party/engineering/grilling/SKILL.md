@@ -9,7 +9,7 @@ description: Grill the user relentlessly about a plan, decision, or idea to stre
 code or architecture, if project memory is enabled, run
 `harness memory search . "<goal, decision and affected module>"` once for prior decisions.
 Repeat only when a newly settled decision changes the subject. Use the installed equivalent from
-`.harness/docs/project-memory.md` when the packager CLI is absent. Follow that guide for
+`.harness/instructions/project-memory.md` when the packager CLI is absent. Follow that guide for
 configuration, search-result and pointer statuses,
 source validation and graceful fallback. Treat hits as candidate precedents, and keep the
 Live Artifact's explicit path-approval rule. In an orchestration dispatch, use the supplied

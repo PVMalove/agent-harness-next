@@ -30,6 +30,10 @@ Use this role when independent verification is required. It is read-only: it doe
 
 The result is a QA finding that states the checks performed, the reproducible evidence, the observed result, and any defect or remaining risk. The evidence is an independent run through the project-facing interface.
 
+Work from the Context Package's `related_tests`; only widen beyond them when that set cannot exercise the acceptance criteria.
+
+When part of the brief stays undone, list each undone item in `incomplete_items` under the common contract; its `target_role` is always `qa`, so only a narrowed QA retry finishes it. A narrowed QA retry still runs every approved verification command. An incomplete item never replaces a failed or `not_run` check in `checks_run`.
+
 </div>
 
 ## 3. Contracts

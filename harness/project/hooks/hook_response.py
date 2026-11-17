@@ -21,8 +21,9 @@
 ``minimal`` понижает блокировку поведенческого hook до предупреждения; критичные hooks блокируют в любом
 профиле (ADR 0024). Advisory-hooks ChangeImpact (``ADVISORY_HOOKS``) не блокируют никогда: тело
 предупреждает префиксом причины при коде 0, а в профиле вне ``ACTIVE_PROFILES`` тело не запускается.
-Их внутренняя ошибка (префикс ``[internal-error]``, иной код, тайм-аут ``ADVISORY_TIMEOUT_SECONDS``)
-даёт warn с кодом 0 и пустым stdout.
+Их внутренняя ошибка (префикс ``[internal-error]``, иной код, тайм-аут ``ADVISORY_TIMEOUT_SECONDS``
+или свой из ``TIMEOUTS``) даёт warn с кодом 0 и пустым stdout. Advisory-hook ``runtime-autostart``
+(ADR 0031) запускает и освобождает runtime во всех профилях.
 Только стандартная библиотека, Python 3.9+.
 """
 
@@ -55,6 +56,7 @@ HOOKS: Dict[str, Tuple[str, bool]] = {
     "impact-first-touch": ("risky-path-first-touch", False),
     "targeted-check-reminder": ("targeted-checks-unreported", False),
     "sensitive-path-recheck": ("sensitive-path-touched", False),
+    "runtime-autostart": ("runtime-autostart-failed", False),
 }
 # Advisory-hooks ChangeImpact (ADR 0024, раздел 2a): тело всегда завершается кодом 0 и называет
 # предупреждение префиксом ``[reason_code] `` первой строки stderr, строка ``evidence_ref=<путь>``
@@ -64,6 +66,8 @@ ACTIVE_PROFILES: Dict[str, Tuple[str, ...]] = {
     "impact-first-touch": ("standard", "strict"),
     "targeted-check-reminder": ("standard", "strict"),
     "sensitive-path-recheck": ("strict",),
+    # Автозапуск runtime (ADR 0031): во всех профилях, никогда не блокирует.
+    "runtime-autostart": ("minimal", "standard", "strict"),
 }
 ADVISORY_HOOKS = tuple(ACTIVE_PROFILES)
 EVIDENCE_PREFIX = "evidence_ref="
@@ -118,6 +122,8 @@ REMEDY_LIMIT = 1000
 INNER_TIMEOUT_SECONDS = 50
 # Тело advisory-hook стоит на горячем пути каждой правки: его тайм-аут короче.
 ADVISORY_TIMEOUT_SECONDS = 10
+# Advisory-hooks со своим тайм-аутом: ``runtime-autostart`` ждёт готовности serve до 40 с.
+TIMEOUTS: Dict[str, float] = {"runtime-autostart": INNER_TIMEOUT_SECONDS}
 
 
 def build_response(
@@ -330,7 +336,8 @@ def main(argv: List[str]) -> int:
         advisory = hook_id in ADVISORY_HOOKS
         if profile not in ACTIVE_PROFILES.get(hook_id, PROFILES):
             return emit(b"", b"", build_response(hook_id, profile, "allow", REASON_OK))
-        timeout = ADVISORY_TIMEOUT_SECONDS if advisory else INNER_TIMEOUT_SECONDS
+        default = ADVISORY_TIMEOUT_SECONDS if advisory else INNER_TIMEOUT_SECONDS
+        timeout = TIMEOUTS.get(hook_id, default)
         code, out, err = run_inner(argv[2:], payload, timeout)
         response = decide(hook_id, profile, code, err.decode("utf-8", "replace"))
         if advisory and response["reason_code"] == REASON_INTERNAL_ERROR:

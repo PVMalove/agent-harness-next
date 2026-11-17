@@ -1534,11 +1534,11 @@ class MemoryPackageTests(ContextBuilderFixture):
     def test_workflow_freezes_local_memory_once_and_reuses_matching_query(self) -> None:
         from harness.memory import build
         from harness.orchestration.ledger.ledger_ops import _load_context_package
-        from harness.orchestration.ledger.lifecycle import LifecycleLedger
         from harness.orchestration.workflow.context_package import (
             _persist_context_package,
         )
         from tests.memory.test_build import configure, source
+        from tests.orchestration.legacy_state import seed_file_ledger
 
         configure(self.repo, min_similarity=0)
         source(
@@ -1548,8 +1548,9 @@ class MemoryPackageTests(ContextBuilderFixture):
         )
         build(self.repo)
         root = self.repo / "state"
-        ledger = LifecycleLedger(root)
-        ledger.ensure()
+        # The Context Package reads records as files of a generation: a 1.x ledger (ADR 0036,
+        # section 5, rules 2 and 3).
+        ledger = seed_file_ledger(root)
         batch = {
             "batch_id": "batch-memory",
             "base_commit": self.base_commit,

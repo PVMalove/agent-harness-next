@@ -9,8 +9,10 @@ tracker and the shared QA gate — remain in [project.json](../project.md).
 
 Installing the `backend-orchestration` capability creates a missing file from the managed
 `.harness/orchestration.example.json`. The project then owns it: a normal `harness update`
-refreshes the example and preserves the existing `orchestration.json`. Forcing a replacement
-is a separate explicit action, not a way to change one setting.
+refreshes the example and does not touch an `orchestration.json` you changed. A file without local
+changes (equal to its baseline in `.harness/harness.lock`) `update` replaces with the new template
+and keeps the previous bytes in a backup. Overwriting a changed file is a separate explicit action,
+the `--force-seed-file .harness/orchestration.json` flag, not a way to change one setting.
 
 The schema lives at `.harness/orchestration/orchestration.schema.json`. The optional string
 field `$schema` points editors to `./orchestration/orchestration.schema.json`.

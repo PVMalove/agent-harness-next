@@ -14,5 +14,5 @@ Leads a step-by-step diagnosis of a hard failure or a performance regression: re
 
 The source `SKILL.md` defines the exact order of steps, the entry conditions, and the limits. This page is a Russian pointer to the pinned upstream version.
 
-In `engineering-suite`, a [first-party override](../diagnosing-bugs.md) with opt-in search
-for past fixes through `harness memory search` is used. The vendor snapshot stays unchanged.
+In `engineering-suite`, a [first-party override](../diagnosing-bugs.md) is used. With project memory enabled, it searches
+for past fixes through `harness memory search`. The vendor snapshot stays unchanged.

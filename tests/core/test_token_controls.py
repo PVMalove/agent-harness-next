@@ -14,6 +14,7 @@ from harness.orchestration import contract, coordinator
 from harness.orchestration.core import config, constants
 from harness.orchestration.ledger import LifecycleLedger
 from harness.orchestration.workflow import batch, context_package, reports
+from tests.orchestration.legacy_state import seed_file_ledger
 
 
 class TokenControlTests(unittest.TestCase):
@@ -246,8 +247,8 @@ class TokenControlTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             root = Path(directory)
-            LifecycleLedger(root).ensure()
-            records = LifecycleLedger(root).records_root()
+            # The test hand-writes batch and plan records: a 1.x ledger (ADR 0036, section 5, rule 3).
+            records = seed_file_ledger(root).records_root()
             (records / "batches" / f"{batch_id}.json").write_text(
                 json.dumps(legacy_fields),
                 encoding="utf-8",
@@ -282,8 +283,8 @@ class TokenControlTests(unittest.TestCase):
         }
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as directory:
             root = Path(directory)
-            LifecycleLedger(root).ensure()
-            records = LifecycleLedger(root).records_root()
+            # The test hand-writes batch and plan records: a 1.x ledger (ADR 0036, section 5, rule 3).
+            records = seed_file_ledger(root).records_root()
             (records / "batches" / f"{batch_id}.json").write_text(
                 json.dumps({**legacy_fields, "approval_policy": "manual_all"}),
                 encoding="utf-8",

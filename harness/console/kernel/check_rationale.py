@@ -146,6 +146,18 @@ RATIONALES: dict[str, tuple[str, str]] = {
         ".harness/.venv, не совпадающий с uv.lock, даёт тесты на других версиях зависимостей, чем в CI.",
         "A .harness/.venv that differs from uv.lock runs tests on other dependency versions than CI.",
     ),
+    "environment.qa_executables": (
+        "Если исполняемого файла QA-команды нет в среде агента, обязательный QA падает уже после запуска.",
+        "If a QA command's executable is missing from the agent environment, required QA fails only after it starts.",
+    ),
+    "environment.c_linker": (
+        "Без C-компоновщика cc cargo не собирает Rust-бинарники, и Rust-тесты в QA падают.",
+        "Without the cc C linker cargo cannot link Rust binaries, and Rust tests in QA fail.",
+    ),
+    "environment.runtime_socket_path": (
+        "Путь сокета длиннее 100 байт не принимается: runtime и тесты, которые его запускают, падают.",
+        "A socket path over 100 bytes cannot be created: the runtime and the tests that start it fail.",
+    ),
     "environment.output_encoding": (
         "Без UTF-8 вывода русский текст и символы статусов искажаются или вызывают ошибки кодировки.",
         "Without UTF-8 output Russian text and status symbols are garbled or raise encoding errors.",
@@ -194,6 +206,30 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "Test-author пишет тесты через защищённый адаптер; без него шаг Red в TDD недоступен или не изолирован.",
         "The test author writes tests through a protected adapter; without it the TDD Red step is unavailable or not isolated.",
     ),
+    "hooks.test_author_config": (
+        "Без блока test_author короткий маршрут /fast-implement не запускает тест-автора.",
+        "Without the test_author block the short /fast-implement route does not start the test author.",
+    ),
+    "hooks.test_author_root": (
+        "Preflight берёт корень проекта из Git; другой CLAUDE_PROJECT_DIR привязал бы автора к чужому checkout.",
+        "The preflight takes the project root from Git; another CLAUDE_PROJECT_DIR would bind the author to a different checkout.",
+    ),
+    "hooks.test_author_trust": (
+        "Тест-автор запускается без диалога доверия, поэтому нужно уже принятое доверие к checkout или к основному checkout его репозитория.",
+        "The test author starts without a trust dialog, so trust must already be accepted for the checkout or the main checkout of its repository.",
+    ),
+    "hooks.test_author_guard": (
+        "Guard не даёт тест-автору писать вне test_paths; без него автор не включается.",
+        "The guard keeps the test author out of everything but test_paths; without it the author stays off.",
+    ),
+    "hooks.test_author_runner": (
+        "Runner запускает выбранный тест в изоляции и подтверждает Red; без него автор не сдаёт тест.",
+        "The runner runs the selected test in isolation and confirms Red; without it the author cannot hand a test over.",
+    ),
+    "hooks.test_author_probe": (
+        "Probe проверяет песочницу runner до запуска теста; без изоляции тест-автор выключен.",
+        "The probe checks the runner sandbox before any test runs; without isolation the test author stays off.",
+    ),
     "tracker.project": (
         "Все операции с задачами идут в трекер, который определён здесь; ошибка направит их не в тот проект.",
         "Every issue operation goes to the tracker resolved here; a mistake sends them to the wrong project.",
@@ -218,6 +254,10 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "Задача без верной Git base начинается не от той ветки, и PR попадает не в ту integration-ветку.",
         "A task without the right Git base starts from the wrong branch, and its PR targets the wrong integration branch.",
     ),
+    "orchestration.runtime": (
+        "Без запущенного harness-runtime serve оркестрация и очистка worktree не работают.",
+        "Without a running harness-runtime serve, orchestration and worktree cleanup do not work.",
+    ),
     "orchestration.ledger_summary": (
         "Ledger — источник состояния оркестрации; недоступный или не мигрированный ledger скрывает работу.",
         "The ledger is the source of orchestration state; an unavailable or unmigrated ledger hides the work.",
@@ -241,6 +281,14 @@ RATIONALES: dict[str, tuple[str, str]] = {
     "orchestration.disposable_data": (
         "Показывает объём одноразовых данных, которые освободит harness cleanup.",
         "Shows how much disposable data harness cleanup would free.",
+    ),
+    "orchestration.adapters": (
+        "Устаревший или отсутствующий адаптер запускает worker не так, как ждёт runtime, и dispatch блокируется.",
+        "An outdated or missing adapter starts the worker other than the runtime expects, and the dispatch gets blocked.",
+    ),
+    "orchestration.worker_binaries": (
+        "Runtime запускает worker в окружении serve; без claude или codex в его PATH внешний worker не стартует.",
+        "The runtime starts workers in the serve environment; without claude or codex on its PATH an external worker does not start.",
     ),
 }
 
@@ -287,6 +335,9 @@ TITLES: dict[str, tuple[str, str]] = {
     "environment.uv": ("Менеджер пакетов uv", "uv package manager"),
     "environment.glab": ("Клиент glab", "glab client"),
     "environment.dev_env": ("Окружение разработки", "Development environment"),
+    "environment.qa_executables": ("Исполняемые файлы QA-команд", "QA command executables"),
+    "environment.c_linker": ("C-компоновщик для Rust", "C linker for Rust"),
+    "environment.runtime_socket_path": ("Путь сокета runtime", "Runtime socket path"),
     "environment.output_encoding": ("Кодировка вывода", "Output encoding"),
     "environment.codex_sandbox": ("Песочница Codex", "Codex sandbox"),
     "environment.claude_sandbox": ("Песочница Claude Code", "Claude Code sandbox"),
@@ -299,18 +350,27 @@ TITLES: dict[str, tuple[str, str]] = {
     "environment.hook_bash": ("Bash для хуков", "Bash for hooks"),
     "hooks.policy": ("Политика хуков", "Hook policy"),
     "hooks.test_author": ("Хук автора тестов", "Test author hook"),
+    "hooks.test_author_config": ("Блок test_author", "test_author block"),
+    "hooks.test_author_root": ("Корень проекта тест-автора", "Test author project root"),
+    "hooks.test_author_trust": ("Доверие для тест-автора", "Test author trust"),
+    "hooks.test_author_guard": ("Guard тест-автора", "Test author guard"),
+    "hooks.test_author_runner": ("Runner тест-автора", "Test author runner"),
+    "hooks.test_author_probe": ("Probe изоляции runner", "Runner isolation probe"),
     "tracker.project": ("Проект в трекере", "Tracker project"),
     "tracker.auth": ("Вход в трекер", "Tracker sign-in"),
     "tracker.reachability": ("Доступность трекера", "Tracker reachability"),
     "tracker.permissions": ("Права в трекере", "Tracker permissions"),
     "tracker.labels": ("Метки трекера", "Tracker labels"),
     "tracker.git_base": ("Базовая ветка Git", "Git base branch"),
+    "orchestration.runtime": ("Процесс runtime", "Runtime process"),
     "orchestration.ledger_summary": ("Сводка ledger", "Ledger summary"),
     "orchestration.unfinished_batches": ("Незавершённые batch", "Unfinished batches"),
     "orchestration.blocked_batches": ("Заблокированные batch", "Blocked batches"),
     "orchestration.stale_dispatches": ("Зависшие dispatch", "Stale dispatches"),
     "orchestration.orphaned_worktrees": ("Брошенные рабочие копии", "Orphaned worktrees"),
     "orchestration.disposable_data": ("Временные данные", "Disposable data"),
+    "orchestration.adapters": ("Адаптеры worker", "Worker adapters"),
+    "orchestration.worker_binaries": ("Бинарники worker", "Worker binaries"),
 }
 
 

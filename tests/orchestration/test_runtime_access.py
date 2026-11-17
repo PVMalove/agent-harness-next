@@ -809,3 +809,147 @@ def test_a_role_with_a_defaults_or_its_own_layer_keeps_an_authored_plan(
 
     assert developer["mode"] == "sandbox"
     assert "legacy" not in developer["sources"].values()
+
+
+def _cache_config(cache: Path, **qa: object) -> JsonObject:
+    return {
+        "access_policy": {
+            "defaults": {"mode": "sandbox"},
+            "operations": {
+                "qa": {
+                    "network": {"hosts": ["static.crates.io", "index.crates.io"]},
+                    "filesystem": [
+                        {
+                            "resource": "cache",
+                            "path": str(cache),
+                            "access": "write",
+                            **qa,
+                        }
+                    ],
+                }
+            },
+        }
+    }
+
+
+def test_a_cache_variable_reaches_the_plan_without_widening_its_network(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    cache = tmp_path / "cargo"
+    plan = runtime_access.resolve_plan(
+        repo,
+        repo,
+        _cache_config(cache, variable="CARGO_HOME"),
+        "qa",
+        "read-only",
+        operation="qa",
+    )
+
+    item = {
+        "resource": "cache",
+        "access": "write",
+        "path": str(cache.resolve()),
+        "variable": "CARGO_HOME",
+    }
+    assert plan["filesystem"] == [item]
+    assert item in plan["requirements"]
+    assert plan["network"] == {"hosts": ["index.crates.io", "static.crates.io"]}
+    runtime_access.validate_plan(plan)
+
+
+def test_a_cache_without_a_variable_keeps_the_historical_item_and_digest(
+    tmp_path: Path,
+) -> None:
+    repo = _repo(tmp_path)
+    cache = tmp_path / "cargo"
+    plan = runtime_access.resolve_plan(
+        repo, repo, _cache_config(cache), "qa", "read-only", operation="qa"
+    )
+
+    assert plan["filesystem"] == [
+        {"resource": "cache", "access": "write", "path": str(cache.resolve())}
+    ]
+    assert all(set(item) == {"resource", "path", "access"} for item in plan["requirements"])
+    assert (
+        plan["plan_digest"]
+        == hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in plan.items() if key != "plan_digest"},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+    )
+
+
+def test_a_cache_variable_named_in_the_environment_is_refused(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    config = _cache_config(tmp_path / "cargo", variable="CARGO_HOME")
+    config["access_policy"]["defaults"]["environment"] = ["CARGO_HOME"]
+
+    with pytest.raises(runtime_access.AccessError, match="CARGO_HOME"):
+        runtime_access.resolve_plan(
+            repo, repo, config, "qa", "read-only", operation="qa"
+        )
+
+
+def test_a_tampered_cache_variable_plan_is_refused(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    plan = runtime_access.resolve_plan(
+        repo,
+        repo,
+        _cache_config(tmp_path / "cargo", variable="CARGO_HOME"),
+        "qa",
+        "read-only",
+        operation="qa",
+    )
+    runtime_access.validate_plan(plan)
+
+    def changed(edit: Callable[[JsonObject], object]) -> JsonObject:
+        copy: JsonObject = json.loads(json.dumps(plan))
+        edit(copy)
+        return _redigest(copy)
+
+    def on_checkout(copy: JsonObject) -> None:
+        for field in ("filesystem", "requirements"):
+            for item in copy[field]:
+                if item["resource"] == "checkout":
+                    item["variable"] = "SRC"
+
+    def second_cache(copy: JsonObject) -> None:
+        extra = {
+            "resource": "cache",
+            "access": "write",
+            "path": str((tmp_path / "other").resolve()),
+            "variable": "CARGO_HOME",
+        }
+        copy["filesystem"].append(extra)
+        copy["requirements"].append(extra)
+
+    def renamed(name: str) -> Callable[[JsonObject], object]:
+        def edit(copy: JsonObject) -> None:
+            for field in ("filesystem", "requirements"):
+                for item in copy[field]:
+                    if "variable" in item:
+                        item["variable"] = name
+
+        return edit
+
+    tampered = [
+        changed(on_checkout),
+        changed(second_cache),
+        changed(
+            lambda p: (
+                p.update(environment=["CARGO_HOME"]),
+                p["sources"].update(environment="defaults"),
+            )
+        ),
+        *(
+            changed(renamed(name))
+            for name in ("1X", "A=B", "", "HOME", "TMPDIR", "CARGO_TARGET_DIR")
+        ),
+    ]
+    for invalid in tampered:
+        with pytest.raises(runtime_access.AccessError):
+            runtime_access.validate_plan(invalid)

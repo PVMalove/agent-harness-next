@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The container executor guide is a shipped payload of backend-orchestration only (#710).
 
-It installs as ``.harness/docs/container-executor.md``, comes from ``harness/docs/`` and never from
+It installs as ``.harness/instructions/container-executor.md``, comes from ``harness/project/instructions/`` and never from
 the source repository's root ``docs/``, and its example adapter keeps the agent's native approval.
 """
 
@@ -11,8 +11,8 @@ import unittest
 
 from harness.bin import harness as harness_cli
 
-INSTALLED = ".harness/docs/container-executor.md"
-SOURCE = harness_cli.PACKAGE / "docs" / "container-executor.md"
+INSTALLED = ".harness/instructions/container-executor.md"
+SOURCE = harness_cli.PACKAGE / "project" / "instructions" / "container-executor.md"
 # Options that would approve actions on the human's behalf or skip the agent's permission checks.
 BYPASS_TOKENS = ("dangerously", "bypassPermissions", "acceptEdits", "skip-permissions")
 
@@ -39,11 +39,25 @@ class ContainerGuideTests(unittest.TestCase):
         text = SOURCE.read_text(encoding="utf-8")
 
         for engine in ("docker", "podman"):
-            for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy"):
+            for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy", "Dockerfile.qa"):
                 with self.subTest(engine=engine, dockerfile=dockerfile):
                     self.assertIn(
                         f"{engine} build -f .harness/container/{dockerfile}", text
                     )
+
+    def test_the_qa_image_ships_a_rust_toolchain_and_the_guide_names_the_chosen_behavior(
+        self,
+    ) -> None:
+        dockerfile = (harness_cli.PACKAGE / "container/Dockerfile.qa").read_text(
+            encoding="utf-8"
+        )
+        text = SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("FROM harness-sandbox:local", dockerfile)
+        self.assertIn("--default-toolchain", dockerfile)
+        self.assertIn("build-essential", dockerfile)
+        self.assertIn("there is no stage filter by executor", text)
+        self.assertIn("qa-environment-failure", text)
 
     def test_the_guide_marks_rootless_podman_on_selinux_as_verified_and_the_rest_as_unverified(
         self,
@@ -59,23 +73,26 @@ class ContainerGuideTests(unittest.TestCase):
         self.assertIn("Rootless Docker", unverified)
         self.assertNotIn("Podman, rootful and rootless", unverified)
 
-    def test_the_example_adapter_keeps_native_approval(self) -> None:
+    def test_the_container_adapter_keeps_native_approval(self) -> None:
         text = SOURCE.read_text(encoding="utf-8")
-        example = text.split("## Example project-owned agent adapter", 1)[1]
+        section = _section(text, "Agent adapter in a container")
 
-        self.assertIn('"${HARNESS_EXECUTOR:-}" != docker', example)
-        self.assertIn(".allowed_tools", example)
+        self.assertIn("claude_worker.py", section)
+        self.assertIn("HARNESS_EXECUTOR=docker", section)
+        self.assertIn("allowed_tools", section)
+        self.assertIn("dontAsk", section)
         for token in BYPASS_TOKENS:
             with self.subTest(token=token):
                 self.assertNotIn(token, text)
 
-    def test_the_example_adapter_streams_the_events_the_host_attests_from(self) -> None:
+    def test_the_container_adapter_streams_the_events_the_host_attests_from(self) -> None:
         """#1014: the host reads the model from the stream-json init event of the worker."""
-        example = SOURCE.read_text(encoding="utf-8").split(
-            "## Example project-owned agent adapter", 1
-        )[1]
+        section = _section(
+            SOURCE.read_text(encoding="utf-8"), "Agent adapter in a container"
+        )
 
-        self.assertIn("--output-format stream-json --verbose", example)
+        self.assertIn("--output-format stream-json --verbose", section)
+        self.assertIn("never to run", section)
 
     def test_reports_from_a_container_name_the_host_side_self_report(self) -> None:
         section = _section(

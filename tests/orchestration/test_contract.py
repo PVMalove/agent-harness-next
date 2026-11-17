@@ -86,8 +86,8 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         self.assertIn("tests/orchestration/test_docker_smoke.py", smoke)
         self.assertIn('HARNESS_REQUIRE_DOCKER_SMOKE: "1"', smoke)
         self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', smoke)
-        # The smoke runs the one debug build of the `rust` job.
-        self.assertIn("needs: rust", smoke)
+        # The smoke runs the one debug build of the `runtime-build` job.
+        self.assertIn("needs: [lint, runtime-build]", smoke)
         self.assertIn("name: harness-runtime-linux-debug", smoke)
         for dockerfile in ("Dockerfile.sandbox", "Dockerfile.proxy"):
             self.assertIn(f"-f harness/container/{dockerfile}", smoke)
@@ -159,11 +159,11 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         self.assertIn("tests/orchestration\n", job)
         self.assertIn('HARNESS_REQUIRE_RUNTIME: "1"', job)
         self.assertIn('HARNESS_REQUIRE_FAULT_INJECTION: "1"', job)
-        # The test hooks of the runtime exist only in a debug build: the `rust` job builds it.
-        self.assertIn("needs: rust", job)
+        # The test hooks of the runtime exist only in a debug build: `runtime-build` builds it.
+        self.assertIn("needs: [lint, runtime-build]", job)
         self.assertIn("name: harness-runtime-linux-debug", job)
-        self.assertIn("run: cargo build --locked --bin harness-runtime\n", blocks["rust"])
-        self.assertNotIn("--release", blocks["rust"])
+        self.assertIn("run: cargo build --locked --bin harness-runtime\n", blocks["runtime-build"])
+        self.assertNotIn("--release", blocks["runtime-build"])
         self.assertIn("native/harness-runtime/target/debug/harness-runtime", job)
         self.assertNotIn("--release", job)
         self.assertIn("--junitxml=.harness/.sandboxes/logs/junit-fault-injection.xml", job)
@@ -912,6 +912,56 @@ class ZoneFreeConfigHealthTests(unittest.TestCase):
         ]["items"]["properties"]["path"]
         for path in ("", " ", "cache\x00bad"):
             self.assertIsNone(re.search(path_schema["pattern"], path))
+
+    def test_a_cache_variable_is_a_free_name_on_a_cache_item_only(self) -> None:
+        import re
+
+        def policy(*items: dict[str, object]) -> dict[str, object]:
+            return {"defaults": {"filesystem": list(items)}}
+
+        def cache(path: str, variable: object) -> dict[str, object]:
+            return {
+                "resource": "cache",
+                "access": "write",
+                "path": path,
+                "variable": variable,
+            }
+
+        self.assertEqual(
+            contract.access_policy_problems(policy(cache("/c", "CARGO_HOME")), set()),
+            [],
+        )
+        invalid = [
+            policy({"resource": "checkout", "access": "read", "variable": "SRC"}),
+            policy(cache("/a", "X"), cache("/b", "X")),
+            *(
+                policy(cache("/c", name))
+                for name in (
+                    None,
+                    "",
+                    "1X",
+                    "A=B",
+                    "HOME",
+                    "TMPDIR",
+                    "CARGO_TARGET_DIR",
+                    "HTTPS_PROXY",
+                    "HARNESS_VERIFY_COLD",
+                )
+            ),
+        ]
+        for value in invalid:
+            with self.subTest(policy=value):
+                self.assertTrue(contract.access_policy_problems(value, set()))
+        schema = json.loads(
+            (Path(contract.__file__).parent / "orchestration.schema.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        variable = schema["definitions"]["accessComponent"]["properties"][
+            "filesystem"
+        ]["items"]["properties"]["variable"]
+        self.assertIsNotNone(re.fullmatch(variable["pattern"][1:-1], "CARGO_HOME"))
+        self.assertIsNone(re.fullmatch(variable["pattern"][1:-1], "A=B"))
 
     def _problems(self, config: dict[str, object]) -> list[str]:
         directory = Path(tempfile.mkdtemp())

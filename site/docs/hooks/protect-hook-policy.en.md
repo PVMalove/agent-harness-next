@@ -5,10 +5,10 @@
 - **Translation / Gist:**
 
 ```text
-Hook policy protection: the agent must not change the hook_policy key, the hooks settings and directories, or write to .harness/project.json through the shell.
+Hook policy protection: the agent must not change the hook_policy key, the hooks settings and directories; a shell write to .harness/project.json goes only through manual human confirmation.
 ```
 ## 2. Full description
-A critical `PreToolUse` hook for Bash and the file tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, and `apply_patch` of the second runtime). It blocks in all profiles (`minimal`, `standard`, `strict`) and does not depend on the role or the environment: `HOOK_PROFILE` and similar variables are not read. A human changes the hook policy (ADR 0024, section 1).
+A critical `PreToolUse` hook for Bash and the file tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`, and `apply_patch` of the second runtime). It protects in all profiles (`minimal`, `standard`, `strict`): it blocks, and it hands a shell write to `.harness/project.json` to manual human confirmation (see the Bash part). It does not depend on the role or the environment: `HOOK_PROFILE` and similar variables are not read. A human changes the hook policy (ADR 0024, section 1).
 
 `protect_hook_policy.py` makes the decision on the fail-closed principle: only code `0` and the word `allow` mean permission. A missing Python, any other code, and a partial copy of the module give code `2`. Through the `hook_response.py` envelope, the hook answers with a verdict that has `hook_id` `protect-hook-policy` and one of the `reason_code` values, which the script names with the prefix `[reason_code]` in the first line of stderr.
 
@@ -16,7 +16,7 @@ A critical `PreToolUse` hook for Bash and the file tools (`Write`, `Edit`, `Mult
 - `.claude/settings*.json`, `.codex/hooks.json`, and everything inside the `.claude/hooks` and `.codex/hooks` directories — block, `agent-config-edit`.
 - `.harness/project.json` — an edit is allowed only if the parsed `hook_policy` key is the same before and after it (parsed values are compared, not bytes; a missing key is also a value). If the key is added, changed, or removed — `hook-policy-changed`. If the JSON before or after the edit does not parse, is not an object, or contains a duplicate key, or if the result of the edit cannot be computed in advance (`old_string` is not found or is ambiguous, `NotebookEdit`) — `hook-policy-unparseable`. An edit of other keys is allowed.
 
-**Bash.** Any write to `.harness/project.json` is a block, `project-json-shell-write`. A write is:
+**Bash.** Any write to `.harness/project.json` requires manual human confirmation, `project-json-shell-write`: in Claude Code (`CLAUDE_PROJECT_DIR` is set), the hook answers with the `ask` verdict, the runtime shows the request with the reason, and the human confirms or rejects it. The agent states in the command `description` what changes and why. Outside Claude Code and without the `hook_response.py` envelope, the same refusal stays a block (code `2`). A write is:
 - a redirection to this file (`>`, `>>`, `>|`, `&>`, `<>`, with a descriptor number and heredoc): the strict lexer `pr_commands.StrictLexer` records the redirection targets (`strict_redirections`);
 - a mention of the file as an argument of any program except the reading ones (`cat`, `grep`, `rg`, `head`, `tail`, `wc`, `ls`, `jq`, `diff`, `sed` without `-i`/`--in-place`, `echo`, `printf`, `cd`, and the safe git subcommands: `status`, `diff`, `log`, `show`, `add`, `commit`, `blame`, `ls-files`, and so on): `tee`, `cp`, `mv`, `install`, `dd of=`, `truncate`, `ln`, `sed -i`, `git checkout|restore`, interpreter code (`python -c`, `perl -pi`), `bash -c`;
 - a program behind the wrapper `command`, `env`, `sudo`, or `timeout` is decided the same way as without the wrapper: `command ls .harness` and `timeout 5 sed -n 1,5p .harness/project.json` are allowed, `sudo cp a .harness/project.json` is a block. The wrapper options are parsed by the `WRAPPERS` table. A wrapper with an option that is not in the table (`env -C`, `env -S`, `sudo -D`, `sudo -e`) itself counts as a writing program. The assignment `env F=.harness/project.json` before a writing program is also a mention;
@@ -37,6 +37,7 @@ Remaining limitations: a write through a script in a file, indirection through v
 - **Input (Input/Brief):** The PreToolUse JSON payload through stdin: `tool_name`, `tool_input` (`command`, or `file_path`/`notebook_path` with the edit content; for `apply_patch`, the patch is in `command`), and `cwd`.
 - **Output (Output/Report):**
   - **Allow:** code `0`; the last line of stderr is the verdict `allow`.
+  - **Manual confirmation:** only `project-json-shell-write` in Claude Code: the body exits with code `3`, and the envelope answers with code `0`, the verdict `ask`, and JSON `hookSpecificOutput.permissionDecision: "ask"` in stdout. Other refusals never ask.
   - **Block:** code `2`, a message with the prefix `[reason_code]` in stderr, and the verdict `block`. Codes: `hook-policy-changed`, `hook-policy-unparseable`, `project-json-shell-write`, `agent-config-edit`, `apply-patch-unparseable` (the `apply_patch` patch does not parse), `hook-policy-protected` (the payload is not parsed or has neither a path nor a command, the module gave no decision). All are registered in `harness/orchestration/system_fields.v1.json` (`hook.reason_code`).
 ## Source
 

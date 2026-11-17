@@ -12,6 +12,9 @@ import type { HomeSnapshot } from "./ws/types";
 
 export const COLLAPSED_KEY = "harness-nav-collapsed";
 
+/** The routes that do not work without the runtime: they show its start command. */
+const RUNTIME_ROUTES = new Set(["", "orchestration", "recovery", "container-route"]);
+
 /** A semver pre-release suffix (`2.1.0-rc.1` -> "rc.1"), else null: the badge shows only then. */
 export function preRelease(version: string): string | null {
   const match = /^v?\d+\.\d+\.\d+-([0-9A-Za-z.-]+)(?:\+[0-9A-Za-z.-]+)?$/.exec(version.trim());
@@ -67,6 +70,17 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
   const version = snapshot?.harness_version ?? "";
   const channel = version ? preRelease(version) : null;
   const project = snapshot?.project ?? null;
+  // Only a runtime store needs the runtime; its start command is set when it did not answer.
+  const store = snapshot?.store ?? null;
+  const runtimeStore = store?.authority === "runtime-store";
+  const startCommand = runtimeStore ? (store?.start_command ?? "") : "";
+  const [copied, setCopied] = useState("");
+  const copyStartCommand = () => {
+    void navigator.clipboard?.writeText(startCommand).then(
+      () => setCopied(startCommand),
+      () => setCopied(""),
+    );
+  };
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -181,6 +195,11 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
             <span className="ds-where-text">{project.branch}</span>
           </span>
         ) : null}
+        {runtimeStore ? (
+          <span id="runtime-state" className={`ds-where runtime-state ${startCommand ? "err" : "ok"}`} role="status">
+            {startCommand ? t("Runtime: не отвечает") : t("Runtime: работает")}
+          </span>
+        ) : null}
         <div className="ds-top-end">
           {chip}
           <div className="ds-seg" role="group" aria-label={t("Язык интерфейса")}>
@@ -246,6 +265,20 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
       <div id="nav-scrim" className="ds-scrim" hidden={!open} onClick={() => setOpen(false)} />
       {/* The open mobile menu is modal: the page behind it takes no focus and no clicks. */}
       <main id="content" tabIndex={-1} className={legacyPage ? "ds-main ds-main--legacy" : "ds-main"} inert={open}>
+        {startCommand && RUNTIME_ROUTES.has(current) ? (
+          <div className="ds-alert ds-alert-err runtime-down" role="alert">
+            <span>{t("Без runtime оркестрация не работает. Запустите его вне песочницы агента:")}</span>
+            <code className="ds-mono">{startCommand}</code>
+            <button className="ds-btn ds-btn-sm" type="button" onClick={copyStartCommand}>
+              <Icon name="copy" className="ds-ic-sm" /> {t("Скопировать команду")}
+            </button>
+            {copied === startCommand ? (
+              <span className="ds-muted" role="status">
+                {t("Команда скопирована")}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
         {children}
       </main>
 

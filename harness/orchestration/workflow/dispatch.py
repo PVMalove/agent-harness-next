@@ -71,6 +71,7 @@ from harness.orchestration.core.workspace import (
     _agent_inbox,
     _integration_ref,
     _prepare_agent_inbox,
+    _require_writable_worktree,
 )
 from harness.orchestration.dispatch_preflight import (
     PreflightError,
@@ -99,6 +100,7 @@ from harness.orchestration.workflow import carried_items, conditions
 from harness.orchestration.workflow import commit_plan as plan_rules
 from harness.orchestration.workflow import delta_review
 from harness.orchestration.workflow import resolver as resolver_route
+from harness.orchestration.workflow import rebaser
 from harness.orchestration.workflow import resolver_state
 from harness.orchestration.workflow import supersede
 from harness.orchestration.workflow import risk as risk_policy
@@ -298,6 +300,7 @@ def _milestones(
         "risk-reassessment-required": bool(batch.get("risk_reassessment_required")),
         "bypass-rerun": route == "bypass-rerun",
         "rebase-fix-forward": route == "rebase-fix-forward",
+        "rebase": route == "rebase",
         "rebase-target": rebase_target is not None,
     }
     return [name for name, hit in crossed.items() if hit]
@@ -535,6 +538,10 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
         prepared = prepare_dispatch(batch["ticket"], args.role, state)
     except PreflightError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
+    # A writer commits in the issue worktree: a session that cannot write it learns so here,
+    # before the brief exists, not from the writer's failed commit (#1126).
+    if core_config._role(repo, args.role)["mode"] == "write":
+        _require_writable_worktree(batch["worktree"])
     return prepared.to_dict()
 
 
@@ -607,9 +614,13 @@ def _proposed_transition(
     rebase_target = (
         routing.get("rebase_target_commit")
         if isinstance(routing, dict)
-        and routing.get("route") == "rebase-fix-forward"
-        and next_action == "developer-retry"
-        and (role_name, purpose) == ("developer", "work")
+        and (
+            (routing.get("route"), next_action, role_name, purpose)
+            == ("rebase-fix-forward", "developer-retry", "developer", "work")
+            # A rebase, or a repeated one, binds the target its routing record carries (#1010).
+            or (next_action, role_name, purpose)
+            == (rebaser.REBASE_NEXT_ACTION, rebaser.REBASER_ROLE, "work")
+        )
         else None
     )
     if not isinstance(rebase_target, str):
@@ -1053,6 +1064,8 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             resolver_state.RESOLVER_NEXT_ACTION: {
                 (resolver_state.RESOLVER_ROLE, "work")
             },
+            # Issue #1010: a moved integration base is carried by the rebaser (ADR 0034).
+            rebaser.REBASE_NEXT_ACTION: {(rebaser.REBASER_ROLE, "work")},
         }
         if role_name == "qa" and batch.get("risk_reassessment_required"):
             message, remedy = risk_policy.reassessment_remedy(batch)
@@ -1203,6 +1216,8 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     remedy=INTERNAL_INVARIANT_REMEDY,
                 )
             if risk["review_required"]:
+                # A candidate an accepted rebase carried keeps the review of its origin (#1010).
+                reviewed = {candidate, *rebaser.rebased_origins(batch, cast(str, candidate))}
                 accepted_review = any(
                     item.get("role") == "code-review"
                     and item.get("state") == "reported"
@@ -1210,7 +1225,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     and _load_dispatch(root, item["dispatch_id"]).get(
                         "candidate_commit"
                     )
-                    == candidate
+                    in reviewed
                     for item in active_dispatches(batch)
                 )
                 if not accepted_review:
@@ -1267,6 +1282,9 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     if e["dispatch_id"] == latest["dispatch_id"]
                 )
                 snapshot_commit = _pending_report(root, batch, prior)["commit_sha"]
+        if role_name == rebaser.REBASER_ROLE:
+            # The rebaser carries the latest accepted candidate, never an unaccepted one.
+            snapshot_commit = _latest_developer_candidate(repo, root, batch)
         if role_name in {"architect", "developer", "verification", "code-review"}:
             snapshot_commit = (
                 candidate
@@ -1450,6 +1468,12 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         from harness.orchestration import pinned_configuration
 
         orchestration_policy = _orchestration_policy(config)
+        if qa_execution is not None:
+            from harness.orchestration.qa_execution import with_executable_checks
+
+            orchestration_policy["infrastructure_retry"] = with_executable_checks(
+                orchestration_policy["infrastructure_retry"], dispatch_commands
+            )
         # The hook policy and the tool list are pinned with the approval (issue #794): a later
         # edit of hook_policy or of the role tool policy does not change an approved dispatch.
         allowed_tools = resolve_allowed_tools(
@@ -1637,6 +1661,15 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             brief["qa_execution"] = qa_execution
         if plan is not None:
             brief["verification_plan"] = plan
+        if role_name == rebaser.REBASER_ROLE:
+            target = brief.get("rebase_target_commit")
+            if not isinstance(target, str):
+                raise CoordinatorError(
+                    "a rebaser dispatch needs the rebase target of a rebase decision",
+                    remedy="decide the report whose route_preview names the rebase route, then "
+                    "create the rebaser dispatch",
+                )
+            brief["rebaser"] = rebaser.brief_section(repo, snapshot_commit, target)
         if role_name == resolver_state.RESOLVER_ROLE:
             brief["resolver"] = resolver_route.brief_section(
                 root, config, batch, dispatch_commands, brief["report_staging_path"]

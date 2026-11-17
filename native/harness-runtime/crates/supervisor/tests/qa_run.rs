@@ -791,3 +791,57 @@ fn a_qa_run_no_thread_of_this_runtime_holds_is_stopped_and_lost_after_a_restart(
     assert!(calls.contains(&strings(&["podman", "rm", &name])));
     assert!(lost.lease_released_at.is_some());
 }
+
+#[test]
+fn each_run_builds_in_its_own_run_root_and_only_downloads_reach_the_cache() {
+    let mut targets = Vec::new();
+    for name in ["cargo-a", "cargo-b"] {
+        let repo = Repo::new(name, &[]);
+        repo.rewrite_brief(|brief| {
+            let requirements = brief["runtime_access"]["requirements"]
+                .as_array_mut()
+                .unwrap();
+            requirements[4]["variable"] = json!("CARGO_HOME");
+        });
+        let supervisor = repo.supervisor();
+        repo.attach("cargo-1", Run::finish("", "", 0));
+        repo.attach("cargo-2", Run::finish("", "", 0));
+
+        repo.run(
+            &supervisor,
+            &gate(&[("cargo-1", "make lint"), ("cargo-2", "make test")]),
+        )
+        .unwrap();
+
+        let exited = repo.wait_for(&supervisor, ExecutionState::Exited);
+        let cache = repo.path("cache/pip");
+        let target = format!("{}/cargo-target", repo.path(".harness/runs"));
+        let runs = repo.runs();
+        assert_eq!(runs.len(), 2);
+        for argv in &runs {
+            let joined = argv.join(" ");
+            assert!(
+                joined.contains(&format!("--env CARGO_TARGET_DIR={target} ")),
+                "{joined}"
+            );
+            assert!(
+                joined.contains(&format!("--env CARGO_HOME={cache} ")),
+                "{joined}"
+            );
+        }
+        assert!(target.starts_with(&repo.path(".harness/runs")));
+        assert!(!target.starts_with(&cache));
+        let settings = exited.launch["settings"].to_string();
+        assert!(settings.contains("\"CARGO_TARGET_DIR\""), "{settings}");
+        assert!(settings.contains("\"CARGO_HOME\""), "{settings}");
+        assert!(
+            !settings.contains(&cache) && !settings.contains(&target),
+            "{settings}"
+        );
+        targets.push(target);
+    }
+    assert_ne!(
+        targets[0], targets[1],
+        "two runs never share a build directory"
+    );
+}

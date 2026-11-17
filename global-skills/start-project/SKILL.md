@@ -89,6 +89,18 @@ explicitly requests one.
    and, after `harness init`, verify that `.harness/project.json` holds
    `"hook_policy": {"profile": "standard"}` and that `harness health` reports `hooks.policy` with
    profile `standard`. Do not pick `minimal` or `strict` unless the owner asked for it.
+
+   When the manifest includes `backend-orchestration`, the new project needs its runtime store
+   before the first `batch create`. The store needs a human approval, so do not run the command
+   yourself. Show the owner the command with the real path, ask them to run it with their own
+   approval, and wait for their confirmation:
+
+   ```bash
+   harness-runtime init --repo "<repo>" \
+     --approved-by <human> --approved-at <RFC 3339 time> --reason <text>
+   ```
+
+   After the confirmation, `harness health` no longer warns at `orchestration.ledger_summary`.
 6. For an existing harness run `harness diff` before `harness update`. Use `harness adopt
    --replace-conflicts` only for an explicit migration after reviewing same-name conflicts.
    `harness update` does not write `hook_policy`; leave the `hook_policy` of an existing project to

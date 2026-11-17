@@ -21,7 +21,9 @@ Command fields and fallback rules are described in [verification settings](../ge
 
 ## Incremental verification
 
-A full run at every step is too expensive, so the verification plan is computed, not chosen by eye.
+A full run at every step is too expensive. So when `orchestration.json` sets
+`verification_plan_policy`, the coordinator computes the verification plan instead of choosing it by
+eye.
 
 - **ChangeImpact** builds the set of affected items from the project graph. Unknown impact widens the
   check and does not narrow it.

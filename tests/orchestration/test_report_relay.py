@@ -72,7 +72,7 @@ def test_relay_preserves_worker_bytes_checks_and_author(
     result = cli(reporting, *arguments)
     assert result["state"] == "reported"
     assert path.read_bytes() == raw
-    stored = json.loads(Path(result["report"]).read_text())
+    stored = json.loads(reporting._stored(result["report"]).read_text())
     assert stored == report
     assert result["report_relay"]["author_dispatch_id"] == brief["dispatch_id"]
     assert result["report_relay"]["submitted_by"] == "operator"

@@ -34,7 +34,10 @@ require `assignment_plans`: the coordinator reads `access_policy` even in a conf
   `--purpose publish`, `qa` for the `qa` role and `integration local-qa`, `git` for `integration refresh`
   and `integration resolve`. The section "QA, Git, and publish access" below describes what exactly is checked.
 - `filesystem` names a resource: `checkout`, `git_common`, `shared_storage`, or `cache` (only `cache`
-  requires `path`). The coordinator turns them into the real paths of the worktree, the shared Git directory, and the
+  requires `path`). A `cache` item may name a `variable`: the container executor itself passes the
+  resolved cache path under this name (`--env NAME=<path>`), for example `CARGO_HOME` (ADR 0032).
+  The name is unique among the caches, is not listed in `environment` and is not one the runtime
+  sets; a cache without `variable` keeps the previous plan digest. The coordinator turns them into the real paths of the worktree, the shared Git directory, and the
   storage. A disk root and a whole home directory are rejected.
 - Write permissions do not widen the brief's `write_paths`, the tool policy, or the native confirmations, and a
   read-only role gets no write access to `checkout`, `git_common`, or `shared_storage`.
@@ -67,8 +70,8 @@ The value `extensions.runtime_access: "docker"` selects the executor that ships 
 Podman container, and, when `access_policy.operations.qa.container` is set, also each QA command. The
 executor contract is described in ADR 0025 and ADR 0022 (the "Implementation decisions" sections); this section
 describes the shipped behavior. The English-language guide
-[`harness/docs/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/container-executor.md), which
-`backend-orchestration` installs as `.harness/docs/container-executor.md`, gives the step-by-step target-project setup: prerequisites, building
+[`harness/project/instructions/container-executor.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/container-executor.md), which
+`backend-orchestration` installs as `.harness/instructions/container-executor.md`, gives the step-by-step target-project setup: prerequisites, building
 images, caches, the allowlist, blockers, cleanup, and an example project adapter. Project implementations of
 `module:factory` work as before, and a host process cannot register another implementation
 under the name `docker`.
@@ -88,6 +91,8 @@ under the name `docker`.
 },
 "extensions": {"runtime_access": "docker"}
 ```
+
+### Configuration {#docker-config}
 
 - The `container` component contains `worker_image` (required), an optional `proxy_image`, and an
   optional `engine` (`docker` by default, or `podman`). A tag is a single image reference without
@@ -114,6 +119,9 @@ under the name `docker`.
 - The executor works only in the runtime store epoch and only on Linux: on the file ledger and outside
   Linux, `dispatch preflight` blocks it with a remedy (`harness-runtime migrate`, then
   `harness-runtime serve`).
+
+### Preflight and images {#docker-preflight}
+
 - `dispatch preflight` asks the runtime (`container.observe`), and the runtime queries the engine read-only:
   `<engine> info` determines the mode (`rootful`, `rootless`, `unknown`, or `unavailable`),
   SELinux, and the daemon ID, and `<engine> image inspect` finds the local id of each image. On success,
@@ -131,8 +139,9 @@ under the name `docker`.
   the send, and the dispatch stays `approved`.
 - The harness does not build, download, or publish images. The `.harness/container/` payload contains
   an optional worker base image `Dockerfile.sandbox` (Debian slim with `git`, `curl`, `jq`,
-  Python with `uv`, and Node.js), `Dockerfile.proxy`, and the egress-proxy code. The guide gives the `docker build` and
-  `podman build` commands for both images; build or download a missing image
+  Python with `uv`, and Node.js), an optional QA image `Dockerfile.qa` on top of `harness-sandbox:local`
+  with `make`, a C compiler, and the Rust toolchain, `Dockerfile.proxy`, and the egress-proxy code. The guide gives the `docker build` and
+  `podman build` commands for the images; build or download a missing image
   yourself, then repeat `dispatch preflight` and `dispatch propose`.
 - `dispatch propose` queries the engine and pins the image ids in the brief field `runtime_images`
   (`{"worker": "sha256:…", "proxy": "sha256:…" | null}`) next to the plan. Its sha256 is part of the
@@ -146,6 +155,9 @@ under the name `docker`.
   The remedy is to restore the image with the pinned id, or to rebuild or download the image, cancel the dispatch
   (`dispatch cancel`), and repeat `dispatch propose`: an approval for a different image is not
   reused.
+
+### Worker launch {#docker-launch}
+
 - `dispatch send` hands the supervised docker dispatch to the runtime's `execution.launch`; Python does not build the engine
   argv. The runtime creates an `--internal` network and a sidecar proxy (if `network.hosts` is not
   empty), then the worker `harness-<dispatch_id>` with `<engine> create --pull never`, and starts
@@ -172,6 +184,8 @@ under the name `docker`.
   usually does not have, so an executable adapter is required. The project adapter sets the agent flags for running in a container
   by the `HARNESS_EXECUTOR` marker.
 
+### Limitations {#docker-limits}
+
 Limitations: a worker role sees `shared_storage` read-only and writes to the storage only in
 `.sandboxes/scratch`, and the runtime socket is not mounted into the container. So the coordinator
 commands that change the ledger (`dispatch self-report`, `dispatch heartbeat`, `report submit`) do not
@@ -180,6 +194,8 @@ recorded on the host with `report submit --file <path>`. The separate `--checkou
 is not mounted into the container: only the plan roots are mounted. The real smoke test in CI (job
 `docker-smoke`) checks only rootful Docker; Podman (rootful and rootless), rootless Docker, and
 SELinux hosts are confirmed only by the argv matrix and the scripted engine and are not verified on a live engine.
+
+### Container QA {#docker-qa}
 
 Container QA is enabled only by a set `access_policy.operations.qa.container`: then each
 QA command is a separate foreground container `--rm --init` from the image pinned in the brief of the
@@ -214,7 +230,7 @@ applies a fresh plan and refuses if the plan has changed. The section runs only 
 `.harness/orchestration.json` selects `extensions.runtime_access: "docker"`, and it is the same for `soft`
 and `hard`. Cleanup skips a worker that is not stopped (with the hint `<engine> stop <name>`), objects of a
 live execution, and a runtime response that cannot be obtained or read. The runtime does not
-list or remove volumes: anonymous volumes from the image's `VOLUME` are left to `rm`.
+list or remove volumes: anonymous volumes from the image's `VOLUME` stay after the container is removed.
 
 ## QA, Git, and publish access {#qa-git-and-publish-access}
 

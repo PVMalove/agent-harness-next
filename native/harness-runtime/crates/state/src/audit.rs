@@ -10,6 +10,7 @@ use serde_json::{Value, json};
 
 use crate::canonical::{canonical_json, sha256_hex};
 use crate::error::Result;
+use crate::store_error::{REPEAT_OR_RESTORE_REMEDY, VALIDATE_AND_RESTORE_REMEDY, is_busy};
 
 /// The `prev_chain_sha256` of the first record.
 pub const GENESIS_CHAIN: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -99,7 +100,7 @@ impl Broken {
                     "the store could not be read for its verification: {}",
                     self.detail
                 ),
-                "repeat the command; if the store stays unreadable, restore the state directory from the snapshot named in AUTHORITY.json",
+                REPEAT_OR_RESTORE_REMEDY,
             );
         }
         let mut error = ErrorBody::new(
@@ -107,7 +108,7 @@ impl Broken {
             FailureDomain::Infrastructure,
             false,
             format!("the store failed the check {}: {}", self.check, self.detail),
-            "stop every writer, run `coordinator.py ledger validate --full`, and restore the state directory from the snapshot named in AUTHORITY.json",
+            VALIDATE_AND_RESTORE_REMEDY,
         )
         .with_fact("check", self.check);
         if let Some(seq) = self.seq {
@@ -124,13 +125,13 @@ const CHECK_STORE: &str = "store";
 
 impl From<rusqlite::Error> for Broken {
     fn from(err: rusqlite::Error) -> Self {
-        let busy = matches!(
-            err.sqlite_error_code(),
-            Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked)
-        );
         Self::new(
             None,
-            if busy { CHECK_BUSY } else { CHECK_STORE },
+            if is_busy(&err) {
+                CHECK_BUSY
+            } else {
+                CHECK_STORE
+            },
             err.to_string(),
         )
     }

@@ -23,9 +23,8 @@ section in the console menu, and the description and details in the block under 
 ## What the web console is
 
 The web console is the browser client of the Console server. The TUI and the browser show the same
-facts: harness state, tasks, orchestration, reports, and recovery. The console does not replace
-the CLI and does not make decisions for a human: it reads the state and shows what happened and
-what to do next.
+facts: harness state, tasks, orchestration, reports, and recovery. The console does not make
+decisions for a human: it shows what happened and what to do next.
 
 ### What it shows
 
@@ -60,8 +59,12 @@ On the left are the stable sections, while roles and statuses are filters inside
 The header shows the connection state: `online` means that the server responds, but it does not mean
 that all checks passed. A skipped check does not count as passed.
 
-The console is read-only: it shows facts and suggests commands, but it does not run them. Decisions about
-approve, rerun, publication, and merge stay with a human.
+The console runs only the commands from its catalog: the same `harness` and
+`.harness/orchestration/coordinator.py` processes as the CLI. Before an irreversible command the console
+asks for a confirmation and explains the reason: deleting data, a coordinator decision, an external change,
+overwriting files, or a download from the network. A project runs only one mutating command at a time.
+A human makes decisions, for example a batch approve, in the console with the same commands, and the
+coordinator and runtime check them again.
 
 ### Limits of the demo
 

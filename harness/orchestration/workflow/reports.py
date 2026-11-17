@@ -120,9 +120,11 @@ from harness.orchestration.runtime_attestation import (
     attest as attest_runtime_worktree,
 )
 from harness.orchestration.workflow import carried_items
+from harness.orchestration.workflow import failure_domains
 from harness.orchestration.workflow.fix_forward import FixForwardHistory
 from harness.orchestration.workflow import commit_plan as plan_rules
 from harness.orchestration.workflow import rebase
+from harness.orchestration.workflow import rebaser
 from harness.orchestration.workflow import resolver_state
 from harness.orchestration.workflow import approval as approvals
 from harness.orchestration.workflow.approval import (
@@ -1583,14 +1585,7 @@ def _validate_qa_stages(report: JsonObject, dispatch: JsonObject) -> None:
         raise refuse(
             "does not agree with checks_run (a command never reached is not_run)"
         )
-    if failed_stage is None:
-        expected_outcome = "completed"
-    elif (
-        failed_stage == "gate" or (diagnosis or {}).get("category") == "project-defect"
-    ):
-        expected_outcome = "failed"
-    else:
-        expected_outcome = "blocked"
+    expected_outcome = failure_domains.qa_report_outcome(stages)
     if report["outcome"] != expected_outcome:
         raise refuse(
             f"requires outcome {expected_outcome} for failed_stage {failed_stage}"
@@ -1854,6 +1849,7 @@ def _validate_report_in_batch(
         allowed_paths=batch.get("allowed_paths"),
     )
     resolver_state.validate_report(repo, root, batch, dispatch, report)
+    rebaser.validate_report(repo, dispatch, report)
 
 
 def report_scope_warnings(report: JsonObject, dispatch: JsonObject) -> list[str]:
@@ -2001,12 +1997,12 @@ def _record_report(
             )
         batch["retry_candidate_required"] = False
     # Only a work report reaches this point with risk_triggers: a publish dispatch is refused by
-    # `send` and recorded by `publish_dispatch` (delivery.py) without a submitted report, and it
+    # `send` and recorded by `publish_dispatch` (publication.py) without a submitted report, and it
     # runs after QA, so it has no reassessment to bind (issue #781).  A blocked writer report
     # binds too: it carries the commit that `accept-conditional` or an infrastructure retry
     # then makes the batch's candidate, and no later step would bind it.
     if (
-        role["name"] in {"developer", "conflict-resolver"}
+        role["name"] in {"developer", "conflict-resolver", rebaser.REBASER_ROLE}
         and report.get("outcome") in {"completed", "blocked"}
         and dispatch.get("purpose", "work") == "work"
     ):
@@ -2084,6 +2080,9 @@ def submit_report(args: argparse.Namespace) -> JsonObject:
     else:
         report = _read_object(path, "completion report")
     root = _state_root(args, repo)
+    from harness.orchestration import container_attestation
+
+    container_attestation.attest_before_submit(repo, root, report.get("dispatch_id"))
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         dispatch = _load_dispatch(root, cast(str, report.get("dispatch_id")))

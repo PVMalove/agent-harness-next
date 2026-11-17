@@ -83,7 +83,10 @@ class StepsPage:
 
 
 def select_source(facts: WorkerFacts) -> str:
-    """A bound runtime receipt gives structured steps; an external adapter gives a plain log."""
+    """A supervised worker's run log or a bound runtime receipt gives structured steps; an
+    external adapter gives a plain log."""
+    if facts.dispatch.get("execution"):
+        return "structured"
     receipt = facts.status.get("adapter_receipt") if facts.status else None
     if (
         isinstance(receipt, Mapping)
@@ -95,6 +98,11 @@ def select_source(facts: WorkerFacts) -> str:
     if facts.dispatch.get("resolved_transport") == "external":
         return "plain"
     return "none"
+
+
+def in_process(facts: WorkerFacts) -> bool:
+    """An in-process worker runs inside the coordinator session and writes no step log."""
+    return facts.dispatch.get("resolved_transport") == "in-process"
 
 
 def no_log_page(dispatch_id: str, offset: int) -> StepsPage:

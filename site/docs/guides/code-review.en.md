@@ -9,21 +9,23 @@ in parallel from a fixed point: a commit, branch, tag, or merge-base.
 This axis checks conformance to the repository's documented standards and to a baseline of twelve
 Fowler code "smells", for example Mysterious Name, Duplicated Code, Primitive Obsession, and
 Repeated Switches. A smell is a judgment, not a hard violation, so it does not count as a defect.
-The axis does not repeat what a linter catches: the linter has already reported it. If they conflict,
+The axis does not repeat what a linter, formatter, or type checker catches: the tool has already
+reported it. If they conflict,
 the repository standard takes precedence over the baseline.
 
 ## Spec
 
 This axis checks conformance to the originating ticket or specification: what is missing, what is
 done in excess (scope creep), and what is implemented incorrectly. If the specification cannot be
-found, the axis is skipped explicitly and does not invent requirements.
+found and the user confirms that there is none, the axis is skipped explicitly and does not invent
+requirements.
 
 ## How it works
 
 The input is the diff from the fixed point and the task description. Two subagents receive independent
 instructions, work in parallel, and return reports to the main session. The main session does not
 silently fix another reviewer's findings; it decides on each one. The report language comes from the
-`language` field of the project configuration, not from the language of code comments.
+`language` field in `.harness/project.json` (default `ru`), not from the language of code comments.
 
 <figure class="ah-diagram">
   <div class="ah-diagram-bar">

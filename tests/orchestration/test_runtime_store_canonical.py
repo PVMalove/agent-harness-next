@@ -10,6 +10,7 @@ proves that the Rust writer does. Both languages therefore agree on every ``reco
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -160,7 +161,12 @@ def test_the_state_fixture_of_the_rust_tests_passes_ledger_validate(
         capture_output=True,
         text=True,
         check=False,
-        env={"PYTHONPATH": str(ROOT), "PATH": ""},
+        env={
+            "PYTHONPATH": str(ROOT),
+            "PATH": "",
+            # Windows cannot load asyncio's sockets without its system root.
+            **{k: v for k, v in os.environ.items() if k.upper() == "SYSTEMROOT"},
+        },
     )
 
     assert result.returncode == 0, result.stderr

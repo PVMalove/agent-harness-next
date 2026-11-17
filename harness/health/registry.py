@@ -68,6 +68,9 @@ REGISTRY: list[tuple[str, CheckFn]] = [
     ("environment.uv", environment_checks.check_uv),
     ("environment.glab", environment_checks.check_glab),
     ("environment.dev_env", environment_checks.check_dev_environment),
+    ("environment.qa_executables", environment_checks.check_qa_executables),
+    ("environment.c_linker", environment_checks.check_c_linker),
+    ("environment.runtime_socket_path", environment_checks.check_runtime_socket_path),
     ("environment.output_encoding", environment_checks.check_output_encoding),
     ("environment.codex_sandbox", runtime_sandbox_checks.check_codex_sandbox),
     ("environment.claude_sandbox", runtime_sandbox_checks.check_claude_sandbox),
@@ -80,18 +83,27 @@ REGISTRY: list[tuple[str, CheckFn]] = [
     ("environment.hook_bash", windows_checks.check_hook_bash),
     ("hooks.policy", hooks_checks.check_policy),
     ("hooks.test_author", hooks_checks.check_test_author),
+    ("hooks.test_author_config", hooks_checks.check_test_author_config),
+    ("hooks.test_author_root", hooks_checks.check_test_author_root),
+    ("hooks.test_author_trust", hooks_checks.check_test_author_trust),
+    ("hooks.test_author_guard", hooks_checks.check_test_author_guard),
+    ("hooks.test_author_runner", hooks_checks.check_test_author_runner),
+    ("hooks.test_author_probe", hooks_checks.check_test_author_probe),
     ("tracker.project", tracker_checks.check_project),
     ("tracker.auth", tracker_checks.check_auth),
     ("tracker.reachability", tracker_checks.check_reachability),
     ("tracker.permissions", tracker_checks.check_permissions),
     ("tracker.labels", tracker_checks.check_labels),
     ("tracker.git_base", tracker_checks.check_git_base),
+    ("orchestration.runtime", orchestration_checks.check_runtime),
     ("orchestration.ledger_summary", orchestration_checks.check_ledger_summary),
     ("orchestration.unfinished_batches", orchestration_checks.check_unfinished_batches),
     ("orchestration.blocked_batches", orchestration_checks.check_blocked_batches),
     ("orchestration.stale_dispatches", orchestration_checks.check_stale_dispatches),
     ("orchestration.orphaned_worktrees", orchestration_checks.check_orphaned_worktrees),
     ("orchestration.disposable_data", orchestration_checks.check_disposable_data),
+    ("orchestration.adapters", orchestration_checks.check_adapters),
+    ("orchestration.worker_binaries", orchestration_checks.check_worker_binaries),
 ]
 
 FIXERS: dict[str, FixFn] = {
@@ -101,6 +113,7 @@ FIXERS: dict[str, FixFn] = {
         for check_id in directory_checks.DIRECTORY_PATHS
     },
     "tracker.labels": tracker_checks.fix_labels,
+    "hooks.test_author_config": hooks_checks.fix_test_author_config,
 }
 
 

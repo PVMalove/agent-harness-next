@@ -44,6 +44,22 @@ STORE_EPOCH_REMEDY = (
     "run the command through the coordinator CLI with the runtime serving "
     "(`harness-runtime serve --repo <repo>`); the coordinator never writes the state files"
 )
+# A repository without orchestration state gets the runtime store, never a file ledger (ADR 0036).
+NEW_PROJECT_MESSAGE = (
+    "this repository has no orchestration state, and the coordinator does not create a file "
+    "ledger: a new project works on the runtime store"
+)
+
+
+def new_project_remedy(repo: Path | str = "<repo>") -> str:
+    """The remedy that leads a repository without orchestration state to its runtime store."""
+    return (
+        f"run 'harness-runtime init --repo {repo} --approved-by <human> --approved-at <RFC 3339> "
+        f"--reason <text>' once (a human approves it), start 'harness-runtime serve --repo {repo}', "
+        "then repeat the command"
+    )
+
+
 POINTER_NAME = "ledger.json"
 GENERATIONS = "generations"
 LOCK_DIRECTORY = ".coordinator.lock"
@@ -1067,11 +1083,25 @@ class LifecycleLedger:
         except LedgerError:
             return None
 
+    def is_new_project(self) -> bool:
+        """Neither a store, nor a ledger, nor a record of a layout older than the ledger."""
+        return (
+            not store_is_authority(self.root)
+            and not self.pointer_path.exists()
+            and not self._legacy_records_present()
+        )
+
+    def refuse_new_project(self, repo: Path | str = "<repo>") -> None:
+        """A repository without orchestration state gets no file ledger (ADR 0036)."""
+        if self.is_new_project():
+            raise LedgerError(NEW_PROJECT_MESSAGE, remedy=new_project_remedy(repo))
+
     def ensure(self) -> JsonObject:
-        """Create the first empty generation; never reinterpret legacy records implicitly.
+        """Return the ledger pointer; never reinterpret legacy records implicitly.
 
         The runtime store exists after the cutover and holds its generation: there is nothing to
-        create, and the answer says only which epoch it is."""
+        create, and the answer says only which epoch it is. A repository without orchestration
+        state is refused: its store comes from ``harness-runtime init`` (ADR 0036)."""
         if store_is_authority(self.root):
             return {"version": STORE_LEDGER_VERSION}
         pointer = self.pointer()
@@ -1087,8 +1117,7 @@ class LifecycleLedger:
                 "legacy lifecycle state requires an explicit ledger migrate",
                 remedy="run 'coordinator.py ledger migrate' once",
             )
-        generation = self._new_generation("initialize")
-        return self._select(generation)
+        raise LedgerError(NEW_PROJECT_MESSAGE, remedy=new_project_remedy())
 
     def status(self) -> JsonObject:
         if store_is_authority(self.root):
@@ -1250,6 +1279,7 @@ class LifecycleLedger:
                 "ledger reset requires --confirm RESET",
                 remedy="pass --confirm RESET (the literal string) to acknowledge the reset",
             )
+        self.refuse_new_project()
         current = self.records_root()
         active = []
         for path in (current / "batches").glob("*.json"):

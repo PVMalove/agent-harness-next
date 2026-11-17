@@ -50,6 +50,9 @@ STAGE_RANKS = {
     "risk-assessment": 2,
     "verification": 3,
     "code-review": 4,
+    # The rebaser carries the reviewed candidate onto a moved base before QA (issue #1010).
+    "rebase": 4,
+    "rebaser": 4,
     "qa": 5,
     "publish": 6,
 }
@@ -402,6 +405,8 @@ def _restart_failed_dispatch(
         if brief.get("purpose") == "publish"
         else "resolve-conflict"
         if brief["role"] == "conflict-resolver"
+        else "rebase"
+        if brief["role"] == "rebaser"
         else brief["role"]
     )
     batch["environmental_restart"] = {

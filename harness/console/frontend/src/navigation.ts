@@ -1,4 +1,4 @@
-/* The 13 sections of docs/design/web-console-mockups/navigation-a.md in their three groups. */
+/* The 13 sections of the console menu in their three groups. */
 import type { IconName } from "./icons";
 
 export interface NavItem {

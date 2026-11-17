@@ -11,7 +11,7 @@ from typing import Protocol, cast
 from harness.health.project_tracker import resolve_project_tracker
 from harness.orchestration.core.constants import STATE_REL
 from harness.orchestration.core.utils import JsonObject
-from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError, serve_command
 from harness.orchestration.ledger.lifecycle import (
     POINTER_NAME,
     STORE_LEDGER_VERSION,
@@ -132,6 +132,7 @@ def store_facts(repo: Path, *, runtime: RuntimeCall | None = None) -> StoreFacts
     if schema == STORE_LEDGER_VERSION:
         audit_records: int | None = None
         reason = ""
+        start_command = ""
         try:
             result = (runtime or _runtime_call(repo))("state.validate", {"full": False})
             count = result.get("audit_records")
@@ -141,6 +142,9 @@ def store_facts(repo: Path, *, runtime: RuntimeCall | None = None) -> StoreFacts
                 reason = NO_AUDIT_COUNT
         except (RuntimeClientError, OSError, ValueError) as error:
             reason = runtime_reason(error)
+            # Only a runtime that did not answer at all is started; a refusal has its own remedy.
+            if isinstance(error, RuntimeClientError) and error.code == "runtime_unavailable":
+                start_command = serve_command(repo)
         return StoreFacts(
             "runtime-store",
             schema,
@@ -148,6 +152,7 @@ def store_facts(repo: Path, *, runtime: RuntimeCall | None = None) -> StoreFacts
             audit_records,
             cutover_at=_cutover_at(root),
             reason=reason,
+            start_command=start_command,
         )
     records = LifecycleLedger(root).records_root_lenient()
     audit = records / "audit" if records is not None else None

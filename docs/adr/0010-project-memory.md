@@ -88,7 +88,7 @@ ticket и PR делят квоту task_archive. Snapshot и index имеют п
 Context Package остаётся offline. Эти ограничения приняты вместо watermark/retention-политики.
 
 Проекты без `memory.enabled` не меняют поведение и бюджет Package. Схема Package и контракт
-Completion report получают новые поля, а схема проектного конфига и `validate_project_json`
+Completion report содержат поля памяти, а схема проектного конфига и `validate_project_json`
 меняются вместе. `harness health` показывает размер индекса, число источников и статус модели
 и остаётся read-only. Качество памяти подтверждается golden-набором из реальных закрытых
 тикетов с гейтом recall@k и потолком нерелевантных хитов; изменение модели, порога или квот

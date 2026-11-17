@@ -119,8 +119,36 @@ function parseDispatch(value: unknown): RosterDispatch | null {
     "started_at",
     "last_event_at",
   ];
-  if (Object.keys(value).length !== fields.length + 1 || typeof value.silent !== "boolean") return null;
+  if (Object.keys(value).length !== fields.length + 2 || typeof value.silent !== "boolean") return null;
+  if (!(value.observation === null || isObservation(value.observation))) return null;
   return fields.every((key) => isText(value[key])) ? (value as unknown as RosterDispatch) : null;
+}
+
+/** The ledger facts of an in-process dispatch: its stream reason, heartbeat, self-report and
+    newest checkpoints of the count it recorded, each with exactly the allowlisted fields. */
+function isObservation(value: unknown): boolean {
+  if (!isObject(value) || Object.keys(value).length !== 5) return false;
+  const { stream_reason, heartbeat_at, self_report, checkpoints, checkpoint_count } = value;
+  if (!isText(stream_reason) || !isText(heartbeat_at) || !Array.isArray(checkpoints)) return false;
+  if (typeof checkpoint_count !== "number" || checkpoint_count < checkpoints.length) return false;
+  const report =
+    self_report === null ||
+    (isObject(self_report) &&
+      Object.keys(self_report).length === 3 &&
+      isText(self_report.reported_model) &&
+      typeof self_report.match === "boolean" &&
+      isText(self_report.reported_at));
+  return (
+    report &&
+    checkpoints.every(
+      (item) =>
+        isObject(item) &&
+        Object.keys(item).length === 3 &&
+        isText(item.checkpoint_id) &&
+        isText(item.commit_sha) &&
+        isText(item.created_at),
+    )
+  );
 }
 
 /** The event of one ok steps.subscribe reply; null for a reply of another shape. */

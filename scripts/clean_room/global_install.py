@@ -59,6 +59,17 @@ def run(ctx: SimpleNamespace) -> None:
     ):
         if not (target_home / rel).is_symlink():
             sys.exit(f"expected symlink missing: {rel}")
+    run_ok(INSTALL_GLOBAL + ["--target-home", str(target_home), "--cli"])
+    run_ok(INSTALL_GLOBAL + ["--target-home", str(target_home), "--cli", "--check"])
+    launcher = target_home / ".local" / "bin" / (
+        "harness.cmd" if sys.platform == "win32" else "harness"
+    )
+    if str(ROOT / "harness" / "bin" / "harness.py") not in launcher.read_text(
+        encoding="utf-8"
+    ):
+        sys.exit("--cli launcher does not run this checkout's harness.py")
+    if sys.platform != "win32":
+        run_ok([str(launcher), "--help"])
     for rel in (
         ".agents/skills/project-harness-bootstrap",
         ".hermes/skills/skill-library",

@@ -7,6 +7,7 @@ use std::fmt;
 use std::fs::{File, OpenOptions, TryLockError};
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use contracts::{
@@ -166,6 +167,31 @@ pub fn hold_instance_lock(paths: &RuntimePaths) -> Result<File, StartError> {
     take_lock(paths)
 }
 
+/// The journal of a runtime the autostart hook started: `<runtime dir>/<repo-id>.serve.log`
+/// (ADR 0031, section 4).
+pub fn serve_log_path(paths: &RuntimePaths) -> PathBuf {
+    paths.dir.join(format!("{}.serve.log", paths.repo_id))
+}
+
+/// Open the journal of an autostarted runtime `0600` and for appending, after the same check of
+/// the runtime directory as `serve` makes. It is never emptied: an `ensure` that loses the start
+/// race keeps the lines of the runtime that serves, and several writers never leave a hole in it.
+///
+/// # Errors
+/// A runtime directory that is not private to this user, or a journal that cannot be opened.
+pub fn open_serve_log(paths: &RuntimePaths) -> Result<(PathBuf, File), StartError> {
+    secure_directory(&paths.dir, crate::paths::process_uid())?;
+    let path = serve_log_path(paths);
+    let mut options = OpenOptions::new();
+    options.append(true).create(true);
+    #[cfg(unix)]
+    std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+    let file = options
+        .open(&path)
+        .map_err(io_context(format!("cannot open {}", path.display())))?;
+    Ok((path, file))
+}
+
 /// Create the runtime directory `0700` when it is missing, then refuse it unless it is private to
 /// `owner`: a symlink, not a directory, another owner, any group or other permission bit, or a
 /// parent that the group or others may write without the sticky bit. Nothing is repaired: in a
@@ -274,11 +300,14 @@ fn drops_the_response(_body: &[u8], _reply: &crate::session::Reply) -> bool {
     false
 }
 
+/// Serve one connection. A `shutdown` it answers sets `shutdown` once the answer is written, so
+/// the accept loop ends the same way as on SIGTERM.
 pub(crate) fn serve_connection<S: Read + Write>(
     stream: &mut S,
     permitted: bool,
     peer_pid: Option<u32>,
     shared: &Shared,
+    shutdown: &AtomicBool,
 ) -> Result<(), FrameError> {
     if !permitted {
         return send(
@@ -315,6 +344,9 @@ pub(crate) fn serve_connection<S: Read + Write>(
             return Ok(());
         }
         send(stream, &reply.response)?;
+        if session.stop_requested() {
+            shutdown.store(true, Ordering::Relaxed);
+        }
         if reply.close {
             return Ok(());
         }
@@ -367,6 +399,7 @@ mod tests {
             state_dir: None,
             snapshots: Default::default(),
             supervisor: Default::default(),
+            lifetime: Default::default(),
         }
     }
 
@@ -377,11 +410,35 @@ mod tests {
         response.error.unwrap().code
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_new_journal_never_empties_the_one_a_running_serve_writes() {
+        // A private parent: the runtime directory refuses one that others may write.
+        let base = crate::test_runtime_dir::RuntimeDir::new("log");
+        let dir = base.path().join("harness");
+        let paths = RuntimePaths {
+            repo_id: "0123456789abcdef".to_owned(),
+            socket: dir.join("s.sock"),
+            token: dir.join("t.token"),
+            lock: dir.join("l.lock"),
+            dir,
+        };
+        let (path, mut running) = open_serve_log(&paths).unwrap();
+        running.write_all(b"ready\n").unwrap();
+
+        let (_, mut loser) = open_serve_log(&paths).unwrap();
+        loser.write_all(b"lease_held\n").unwrap();
+        running.write_all(b"served\n").unwrap();
+
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(text, "ready\nlease_held\nserved\n");
+    }
+
     #[test]
     fn a_refused_peer_gets_unauthorized_peer_before_anything_is_read() {
         let mut stream = Duplex::new(vec![0xff; 16]);
 
-        serve_connection(&mut stream, false, None, &shared()).unwrap();
+        serve_connection(&mut stream, false, None, &shared(), &AtomicBool::new(false)).unwrap();
 
         assert_eq!(first_error(&stream.output), ErrorCode::UnauthorizedPeer);
         assert_eq!(stream.input.position(), 0);
@@ -391,7 +448,7 @@ mod tests {
     fn a_permitted_peer_is_served_over_any_byte_stream() {
         let mut stream = Duplex::new((MAX_FRAME_LEN + 1).to_be_bytes().to_vec());
 
-        serve_connection(&mut stream, true, None, &shared()).unwrap();
+        serve_connection(&mut stream, true, None, &shared(), &AtomicBool::new(false)).unwrap();
 
         assert_eq!(first_error(&stream.output), ErrorCode::MalformedRequest);
     }

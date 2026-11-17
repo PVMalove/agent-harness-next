@@ -12,11 +12,12 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable, Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Protocol
 
 from ..domain.live_steps import (
     DispatchTiming,
+    InProcessObservation,
     RosterDispatch,
     Step,
     agent_steps,
@@ -79,8 +80,13 @@ class LiveSteps:
         max_followed: int = MAX_FOLLOWED,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         timing: Callable[[str], Awaitable[DispatchTiming | None]] | None = None,
+        observation: Callable[[str], Awaitable[InProcessObservation | None]]
+        | None = None,
     ) -> None:
         self._timing = timing
+        self._observation = observation
+        # A dispatch out of the live states records nothing new until its state changes.
+        self._settled: dict[tuple[str, str], InProcessObservation | None] = {}
         self._events = events
         self._workers = workers
         self._now = now
@@ -101,6 +107,24 @@ class LiveSteps:
         for entry in roster:
             timing = await self._timing(entry.dispatch_id) if entry.state in self._live else None
             found.append(timed(entry, timing, now))
+        return tuple(found)
+
+    async def _observed(
+        self, roster: tuple[RosterDispatch, ...]
+    ) -> tuple[RosterDispatch, ...]:
+        """The roster with the ledger observation of its in-process dispatches, in any state."""
+        if self._observation is None:
+            return roster
+        found: list[RosterDispatch] = []
+        for entry in roster:
+            key = (entry.dispatch_id, entry.state)
+            if key in self._settled:
+                observation = self._settled[key]
+            else:
+                observation = await self._observation(entry.dispatch_id)
+                if entry.state not in self._live:
+                    self._settled[key] = observation
+            found.append(replace(entry, observation=observation))
         return tuple(found)
 
     async def subscribe(self) -> AsyncGenerator[RosterItem | StepsItem, None]:
@@ -127,8 +151,10 @@ class LiveSteps:
                 journal_id = page.journal_id
                 position = max(page.floor, page.head - self._backlog)
                 page = self._events.read_after(position, _BATCH_EVENTS)
-            roster = await self._timed(
-                roster_from_view(page.view if page is not None else None)
+            roster = await self._observed(
+                await self._timed(
+                    roster_from_view(page.view if page is not None else None)
+                )
             )
             source = (
                 "available" if page is not None and page.available else "unavailable"

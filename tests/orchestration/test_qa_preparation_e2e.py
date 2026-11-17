@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import textwrap
 import unittest
@@ -169,7 +170,7 @@ class PreparationFixture(unittest.TestCase):
 
     def report_of(self, result: JsonObject) -> JsonObject:
         report: JsonObject = json.loads(
-            Path(result["report"]).read_text(encoding="utf-8")
+            self.fx._stored(result["report"]).read_text(encoding="utf-8")
         )
         return report
 
@@ -219,7 +220,7 @@ class QaPreparationE2ETests(PreparationFixture):
         )
         self.assertIn("code was not verified", report["output"])
         self.assertFalse(self.gate_ran.exists(), "the gate must not start")
-        artifact = Path(result["artifact"]).read_text(encoding="utf-8")
+        artifact = self.fx._stored(result["artifact"]).read_text(encoding="utf-8")
         # The artifact shows what ran; the stage keeps the approved command and names what ran.
         self.assertIn(f"$ {stage['executed_command']}", artifact)
         self.assertIn("EAI_AGAIN", artifact)
@@ -272,7 +273,7 @@ class QaPreparationE2ETests(PreparationFixture):
         self.assertTrue(self.gate_ran.exists())
         self.assertIn(
             "prepared: True",
-            Path(rerun_result["artifact"]).read_text(encoding="utf-8"),
+            self.fx._stored(rerun_result["artifact"]).read_text(encoding="utf-8"),
         )
         # The first dispatch, its report and its decision stay as audit evidence.
         entries = {
@@ -281,7 +282,7 @@ class QaPreparationE2ETests(PreparationFixture):
         }
         self.assertEqual(entries[first["dispatch_id"]]["state"], "reported")
         self.assertEqual(entries[first["dispatch_id"]]["decision"]["decision"], "retry")
-        self.assertTrue(Path(result["report"]).is_file())
+        self.assertTrue(self.fx._stored(result["report"]).is_file())
         self.assertEqual(self.developer_retries(), 0)
         accepted = self.fx._decide(self.batch_id, "accept")
         self.assertEqual(accepted["coordinator_decisions"][-1]["decision"], "accept")
@@ -383,6 +384,37 @@ class QaPreparationE2ETests(PreparationFixture):
         self.assertEqual(report["outcome"], "completed")
         self.assertNotIn("qa_stages", report)
         self.assertEqual([c["result"] for c in report["checks_run"]], ["pass", "pass"])
+
+    @unittest.skipIf(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        "a privileged process is not denied by file permissions",
+    )
+    @unittest.skipIf(os.name == "nt", "Windows does not deny writes by POSIX mode bits")
+    def test_qa_run_with_a_read_only_git_worktrees_directory_runs_the_gate_and_leaves_it_unchanged(
+        self,
+    ) -> None:
+        self.configure(preparation=[self.prepare])
+        brief = self.qa_brief()
+        common = Path(
+            subprocess.run(
+                ["git", "-C", str(self.repo), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+        registry = common / "worktrees"
+        registry.mkdir(exist_ok=True)
+        listing = sorted(path.name for path in registry.iterdir())
+        registry.chmod(0o555)
+        self.addCleanup(registry.chmod, 0o755)
+
+        report = self.report_of(self.run_qa(brief))
+
+        self.assertEqual(report["outcome"], "completed")
+        self.assertEqual([c["result"] for c in report["checks_run"]], ["pass", "pass"])
+        self.assertTrue(self.gate_ran.exists())
+        self.assertEqual(sorted(path.name for path in registry.iterdir()), listing)
 
     def test_a_report_failure_after_preparation_leaves_the_lane_free_for_a_rerun(
         self,

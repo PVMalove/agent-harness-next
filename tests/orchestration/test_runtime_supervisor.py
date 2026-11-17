@@ -214,6 +214,22 @@ def test_the_execution_moves_from_launching_through_running_and_stopping_to_exit
     ) == [("exited",)]
 
 
+def test_dispatch_status_of_a_batch_shows_the_execution_the_runtime_observes(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    sent(repo.send())
+    repo.wait_launches(1)
+    repo.wait_execution("running")
+
+    viewed = repo.run("dispatch", "status", "--batch", repo.batch)
+
+    assert viewed.returncode == 0, viewed.stderr
+    (entry,) = cast(list[object], dig(json.loads(viewed.stdout), "dispatches"))
+    assert dig(entry, "dispatch_id") == repo.dispatch
+    assert dig(entry, "execution", "state") == "running"
+
+
 @pytest.mark.parametrize("ignores_term", [False, True], ids=["obeys", "ignores"])
 def test_a_deadline_stop_signals_the_group_and_releases_the_lease_only_after_the_exit(
     supervised: Factory, ignores_term: bool

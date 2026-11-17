@@ -29,7 +29,7 @@ pub const DISPATCH_STATES: [&str; 11] = [
 ];
 
 /// `RecoveryRoute`.
-pub const RECOVERY_ROUTES: [&str; 16] = [
+pub const RECOVERY_ROUTES: [&str; 17] = [
     "developer-retry",
     "same-candidate-rerun",
     "verification",
@@ -42,6 +42,7 @@ pub const RECOVERY_ROUTES: [&str; 16] = [
     "narrowed-retry",
     "fix-forward",
     "rebase-fix-forward",
+    "rebase",
     "supersede",
     "environmental-restart",
     "rewind",

@@ -188,9 +188,10 @@ def test_hook_catalog_agrees_with_the_templates() -> None:
     for spec in settings_specs:
         for tool in spec.tools:
             assert is_wired(first, spec, tool), (spec.hook_id, tool)
-            # The second runtime wires exactly what it delivers, Write/Edit via apply_patch.
+            # The second runtime wires exactly what it delivers, Write/Edit via apply_patch, and
+            # only the hooks shipped to it (`HookSpec.runtimes`).
             assert is_wired(second, spec, tool) == (
-                tool in supported_tools(spec, CODEX_SUPPORT)
+                tool in supported_tools(spec, CODEX_SUPPORT, "codex")
             ), (
                 spec.hook_id,
                 tool,
@@ -208,6 +209,21 @@ def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards()
     assert delivered("test-author-guard") == ("Write", "Edit", "Bash")
     for advisory in ("impact-first-touch", "sensitive-path-recheck", "targeted-check-reminder"):
         assert delivered(advisory) == ()
+
+
+def test_the_runtime_autostart_hook_is_shipped_to_claude_code_only() -> None:
+    specs = [spec for spec in HOOK_CATALOG if spec.hook_id == "runtime-autostart"]
+
+    assert {(spec.event, spec.tools) for spec in specs} == {
+        ("PreToolUse", ("Bash",)),
+        ("Stop", ("*",)),
+        ("SubagentStop", ("*",)),
+    }
+    for spec in specs:
+        assert not spec.critical
+        assert spec.runtimes == ("claude",)
+        assert supported_tools(spec, CODEX_SUPPORT, "codex") == ()
+        assert supported_tools(spec, CODEX_SUPPORT, "claude") == spec.tools
 
 
 def test_profile_without_hook_policy_key_comes_from_the_default_source(
@@ -521,3 +537,72 @@ def test_console_route_of_the_policy_warn_does_not_promise_that_update_fixes_it(
     assert "неверно" not in route.title
     assert route.title != check_route("environment.hook_bash").title
     assert i18n.tr("en", route.title) != route.title
+
+
+ENVELOPE = ".claude/hooks/hook_response.py"
+
+
+def forget_runtime_autostart(repo: Path) -> None:
+    """An older installed envelope: its ``HOOKS`` and ``ACTIVE_PROFILES`` lack runtime-autostart."""
+    envelope = repo / ENVELOPE
+    text = envelope.read_text(encoding="utf-8")
+    for line in (
+        '    "runtime-autostart": ("runtime-autostart-failed", False),\n',
+        '    "runtime-autostart": ("minimal", "standard", "strict"),\n',
+    ):
+        assert line in text
+        text = text.replace(line, "")
+    envelope.write_text(text, encoding="utf-8")
+
+
+def test_a_wired_hook_the_envelope_does_not_register_fails_with_the_force_command(
+    repo: Path,
+) -> None:
+    forget_runtime_autostart(repo)
+
+    result = check(repo)
+
+    assert result["status"] == "fail"
+    assert "не регистрирует hook_id runtime-autostart" in result["message"]
+    assert "runtime-autostart.sh, подключён" in result["message"]
+    assert result["fix"]["command"].endswith(f"--force-seed-file {ENVELOPE}")
+    assert ".harness/.sandboxes/seed-backups/" in result["fix"]["text"]
+
+
+def test_an_unwired_hook_the_envelope_does_not_register_warns(repo: Path) -> None:
+    forget_runtime_autostart(repo)
+    document = load(repo, SETTINGS)
+    drop_script(document, "runtime-autostart.sh")
+    save(repo, SETTINGS, document)
+
+    result = check(repo)
+
+    assert "не регистрирует hook_id runtime-autostart (runtime-autostart.sh)" in result["message"]
+    assert "подключён)" not in result["message"]
+    assert result["fix"]["command"].endswith(f"--force-seed-file {ENVELOPE}")
+
+
+def test_an_unreadable_envelope_hooks_table_fails(repo: Path) -> None:
+    (repo / ENVELOPE).write_text("HOOKS = {\n", encoding="utf-8")
+
+    result = check(repo)
+
+    assert result["status"] == "fail"
+    assert "hook_response.py: HOOKS не читается" in result["message"]
+
+
+@pytest.mark.parametrize("envelope", [ENVELOPE, ".claude/hooks/hook-envelope.sh"])
+def test_a_missing_envelope_file_fails_and_update_restores_it(
+    repo: Path, envelope: str
+) -> None:
+    (repo / envelope).unlink()
+
+    result = check(repo)
+
+    assert result["status"] == "fail"
+    assert f"{envelope}: файл отсутствует" in result["message"]
+    assert "без JSON-конверта" in result["message"]
+    assert result["fix"]["command"].endswith(f"update {repo}")
+    assert harness("update", str(repo)).returncode == 0
+    assert (repo / envelope).is_file()
+    assert "файл отсутствует" not in check(repo)["message"]

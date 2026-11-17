@@ -6,7 +6,7 @@ direction is not under discussion.
 
 ## When to use
 
-- The ticket is labeled `afk` and `pipeline::fast`. This is a small scope, usually up to three story
+- The ticket is labeled `afk` and `pipeline::fast`. This is a small scope, by default up to three story
   points.
 - The task fits within one verifiable boundary and does not need independent verification by a
   separate role.
@@ -14,8 +14,9 @@ direction is not under discussion.
   implementation.
 
 If the command receives an epic instead of a ticket, it takes the first suitable ticket on the
-frontier: open, not blocked, not taken by anyone, and labeled `pipeline::fast` together with `afk`.
-A ticket that is named explicitly but has no `pipeline::fast` label goes to `/implement`.
+frontier, that is, the list of the epic's child tickets that are ready for work. A suitable ticket is
+open, not blocked, not taken by anyone, and labeled `pipeline::fast` together with `afk`. If a ticket
+named explicitly has no `pipeline::fast` label, the command stops and suggests `/implement`.
 
 ## Pre-flight
 
@@ -44,7 +45,7 @@ A ticket that is named explicitly but has no `pipeline::fast` label goes to `/im
 3. **Review by consent.** Offer `/code-review`; if it is declined, record the refusal explicitly.
 4. **Commit and push.** After separate consent, make a semantic commit and push the issue branch,
    reporting the hash and the push result.
-5. **Offer publication.** Name `/to-pull-requests` and stop: a human opens the PR.
+5. **Offer publication.** Name `/to-pull-requests` and stop: a human invokes that command.
 
 <figure class="ah-diagram">
   <div class="ah-diagram-bar">

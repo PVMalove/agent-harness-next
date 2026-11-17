@@ -10,11 +10,12 @@ reports, or logs.
 
 ## What is checked automatically
 
-- `tests/console/test_web.py` starts a real server. The URL `/?token=` answers 303 to the
-  clean `/#/?lang=ru` and sets the cookie `console_token_<port>` (HttpOnly, SameSite=Strict,
-  Path=/). With this cookie `/ws` returns the Home snapshot. A wrong token, extra parameters, HEAD,
-  a repeated cookie, and a cookie of another port are rejected. The token does not appear in the response.
-- `tests/console/test_console_admission.py` checks the parsing of the Cookie header and the sign-in rule.
+- `tests/console/test_console_admission.py` checks the parsing of the Cookie header and the sign-in rule:
+  the URL `/?token=` answers 303; a wrong token, extra parameters, HEAD, a repeated cookie, and a
+  cookie of another port are rejected.
+- Playwright `tests/web/home.spec.ts` against a real server checks that the sign-in URL opens the
+  clean `/#/?lang=ru` and sets the cookie `console_token_<port>` (HttpOnly, SameSite=Strict, Path=/),
+  that with this cookie Home gets a snapshot over `/ws`, and that a wrong token gets 401 without a cookie.
 - `tests/console/test_web_catalog.py` compares `src/i18n/catalog.json` with the TUI translation tables.
 - Vitest in `tests/web/*.test.ts(x)` checks the shell (13 sections in three groups,
   `aria-current`, collapsing, the mobile menu, Esc, the keys g/d/o/?), ru/en without a reload,
@@ -23,8 +24,8 @@ reports, or logs.
   `dist/execution-console.css` with the mockup styles, and no external URLs.
 - Playwright in `tests/web/*.spec.ts` checks in Chromium the sign-in by link, the cookie, language
   switching without a reload, no CSP violations, no console errors, and no requests to other origins, all
-  five states, and screenshots of the shell and Home at 1440 and 390 px. The comparison tolerance is
-  `maxDiffPixelRatio: 0.01`, `threshold: 0.2`.
+  five states, and the structure of the shell and Home at 1440 and 390 px. These are DOM checks without
+  screenshot comparison (ADR 0029): the owner accepts the appearance by hand against the mockup.
 
 Automated tests do not replace a human review: 200 % zoom, a real tracker, and a long
 connection loss are checked by hand.
@@ -41,8 +42,8 @@ npm run test:e2e
 ```
 
 From the repository root: `make web-install`, `make web-build`, `make web-test`, `make web-e2e`.
-The Python part: `.harness/.venv/bin/python -m pytest tests/console/test_web.py
-tests/console/test_console_admission.py tests/console/test_web_catalog.py`.
+The Python part: `.harness/.venv/bin/python -m pytest tests/console/test_console_admission.py
+tests/console/test_web_catalog.py`.
 
 ## Manual checklist for the PR
 

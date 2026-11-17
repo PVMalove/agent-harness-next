@@ -51,6 +51,7 @@ def test_the_store_facts_and_the_target_schema_round_trip_through_their_payload(
         "audit_records": 12,
         "cutover_at": None,
         "reason": "",
+        "start_command": "",
     }
     assert UpdateHarnessFacts.from_payload(payload) == sut
 

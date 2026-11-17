@@ -7,12 +7,13 @@ use std::fs::{self, File};
 use std::io::{self, Write};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 use platform_ffi::{
     PipeConnection, PipeListener, create_private_file, current_user_sid, process_user_sid,
 };
+use state::mutex::lock_unpoisoned;
 
 use crate::paths::RuntimePaths;
 use crate::peer::{PeerId, same_user};
@@ -27,6 +28,8 @@ pub struct Server {
     listener: Mutex<PipeListener>,
     paths: RuntimePaths,
     shared: Arc<Shared>,
+    /// Set by a `shutdown` request; the accept loop ends as when the caller's stop flag is set.
+    shutdown: Arc<AtomicBool>,
     /// Holds the exclusive lock of this repository's runtime until the server is dropped.
     _lock: File,
 }
@@ -66,11 +69,14 @@ impl Server {
             supervisor: Arc::new(crate::server::supervisor_of(&paths, state_dir.as_deref())),
             state_dir,
             snapshots: Arc::default(),
+            // A Windows runtime is started by hand (ADR 0031): it never stops by itself.
+            lifetime: Arc::new(crate::lifetime::Lifetime::manual()),
         });
         Ok(Self {
             listener: Mutex::new(listener),
             paths,
             shared,
+            shutdown: Arc::default(),
             _lock: lock,
         })
     }
@@ -84,7 +90,8 @@ impl Server {
         &self.shared.supervisor
     }
 
-    /// Serve connections until `stop` is set. A connection runs on its own thread.
+    /// Serve connections until `stop` is set or a client sends `shutdown`. A connection runs on
+    /// its own thread.
     pub fn serve_until(&self, stop: &AtomicBool) -> io::Result<()> {
         let own = current_user_sid()?;
         self.serve_until_as(stop, own)
@@ -93,18 +100,15 @@ impl Server {
     /// Like [`Server::serve_until`], but a client must run as the user with SID `expected`.
     /// Tests use another SID to see the refusal of a foreign peer on a real pipe.
     pub fn serve_until_as(&self, stop: &AtomicBool, expected: PeerId) -> io::Result<()> {
-        while !stop.load(Ordering::Relaxed) {
-            let accepted = self
-                .listener
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .accept(ACCEPT_POLL)?;
+        while !stop.load(Ordering::Relaxed) && !self.shutdown.load(Ordering::Relaxed) {
+            let accepted = lock_unpoisoned(&self.listener).accept(ACCEPT_POLL)?;
             if let Some(connection) = accepted {
                 let shared = Arc::clone(&self.shared);
+                let shutdown = Arc::clone(&self.shutdown);
                 let expected = expected.clone();
                 thread::spawn(move || {
                     // A broken connection ends its own thread, never the server.
-                    let _ = serve_pipe(connection, &expected, &shared);
+                    let _ = serve_pipe(connection, &expected, &shared, &shutdown);
                 });
             }
         }
@@ -141,6 +145,7 @@ fn serve_pipe(
     mut connection: PipeConnection,
     expected: &str,
     shared: &Shared,
+    shutdown: &AtomicBool,
 ) -> Result<(), contracts::FrameError> {
     connection.set_timeout(Some(IDLE_TIMEOUT));
     let pid = connection.client_process_id().ok().filter(|pid| *pid > 0);
@@ -148,5 +153,5 @@ fn serve_pipe(
         .ok_or_else(|| std::io::Error::other("no client process id"))
         .and_then(process_user_sid)
         .is_ok_and(|sid| same_user(&sid, expected));
-    serve_connection(&mut connection, permitted, pid, shared)
+    serve_connection(&mut connection, permitted, pid, shared, shutdown)
 }

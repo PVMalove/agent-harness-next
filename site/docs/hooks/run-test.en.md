@@ -69,7 +69,7 @@ the path stays short, `/tmp`, so database sockets fit into the AF_UNIX limit of 
 shared cache between runs: through it a test would slip the `.pyc` of a production module to the next
 run.
 
-**Sandbox.** The flag set from ADR 0014 is not weakened:
+**Sandbox.** The flag set from ADR 0035 is not weakened:
 
 ```text
 bwrap --ro-bind / / --dev /dev --proc /proc --bind <run>/tmp-* /tmp --tmpfs /run
@@ -161,7 +161,7 @@ preparation of build artifacts and the separate test database.
 [run-test.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/run-test.sh),
 [isolated_runner.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/isolated_runner.py),
 [project_files.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/health/project_files.py),
-ADR 0014
+ADR 0035
 
 ### Build and test database
 

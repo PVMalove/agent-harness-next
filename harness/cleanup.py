@@ -34,6 +34,25 @@ _INSTALL_DIR_RE = re.compile(
 )
 # Bound of each local git call; generous because `git worktree remove` deletes a whole checkout.
 GIT_TIMEOUT_SECONDS = 300
+# Where the agent application keeps the worktrees it creates itself (Claude Code `EnterWorktree`).
+# `git worktree move` cannot bring one into `.sandboxes/worktrees` inside the agent sandbox (#1180).
+AGENT_WORKTREES = Path(".claude") / "worktrees"
+# The protocol minor of `worktree.remove`, and the answers of a runtime that does not serve it.
+WORKTREE_PROTOCOL_MINOR = 8
+_NO_WORKTREE_OPERATION = frozenset({"protocol_unsupported", "unknown_operation"})
+# Why the worktrees stay when the batches that own them were not read: the general reason, and the
+# runtime-store one that names the process to start. Each is a key of the console's REASONS_RU.
+LEDGER_UNAVAILABLE = "Git or ledger state unavailable"
+RUNTIME_UNAVAILABLE = (
+    "runtime does not answer: start `harness-runtime serve --repo <repo>`"
+)
+
+
+@dataclass(frozen=True)
+class _Unread:
+    """The batches of the worktrees were not read; `reason` is LEDGER_ or RUNTIME_UNAVAILABLE."""
+
+    reason: str
 
 
 class CleanupItem(TypedDict):
@@ -96,7 +115,7 @@ def _worktree_fact(
     root: Path,
     path: Path,
     branch: str | None,
-    active: set[Path] | None,
+    active: set[Path] | _Unread,
     min_age_hours: float,
 ) -> WorktreeFact:
     status = _git(path, "status", "--porcelain", "-z", "--untracked-files=all")
@@ -109,16 +128,12 @@ def _worktree_fact(
             if record[0] in "RC" or record[1:2] in ("R", "C"):
                 next(records, None)
     reason = ""
-    managed = (sandboxes_root(checkout) / "worktrees", root / "worktrees")
     if path == checkout:
         reason = "current checkout"
-    elif not _inside(root, path) or not any(
-        not parent.is_symlink() and path.parent == parent.resolve()
-        for parent in managed
-    ):
+    elif not _managed_worktree(checkout, root, path):
         reason = "not a direct managed worktree"
-    elif active is None:
-        reason = "Git or ledger state unavailable"
+    elif isinstance(active, _Unread):
+        reason = active.reason
     elif path in active:
         reason = "referenced by an active batch"
     elif branch is not None and not _branch_allowed(root, branch):
@@ -129,6 +144,8 @@ def _worktree_fact(
         reason = "worktree status unavailable"
     elif dirty:
         reason = "worktree has uncommitted changes"
+    elif _locked(path):
+        reason = "worktree is locked"
     elif not _worktree_preserved(checkout, path, branch):
         reason = "local commits are not preserved on origin"
     return WorktreeFact(path, branch, dirty if status.returncode == 0 else None, reason)
@@ -143,11 +160,61 @@ def worktree_facts(repo: Path, *, min_age_hours: float = 24) -> list[WorktreeFac
     if registered is None:
         raise ValueError("Git unavailable")
     root = storage_root(checkout)
-    active = _active_worktrees(root)
+    active = _active_paths(_worktree_batches(root))
     return [
         _worktree_fact(checkout, root, path, branch, active, min_age_hours)
         for path, branch in registered.items()
     ]
+
+
+def _managed_worktree_parents(checkout: Path, root: Path) -> tuple[Path, ...]:
+    """The directories whose direct children the cleanup may remove as worktrees."""
+    return (
+        sandboxes_root(checkout) / "worktrees",
+        root / "worktrees",
+        checkout / AGENT_WORKTREES,
+    )
+
+
+def _managed_worktree(checkout: Path, root: Path, path: Path) -> bool:
+    """A real directory that is a direct child of a managed parent that is no symlink."""
+    return not path.is_symlink() and any(
+        not parent.is_symlink() and path.parent == parent.resolve()
+        for parent in _managed_worktree_parents(checkout, root)
+    )
+
+
+def _locked(worktree: Path) -> bool:
+    """Whether `git worktree lock` protects the worktree; a live agent session locks its own."""
+    git_dir = _git(worktree, "rev-parse", "--absolute-git-dir")
+    return git_dir.returncode == 0 and (Path(git_dir.stdout.strip()) / "locked").exists()
+
+
+def _remove_registered_worktree(checkout: Path, root: Path, path: Path) -> None:
+    """Remove one registered worktree, keeping its branch; OSError names why it stays.
+
+    With the runtime store the runtime removes it: it works outside the agent sandbox, where
+    `.git/worktrees` is read-only (#1180). A runtime that does not serve the operation, and the
+    file-ledger epoch, leave the removal to the local git.
+    """
+    if store_is_authority(root / "orchestration" / "state"):
+        try:
+            RuntimeClient(checkout).call(
+                "worktree.remove",
+                operation_id=f"cleanup.worktree-remove-{uuid.uuid4().hex}",
+                payload={"path": str(path)},
+                timeout_seconds=120,
+                requires_minor=WORKTREE_PROTOCOL_MINOR,
+            )
+            return
+        except RuntimeClientError as exc:
+            if exc.code not in _NO_WORKTREE_OPERATION:
+                raise OSError(
+                    f"harness-runtime did not remove it: [{exc.code}] {exc.message}"
+                ) from exc
+    result = _git(checkout, "worktree", "remove", str(path))
+    if result.returncode != 0:
+        raise OSError(result.stderr.strip() or "git worktree remove failed")
 
 
 def remove_worktree(repo: Path, path: Path) -> None:
@@ -157,9 +224,11 @@ def remove_worktree(repo: Path, path: Path) -> None:
     fact = next((item for item in worktree_facts(repo) if item.path == target), None)
     if fact is None or not fact.removable:
         raise ValueError(fact.reason if fact else "worktree is not registered")
-    result = _git(repo, "worktree", "remove", str(target))
-    if result.returncode:
-        raise ValueError(result.stderr.strip() or "git worktree remove failed")
+    checkout = repo.expanduser().resolve()
+    try:
+        _remove_registered_worktree(checkout, storage_root(checkout), target)
+    except OSError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def _git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -276,13 +345,16 @@ def _registered_worktrees(repo: Path) -> dict[Path, str | None] | None:
 
 def _active_worktrees(root: Path) -> set[Path] | None:
     """Получить множество путей worktree, занятых активными батчами оркестрации."""
-    return _active_paths(_worktree_batches(root))
+    active = _active_paths(_worktree_batches(root))
+    return None if isinstance(active, _Unread) else active
 
 
-def _active_paths(batches: dict[Path, tuple[str, str]] | None) -> set[Path] | None:
-    """Оставить worktree нетерминальных batch; None сохраняет «ledger не прочитан»."""
-    if batches is None:
-        return None
+def _active_paths(
+    batches: dict[Path, tuple[str, str]] | _Unread,
+) -> set[Path] | _Unread:
+    """Оставить worktree нетерминальных batch; _Unread сохраняет причину, по которой ledger не прочитан."""
+    if isinstance(batches, _Unread):
+        return batches
     return {
         path
         for path, (_, state) in batches.items()
@@ -303,8 +375,9 @@ def _remember_batch(
         batches[path] = (batch_id, state)
 
 
-def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
-    """Сопоставить worktree с id и состоянием batch; None, если ledger не прочитан."""
+def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
+    """Сопоставить worktree с id и состоянием batch; _Unread, если ledger не прочитан:
+    с RUNTIME_UNAVAILABLE при неотвечающем runtime, иначе с LEDGER_UNAVAILABLE."""
     state = root / "orchestration" / "state"
     if not state.exists():
         return {}
@@ -318,18 +391,18 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
             )
             records = reply.result.get("records")
             if not isinstance(records, dict):
-                return None
+                return _Unread(LEDGER_UNAVAILABLE)
             store_batches: dict[Path, tuple[str, str]] = {}
             for key, batch in records.items():
                 if not isinstance(batch, dict) or not isinstance(
                     batch.get("state"), str
                 ):
-                    return None
+                    return _Unread(LEDGER_UNAVAILABLE)
                 value = batch.get("worktree")
                 if not isinstance(value, str) or not value:
                     if batch["state"] in TERMINAL_BATCH_STATES:
                         continue
-                    return None
+                    return _Unread(LEDGER_UNAVAILABLE)
                 path = Path(value)
                 _remember_batch(
                     store_batches,
@@ -338,8 +411,12 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
                     batch["state"],
                 )
             return store_batches
-        except (RuntimeClientError, OSError, ValueError):
-            return None
+        except RuntimeClientError as error:
+            if error.code == "runtime_unavailable":
+                return _Unread(RUNTIME_UNAVAILABLE)
+            return _Unread(LEDGER_UNAVAILABLE)
+        except (OSError, ValueError):
+            return _Unread(LEDGER_UNAVAILABLE)
     pointer = state / "ledger.json"
     try:
         if pointer.exists():
@@ -347,12 +424,12 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
             if not isinstance(generation, str) or not re.fullmatch(
                 r"generation-[A-Za-z0-9-]+", generation
             ):
-                return None
+                return _Unread(LEDGER_UNAVAILABLE)
             records = state / "generations" / generation / "batches"
         else:
             records = state / "batches"
         if not records.exists():
-            return None if pointer.exists() else {}
+            return _Unread(LEDGER_UNAVAILABLE) if pointer.exists() else {}
         batches: dict[Path, tuple[str, str]] = {}
         for record in records.glob("batch-*.json"):
             batch = json.loads(record.read_text(encoding="utf-8"))
@@ -371,7 +448,7 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | None:
             )
         return batches
     except (OSError, ValueError, KeyError, TypeError):
-        return None
+        return _Unread(LEDGER_UNAVAILABLE)
 
 
 def _docker_selected(root: Path) -> bool:
@@ -766,17 +843,22 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
         worktree_roots = [sandboxes / "worktrees"]
         if (root / "worktrees").resolve() != (sandboxes / "worktrees").resolve():
             worktree_roots.append(root / "worktrees")
+        worktree_roots.append(checkout / AGENT_WORKTREES)
 
         batches = _worktree_batches(root)
         active = _active_paths(batches)
         for worktrees in worktree_roots:
             if not worktrees.is_dir() or worktrees.is_symlink():
                 continue
-            if registered is None or active is None:
+            if registered is None or isinstance(active, _Unread):
                 skipped.append(
                     {
                         "path": str(worktrees),
-                        "reason": "Git or ledger state unavailable",
+                        "reason": (
+                            LEDGER_UNAVAILABLE
+                            if registered is None or not isinstance(active, _Unread)
+                            else active.reason
+                        ),
                     }
                 )
             else:
@@ -786,7 +868,7 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                     reason = _worktree_fact(
                         checkout, root, path, branch, active, min_age_hours
                     ).reason
-                    batch = None if batches is None else batches.get(path)
+                    batch = None if isinstance(batches, _Unread) else batches.get(path)
                     if reason:
                         kept = {"path": str(path), "reason": reason}
                         if batch is not None:
@@ -842,7 +924,11 @@ def apply_cleanup(
             containers.append(item)
             continue
         path = Path(item["path"])
-        if not _inside(root, path):
+        if not (
+            _managed_worktree(checkout, root, path)
+            if item["kind"] == "worktree"
+            else _inside(root, path)
+        ):
             failed.append({"path": str(path), "reason": "path escaped storage root"})
             continue
         try:
@@ -852,9 +938,7 @@ def apply_cleanup(
                 branch = item["branch"]
                 if not _worktree_preserved(checkout, path, branch):
                     raise OSError("worktree is no longer preserved on origin")
-                result = _git(checkout, "worktree", "remove", str(path))
-                if result.returncode != 0:
-                    raise OSError(result.stderr.strip() or "git worktree remove failed")
+                _remove_registered_worktree(checkout, root, path)
                 if branch is not None:
                     result = _git(checkout, "branch", "-D", branch)
                     if result.returncode != 0:

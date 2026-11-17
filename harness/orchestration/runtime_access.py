@@ -20,7 +20,7 @@ from harness.errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from harness.storage import storage_root
 
 from . import container_executor, extensions
-from .contract import access_policy_problems, role_access_authored
+from .contract import ENVIRONMENT_NAME, access_policy_problems, role_access_authored
 from .core.constants import ACCESS_OPERATIONS, ACCESS_RESOURCES, CONTAINER_ENGINES
 from .core.utils import JsonObject
 
@@ -74,6 +74,35 @@ def _root(path: Path) -> str:
             remedy="select a specific project, Git, storage or cache directory",
         )
     return str(resolved)
+
+
+def _check_cache_variables(
+    items: list[JsonObject],
+    environment: object,
+    remedy: str = "fix access_policy and repeat preflight before approval",
+) -> None:
+    """Refuse a cache ``variable`` the runtime sets itself, repeats, or takes from ``environment``.
+
+    The runtime passes the cache path under this name itself (ADR 0032), so the same name from the
+    serve environment would make the value ambiguous.
+    """
+    names = [item["variable"] for item in items if "variable" in item]
+    taken = set(environment) if isinstance(environment, list) else set()
+    if (
+        any(
+            not isinstance(name, str)
+            or ENVIRONMENT_NAME.fullmatch(name) is None
+            or name in container_executor.RUNTIME_SET_NAMES
+            for name in names
+        )
+        or len(set(map(str, names))) != len(names)
+        or taken & set(map(str, names))
+    ):
+        raise AccessError(
+            "runtime access cache variables must be unique names that neither the runtime nor "
+            f"the plan environment sets: {', '.join(map(str, names))}",
+            remedy=remedy,
+        )
 
 
 def validate_plan(plan: object) -> None:
@@ -146,7 +175,8 @@ def validate_plan(plan: object) -> None:
         for item in entries:
             if (
                 not isinstance(item, dict)
-                or set(item) != {"resource", "path", "access"}
+                or set(item) - {"variable"} != {"resource", "path", "access"}
+                or ("variable" in item and item["resource"] != "cache")
                 or item["resource"] not in (*ACCESS_RESOURCES, "artifacts")
                 or item["access"] not in ("read", "write")
                 or not isinstance(item["path"], str)
@@ -163,6 +193,8 @@ def validate_plan(plan: object) -> None:
             raise AccessError(
                 f"runtime access {field} has duplicate requirements", remedy=remedy
             )
+    for field in ("filesystem", "requirements"):
+        _check_cache_variables(plan[field], plan.get("environment", []), remedy)
     legacy = all(value == "legacy" for value in sources.values())
     if legacy:
         if (
@@ -461,9 +493,16 @@ def resolve_plan(
                 f"read-only role cannot request write access to {resource}",
                 remedy="keep source and Git roots read-only; operational scratch is added separately",
             )
-        filesystem.append(
-            {"resource": resource, "access": item["access"], "path": _root(path)}
-        )
+        entry: JsonObject = {
+            "resource": resource,
+            "access": item["access"],
+            "path": _root(path),
+        }
+        if "variable" in item:
+            # Only an authored variable enters the plan, so a cache without one keeps its digest.
+            entry["variable"] = item["variable"]
+        filesystem.append(entry)
+    _check_cache_variables(filesystem, environment or [])
     requirements = [
         {
             "resource": "checkout",

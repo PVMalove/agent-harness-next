@@ -1,28 +1,17 @@
 # Консолидация integration-веток Harness Next и Release Gate
 
 **Статус: ACCEPTED (2026-10-20).** Эпик #784, ADR 0019–0024. Документ определяет, какие
-integration-ветки входят в `integration/harness-runtime-reliability` и как они импортируются,
-какие их части заменяет Harness Next и какое evidence разрешает влить кандидата в целевую ветку.
+integration-ветки входят в `integration/harness-runtime-reliability`, какие их части заменяет
+Harness Next и какое evidence разрешает влить кандидата в целевую ветку.
 
 ## Контекст системы
 
-На 2026-10-20 (`origin`, база — `master` 3556b16, Harness Next — 948c980) от `master` отходят
-четыре integration-ветки с работой, которой нет в `master`:
-
-| Ветка | Коммитов вне `master` | Содержание |
-|---|---|---|
-| `integration/orchestration-ledger` | 1 | 7cef1d7 — #780: QA-lease освобождается после сбоя на занятом ledger |
-| `integration/container-executor` | 9 | ADR 0018 `0018-container-executor.md`, Python-исполнитель Docker/Podman (#704–#708, #752, #766, #770, #771, #775, #782) |
-| `integration/orchestration-system-fields` | 9 | эпик #681: `systemFields.v1` и normalizer (#690), Python store `runtimeState.v1` (#699), durable intent и reconcile (#701, #703), доработки файлового ledger (#712, #728, #735, b69eed1), совместимость recovery с консолью (#746) |
-| `integration/console-redesign` | 9 | общий каркас консоли (#729–#773), наблюдение запуска worker-а (#716) |
-
-ADR 0019–0024 учитывали только первые две ветки. Python store `runtimeState.v1` из
+Работа Harness Next собрана из четырёх integration-веток, которые отходили от `master`:
+`integration/orchestration-ledger`, `integration/container-executor`,
+`integration/orchestration-system-fields` (эпик #681) и `integration/console-redesign`.
+ADR 0019–0024 учитывали только первые две. Python store `runtimeState.v1` из
 `integration/orchestration-system-fields` — второй writer operational state, который запрещают
-ADR 0020 и ADR 0021. Пробное слияние (`git merge-tree`) даёт: Harness Next с
-`orchestration-ledger` и с `container-executor` — без конфликтов;
-`container-executor` с `orchestration-system-fields` — конфликты в `CHANGELOG.md`,
-`harness/configuration_schema.py`, `harness/orchestration/contract.py` и
-`harness/orchestration/core/constants.py`.
+ADR 0020 и ADR 0021.
 
 PR в integration-ветки и релизы вливаются squash-merge (так влиты #785 и релиз 1.5.1 #755).
 Поэтому SHA коммита в целевой ветке никогда не равен SHA кандидата, на котором прошёл QA.
@@ -32,56 +21,43 @@ PR в integration-ветки и релизы вливаются squash-merge (т
 ### 1. Что входит в Harness Next
 
 Все четыре ветки входят в `integration/harness-runtime-reliability` и выходят в `master` только
-релизом 2.0.0 (ADR 0020, раздел 6). Импортируется только то, чем по матрице authority ADR 0021
-владеет Python и что не пишет operational state:
+релизом 2.0.0 (ADR 0020, раздел 6). В Harness Next входит только то, чем по матрице authority
+ADR 0021 владеет Python и что не пишет operational state:
 
-| Источник | Решение |
-|---|---|
-| `integration/orchestration-ledger` | импортируется целиком; правило #780 переходит в fencing QA-lane (ADR 0020, раздел 3) |
-| `integration/container-executor` | импортируется целиком; граница движка `run_engine` переходит к Rust до 2.0.0 (ADR 0022) |
-| `integration/console-redesign` | импортируется целиком |
-| `orchestration-system-fields`: ccc1d1e (#690) — реестр `systemFields.v1`, normalizer конфигурации, pinned configuration snapshot | импортируется |
-| `orchestration-system-fields`: 38ae9d7 (#699), c8f5774 (#701), b095142 (#703) — store, intent, reconcile, effect | **Superseded-by-Harness-Next**: критерии переходят на Rust store (ADR 0020), идемпотентность (ADR 0021, раздел 4) и reconcile (ADR 0022, раздел 5) |
-| `orchestration-system-fields`: bf3def1 (#712), 968ab8d (#728), 35f76bd (#735), b69eed1 | **Superseded-by-Harness-Next**: файловый ledger в 2.0.0 не пишется (ADR 0020, раздел 1); quarantine неизвестных значений переходит в repair импорта, цепочка хэшей — в audit-цепочку store (ADR 0020, разделы 4–5). b69eed1 правит только запись файлового ledger, поэтому следует тому же решению |
-| `orchestration-system-fields`: 7719682 (#746) | **Superseded-by-Harness-Next**: recovery API и совместимость строятся на `runtime_state_store`. Recovery policy (`recovery_api.py`, `operational_hold.py`) переходит в тикет команд восстановления Harness Next; Rust заменяет только store. Тесты Superseded-коммитов становятся acceptance-сценариями тикетов store, supervisor и recovery |
-| #685 (canonical CI, не реализован) | критерии остаются; CI проверяет реестр против Python и Rust (ADR 0021, раздел 3) |
+- `integration/orchestration-ledger`, `integration/container-executor` и
+  `integration/console-redesign` входят целиком. Правило #780 выполняет fencing QA-lane
+  (ADR 0020, раздел 3). Границей движка владеет Rust (ADR 0022).
+- Из `integration/orchestration-system-fields` входят реестр `systemFields.v1`, normalizer
+  конфигурации и pinned configuration snapshot (#690).
+- Python store `runtimeState.v1`, durable intent, reconcile и effect (#699, #701, #703), а также
+  доработки файлового ledger (#712, #728, #735) имеют статус Superseded-by-Harness-Next. Их
+  критерии выполняют Rust store (ADR 0020), идемпотентность (ADR 0021, раздел 4) и reconcile
+  (ADR 0022, раздел 5). Repair импорта заменяет quarantine неизвестных значений, audit-цепочка
+  store заменяет цепочку хэшей (ADR 0020, разделы 4–5).
+- Recovery policy (`recovery_api.py`, `operational_hold.py`) остаётся на Python и работает поверх
+  Rust store; Rust заменяет только store (#746). Тесты заменённых коммитов служат
+  acceptance-сценариями store, supervisor и recovery.
+- Критерии #685 (canonical CI) остаются: CI проверяет реестр против Python и Rust (ADR 0021,
+  раздел 3).
 
-Реестр `systemFields.v1` из ccc1d1e уже содержит словари Python store: `runtime.state`,
+Реестр `systemFields.v1` не содержит словарей Python store: `runtime.state`,
 `runtime.operation_kind`, `runtime.operation_phase`, `runtime.effect_state`,
-`runtime.failure_code`. Они несовместимы с состояниями и кодами ADR 0021 (разделы 3–4) и при
-импорте удаляются; словари Rust runtime добавляет в реестр тикет IPC-контракта (ADR 0021,
-раздел 3).
+`runtime.failure_code`. Они несовместимы с состояниями и кодами ADR 0021 (разделы 3–4). Словари
+Rust runtime реестр получает по ADR 0021, раздел 3.
 
-Классификацию по коммитам импорт сверяет по файлам: модуль, который пишет operational state или
-читает `runtime_state_store`/`runtime_intent`, не импортируется. Спорный файл — блокер импорта,
-а не решение исполнителя. Для целых источников то же правило проверяется по итоговому дереву
-импорт-PR (раздел «Операционные последствия»).
+Модуль, который пишет operational state или читает `runtime_state_store`/`runtime_intent`, в
+Harness Next не входит.
 
 ### 2. Процедура импорта
 
-- Один squash-PR на источник в `integration/harness-runtime-reliability`, по порядку:
-  `orchestration-ledger` → `container-executor` → часть `orchestration-system-fields` →
-  `console-redesign`. Следующий импорт начинается от головы Harness Next после предыдущего merge.
-- Ветка импорта — `feature/issue-<ID>-import-<источник>` по `branch_pattern`:
-  - для целого источника создаётся от его головы, затем в неё вливается (`git merge`, не rebase)
-    голова Harness Next, и конфликты разрешаются в этом merge-коммите;
-  - для части `orchestration-system-fields` создаётся от головы Harness Next, и импортируемые
-    коммиты переносятся `git cherry-pick -x` с последующим удалением неимпортируемых файлов.
-- Исходные integration-ветки не переписываются и не удаляются; force push запрещён. Тело PR
-  перечисляет SHA источника и решение из раздела 1 для каждого коммита.
-- Каждый импорт-PR — кандидат: полный clean-room QA на его голове (раздел 4).
-- Номер 0025 зарезервирован за контейнерным исполнителем. В PR импорта `container-executor` файл
-  `docs/adr/0018-container-executor.md` переименовывается в `docs/adr/0025-container-executor.md`,
-  а ссылки на него в самом ADR, `CONTEXT.md` и коде исправляются. ADR 0019–0024 уже ссылаются на
-  него как на ADR 0025. Номер 0018 остаётся за `0018-ci-windows-subset.md`.
-- Issue, чья Python-реализация стала Superseded, не закрываются молча: тикет HN-01 эпика #784
-  (обновление открытых issue) добавляет в них раздел Harness Next со ссылкой на этот ADR.
+Все четыре источника импортированы. Номер 0025 принадлежит контейнерному исполнителю
+(`0025-container-executor.md`), а номер 0018 принадлежит `0018-ci-windows-subset.md`. Исходные
+integration-ветки не переписываются; force push запрещён.
 
 ### 3. Тикеты Harness Next
 
 Дочерние тикеты #784 создаются от `integration/harness-runtime-reliability` и направляют PR в неё
-(`Related to #<ID>`). Тикеты Rust-фундамента начинаются после импортов раздела 2, чтобы вся работа
-шла от одного дерева.
+(`Related to #<ID>`).
 
 ### 4. Release Gate
 
@@ -129,27 +105,18 @@ PR в integration-ветки и релизы вливаются squash-merge (т
   прогоном (`full`). Полный CI пары принимает `integration collect-ci`; задание `verify-light` пару с
   выбором `full` не подтверждает (причина `light_check`), и тогда остаётся запасной полный локальный QA.
   Падение полного прогона перед `master` чинят fix-тикеты с базой в integration-ветке.
-- **Решения #812.** Они действовали и раньше, а здесь записаны явно.
+- **Решения #812.**
   - **D2.** Запись пары создают `dispatch publish`, `integration prepare` и refresh. `integration next`
-    запись только читает; таблица ADR 0021, которая называла писателем `integration next`, этим
-    уточнена.
+    запись только читает.
   - **D4.** `qa.evidence.verify` спрашивается только в эпохе runtime store. В эпохе file-ledger
     действуют Python-проверки Git пары (голова цели, `candidate_tree_sha`, источник QA).
 - Сверка дерева после squash-merge остаётся для каждого merge, в том числе для пары в `integration/*`.
 
 ## Операционные последствия
 
-- **Approval.** Импорт не меняет утверждённые brief, approval и evidence исходных веток: они
-  остаются в истории источника. Merge каждого PR выполняет человек; auto-merge запрещён.
-- **Проверки импорта:** `git merge-tree --write-tree` перед созданием ветки; `make verify` на
-  голове каждого импорт-PR; `rg -n "runtime_state_store|runtime_intent|runtime\.(state|operation_kind|operation_phase|effect_state|failure_code)" harness tests`
-  на голове каждого импорт-PR — без совпадений; после импорта `container-executor` файла
-  `docs/adr/0018-container-executor.md` нет, а `docs/adr/0025-container-executor.md` есть.
+- **Approval.** Merge каждого PR выполняет человек; auto-merge запрещён.
 - **Негативные проверки Release Gate:** голова целевой ветки ушла вперёд после QA → merge отказан;
   дерево после squash-merge не равно `candidate_tree_sha` → блокер; QA на SHA, отличном от головы
   push → push отказан; CI, привязанный вручную без `integration collect-ci`, пару не подтверждает;
   стадии `ticket-diff` для пары в ветку по умолчанию или при выключенном флаге → `selection_not_full`.
   Сверка дерева после squash-merge остаётся для каждого merge, в том числе для пары в `integration/*`.
-- **Риск.** Пока импорты не завершены, тикеты Rust-фундамента не стартуют; разрешение конфликтов
-  `contract.py`, `constants.py` и `configuration_schema.py` — работа импорта
-  `orchestration-system-fields`, а не тикетов Rust.

@@ -38,6 +38,8 @@ def required_target(batch: JsonObject, dispatch: JsonObject) -> str | None:
     if approved is not None:
         return approved
     target = batch.get("rebase_target_commit")
+    # Only legacy batches imported from ledger 1.x by `harness-runtime migrate` can carry
+    # `base_rebase_required = true`; 2.x code never sets it (ADR 0014 removed the gate).
     if (
         dispatch.get("role") == "developer"
         and batch.get("base_rebase_required")
@@ -74,6 +76,8 @@ def propose_target(repo: Path, batch: JsonObject, snapshot: str) -> str | None:
     ):
         return None
     stale = batch.get("rebase_target_commit")
+    # Only legacy batches imported from ledger 1.x by `harness-runtime migrate` can carry
+    # `base_rebase_required = true`; 2.x code never sets it (ADR 0014 removed the gate).
     if (
         batch.get("base_rebase_required")
         and isinstance(stale, str)

@@ -17,11 +17,13 @@ from harness.console.backend.application.worker_steps import WorkerNotFound
 from harness.console.backend.domain.live_steps import (
     AgentStep,
     DispatchTiming,
+    InProcessObservation,
     OrchestrationStep,
     RosterDispatch,
     chunks,
     dispatch_timing,
     followed,
+    in_process_observation,
     orchestration_step,
     roster_from_view,
     timed,
@@ -157,6 +159,7 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "started_at": "",
             "last_event_at": "",
             "silent": False,
+            "observation": None,
         },
         {
             "dispatch_id": "dispatch-d",
@@ -169,6 +172,7 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "started_at": "",
             "last_event_at": "",
             "silent": False,
+            "observation": None,
         },
         {
             "dispatch_id": "dispatch-q",
@@ -181,6 +185,7 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "started_at": "",
             "last_event_at": "",
             "silent": False,
+            "observation": None,
         },
     ]
     assert roster_from_view(None) == ()
@@ -437,3 +442,98 @@ def test_the_feed_times_only_the_live_dispatches_of_its_roster() -> None:
     assert not by_id["dispatch-d"].silent
     assert by_id["dispatch-a"].started_at == ""
     assert set(asked) == {"dispatch-d", "dispatch-q"}
+
+
+def test_an_in_process_observation_shows_the_reason_heartbeat_self_report_and_checkpoints() -> (
+    None
+):
+    status = {
+        "heartbeat_at": "2026-11-06T09:58:00+00:00",
+        "updated_at": "2026-11-06T09:50:00+00:00",
+        "model_self_report": {
+            "reported_model": "claude-opus-5-5",
+            "expected_model": "claude-opus-5-5",
+            "match": True,
+            "reported_at": "2026-11-06T09:51:00+00:00",
+        },
+    }
+    checkpoint = {
+        "checkpoint_id": "cp-1",
+        "commit_sha": "1111111aaaa",
+        "created_at": "2026-11-06T09:55:00+00:00",
+    }
+    entry = roster_from_view(_view({"dispatch-d": "working"}))[1]
+
+    sut = replace(entry, observation=in_process_observation(status, [checkpoint]))
+
+    assert sut.to_wire()["observation"] == {
+        "stream_reason": "in_process",
+        "heartbeat_at": "2026-11-06T09:58:00+00:00",
+        "self_report": {
+            "reported_model": "claude-opus-5-5",
+            "match": True,
+            "reported_at": "2026-11-06T09:51:00+00:00",
+        },
+        "checkpoints": [
+            {
+                "checkpoint_id": "cp-1",
+                "commit_sha": "1111111aaaa",
+                "created_at": "2026-11-06T09:55:00+00:00",
+            }
+        ],
+        "checkpoint_count": 1,
+    }
+    assert entry.to_wire()["observation"] is None
+
+
+def test_an_observation_without_a_self_report_keeps_the_newest_twenty_checkpoints() -> None:
+    checkpoints = [
+        {
+            "checkpoint_id": f"cp-{number}",
+            "commit_sha": f"sha{number}",
+            "created_at": "2026-11-06T09:55:00+00:00",
+        }
+        for number in range(1, 26)
+    ]
+
+    sut = in_process_observation({"model_self_report": "not a report"}, checkpoints)
+
+    assert sut.self_report is None
+    assert sut.heartbeat_at == ""
+    assert sut.checkpoint_count == 25
+    assert [item.checkpoint_id for item in sut.checkpoints] == [
+        f"cp-{number}" for number in range(6, 26)
+    ]
+
+
+def test_the_feed_observes_in_process_dispatches_in_any_state_and_reads_a_settled_one_once() -> (
+    None
+):
+    asked: list[str] = []
+    observed = in_process_observation(None, [])
+
+    async def observation(dispatch_id: str) -> InProcessObservation | None:
+        asked.append(dispatch_id)
+        return observed if dispatch_id in {"dispatch-a", "dispatch-d"} else None
+
+    journal = Journal(_view({"dispatch-d": "working"}), [])
+    feed = _feed(journal, Workers({}), observation=observation)
+
+    first = asyncio.run(_take(feed.subscribe(), 1))[0]
+    second = asyncio.run(_take(feed.subscribe(), 1))[0]
+
+    assert isinstance(first, RosterItem) and isinstance(second, RosterItem)
+    by_id = {entry.dispatch_id: entry for entry in second.dispatches}
+    assert (by_id["dispatch-a"].state, by_id["dispatch-a"].observation) == (
+        "reported",
+        observed,
+    )
+    assert by_id["dispatch-d"].observation == observed
+    assert by_id["dispatch-q"].observation is None
+    assert sorted(asked) == [
+        "dispatch-a",
+        "dispatch-d",
+        "dispatch-d",
+        "dispatch-q",
+        "dispatch-q",
+    ]

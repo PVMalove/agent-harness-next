@@ -16,8 +16,11 @@ scratch files (`scratch/`, `pr_body/`), expired logs (`logs/` >24h), and legacy 
 also previews clearing rebuildable caches (`cache/`), reports (`reports/`), and old clean managed
 worktrees (`worktrees/`). Execute hard cleanup with `--apply --confirm HARD`. Both modes default to a
 24-hour minimum age for temporary data and worktrees; adjust with `--min-age-hours`. Active runs,
-ledger-referenced worktrees, dirty trees, and branches with commits absent from `origin` are preserved.
-Remote branches are never deleted.
+worktrees of non-terminal batches, dirty trees, and branches with commits absent from `origin` are
+preserved. Hard cleanup removes the worktree of a `completed`, `failed`, `abandoned`, or
+`not-required` batch, and its local branch, when the tree is clean, pushed to `origin`, and older
+than the threshold. The plan and the `--apply` result name the `batch_id` and `state` of each
+worktree. Remote branches are never deleted.
 
 This guide defines only task artifacts and scratchpads. Orchestration contracts are in
 `.harness/orchestration/playbook.md`; run `harness --help` for the CLI.

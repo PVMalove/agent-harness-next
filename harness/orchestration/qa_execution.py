@@ -12,6 +12,8 @@ code beside its failure domain.
 from __future__ import annotations
 
 import hashlib
+import re
+import shlex
 import signal
 import threading
 import time
@@ -99,6 +101,65 @@ def next_attempt(status: Mapping[str, object]) -> int:
     """The attempt a new QA run of a dispatch takes: one after the recorded one."""
     attempt = status.get("attempt")
     return (attempt if isinstance(attempt, int) else 0) + 1
+
+
+# A bare executable name a gate command starts with; a path (``.venv/bin/pytest``) is left out:
+# preparation creates it.
+_EXECUTABLE = re.compile(r"[A-Za-z0-9._+-]+")
+_ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def gate_executables(commands: Sequence[str | list[str]]) -> list[tuple[str, str]]:
+    """Each bare executable the gate commands start with, once, beside the first command that
+    needs it. Leading ``NAME=VALUE`` assignments and ``env`` are skipped; an argv list is taken as
+    it is, and a command string that does not split is left out."""
+    found: dict[str, str] = {}
+    for command in commands:
+        text = approved_command_text(command)
+        try:
+            words = list(command) if isinstance(command, list) else shlex.split(text)
+        except ValueError:
+            continue
+        words = [str(word) for word in words]
+        while words and (words[0] == "env" or _ASSIGNMENT.match(words[0])):
+            words.pop(0)
+        if words and _EXECUTABLE.fullmatch(words[0]):
+            found.setdefault(words[0], text)
+    return list(found.items())
+
+
+def executable_check(name: str) -> str:
+    """The preparation command that fails (exit 1, not 127: no runtime domain) when ``name`` is no
+    executable on the QA environment's ``PATH``."""
+    return (
+        f"command -v {name} >/dev/null 2>&1 || {{ echo \"QA environment has no executable "
+        f"{name} on PATH; a gate command needs it\" >&2; exit 1; }}"
+    )
+
+
+def executable_checks(commands: Sequence[str | list[str]]) -> list[str]:
+    """The ``executable_check`` of each bare executable the gate commands start with."""
+    return [executable_check(name) for name, _ in gate_executables(commands)]
+
+
+def with_executable_checks(
+    policy: JsonObject, commands: Sequence[str | list[str]]
+) -> JsonObject:
+    """The infrastructure-retry snapshot of a container QA brief with a check of every bare gate
+    executable after the project's own preparation (which may install it) and again as an
+    environment probe: an image without it stops QA before any gate command, with that executable
+    named. The runtime runs only commands the brief names, so the checks are pinned here. Without a
+    declared preparation the snapshot stays as it is."""
+    preparation = cast(list[str], policy["qa_preparation"])
+    if not preparation:
+        return policy
+    checks = executable_checks(commands)
+    probes = cast(list[str], policy["qa_environment_probes"])
+    return {
+        **policy,
+        "qa_preparation": [*preparation, *checks],
+        "qa_environment_probes": [*probes, *checks],
+    }
 
 
 class RuntimeQaPolicy:

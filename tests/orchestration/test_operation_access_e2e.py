@@ -23,6 +23,7 @@ from harness.storage import storage_path
 from tests.orchestration import test_conflict_resolver as resolver_tests
 from tests.orchestration import test_coordinator as coordinator_tests
 from tests.orchestration.test_integration_record import PublishedBranch, _git
+from tests.orchestration.legacy_state import seed_file_ledger
 
 NON_ROOT = unittest.skipIf(
     hasattr(os, "geteuid") and os.geteuid() == 0,
@@ -133,7 +134,9 @@ class CleanRoomQaTests(QaFixture):
 
         self.assertEqual(result["state"], "reported")
         self.assertEqual(len(self.attempts()), 1)
-        report = json.loads(Path(result["report"]).read_text(encoding="utf-8"))
+        report = json.loads(
+            self.fx._stored(result["report"]).read_text(encoding="utf-8")
+        )
         self.assertEqual(report["outcome"], "completed")
         self.assertEqual(report["checks_run"][0]["result"], "pass")
 
@@ -271,6 +274,8 @@ class LocalQaTests(unittest.TestCase):
         self.repo = self.branch.repo
         # Local QA is repository-scoped: the integration record lives in the repository state.
         self.branch.fixture.state_dir = self.repo / coordinator.STATE_REL
+        # Builds on a publish, which needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+        seed_file_ledger(self.branch.fixture.state_dir)
         self.branch.publish()
         self.record = self.branch.prepare()["integration_record_id"]
         write_policy(self.repo, INHERIT)

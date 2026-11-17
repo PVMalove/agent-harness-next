@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Mapping
 
+from .json_shape import json_int, json_list, json_object, json_str
+
 
 @dataclass(frozen=True)
 class BoardSpec:
@@ -96,27 +98,19 @@ class BoardSnapshot:
 
 
 def _dict(value: object, what: str) -> dict[str, object]:
-    if not isinstance(value, dict):
-        raise ValueError(f"{what} is not an object")
-    return value
+    return json_object(value, f"{what} is not an object")
 
 
 def _list(value: object, what: str) -> list[object]:
-    if not isinstance(value, list):
-        raise ValueError(f"{what} is not a list")
-    return value
+    return json_list(value, f"{what} is not a list")
 
 
 def _str(value: object, what: str) -> str:
-    if not isinstance(value, str):
-        raise ValueError(f"{what} is not a string")
-    return value
+    return json_str(value, f"{what} is not a string")
 
 
 def _int(value: object, what: str) -> int:
-    if not isinstance(value, int) or isinstance(value, bool):
-        raise ValueError(f"{what} is not an integer")
-    return value
+    return json_int(value, f"{what} is not an integer")
 
 
 def _optional_int(value: object, what: str) -> int | None:

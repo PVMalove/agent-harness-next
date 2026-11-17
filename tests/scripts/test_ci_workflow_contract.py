@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The two CI paths of .github/workflows/verify.yml (issue #937).
 
-A pull request into an ``integration/**`` branch runs one light job (``verify-light``) and none of
-the jobs that run the full test suite; a pull request into any other branch, a push to ``master``
+A pull request into an ``integration/**`` branch runs ``verify-light`` and the platform test groups;
+a pull request into any other branch, a push to ``master``
 and a call from another workflow run the full jobs. The workflow is read as text with the comment
 lines removed (no YAML library): a job that exists only in a comment pins nothing.
 """
@@ -35,8 +35,17 @@ FULL_JOBS = {
     "docker-smoke": FULL_CONDITION,
     "fault-injection": FULL_CONDITION,
 }
+PLATFORM_GROUP_JOBS = {
+    "verify-linux-unit",
+    "verify-linux-integration",
+    "verify-windows-unit",
+    "verify-windows-integration",
+}
 # The fast gate of the full path: no tests, but every suite waits for it.
 GATE_JOB = "lint"
+# The one debug build of harness-runtime on the full path: it waits for nothing, runs beside the
+# gate and is downloaded by every Linux suite that starts the runtime.
+BUILD_JOB = "runtime-build"
 # The jobs without tests keep their own condition on both paths.
 UNCHANGED_JOBS = {
     "private-terms": "github.event_name == 'pull_request'",
@@ -44,25 +53,41 @@ UNCHANGED_JOBS = {
 }
 # The jobs that run on both paths without a condition: the console SPA and the public site.
 BOTH_PATHS_JOBS = {"console-spa", "docs"}
+GROUPS_JOB = "verify-test-groups"
 ALL_JOBS = {
     LIGHT_JOB,
     GATE_JOB,
+    BUILD_JOB,
     "dashboard",
     *FULL_JOBS,
     *UNCHANGED_JOBS,
     *BOTH_PATHS_JOBS,
+    GROUPS_JOB,
+    *PLATFORM_GROUP_JOBS,
 }
-# What each suite waits for: the fast gate, directly or through `rust`, whose debug build of
-# harness-runtime the Linux suites download; the long suites also wait for the public site.
+# What each suite waits for: the fast gate, directly or through `rust`, and the debug build of
+# harness-runtime that the Linux suites download; the long suites also wait for the public site.
 STAGES = {
     "rust": {GATE_JOB},
-    "verify": {"docs", "rust"},
-    "verify-windows": {GATE_JOB, "docs"},
+    BUILD_JOB: set(),
+    # The clean-room job never waits for the Linux groups; `verify-test-groups` confirms them.
+    "verify": {"docs", GATE_JOB, BUILD_JOB},
+    "verify-windows": {
+        GATE_JOB,
+        "docs",
+        "verify-windows-unit",
+        "verify-windows-integration",
+    },
+    "verify-linux-unit": {"docs", GATE_JOB, LIGHT_JOB, BUILD_JOB},
+    "verify-linux-integration": {"docs", GATE_JOB, LIGHT_JOB, BUILD_JOB},
+    "verify-windows-unit": {"docs", GATE_JOB, LIGHT_JOB},
+    "verify-windows-integration": {"docs", GATE_JOB, LIGHT_JOB},
+    GROUPS_JOB: PLATFORM_GROUP_JOBS,
     "diff-coverage": {GATE_JOB, "docs"},
     "repo-map-bundle": {"parser-bundle", GATE_JOB},
     "runtime-ipc-windows": {GATE_JOB},
-    "docker-smoke": {"rust"},
-    "fault-injection": {"rust"},
+    "docker-smoke": {GATE_JOB, BUILD_JOB},
+    "fault-injection": {GATE_JOB, BUILD_JOB},
 }
 # What the light job must never contain: each of these runs, or measures, the full suite.
 FULL_SUITE_MARKERS = (
@@ -111,7 +136,9 @@ def _condition(job: str) -> str | None:
     """The one-line ``if:`` of a job; a job-level ``if`` that spans lines is not used here."""
     found = re.findall(r"^    if: (.+)$", job, flags=re.MULTILINE)
     assert len(found) <= 1, "a job has one if"
-    return found[0].strip() if found else None
+    if not found or str(found[0]).strip() in {">", ">-", "|", "|-"}:
+        return None
+    return str(found[0]).strip()
 
 
 def _atom(text: str, event: str, base_ref: str) -> bool:
@@ -141,9 +168,19 @@ def _runs(condition: str | None, event: str, base_ref: str) -> bool:
 
 
 def _running(event: str, base_ref: str) -> set[str]:
-    return {
+    running = {
         name for name, job in _jobs().items() if _runs(_condition(job), event, base_ref)
     }
+    if event == "pull_request":
+        running.update(PLATFORM_GROUP_JOBS | {GROUPS_JOB})
+        if base_ref.startswith("integration/"):
+            running.discard("verify-windows")
+        else:
+            running.add("verify-windows")
+    else:
+        running.difference_update(PLATFORM_GROUP_JOBS | {GROUPS_JOB})
+        running.add("verify-windows")
+    return running
 
 
 class WorkflowTriggersTests(unittest.TestCase):
@@ -205,9 +242,34 @@ class LightPathTests(unittest.TestCase):
 
         self.assertEqual(
             running,
-            {LIGHT_JOB, "private-terms", "parser-bundle", "dashboard", *BOTH_PATHS_JOBS},
+            {
+                LIGHT_JOB,
+                GROUPS_JOB,
+                *PLATFORM_GROUP_JOBS,
+                "private-terms",
+                "parser-bundle",
+                "dashboard",
+                *BOTH_PATHS_JOBS,
+            },
         )
         self.assertFalse(running & set(FULL_JOBS))
+
+    def test_integration_groups_cover_both_platforms_and_python_test_kinds(
+        self,
+    ) -> None:
+        jobs = _jobs()
+        for name in PLATFORM_GROUP_JOBS:
+            with self.subTest(job=name):
+                job = jobs[name]
+                self.assertIn("./.github/actions/verify-test-group", job)
+                self.assertIn("group: unit" if name.endswith("unit") else "group: integration", job)
+                self.assertIn("windows-latest" if "windows" in name else "ubuntu-latest", job)
+        # Each group defines its targets once, in the Linux job; the Windows job reuses the anchor.
+        for group, target in (("unit", "tests/core"), ("integration", "tests/orchestration")):
+            with self.subTest(group=group):
+                self.assertIn(f"targets: &{group}-targets", jobs[f"verify-linux-{group}"])
+                self.assertIn(f"--pytest-target {target}", jobs[f"verify-linux-{group}"])
+                self.assertIn(f"targets: *{group}-targets", jobs[f"verify-windows-{group}"])
 
 
 class StageTests(unittest.TestCase):
@@ -235,21 +297,55 @@ class StageTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertEqual(_needs(jobs[name]), needs)
 
-    def test_the_linux_suites_download_the_one_debug_build_of_the_rust_job(self) -> None:
+    def test_the_build_job_is_on_the_full_path_and_builds_only_the_binary(self) -> None:
+        job = _jobs()[BUILD_JOB]
+
+        self.assertEqual(_condition(job), FULL_CONDITION)
+        self.assertIn("run: cargo build --locked --bin harness-runtime\n", job)
+        for marker in FULL_SUITE_MARKERS:
+            with self.subTest(marker=marker):
+                self.assertNotIn(marker, job)
+
+    def test_the_linux_suites_download_the_one_debug_build_of_the_build_job(
+        self,
+    ) -> None:
         jobs = _jobs()
 
-        self.assertIn("name: harness-runtime-linux-debug", jobs["rust"])
+        self.assertIn("name: harness-runtime-linux-debug", jobs[BUILD_JOB])
+        self.assertNotIn("name: harness-runtime-linux-debug", jobs["rust"])
         for name in ("verify", "docker-smoke", "fault-injection"):
             with self.subTest(job=name):
                 self.assertIn("name: harness-runtime-linux-debug", jobs[name])
                 self.assertNotIn("cargo build", jobs[name])
 
+    def test_both_lint_jobs_restore_the_mypy_cache_before_make_lint(self) -> None:
+        jobs = _jobs()
+        lint = jobs[GATE_JOB]
+
+        self.assertIn("path: .mypy_cache", lint)
+        self.assertIn("hashFiles('uv.lock', 'pyproject.toml')", lint)
+        self.assertIn("'harness/**/*.py', 'scripts/**/*.py', 'tests/**/*.py'", lint)
+        self.assertLess(lint.index("- &mypy-cache"), lint.index("make lint"))
+        light = jobs[LIGHT_JOB]
+        self.assertLess(light.index("- *mypy-cache"), light.index("run: make lint"))
+
+    def test_the_jobs_that_build_rust_keep_only_line_tables(self) -> None:
+        jobs = _jobs()
+
+        # Set per CI job, never in Cargo.toml: a local debug build keeps full debug info.
+        self.assertIn("CARGO_PROFILE_DEV_DEBUG: line-tables-only", jobs["rust"])
+        self.assertIn("CARGO_PROFILE_TEST_DEBUG: line-tables-only", jobs["rust"])
+        for name in (BUILD_JOB, LIGHT_JOB, "runtime-ipc-windows"):
+            with self.subTest(job=name):
+                self.assertIn("    env: *rust-line-tables\n", jobs[name])
+        manifest = (ROOT / "native/harness-runtime/Cargo.toml").read_text(encoding="utf-8")
+        self.assertNotIn("line-tables-only", manifest)
+
     def test_the_failed_tests_of_each_suite_become_annotations(self) -> None:
         jobs = _jobs()
 
-        for name in ("verify", "verify-windows"):
-            with self.subTest(job=name):
-                self.assertIn("scripts/ci_summary.py annotate", jobs[name])
+        self.assertIn("scripts/ci_summary.py annotate", jobs["verify"])
+        self.assertIn("Summarize grouped tests", (ROOT / ".github/actions/verify-test-group/action.yml").read_text())
 
 
 class FullPathTests(unittest.TestCase):
@@ -258,7 +354,10 @@ class FullPathTests(unittest.TestCase):
 
         for name, condition in FULL_JOBS.items():
             with self.subTest(job=name):
-                self.assertEqual(_condition(jobs[name]), condition)
+                if name == "verify-windows":
+                    self.assertIn("always()", jobs[name])
+                else:
+                    self.assertEqual(_condition(jobs[name]), condition)
 
     def test_the_full_jobs_still_run_the_whole_suite(self) -> None:
         jobs = _jobs()
@@ -269,13 +368,15 @@ class FullPathTests(unittest.TestCase):
         self.assertIn("-m docker_smoke", jobs["docker-smoke"])
         self.assertIn("-m fault_injection", jobs["fault-injection"])
 
-    def test_the_windows_job_runs_the_full_suite_on_a_pull_request(self) -> None:
+    def test_the_windows_job_runs_grouped_tests_and_clean_room_on_a_pull_request(self) -> None:
         job = _jobs()["verify-windows"]
 
-        # The comment lines are removed by `_jobs`, so only code can fail this.
+        # The test matrix row confirms the named groups; clean-room remains its own matrix row.
         self.assertNotIn("--platform-subset", job)
         self.assertIn("--fail-fast", job)
-        self.assertEqual(_condition(job), FULL_CONDITION)
+        self.assertIn("always()", job)
+        self.assertIn("Check Windows test groups", job)
+        self.assertIn("matrix.part == 'clean-room'", job)
 
     def test_the_windows_tests_report_every_failure_of_a_pull_request_in_one_run(
         self,
@@ -298,7 +399,7 @@ class FullPathTests(unittest.TestCase):
             with self.subTest(job=name):
                 self.assertEqual(_condition(jobs[name]), condition)
 
-    def test_a_pull_request_into_master_runs_the_full_jobs_and_not_the_light_job(
+    def test_a_pull_request_into_master_runs_the_full_jobs_and_not_the_group_jobs(
         self,
     ) -> None:
         running = _running("pull_request", "master")
@@ -307,11 +408,13 @@ class FullPathTests(unittest.TestCase):
 
     def test_a_pull_request_into_another_branch_runs_the_full_jobs(self) -> None:
         self.assertEqual(
-            _running("pull_request", "release/1.x"), ALL_JOBS - {LIGHT_JOB}
+            _running("pull_request", "release/1.x"),
+            ALL_JOBS - {LIGHT_JOB},
         )
         # A branch that only starts with the word is no integration branch.
         self.assertEqual(
-            _running("pull_request", "integrations"), ALL_JOBS - {LIGHT_JOB}
+            _running("pull_request", "integrations"),
+            ALL_JOBS - {LIGHT_JOB},
         )
 
     def test_a_push_to_master_and_a_call_from_another_workflow_run_the_full_jobs(
@@ -322,7 +425,8 @@ class FullPathTests(unittest.TestCase):
             with self.subTest(event=event):
                 self.assertEqual(
                     _running(event, ""),
-                    ALL_JOBS - {LIGHT_JOB, "diff-coverage", "private-terms"},
+                    ALL_JOBS
+                    - {LIGHT_JOB, GROUPS_JOB, *PLATFORM_GROUP_JOBS, "diff-coverage", "private-terms"},
                 )
 
 
@@ -333,7 +437,8 @@ class DashboardTests(unittest.TestCase):
 
         assert needs is not None
         self.assertEqual(
-            {item.strip() for item in needs[1].split(",")}, ALL_JOBS - {"dashboard"}
+            {item.strip() for item in needs[1].split(",")},
+            ALL_JOBS - {"dashboard", *PLATFORM_GROUP_JOBS},
         )
         self.assertEqual(_condition(dashboard), "always()")
 

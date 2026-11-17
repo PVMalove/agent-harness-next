@@ -17,11 +17,14 @@ updates come with a separate command.
 ├── .claude/             # runtime rules, agents, hooks, and local settings
 ├── docs/
 │   ├── agents/          # operational guides for agents
-│   └── adr/             # architectural decisions of the project
+│   └── adr/             # architectural decisions of the project (kept by skills)
 ├── AGENTS.md            # cross-runtime contract of the project
 ├── CLAUDE.md            # entry point for Claude Code
-└── CONTEXT.md           # glossary of terms and the domain model
+└── CONTEXT.md           # glossary of terms and the domain model (kept by skills)
 ```
+
+The installer does not create `docs/adr/` and `CONTEXT.md`: the `domain-modeling` and
+`grill-with-docs` skills write them when terms and decisions appear in the project.
 
 The installer manages the content of `.harness/`: edits to managed files show up in `diff` and are not
 silently overwritten. Seed files, which the project edits for itself, are kept during an update
@@ -34,7 +37,7 @@ The project receives the operational guides
 the documents an agent follows to do the work: branches and commits, tracker work, labels, temporary
 artifacts, worktrees, and the test zone.
 
-The release guide and the subagent descriptions stay in the source harness repository: in the target
+The release guide and the Russian subagent descriptions stay in the source harness repository: in the target
 project, they are either not needed or depend on its own rules.
 
 ## What is not installed

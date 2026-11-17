@@ -47,12 +47,18 @@ addopts = ["-m", "not docker_smoke and not podman_smoke"]
 markers = [
     "docker_smoke: real Docker smoke of the container executor; run only with -m docker_smoke",
     "podman_smoke: real rootless Podman smoke on Fedora with SELinux enforcing; run only with -m podman_smoke",
+    "real_process: a console test that needs a real OS process, so the unit boundary guard is off (tests/console/conftest.py)",
     "fault_injection: a scenario of the fault-injection and security matrix at seam 1 (tests/orchestration/fault_injection_matrix.py)",
 ]
 
 [tool.coverage.run]
 # CLI adapters run in child Python processes, including their detached worker supervisors.
 patch = ["subprocess"]
+# sys.monitoring (PEP 669) instead of the C tracer: a line is recorded once and its event disabled,
+# so the measured suite runs markedly faster. Child processes get it through the serialized config
+# of `patch`. It requires line coverage only: on Python 3.12 and 3.13 sysmon cannot measure branches,
+# and coverage then warns and falls back to the C tracer.
+core = "sysmon"
 
 [tool.ruff.lint.per-file-ignores]
 # Facade: `import x as x` marks explicit re-exports under mypy strict (no implicit reexport).

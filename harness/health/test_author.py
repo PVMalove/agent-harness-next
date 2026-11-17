@@ -40,6 +40,7 @@ ADAPTERS = {"claude": ".claude/hooks/test-author-preflight.sh"}
 PREFLIGHT_REASONS = frozenset(
     {
         "checkout_mismatch",
+        "project_dir_mismatch",
         "project_untrusted",
         "claude_code_unsupported",
         "agent_missing",
@@ -189,6 +190,7 @@ def preflight_author(
     *,
     brief: Path | None = None,
     planned: bool = False,
+    launcher: bool = False,
 ) -> None:
     """Dispatch readiness to the selected protected adapter, preserving sanitized refusals."""
     preflight = adapter_for(selection)
@@ -197,13 +199,10 @@ def preflight_author(
         raise AuthorUnavailable("runner_unavailable")
     context = ["--brief", str(brief)] if brief else ["--planned"] if planned else []
     env = dict(os.environ)
-    if brief is not None:
-        # A full-route native Agent serves its parent's checkout. Never manufacture that
-        # identity as Health (diagnostics) or the short external launcher may do.
-        identity = env.get("CLAUDE_PROJECT_DIR")
-        if not identity or Path(identity).resolve() != repo:
-            raise AuthorUnavailable("checkout_mismatch")
-    else:
+    if brief is None or launcher:
+        # The launcher binds its fresh author process to repo; Health and the short route have
+        # no native parent. A full-route native Agent keeps its parent's identity, if passed,
+        # for the adapter to compare with the Git root (project_dir_mismatch).
         env["CLAUDE_PROJECT_DIR"] = str(repo)
     try:
         checked = execute(
@@ -236,7 +235,7 @@ def run_author(
     binary = shutil.which(str(selection["runtime"]))
     if binary is None:
         raise AuthorUnavailable("runtime_unavailable")
-    preflight_author(repo, selection, brief=brief)
+    preflight_author(repo, selection, brief=brief, launcher=True)
     from harness.storage import storage_path
 
     try:

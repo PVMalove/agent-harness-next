@@ -110,6 +110,8 @@ from harness.orchestration.ledger.ledger_admin import (
 )
 from harness.orchestration.ledger.ledger_admin import reset_ledger as reset_ledger
 from harness.orchestration.runtime_client import runtime_status as runtime_status
+from harness.orchestration.worktree_lifecycle import create_worktree as create_worktree
+from harness.orchestration.worktree_lifecycle import remove_worktree as remove_worktree
 from harness.orchestration.workflow.attention import attention_check as attention_check
 from harness.orchestration.workflow.attention import (
     attention_resolve as attention_resolve,
@@ -157,6 +159,7 @@ from harness.orchestration.workflow.context_package import (
 from harness.orchestration.workflow.decisions import decide_batch as decide_batch
 from harness.orchestration.workflow.decisions import decision_packet as decision_packet
 from harness.orchestration.workflow.delivery import observe_dispatch as observe_dispatch
+from harness.orchestration.workflow.worker_logs import dispatch_logs as dispatch_logs
 from harness.orchestration.workflow.delivery import dispatch_status as dispatch_status
 from harness.orchestration.workflow.delivery import publish_dispatch as publish_dispatch
 from harness.orchestration.workflow.delivery import (

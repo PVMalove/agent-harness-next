@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -33,6 +35,7 @@ def run(ctx: SimpleNamespace) -> None:
     # non-terminal checkpoint and resume the same dispatch ID under a fresh worker session; a
     # read-only role may never checkpoint at all, and a checkpoint is never a completion report.
     checkpoint_state = test_root / "checkpoint-state"
+    seed_file_ledger(checkpoint_state)
     run_step(
         ["git", "branch", "feature/issue-139-checkpoint"],
         cwd=orchestration_project,

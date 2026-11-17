@@ -1,7 +1,7 @@
 # Quick start
 
 Agent Harness Next installs skills, hooks, and context documents into a project as a verifiable
-snapshot. After installation the project runs on its own. Skills and hooks work through the native
+snapshot. After installation the project does not depend on the harness repository. Skills and hooks work through the native
 mechanisms of Claude Code and Codex, and orchestration uses the Rust runtime and the local runtime store.
 
 !!! note "Early access"
@@ -114,6 +114,38 @@ python3 bin/install-global.py --target-home "$HOME" \
 saves a backup of them first. The installer does not touch MCP, models, plugins, credentials, or
 permissions.
 
+### The `harness` command
+
+`--cli` installs a `harness` command into `~/.local/bin` (`harness.cmd` on Windows). That directory
+must be on `PATH`; the installer reminds you when it is not. The command runs
+`harness/bin/harness.py` of the clone the installer ran from. Keep a separate clone for this that
+nobody develops in, for example `~/.local/share/agent-harness`. Then switching branches in your
+development clone does not change the code that updates your projects.
+
+```bash {.ah-code-wrap}
+python3 ~/.local/share/agent-harness/bin/install-global.py --target-home "$HOME" --cli
+harness self-update                  # the branch of origin/HEAD
+harness self-update --ref <branch>   # another origin branch
+harness update /path/to/repository
+```
+
+`harness self-update` fetches the branch from `origin` and detaches the clone at its latest commit.
+The command refuses and leaves the clone unchanged when the clone has uncommitted changes or
+commits that are not on `origin`, when `origin` has no such branch, or when the CLI lies inside
+another repository.
+
+The agent sandbox does not allow writes to `.claude/hooks`, `.claude/settings*.json` or the skills
+directory, so `harness update` run by an agent fails with `Read-only file system`. An exemption by
+command name does not depend on the clone path. Add to `sandbox.excludedCommands` in
+`~/.claude/settings.json`:
+
+```json
+["harness update *", "harness health *", "harness self-update *"]
+```
+
+An excluded command still goes through the runtime permission check. A write into `.claude/` may
+ask for confirmation.
+
 ??? quote ah-skill-text "Agent prompt: global layer"
 
     ```text
@@ -154,8 +186,9 @@ python3 harness/bin/harness.py init /path/to/repository \
   --qa-gate-command "make test"
 ```
 
-If the project already has its own skills with the same names, use `adopt`. It keeps everything that
-is not part of the selected capability and fails with a list of conflicts. `--replace-conflicts`
+If the project already has its own skills, use `adopt`. It keeps everything that is not part of the
+selected capability. If a skill name from the capability is already taken, `adopt` fails and prints
+the list of conflicts. `--replace-conflicts`
 replaces the conflicting directories without a backup, so check the list first.
 
 ```bash {.ah-code-wrap}
@@ -163,13 +196,13 @@ python3 harness/bin/harness.py adopt /path/to/repository \
   --capability engineering-suite --replace-conflicts
 ```
 
-A capability sets the snapshot contents. The builds are mutually exclusive.
+A capability sets the snapshot contents. Choose one build.
 
 | Capability | What it adds |
 | --- | --- |
 | `project-foundation` | The default domain-neutral base: design, research, handoff, and the project language. |
 | `mattpocock-suite` | The full upstream set, pinned to a verified commit. |
-| `engineering-suite` | The engineering workflow: epics and tickets, triage, two-axis review, `qa-gate`, and PR preparation. |
+| `engineering-suite` | On top of `mattpocock-suite`: the engineering workflow, epics and tickets, triage, two-axis review, `qa-gate`, and PR preparation. |
 | `backend-orchestration` | On top of `engineering-suite`: a coordinator, roles, briefs, worktrees, a ledger, and a QA lane. |
 
 ??? quote ah-skill-text "Agent prompt: connect the harness"
@@ -213,13 +246,13 @@ python3 harness/bin/harness.py health /path/to/repository --json
 | Flag | What it does |
 | --- | --- |
 | no flags | Local checks of files, directories, the environment, and the Repo Map. |
-| `--fix` | Creates the missing `.harness/` directories and regenerates a stale skill registry. It does not touch worktrees. |
-| `--online` | Adds tracker checks: `gh`/`glab` authorization, origin reachability, permissions, and labels. |
+| `--fix` | Creates the missing `.harness/` directories and regenerates a stale skill registry. It does not touch system settings or worktrees. |
+| `--online` | Adds tracker checks: `gh`/`glab` authorization, origin reachability, permissions, and labels. Without the flag, only the local `tracker.project` check runs; the other `tracker.*` checks are skipped. |
 | `--json` | Prints a machine-readable report with `schema_version: 1`. |
 
 Each line is marked `✅` ok, `⚠️` warn, `❌` fail, or `-` skipped. On `fail` the command prints the
 reason and the command that fixes it. The "Orchestration" group appears only with `backend-orchestration`.
-It shows the ledger, unfinished batches, dispatches without activity, and untracked worktrees.
+It shows the runtime, the ledger, unfinished batches, dispatches without activity, and untracked worktrees.
 
 ??? quote ah-skill-text "Agent prompt: check health"
 
@@ -258,11 +291,11 @@ python3 harness/bin/harness.py update /path/to/repository
 | Command | Purpose |
 | --- | --- |
 | `list <repo>` | Lists the installed skills. |
-| `diff <repo>` | Shows the differences from the locked snapshot; `--json` gives a machine-readable report. |
-| `update <repo>` | Pulls the new capability version and keeps the local edits. |
-| `console <repo>` | The TUI panel and the web console: tasks, orchestration, reports, and recovery. |
+| `diff <repo>` | Shows the differences from the snapshot pinned in the lock file; `--json` gives a machine-readable report. |
+| `update <repo>` | Updates the managed files to the current harness version. If you edited the standard skills, it aborts and does not touch the files; `--force-managed-files` replaces your edits. |
+| `console <repo>` | Opens the TUI panel or the web console: tasks, orchestration, reports, and recovery. |
 | `cleanup <repo>` | A cleanup plan for `.harness/.sandboxes`; `--apply` deletes, and `--mode hard` requires `--apply --confirm HARD`. |
-| `uninstall <repo>` | A plan and the full removal of the harness; `--apply --confirm UNINSTALL` saves the changed files in `.harness-uninstall-backup/`. |
+| `uninstall <repo>` | Prints the harness removal plan; `--apply --confirm UNINSTALL` removes the whole harness and saves the changed files in `.harness-uninstall-backup/`. |
 
 `console` is beta. It needs `uv`, and on the first run it downloads dependencies, so it needs network
 access. `console --web` starts the Console Server, prints a URL with a token, and opens the browser.
@@ -300,6 +333,71 @@ python3 .harness/orchestration/coordinator.py --repo . ledger validate --full
     credentials/trust, migrate state or send workers without separate explicit authorization.
     ```
 
+
+## 5. Runtime {#runtime}
+
+This section applies when `backend-orchestration` is installed. The runtime store holds the
+orchestration state, and only the `harness-runtime serve` process can write it. A new project gets
+its store with one command, which a human runs with their own approval:
+
+```bash {.ah-code-wrap}
+harness-runtime init --repo /path/to/repository \
+  --approved-by <human> --approved-at <RFC 3339 time> --reason <text>
+```
+
+A project with a 1.x ledger needs a one-time `harness-runtime migrate` instead, also approved by a
+human; the [upgrade guide](../guides/upgrade-2-0.md) describes the procedure.
+
+After `init` or the migration, `serve` must keep running while you use orchestration. Start it
+outside the agent sandbox:
+
+```bash {.ah-code-wrap}
+harness-runtime serve --repo /path/to/repository
+python3 .harness/orchestration/coordinator.py --repo . runtime status
+```
+
+`runtime status` prints the pid, the version, and the protocol of the running runtime. Without the
+runtime, these commands refuse:
+
+- the `coordinator.py` commands `batch`, `dispatch`, `qa`, and `recovery`: exit code 2 and
+  `[runtime_unavailable]`;
+- `harness cleanup`: worktrees stay with the reason "runtime does not answer";
+- `harness worktree-remove`: the same refusal reason.
+
+`harness health` shows the runtime state in the `orchestration.runtime` check, with a "how to fix"
+line. The web console shows a "Runtime" indicator in the header and the start command on the
+orchestration pages. In Claude Code, the
+[autostart](../guides/orchestration/operations.md#runtime-autostart) hook starts the runtime. In
+Codex and on Windows, keep the process running yourself: in a separate terminal or as a user
+service. An example for `systemd --user`:
+
+```ini {.ah-code-wrap}
+# ~/.config/systemd/user/harness-runtime.service
+[Unit]
+Description=harness-runtime serve
+
+[Service]
+ExecStart=/abs/path/to/harness-runtime serve --repo /path/to/repository
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+```bash {.ah-code-wrap}
+systemctl --user daemon-reload
+systemctl --user enable --now harness-runtime.service
+```
+
+The service has its own environment, not the environment of your shell:
+
+- **`PATH`.** Give the absolute path to `harness-runtime` in `ExecStart`. For the container
+  executor, add the directory of `docker` or `podman` to `Environment=PATH=`.
+- **`XDG_RUNTIME_DIR`.** systemd sets `/run/user/<uid>` for the service. The clients look for the
+  socket in the same directory, so the shell where the agent and the coordinator run must have the
+  same value. If the shell has no such variable, the runtime and the clients diverge: the client
+  looks for the socket in `/tmp/harness-<uid>`.
 
 ## Next
 

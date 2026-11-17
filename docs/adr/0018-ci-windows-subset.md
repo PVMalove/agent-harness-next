@@ -1,73 +1,51 @@
 # Набор проверок CI на Windows в pull request
 
-**Поправка 2026-11-11 (#1062): PR в `master` гоняет на Windows полный набор.** Задание
-`verify-windows (tests)` больше не передаёт `--platform-subset` ни в `pull_request`, ни на `push`:
-полный набор тестов, включая `WINDOWS_PR_IGNORED_TESTS`, идёт и в PR в ветку, кроме `integration/**`,
-и после слияния в `master`. В PR по-прежнему действует `--fail-fast` и кэш `--failed-first`. Причина:
-подмножество откладывало Windows-сбои до слияния, где их исправляет отдельный тикет, а PR #787 нужен
-зелёный полный прогон до слияния. Лимит времени части tests поднят с 60 до 180 минут: до разделения
-на два задания полный прогон на Windows занимал больше часа, а Linux-задание на той же ветке идёт
-около часа при лимите 120 минут. Значение 180 оценочное: полного прогона на Windows после #938 ещё не
-было; его уточняют по первому полному прогону PR #787. Часть clean-room остаётся на 30 минутах. Пункты
-«Подмножество в pull request» и «Полный прогон на `master`» ниже описывают состояние до этой поправки.
-Ключ `--platform-subset` и список `WINDOWS_PR_IGNORED_TESTS` остаются только для локального запуска.
-
-**Поправка 2026-11-07 (#938): Windows-проверки снова включены.** Задания `verify-windows (tests)` и
-`verify-windows (clean-room)` раскомментированы в `verify.yml`, входят в `needs` у `dashboard` и идут
-на полном пути CI: для PR в ветку, кроме `integration/**`, для публикации в `master` и для вызова из
-другого workflow. Лёгкий путь PR в `integration/**` (ADR 0023, поправка 2026-11-07) их пропускает.
-Статус ниже описывает состояние до этой поправки; решения про подмножество в PR и полный прогон на
-`master` действуют снова.
-
-**История статуса.** С #753 по 2026-11-07 Windows-проверки были сняты с CI; сейчас они включены (см.
-поправку выше). `windows-latest` в матрице `memory-vector-probe.yml` по-прежнему закомментирован.
-Пункты ниже про Windows-задания, подмножество в pull request, полный прогон на `master`, Git на
-Windows и имена обязательных проверок действуют снова. Остальное (Linux, diff-coverage, быстрая обратная связь, сводка и дашборд)
-действует. Ключ `--platform-subset` и список `WINDOWS_PR_IGNORED_TESTS` в `scripts/verify.py`
-остаются для локального запуска.
+**Статус: ACCEPTED (2026-10-11).** Подмножество тестов Windows в pull request отменено (#1062):
+CI гоняет на Windows полный набор.
 
 ## Контекст системы
 
 Прогон `make verify` на `windows-latest` с полным набором из ~2 700 тестов занимает больше
 часа: процессы на Windows запускаются на порядок медленнее, чем на Linux, а тесты координатора
 (`tests/orchestration/test_coordinator.py`) вызывают `git` ~90 раз каждый. Такое задание упирается в
-лимит времени и не доходит до clean-room прогона. Логика координатора не зависит от платформы, а
-Linux-задание уже проверяет её целиком.
+лимит времени и не доходит до clean-room прогона. Подмножество тестов в pull request откладывало
+Windows-сбои до слияния, где их исправлял отдельный тикет. Поэтому pull request проверяет на Windows
+полный набор, а время ограничивают разбиение на задания и длинный лимит.
 
-## Контракт на момент решения
+## Действующий контракт
 
-- **Два параллельных задания Windows.** `verify-windows (tests)` выполняет статические проверки,
-  mypy и pytest; `verify-windows (clean-room)` — статические проверки и clean-room прогон. Время
-  одного не расходует лимит другого. Разбиение задают `scripts/verify.py --only tests` и
-  `--only clean-room`; `make verify` передаёт их через `VERIFY_ARGS`.
-- **Подмножество в pull request.** В событии `pull_request` Windows-задание pytest получает
-  `--platform-subset`: на Windows из набора исключаются файлы `WINDOWS_PR_IGNORED_TESTS` в
-  `scripts/verify.py` — платформенно-нейтральные и медленные. Сейчас это
-  `tests/orchestration/test_coordinator.py`.
-- **Полный прогон на `master`.** Событие `push` на `master` и вызов workflow не передают
-  `--platform-subset`, поэтому полный набор на Windows проверяется после слияния.
-- **Linux не сужается.** Набор тестов задания `verify` на Linux не урезается; в pull request он лишь
-  останавливается на первом падении (см. ниже).
-- **Diff-coverage отдельно.** Задание `diff-coverage` (только `pull_request`) измеряет покрытие своим
+- **Группы тестов в pull request.** Любой pull request, в том числе в `integration/**`, запускает
+  pytest на Windows двумя заданиями: `verify-windows-unit` и `verify-windows-integration`. Такие же
+  группы идут на Linux (`verify-linux-unit`, `verify-linux-integration`). Задание
+  `verify-test-groups` сводит результаты четырёх групп.
+- **Два параллельных задания Windows на полном пути.** `verify-windows (tests)` и
+  `verify-windows (clean-room)` идут для pull request в ветку, кроме `integration/**`, для push в
+  `master` и для вызова из другого workflow. Время одного не расходует лимит другого. Разбиение
+  задают `scripts/verify.py --only tests` и `--only clean-room`; `make verify` передаёт их через
+  `VERIFY_ARGS`. В pull request часть `tests` сама pytest не запускает: она проверяет, что прошли
+  обе Windows-группы. На `master` и при вызове workflow часть `tests` запускает полный набор. Лимит
+  части `tests` 180 минут, части `clean-room` 30 минут.
+- **Без подмножества.** CI не передаёт `--platform-subset`. Ключ и список
+  `WINDOWS_PR_IGNORED_TESTS` в `scripts/verify.py` остаются только для локального запуска.
+- **Diff-coverage отдельно.** Задание `diff-coverage` (только pull request вне `integration/**`) измеряет покрытие своим
   прогоном pytest параллельно с `verify`, а не после него.
 - **Git на Windows.** Задание задаёт `core.autocrlf=false`, `core.fscache=true`,
   `core.preloadindex=true` до checkout.
-- **Быстрая обратная связь в pull request.** `verify.py --fail-fast` останавливает pytest на первом
-  падении; `--failed-first <каталог>` хранит кэш pytest в `.harness/.sandboxes/pytest-cache`,
-  который workflow сохраняет и восстанавливает по ключу ветки, и запускает ранее упавшие тесты
-  первыми. Повторное падение видно в первые минуты, а не после 20 минут полного прогона. `master`
-  и вызов workflow запускают всё без остановки. Каждое новое обновление ветки pull request отменяет
-  прежний запуск (`concurrency` с `cancel-in-progress` только для `pull_request`).
+- **Обратная связь в pull request.** Группы pytest не останавливаются на первом падении: один
+  прогон показывает все Windows-сбои. Часть `clean-room` в pull request останавливается на первом
+  падении (`--fail-fast`). Полный прогон вне pull request получает `--failed-first <каталог>`: кэш
+  pytest лежит в `.harness/.sandboxes/pytest-cache`, workflow сохраняет и восстанавливает его по
+  ключу ветки, и ранее упавшие тесты идут первыми. Каждое новое обновление ветки pull request
+  отменяет прежний запуск (`concurrency` с `cancel-in-progress` только для `pull_request`).
 - **Сводка и дашборд.** `--junit-xml` пишет отчёт pytest; `scripts/ci_summary.py tests` кладёт в
   сводку задания итоги, упавшие тесты с причиной и самые медленные тесты, а задание `dashboard`
   (всегда после остальных) собирает одну страницу: результаты всех заданий, тесты по заданиям и
   все упавшие тесты.
 
-## Операционные последствия на момент решения
+## Операционные последствия
 
 - Новый тест, зависящий от платформы (пути, блокировки файлов, процессы, оболочка), не добавляется
   в `WINDOWS_PR_IGNORED_TESTS`; в список попадает только файл, у которого нет платформенной логики.
-- Сбой, найденный только полным прогоном на `master`, исправляется отдельным тикетом: pull request
-  уже слит.
-- Имена обязательных проверок ветки изменились: вместо `verify-windows` теперь
-  `verify-windows (tests)` и `verify-windows (clean-room)`.
+- Задания Windows в CI: `verify-windows` (части `tests` и `clean-room`), `verify-windows-unit`
+  (`Windows / Unit`) и `verify-windows-integration` (`Windows / Integration`).
+- `windows-latest` в матрице `memory-vector-probe.yml` закомментирован (#753).

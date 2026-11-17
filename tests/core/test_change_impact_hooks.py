@@ -111,6 +111,7 @@ def _script(
         input=json.dumps(payload),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         cwd=project,
         env={**os.environ, **(env or {})},
         check=False,
@@ -222,7 +223,7 @@ def test_each_profile_gives_each_role_the_decision_of_the_matrix(
         if verdict["decision"] == "allow":
             assert verdict["reason_code"] == "ok"
     if MATRIX[profile][FIRST_TOUCH] == "warn":
-        assert verdicts[FIRST_TOUCH]["reason_code"] == "risky-path-first-touch"
+        assert verdicts[FIRST_TOUCH]["reason_code"] == "risky-path-first-touch", first.stderr
         context = json.loads(first.stdout)["hookSpecificOutput"]
         assert context["hookEventName"] == "PreToolUse"
         assert "pyproject.toml" in context["additionalContext"]
@@ -725,6 +726,7 @@ def test_an_internal_error_through_the_envelope_warns_and_never_blocks(
             input=payload if isinstance(payload, str) else json.dumps(payload),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
             timeout=60,
         )
@@ -746,6 +748,7 @@ def test_concurrent_identical_events_warn_once(tmp_path: Path) -> None:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
         )
         for _ in range(8)
     ]

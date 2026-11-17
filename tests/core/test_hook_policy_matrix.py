@@ -170,6 +170,7 @@ def _run(
         input=json.dumps(body),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         env=_environment(project, role, profile),
         cwd=project,
         check=False,
@@ -246,6 +247,7 @@ def test_the_scoped_test_author_guard_denies_in_every_profile_and_role(
             input=json.dumps(payload),
             capture_output=True,
             text=True,
+            encoding="utf-8",
             env=_environment(project, role, profile),
             check=False,
             timeout=60,
@@ -369,7 +371,7 @@ def test_a_legacy_project_without_hook_policy_keeps_the_standard_decisions(
 
 
 def test_the_scoped_test_author_guard_stays_outside_the_envelope_by_decision() -> None:
-    """ADR 0024 section 2a lists it as critical, but it answers with its own soft refusal (ADR 0014)
+    """ADR 0024 section 2a lists it as critical, but it answers with its own soft refusal (ADR 0035)
     inside the agent description, so it is wired outside the envelope; the matrix above proves it
     denies in every profile and role."""
     spec = importlib.util.spec_from_file_location(

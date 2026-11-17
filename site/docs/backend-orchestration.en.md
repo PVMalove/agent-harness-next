@@ -39,7 +39,7 @@ Local state stays out of Git; cleanup requires a separate coordinator decision.
 
 ## Language and evidence
 
-Read [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/docs/technical-english.md) before the first English handoff.
+Read [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/technical-english.md) before the first English handoff.
 Role handoffs, checkpoints and state evidence use English; completion reports to the coordinator
 use Russian with `"report_language": "ru"`. Commands, paths and SHA values are not translated.
 

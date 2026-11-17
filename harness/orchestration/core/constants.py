@@ -144,6 +144,7 @@ class RecoveryRoute(StrEnum):
     NARROWED_RETRY = "narrowed-retry"
     FIX_FORWARD = "fix-forward"
     REBASE_FIX_FORWARD = "rebase-fix-forward"
+    REBASE = "rebase"
     SUPERSEDE = "supersede"
     ENVIRONMENTAL_RESTART = "environmental-restart"
     REWIND = "rewind"
@@ -277,6 +278,9 @@ RETRY_REASON_CATEGORIES = tuple(RetryReason)
 # ``rebase-fix-forward`` (issue #504) is a ``developer-retry`` decided while ``origin/<integration_ref>``
 # moved ahead of the pinned integration base: its brief carries the human-approved rebase target,
 # and the developer rebases the candidate onto it and fixes on top in the same dispatch.
+# ``rebase`` (issue #1010) carries an accepted candidate onto the moved ``origin/<integration_ref>``
+# tip through the narrow ``rebaser`` role: no new code, no developer retry spent, and the accepted
+# code-review keeps covering the rebased candidate, so QA follows directly (ADR 0034).
 # ``supersede`` (issue #506) is recorded by ``batch create --supersedes`` on the new batch: after a
 # forced abandon it resumes from the abandoned batch's ``last_accepted`` record instead of
 # repeating the architect stage and cherry-picking the accepted commits by hand.
@@ -291,6 +295,8 @@ NEXT_ACTION_DISPATCH_ROLE = {
     "publish": "developer",
     # Issue #534: a textual integration conflict is handed to the conflict-resolver writer.
     "resolve-conflict": "conflict-resolver",
+    # Issue #1010: a moved integration base is carried by the narrow rebaser writer (ADR 0034).
+    "rebase": "rebaser",
 }
 DISPATCH_PURPOSES = {"work", "verification", "publish"}
 # The gates `batch create --required-gate` may name; a batch that names none records `none`.
@@ -513,6 +519,7 @@ REPORT_OPTIONAL_FIELDS = {
     "used_memory",
     "tooling_blocker",
     "resolver",
+    "rebase_check",
     "incomplete_items",
     "carried_item_closure",
     "qa_stages",

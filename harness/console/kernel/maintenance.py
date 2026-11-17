@@ -289,11 +289,15 @@ REASONS_RU = {
     "current checkout": "текущий checkout",
     "not a direct managed worktree": "вне управляемого каталога worktree",
     "Git or ledger state unavailable": "Git или ledger недоступен",
+    "runtime does not answer: start `harness-runtime serve --repo <repo>`": (
+        "runtime не отвечает: запустите `harness-runtime serve --repo <repo>`"
+    ),
     "referenced by an active batch": "используется активным batch",
     "unowned local branch": "ветка вне шаблона проекта",
     "worktree newer than minimum age": "worktree моложе 24 ч",
     "worktree status unavailable": "статус Git недоступен",
     "worktree has uncommitted changes": "есть незакоммиченные изменения",
+    "worktree is locked": "worktree заблокирован (`git worktree lock`)",
     "local commits are not preserved on origin": "коммиты не сохранены на origin",
     "active or newer than minimum age": "активные данные или моложе 24 ч",
     "registered QA worktree or Git unavailable": "зарегистрированный QA worktree или Git недоступен",

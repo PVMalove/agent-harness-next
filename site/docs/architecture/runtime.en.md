@@ -25,6 +25,32 @@ reconcile and does not start a second process if the object already exists.
 python3 .harness/orchestration/coordinator.py --repo . runtime status
 ```
 
+A serve that the `runtime-autostart` hook started (`serve --owner-session`) is an own one: it keeps
+its owners (`runtime.attach`, `runtime.release`) and exits with code 0 by itself once no owner is
+left, no connection is open and the store is idle. A manual serve never stops by itself
+([runtime autostart](../guides/orchestration/operations.md#runtime-autostart), ADR 0031).
+
+## Stop and restart
+
+`harness-runtime stop --repo <repo>` stops the runtime of a repository the same way as SIGTERM: it
+sends the `shutdown` operation over the runtime IPC with the runtime token and waits until the
+runtime lets the instance lock go (up to 30 s). The runtime removes its socket and token file
+itself. Executions outlive the stop, as with SIGTERM. The command prints one JSON line.
+
+`harness-runtime restart --repo <repo>` runs `stop`, then `serve` in the same process: it prints the
+`serve` readiness line and exits with its codes. The client connections of the old runtime close
+with it; a client reads the new token again.
+
+| Code | `stop` | `restart` |
+| --- | --- | --- |
+| 0 | `{"status":"stopped","pid":<pid>}` or `{"status":"not_running"}`; a repeat is safe | the runtime stopped normally |
+| 1 | the runtime holds the lock but did not answer in 30 s (`[runtime_unavailable]`), or accepted `shutdown` but did not let the lock go in 30 s (`[deadline_exceeded]`) | `stop` failed, or the running `serve` ended with an error |
+| 2 | refused, nothing stopped: wrong arguments, the directory is no repository (`[not_found]`), the runtime refused `hello` (`[unauthorized_peer]`, `[protocol_unsupported]`) or does not know `shutdown` (`[unknown_operation]`) | `stop` refused, or `serve` refused to start |
+
+The command does not stop a runtime release without `shutdown`: stop it once with SIGTERM (Ctrl+Break
+on Windows); `stop` and `restart` work after that. On Windows the contract is the same; the client
+connects to the runtime named pipe.
+
 ## Store
 
 Operational state is SQLite WAL with short transactions and no external calls inside a transaction.
@@ -70,7 +96,7 @@ the next observation.
 Reconcile compares the saved intent with the actual host state. If the object already exists, the
 runtime does not start a second process. If the object is proven absent, the execution gets `lost` and
 becomes terminal. The execution state is an observation of Rust, and Python chooses the dispatch state
-from this observation. The runtime never writes the batch lifecycle directly.
+from this observation. The runtime does not change the batch lifecycle on its own: it only saves the Python decision.
 
 ## Verification
 
@@ -93,6 +119,8 @@ An error is typed, so that a retry does not spend the role budget on infrastruct
 | `code_test` | A test or mypy fails | A return to the developer with evidence. |
 | `timeout` | The deadline expired | A stop with a grace period and partial evidence. |
 
+Besides these five, the runtime vocabulary has the domains `tooling`, `cancelled`, and `unknown`.
+
 ## Security
 
 | Boundary | Rule |
@@ -114,6 +142,9 @@ An error is typed, so that a retry does not spend the role budget on infrastruct
 | 0023 | Incremental checks |
 | 0025 | The built-in container executor |
 | 0026 | The consolidation of Harness Next and the Release Gate |
+| 0030 | The operational recovery store and its reconciliation with the authority lifecycle |
+| 0031 | The autostart of `harness-runtime serve` for `/implement` |
+| 0032 | The cargo cache in QA containers |
 
 ## Next
 

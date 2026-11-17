@@ -127,12 +127,14 @@ class DiffPairTreeComparisonTests(plan_dispatch.TicketDiffFixture):
     ref = "integration/it"
     flag = True
     expected = release_gate.SELECTION_TICKET_DIFF
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    file_ledger = True
 
     def setUp(self) -> None:
         super().setUp()
         self._configure(self._on(ticket_diff_selection=self.flag))
         self.branch = PublishedBranch(self.fx, self.ref)
-        self.fx.state_dir = self.fx.repo / ".harness/orchestration/state"
+        self.branch.keep_state_in_repo()
         self.published = self.branch.publish()
         self.prepared = self.branch.prepare()
         write_project(self.fx.repo, GITHUB, ["lint", "tests"])

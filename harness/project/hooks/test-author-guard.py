@@ -85,8 +85,9 @@ def _validate_agent(repo: Path) -> None:
         raise GuardRefusal("scoped_hook_unsupported")
     # Seed files can survive an update. A stale fixed model/effort must not silently override
     # the selected developer or short-route launcher settings.
+    # No model line is the inherited model (#814); `model: inherit` of an older seed means the same.
     models = [line for line in frontmatter if re.match(r"^model\s*:", line)]
-    if models != ["model: inherit"] or any(
+    if models not in ([], ["model: inherit"]) or any(
         re.match(r"^effort\s*:", line) for line in frontmatter
     ):
         raise GuardRefusal("test_author_config_invalid")

@@ -246,6 +246,9 @@ class QaRunBoundaryTests(StrictBoundaryFixture):
 
 
 class PublishBoundaryTests(StrictBoundaryFixture):
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    file_ledger = True
+
     def _publish_brief(self, *, plan: bool) -> tuple[str, str]:
         """QA accepted under standard, then the project moves to strict before publish."""
         self._configure(POLICY if plan else None)

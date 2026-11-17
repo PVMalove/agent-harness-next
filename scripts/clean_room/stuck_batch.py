@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -26,6 +28,7 @@ def run(ctx: SimpleNamespace) -> None:
     # report can never be decided. Without a sanctioned way out, that batch stays open for good and
     # the only remaining move is editing the state files by hand.
     wedge_state = test_root / "wedged-state"
+    seed_file_ledger(wedge_state)
     run_step(
         ["git", "branch", "feature/issue-905-wedged"],
         cwd=orchestration_project,

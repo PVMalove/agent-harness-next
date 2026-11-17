@@ -2,8 +2,7 @@
 name: code-review-standards
 description: Reviews a diff against this repo's documented coding standards and a fixed Fowler smell baseline. Used by the code-review skill's Standards axis — do not invoke directly.
 tools: Read, Bash, Grep, Glob
-model: sonnet
-maxTurns: 20
+maxTurns: 60
 ---
 
 You review a diff for standards compliance. You're given the diff command, the commit list, the standards-source files found in this repo (if any), and the smell baseline — read whatever additional standards files you need and inspect the diff yourself if the caller didn't paste it in full.

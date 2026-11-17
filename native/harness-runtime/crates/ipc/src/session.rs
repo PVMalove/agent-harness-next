@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use contracts::{
-    ErrorBody, ErrorCode, FailureDomain, HelloPayload, HelloResult, PROTOCOL_VERSION,
-    ProtocolVersion, Request, Response, decode, negotiate,
+    ErrorBody, ErrorCode, FailureDomain, HelloPayload, HelloResult, PROTOCOL_REMEDY,
+    PROTOCOL_VERSION, ProtocolVersion, Request, Response, decode, negotiate,
 };
 use serde_json::{Value, json};
 
@@ -29,7 +29,73 @@ pub struct Shared {
     pub snapshots: Arc<state::read_session::Registry>,
     /// The process supervisor of the executions (ADR 0022).
     pub supervisor: Arc<supervisor::Supervisor>,
+    /// The owners of a runtime the autostart hook started (ADR 0031); a manual runtime never
+    /// stops by itself.
+    pub lifetime: Arc<crate::lifetime::Lifetime>,
 }
+
+/// One `hello` feature of this runtime besides the supervisor's (`supervisor::FEATURES`).
+#[derive(Clone, Copy, Debug)]
+struct Feature {
+    name: &'static str,
+    /// Listed only while the state directory has a runtime store that is the authority.
+    needs_store: bool,
+    /// An operation that `Session::handle` dispatches; `false` names a capability of another
+    /// operation, which no request names.
+    operation: bool,
+}
+
+impl Feature {
+    /// An operation every runtime answers, a manual one and one that serves no state too.
+    const fn always(name: &'static str) -> Self {
+        Self {
+            name,
+            needs_store: false,
+            operation: true,
+        }
+    }
+
+    /// An operation of the runtime store.
+    const fn of_store(name: &'static str) -> Self {
+        Self {
+            name,
+            needs_store: true,
+            operation: true,
+        }
+    }
+
+    /// A capability of the store that another operation carries.
+    const fn store_capability(name: &'static str) -> Self {
+        Self {
+            name,
+            needs_store: true,
+            operation: false,
+        }
+    }
+}
+
+/// The features `hello` lists, in this order, before the supervisor's. `Session::handle` serves
+/// the operations of this table and of `supervisor::FEATURES` only; a unit test checks that it
+/// routes each of them.
+const FEATURES: [Feature; 12] = [
+    // The owners of the runtime (ADR 0031): every runtime answers them, a manual one too.
+    Feature::always("status"),
+    Feature::always("shutdown"),
+    Feature::always("runtime.attach"),
+    Feature::always("runtime.release"),
+    Feature::of_store("state.read"),
+    Feature::of_store("state.write"),
+    Feature::of_store("state.validate"),
+    Feature::of_store("qa.lane.inspect"),
+    // The recovery records of a batch (ADR 0026): its operational hold and its intent.
+    Feature::store_capability("state.recovery"),
+    // The verdict on the stored QA evidence of a Release Gate pair (ADR 0021, section 7).
+    Feature::of_store("qa.evidence.verify"),
+    // The managed issue worktrees that a sandboxed coordinator cannot create or remove itself
+    // (issue #1180).
+    Feature::of_store("worktree.create"),
+    Feature::of_store("worktree.remove"),
+];
 
 /// The answer to one frame.
 #[derive(Debug)]
@@ -45,6 +111,7 @@ pub struct Reply {
 pub struct Session {
     negotiated: Option<ProtocolVersion>,
     peer_pid: Option<u32>,
+    stop_requested: bool,
 }
 
 fn operation_id_of(body: &[u8]) -> String {
@@ -71,7 +138,14 @@ impl Session {
         Self {
             negotiated: None,
             peer_pid,
+            stop_requested: false,
         }
+    }
+
+    /// Whether this connection asked the runtime to stop (`shutdown`). The server sets its stop
+    /// flag only after the reply is written, so the client always reads the answer.
+    pub fn stop_requested(&self) -> bool {
+        self.stop_requested
     }
 
     /// The reply to one frame body, given the current time in UTC milliseconds.
@@ -126,6 +200,10 @@ impl Session {
         }
         #[cfg(debug_assertions)]
         state::hooks::trace(&format!("request:{}", request.operation));
+        // The feature table decides what is served; the match only routes it.
+        if !dispatched(shared, &request.operation) {
+            return unknown_operation(&request);
+        }
         match request.operation.as_str() {
             "status" => Reply {
                 response: Response::ok(
@@ -134,47 +212,47 @@ impl Session {
                         "state": "serving",
                         "pid": std::process::id(),
                         "repo_id": shared.repo_id,
+                        // The PATH the workers this runtime spawns resolve their binaries on.
+                        "search_path": std::env::var_os("PATH")
+                            .map(|v| v.to_string_lossy().into_owned()),
                     }),
                 ),
                 close: false,
             },
+            // The same stop as SIGTERM (`harness-runtime stop`): the connection closes after the
+            // answer, and the executions outlive the runtime.
+            "shutdown" => {
+                self.stop_requested = true;
+                Reply {
+                    response: Response::ok(
+                        &request.operation_id,
+                        json!({"state": "stopping", "pid": std::process::id()}),
+                    ),
+                    close: true,
+                }
+            }
+            "runtime.attach" => runtime_attach(shared, &request),
+            "runtime.release" => runtime_release(shared, &request),
             "state.read" => state_read(shared, &request, negotiated.minor),
             "state.write" => state_write(shared, &request, self.peer_pid),
             "qa.lane.inspect" => qa_lane_inspect(shared, &request),
             "qa.evidence.verify" => qa_evidence_verify(shared, &request),
             "state.validate" => state_validate(shared, &request),
-            "execution.launch" if supervised(shared, &request.operation) => {
-                answer(&request, shared.supervisor.launch(&request))
+            "worktree.create" => {
+                worktree_operation(shared, &request, negotiated.minor, crate::worktree::create)
             }
-            "execution.observe" if supervised(shared, &request.operation) => {
-                answer(&request, shared.supervisor.observe(&request))
+            "worktree.remove" => {
+                worktree_operation(shared, &request, negotiated.minor, crate::worktree::remove)
             }
-            "container.observe" if supervised(shared, &request.operation) => {
-                answer(&request, shared.supervisor.container_observe(&request))
-            }
-            "container.objects" if supervised(shared, &request.operation) => {
-                answer(&request, shared.supervisor.container_objects(&request))
-            }
-            "container.remove" if supervised(shared, &request.operation) => {
-                answer(&request, shared.supervisor.container_remove(&request))
-            }
-            "qa.run" if supervised(shared, &request.operation) => {
-                answer(&request, shared.supervisor.qa_run(&request))
-            }
-            "qa.stop" if supervised(shared, &request.operation) => {
-                answer(&request, shared.supervisor.qa_stop(&request))
-            }
-            other => failure(
-                &request.operation_id,
-                ErrorBody::new(
-                    ErrorCode::UnknownOperation,
-                    FailureDomain::Tooling,
-                    false,
-                    format!("the runtime does not serve the operation {other:?}"),
-                    "use an operation the hello features list names, or update the runtime",
-                ),
-                false,
-            ),
+            "execution.launch" => answer(&request, shared.supervisor.launch(&request)),
+            "execution.observe" => answer(&request, shared.supervisor.observe(&request)),
+            "container.observe" => answer(&request, shared.supervisor.container_observe(&request)),
+            "container.objects" => answer(&request, shared.supervisor.container_objects(&request)),
+            "container.remove" => answer(&request, shared.supervisor.container_remove(&request)),
+            "qa.run" => answer(&request, shared.supervisor.qa_run(&request)),
+            "qa.stop" => answer(&request, shared.supervisor.qa_stop(&request)),
+            // An operation of the table without a route: a unit test keeps this arm unreachable.
+            _ => unknown_operation(&request),
         }
     }
 
@@ -232,19 +310,13 @@ impl Session {
         // The store is the authority only after a cutover, which can happen while this runtime
         // lives, so every `hello` asks again.
         let store_id = shared.state_dir.as_deref().and_then(state::read::store_id);
-        let mut features = vec!["status".to_owned()];
-        if store_id.is_some() {
-            features.push("state.read".to_owned());
-            features.push("state.write".to_owned());
-            features.push("state.validate".to_owned());
-            features.push("qa.lane.inspect".to_owned());
-            // The recovery records of a batch (ADR 0026): its operational hold and its intent.
-            features.push("state.recovery".to_owned());
-            // The verdict on the stored QA evidence of a Release Gate pair (ADR 0021, section 7).
-            features.push("qa.evidence.verify".to_owned());
-            if supervisor::Supervisor::supported() {
-                features.extend(supervisor::FEATURES.map(str::to_owned));
-            }
+        let mut features: Vec<String> = FEATURES
+            .iter()
+            .filter(|feature| store_id.is_some() || !feature.needs_store)
+            .map(|feature| feature.name.to_owned())
+            .collect();
+        if store_id.is_some() && supervisor::Supervisor::supported() {
+            features.extend(supervisor::FEATURES.map(str::to_owned));
         }
         let result = HelloResult {
             protocol: version,
@@ -268,6 +340,111 @@ fn supervised(shared: &Shared, operation: &str) -> bool {
         && supervisor::FEATURES.contains(&operation)
 }
 
+/// Whether `Session::handle` serves `operation` here: an operation of the feature table, or a
+/// supervisor operation this runtime supervises.
+fn dispatched(shared: &Shared, operation: &str) -> bool {
+    FEATURES
+        .iter()
+        .any(|feature| feature.operation && feature.name == operation)
+        || supervised(shared, operation)
+}
+
+fn unknown_operation(request: &Request) -> Reply {
+    failure(
+        &request.operation_id,
+        ErrorBody::new(
+            ErrorCode::UnknownOperation,
+            FailureDomain::Tooling,
+            false,
+            format!(
+                "the runtime does not serve the operation {:?}",
+                request.operation
+            ),
+            "use an operation the hello features list names, or update the runtime",
+        ),
+        false,
+    )
+}
+
+/// The owner key of a `runtime.attach` or `runtime.release` payload, and the payload.
+fn owner_key<'a>(request: &'a Request, allowed: &[&str]) -> Result<(&'a str, &'a Value), String> {
+    let Some(payload) = request
+        .payload
+        .as_ref()
+        .filter(|payload| payload.is_object())
+    else {
+        return Err(format!("{} needs a payload object", request.operation));
+    };
+    if let Some(field) = payload.as_object().and_then(|fields| {
+        fields
+            .keys()
+            .find(|field| !allowed.contains(&field.as_str()))
+    }) {
+        return Err(format!("unknown payload field {field:?}"));
+    }
+    match payload.get("key").and_then(Value::as_str) {
+        Some(key) if crate::lifetime::valid_key(key) => Ok((key, payload)),
+        _ => Err(format!(
+            "key must be 1 to {} characters of [A-Za-z0-9._:/-]",
+            crate::lifetime::MAX_KEY_LEN
+        )),
+    }
+}
+
+/// What still needs the store of this runtime (ADR 0031, section 3).
+fn busy(shared: &Shared) -> Vec<String> {
+    shared
+        .state_dir
+        .as_deref()
+        .map(state::idle::busy)
+        .unwrap_or_default()
+}
+
+/// `runtime.attach`: add or renew the owner `key`; `owner_pid` names the process whose death
+/// releases it (ADR 0031, section 2).
+fn runtime_attach(shared: &Shared, request: &Request) -> Reply {
+    let id = &request.operation_id;
+    let (key, payload) = match owner_key(request, &["key", "owner_pid"]) {
+        Ok(found) => found,
+        Err(detail) => return malformed(id, &detail),
+    };
+    let owner_pid = match payload.get("owner_pid") {
+        None | Some(Value::Null) => None,
+        Some(pid) => match pid.as_i64().filter(|pid| *pid > 0) {
+            Some(pid) => Some(pid),
+            None => return malformed(id, "owner_pid must be a positive integer"),
+        },
+    };
+    let identity =
+        owner_pid.and_then(|pid| state::identity::observe(pid, &state::identity::observer()));
+    shared
+        .lifetime
+        .attach(key, identity, std::time::Instant::now());
+    let mut result = shared.lifetime.describe(&busy(shared));
+    result["attached"] = json!(!shared.lifetime.is_exiting());
+    Reply {
+        response: Response::ok(id, result),
+        close: false,
+    }
+}
+
+/// `runtime.release`: remove the owner `key`. It never stops the runtime by itself: the accept
+/// loop decides that (ADR 0031, section 2).
+fn runtime_release(shared: &Shared, request: &Request) -> Reply {
+    let id = &request.operation_id;
+    let key = match owner_key(request, &["key"]) {
+        Ok((key, _)) => key,
+        Err(detail) => return malformed(id, &detail),
+    };
+    let released = shared.lifetime.release(key);
+    let mut result = shared.lifetime.describe(&busy(shared));
+    result["released"] = json!(released);
+    Reply {
+        response: Response::ok(id, result),
+        close: false,
+    }
+}
+
 /// The reply of an execution operation (ADR 0022).
 fn answer(request: &Request, outcome: Result<Value, ErrorBody>) -> Reply {
     match outcome {
@@ -281,8 +458,10 @@ fn answer(request: &Request, outcome: Result<Value, ErrorBody>) -> Reply {
 
 /// The protocol minor a filtered read needs: version 7 added the `filter` payload field of
 /// `state.read` (ADR 0020, section 3). A peer that negotiated an older minor gets a typed
-/// `protocol_unsupported` instead of a `malformed_request` for a field it never learned.
-const FILTER_MINOR: u32 = 7;
+/// `protocol_unsupported` instead of a `malformed_request` for a field it never learned. It is
+/// the minor that introduced the field, not `PROTOCOL_VERSION.minor`: a later minor keeps it.
+const FILTER_SINCE_MINOR: u32 = 7;
+const _: () = assert!(FILTER_SINCE_MINOR <= PROTOCOL_VERSION.minor);
 
 /// `state.read`: records of the runtime store in the form of the legacy ledger files.
 fn state_read(shared: &Shared, request: &Request, negotiated_minor: u32) -> Reply {
@@ -292,7 +471,7 @@ fn state_read(shared: &Shared, request: &Request, negotiated_minor: u32) -> Repl
         .as_ref()
         .and_then(|payload| payload.get("filter"))
         .is_some_and(|filter| !filter.is_null());
-    if filtered && negotiated_minor < FILTER_MINOR {
+    if filtered && negotiated_minor < FILTER_SINCE_MINOR {
         return failure(
             id,
             ErrorBody::new(
@@ -303,7 +482,7 @@ fn state_read(shared: &Shared, request: &Request, negotiated_minor: u32) -> Repl
                 "update harness or harness-runtime so that both speak protocol 1.7, then read again",
             )
             .with_fact("negotiated_minor", negotiated_minor)
-            .with_fact("required_minor", FILTER_MINOR),
+            .with_fact("required_minor", FILTER_SINCE_MINOR),
             false,
         );
     }
@@ -427,7 +606,7 @@ fn read_refusal(id: &str, error: state::read::ReadError) -> Reply {
             FailureDomain::Infrastructure,
             false,
             format!("the store cannot be read: {message}"),
-            "repeat the command; if the store stays unreadable, restore the state directory from the snapshot named in AUTHORITY.json",
+            state::store_error::REPEAT_OR_RESTORE_REMEDY,
         ),
     }
 }
@@ -550,6 +729,46 @@ fn state_validate(shared: &Shared, request: &Request) -> Reply {
     }
 }
 
+/// The protocol minor the worktree operations need: version 8 added `worktree.create` and
+/// `worktree.remove` (issue #1180). A peer that negotiated an older minor gets a typed
+/// `protocol_unsupported` for an operation its protocol does not define. It is the minor that
+/// introduced the operations, not `PROTOCOL_VERSION.minor`: a later minor keeps it.
+const WORKTREE_SINCE_MINOR: u32 = 8;
+const _: () = assert!(WORKTREE_SINCE_MINOR <= PROTOCOL_VERSION.minor);
+
+/// `worktree.create` or `worktree.remove`: a managed issue worktree that a sandboxed coordinator
+/// cannot create or remove itself, because its sandbox mounts `.git/worktrees` read-only
+/// (issue #1180). `serve` is the operation of `crate::worktree`.
+fn worktree_operation(
+    shared: &Shared,
+    request: &Request,
+    negotiated_minor: u32,
+    serve: fn(Option<&Path>, Option<&Value>) -> Result<Value, ErrorBody>,
+) -> Reply {
+    if negotiated_minor < WORKTREE_SINCE_MINOR {
+        return failure(
+            &request.operation_id,
+            ErrorBody::new(
+                ErrorCode::ProtocolUnsupported,
+                FailureDomain::Tooling,
+                false,
+                format!(
+                    "the operation {} needs a newer protocol minor",
+                    request.operation
+                ),
+                "update harness or harness-runtime so that both speak protocol 1.8, then send the request again",
+            )
+            .with_fact("negotiated_minor", negotiated_minor)
+            .with_fact("required_minor", WORKTREE_SINCE_MINOR),
+            false,
+        );
+    }
+    answer(
+        request,
+        serve(shared.state_dir.as_deref(), request.payload.as_ref()),
+    )
+}
+
 /// A client names its repository by a working tree root. The runtime serves the repository, not
 /// one checkout: a linked worktree has the repo-id of its main checkout (ADR 0021, section 2),
 /// the id that picked this socket, so it is the same repository.
@@ -562,13 +781,7 @@ fn serves_repository(shared: &Shared, client_root: &str) -> bool {
 fn malformed(operation_id: &str, detail: &str) -> Reply {
     failure(
         operation_id,
-        ErrorBody::new(
-            ErrorCode::MalformedRequest,
-            FailureDomain::Tooling,
-            false,
-            format!("the request is not valid: {detail}"),
-            "send a request the protocol defines: a known envelope, no unknown fields",
-        ),
+        ErrorBody::malformed(detail, PROTOCOL_REMEDY),
         false,
     )
 }
@@ -605,6 +818,7 @@ mod tests {
             state_dir: None,
             snapshots: Default::default(),
             supervisor: Default::default(),
+            lifetime: Default::default(),
         }
     }
 
@@ -683,7 +897,7 @@ mod tests {
 
         assert_eq!(code(&reply), ErrorCode::ProtocolUnsupported);
         let error = reply.response.error.unwrap();
-        assert_eq!(error.facts["server"], json!({"major": 1, "minor": 7}));
+        assert_eq!(error.facts["server"], json!({"major": 1, "minor": 8}));
         assert!(error.remedy.contains("update harness"));
         assert!(reply.close);
     }
@@ -751,6 +965,59 @@ mod tests {
     }
 
     #[test]
+    fn status_answers_the_search_path_of_the_serve_environment() {
+        let (shared, root) = setup();
+        let mut session = authenticated(&shared, &root);
+
+        let reply = session.handle(&shared, &status_body(1, "status", NOW + 1), NOW);
+
+        let expected = std::env::var_os("PATH").map(|v| v.to_string_lossy().into_owned());
+        assert_eq!(
+            reply.response.result.unwrap()["search_path"],
+            json!(expected)
+        );
+    }
+
+    #[test]
+    fn shutdown_before_hello_is_unauthorized_and_requests_no_stop() {
+        let mut session = Session::new();
+
+        let reply = session.handle(&setup().0, &status_body(1, "shutdown", NOW + 1), NOW);
+
+        assert_eq!(code(&reply), ErrorCode::UnauthorizedPeer);
+        assert!(!session.stop_requested());
+    }
+
+    #[test]
+    fn an_authenticated_shutdown_answers_the_pid_and_requests_the_stop() {
+        let (shared, root) = setup();
+        let mut session = authenticated(&shared, &root);
+        assert!(!session.stop_requested());
+
+        let reply = session.handle(&shared, &status_body(1, "shutdown", NOW + 1), NOW);
+
+        assert_eq!(reply.response.status, Status::Ok);
+        let result = reply.response.result.unwrap();
+        assert_eq!(result["state"], "stopping");
+        assert_eq!(result["pid"], std::process::id());
+        assert!(reply.close);
+        assert!(session.stop_requested());
+    }
+
+    #[test]
+    fn hello_lists_shutdown_among_the_features() {
+        let (shared, root) = setup();
+
+        let reply = Session::new().handle(&shared, &hello_body(&root, "secret", 1, 1), NOW);
+
+        let features = reply.response.result.unwrap()["features"].clone();
+        assert!(
+            features.as_array().unwrap().contains(&json!("shutdown")),
+            "{features}"
+        );
+    }
+
+    #[test]
     fn an_unknown_operation_is_named() {
         let (shared, root) = setup();
         let mut session = authenticated(&shared, &root);
@@ -759,6 +1026,61 @@ mod tests {
 
         assert_eq!(code(&reply), ErrorCode::UnknownOperation);
         assert!(!reply.close);
+    }
+
+    #[test]
+    fn every_operation_hello_can_list_is_dispatched() {
+        let (mut shared, root) = setup();
+        // A state directory makes the supervisor serve its operations; without a payload or a
+        // store every operation answers its own refusal, never `unknown_operation`.
+        shared.state_dir = Some(root.join(".harness/orchestration/state"));
+        let mut operations: Vec<&str> = FEATURES
+            .iter()
+            .filter(|feature| feature.operation)
+            .map(|feature| feature.name)
+            .collect();
+        if supervisor::Supervisor::supported() {
+            operations.extend(supervisor::FEATURES);
+        }
+
+        for operation in operations {
+            let mut session = authenticated(&shared, &root);
+            let reply = session.handle(&shared, &status_body(1, operation, NOW + 1), NOW);
+            let unknown = reply
+                .response
+                .error
+                .as_ref()
+                .is_some_and(|error| error.code == ErrorCode::UnknownOperation);
+            assert!(
+                !unknown,
+                "hello lists {operation}, but handle does not serve it"
+            );
+        }
+    }
+
+    #[test]
+    fn a_capability_feature_is_no_operation() {
+        let (mut shared, root) = setup();
+        shared.state_dir = Some(root.join(".harness/orchestration/state"));
+        let mut session = authenticated(&shared, &root);
+
+        for feature in FEATURES.iter().filter(|feature| !feature.operation) {
+            let reply = session.handle(&shared, &status_body(1, feature.name, NOW + 1), NOW);
+            assert_eq!(
+                code(&reply),
+                ErrorCode::UnknownOperation,
+                "{}",
+                feature.name
+            );
+        }
+    }
+
+    #[test]
+    fn the_features_name_each_operation_once() {
+        let mut names: Vec<&str> = FEATURES.iter().map(|feature| feature.name).collect();
+        names.extend(supervisor::FEATURES);
+        let distinct: std::collections::BTreeSet<&str> = names.iter().copied().collect();
+        assert_eq!(distinct.len(), names.len(), "{names:?}");
     }
 
     #[test]
@@ -898,7 +1220,10 @@ mod tests {
 
         let result = hello.response.result.unwrap();
         assert_eq!(result["store_id"], Value::Null);
-        assert_eq!(result["features"], json!(["status"]));
+        assert_eq!(
+            result["features"],
+            json!(["status", "shutdown", "runtime.attach", "runtime.release"])
+        );
         assert_eq!(code(&reply), ErrorCode::NotFound);
     }
 
@@ -921,12 +1246,17 @@ mod tests {
         assert_eq!(result["store_id"], store_id.as_str());
         let mut features = vec![
             "status",
+            "shutdown",
+            "runtime.attach",
+            "runtime.release",
             "state.read",
             "state.write",
             "state.validate",
             "qa.lane.inspect",
             "state.recovery",
             "qa.evidence.verify",
+            "worktree.create",
+            "worktree.remove",
         ];
         // The supervisor serves its operations where the platform supervises processes.
         if supervisor::Supervisor::supported() {
@@ -1039,6 +1369,93 @@ mod tests {
 
         assert_eq!(code(&reply), ErrorCode::MalformedRequest);
         assert!(!reply.close);
+    }
+
+    /// A session whose `hello` negotiated exactly the protocol minor `minor`.
+    fn authenticated_at(shared: &Shared, root: &Path, minor: u32) -> Session {
+        let version = json!({"major": 1, "minor": minor});
+        let body = serde_json::to_vec(&json!({
+            "protocol_version": version,
+            "operation_id": "h",
+            "operation": "hello",
+            "request_deadline": NOW + 1,
+            "payload": {
+                "protocol": {"min": version, "max": version},
+                "client_version": "1",
+                "repo_root": root,
+                "token": "secret",
+            },
+        }))
+        .unwrap();
+        let mut session = Session::new();
+        let reply = session.handle(shared, &body, NOW);
+        assert_eq!(
+            reply.response.result.unwrap()["protocol"]["minor"],
+            json!(minor)
+        );
+        session
+    }
+
+    fn worktree_body(operation: &str, payload: Value) -> Vec<u8> {
+        serde_json::to_vec(&json!({
+            "protocol_version": {"major": 1, "minor": 8},
+            "operation_id": "t",
+            "operation": operation,
+            "request_deadline": NOW + 1,
+            "payload": payload,
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn the_worktree_operations_are_routed_to_their_own_refusals() {
+        let (mut shared, root) = setup();
+        shared.state_dir = Some(root.join(state::migrate::STATE_REL));
+        let mut session = authenticated_at(&shared, &root, 8);
+        let outside = json!({"path": root.join("elsewhere")});
+
+        let unknown_field = session.handle(
+            &shared,
+            &worktree_body("worktree.create", json!({"surprise": true})),
+            NOW,
+        );
+        let removed = session.handle(&shared, &worktree_body("worktree.remove", outside), NOW);
+
+        assert_eq!(code(&unknown_field), ErrorCode::MalformedRequest);
+        assert!(!unknown_field.close);
+        assert_eq!(code(&removed), ErrorCode::PolicyDenied);
+        assert!(!removed.close);
+    }
+
+    #[test]
+    fn a_worktree_operation_of_a_runtime_that_serves_no_state_is_an_invariant_violation() {
+        let (shared, root) = setup();
+        let mut session = authenticated_at(&shared, &root, 8);
+        let payload = json!({"path": root.join(".harness/.sandboxes/worktrees/issue-1")});
+
+        let reply = session.handle(&shared, &worktree_body("worktree.remove", payload), NOW);
+
+        assert_eq!(code(&reply), ErrorCode::InvariantViolation);
+        assert_eq!(
+            reply.response.error.unwrap().domain,
+            FailureDomain::EnvironmentPreparation
+        );
+    }
+
+    #[test]
+    fn a_worktree_operation_from_an_older_protocol_minor_is_protocol_unsupported() {
+        let (mut shared, root) = setup();
+        shared.state_dir = Some(root.join(state::migrate::STATE_REL));
+        let mut session = authenticated_at(&shared, &root, 7);
+
+        for operation in ["worktree.create", "worktree.remove"] {
+            let reply = session.handle(&shared, &worktree_body(operation, json!({})), NOW);
+
+            assert_eq!(code(&reply), ErrorCode::ProtocolUnsupported, "{operation}");
+            let facts = reply.response.error.unwrap().facts;
+            assert_eq!(facts["negotiated_minor"], 7);
+            assert_eq!(facts["required_minor"], 8);
+        }
     }
 
     #[test]

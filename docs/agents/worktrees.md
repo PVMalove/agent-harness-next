@@ -14,7 +14,7 @@ For a subagent spawned via the `Agent` tool to work on an independent ticket in 
 ## Conventions
 
 - **Branch naming still applies.** `EnterWorktree`'s `name` parameter drives the new branch name, but it is not copied verbatim: the runtime has been observed to prefix it and to replace `/`, turning `feature/issue-366-checkout-quote` into `worktree-feature+issue-366-checkout-quote` — which does not satisfy `branch_pattern` in `.harness/project.json` (see [git-workflow.md](./git-workflow.md#2-workflow-sequence)). Check the branch the tool actually created and rename it before committing anything. Don't let it default to a random name for ticket work.
-- **A session that only provisions a worktree for someone else does not enter it.** `EnterWorktree` is for a session that will do the work in that branch itself. A coordinator session driving `coordinator.py` is not that: its state lives in `.harness/orchestration/state/` relative to the repository root it passes as `--repo`, so switching into the worktree forks that state into a second copy and hides the batch from the root. Such a session creates the tree with plain `git worktree add`, stays in the main checkout, and passes only the path on to the batch.
+- **A session that only provisions a worktree for someone else does not enter it.** `EnterWorktree` is for a session that will do the work in that branch itself. A coordinator session driving `coordinator.py` is not that: its state lives in `.harness/orchestration/state/` relative to the repository root it passes as `--repo`, so switching into the worktree forks that state into a second copy and hides the batch from the root. Such a session creates the tree with `worktree create` (see Coordinator issue worktree), stays in the main checkout, and passes only the path on to the batch. The one exception is the pair that opens write access (see Session write access below): `EnterWorktree` with `path`, then `ExitWorktree` with `action: keep`. The pair returns the session to the main checkout before the next coordinator command.
 - **Never change tool configuration to make a worktree behave.** Editing `.claude/settings.local.json` — `worktree.baseRef` included — to steer one task alters the project for every later session. If the default base ref is wrong for the task, create the tree explicitly from the ref you want instead.
 - **Base ref**: a fresh worktree for a child ticket branches from the epic's recorded `origin/<integration-branch>`; an epic-less task uses `origin/<base_branch>` from `.harness/project.json`. Use the current local `HEAD` only when the task specifically requires it (`worktree.baseRef` setting).
 - **Everything else in [git-workflow.md](./git-workflow.md) still applies inside a worktree** — TDD, `qa-gate` before opening a PR, the PR confirmation checkpoint, never merging. A worktree changes *where* the work happens, not the process.
@@ -25,19 +25,27 @@ For a subagent spawned via the `Agent` tool to work on an independent ticket in 
 
 A coordinator (`/implement`) must create the issue worktree before `batch create`. `batch create`
 refuses a worktree that `git worktree list` does not show: `worktree '<path>' is not registered by git worktree`.
-The coordinator runs these commands in the main checkout and does not enter the new worktree:
+The coordinator runs these commands in the main checkout and does not work in the new worktree:
 
 ```bash
 git fetch origin <integration-branch>
-git worktree add --no-track -b feature/issue-<ID>-<slug> .harness/.sandboxes/worktrees/issue-<ID>-<slug> origin/<integration-branch>
+python .harness/orchestration/coordinator.py worktree create --repo . \
+  --branch feature/issue-<ID>-<slug> --base origin/<integration-branch>
+harness worktree-venv . .harness/.sandboxes/worktrees/issue-<ID>-<slug>
 ```
 
+- `worktree create` asks `harness-runtime` to run `git worktree add --no-track -b <branch> <path> <base>`. The runtime works outside the agent sandbox. The sandbox mounts `.git/worktrees` read-only, so the coordinator's own `git worktree add` stops half done there. The default path is `.harness/.sandboxes/worktrees/<last branch segment>`; the runtime refuses a path outside that directory. A repeated command answers `"created": false`. `worktree remove --path <worktree>` removes a clean managed worktree the same way and keeps its branch.
+- If the runtime answers `protocol_unsupported` or `unknown_operation`, it is older than this command. Update and restart `harness-runtime`, or ask the developer to run `git worktree add --no-track -b feature/issue-<ID>-<slug> .harness/.sandboxes/worktrees/issue-<ID>-<slug> origin/<integration-branch>` in a terminal outside the sandbox.
+
 - `<integration-branch>` is the ticket's `## Integration Branch` value. If the ticket has no such section, use its `## Git base` value, then the same section of its parent epic. For a task without an epic, use `base_branch` from `.harness/project.json`. If the value is absent for a ticket that has an epic, stop and report a blocker. Do not guess it.
-- `--no-track` is required. Without it, `git worktree add -b` writes the upstream of the new branch to `.git/config`. In a sandbox, `.git/config` can be write-protected. The command then stops half done: the branch exists, but the worktree does not.
+- In a manual `git worktree add -b`, `--no-track` is required. Without it, the command writes the upstream of the new branch to `.git/config`. In a sandbox, `.git/config` can be write-protected. The command then stops half done: the branch exists, but the worktree does not.
 - `git push -u origin feature/issue-<ID>-<slug>` (see [git-workflow.md](./git-workflow.md#2-workflow-sequence), step 2) sets the upstream later. It writes `.git/config` too, so it can fail the same way in a sandbox. If it fails, push with `git push origin feature/issue-<ID>-<slug>` and tell the developer that the upstream is not set.
+- `harness worktree-venv` makes the worktree's `.harness/.venv` a symlink to the main checkout's venv, so brief checks such as `make lint` run without `make bootstrap`. It links only when the worktree's `uv.lock` and `pyproject.toml` match the main checkout. Otherwise it answers `"status": "refused"` with the differing files and a remedy: a separate venv in the worktree (`UV_PROJECT_ENVIRONMENT=.harness/.venv uv sync --locked`). Do not run `make bootstrap` in a worktree with a linked venv: through the link it re-syncs the main checkout's venv. Run the command again after the recovery `git worktree add` below.
 - Pass the absolute path of the worktree as `--worktree`, the branch as `--branch`, and the integration branch as `--integration-ref` to `batch create`. For a task without an epic, omit `--integration-ref`.
 
-**Recovery after a partial failure.** If `git worktree add -b` fails and `git branch --list feature/issue-<ID>-<slug>` shows the branch, the branch exists and the worktree does not. Do not create the branch again and do not delete it. Run:
+**Session write access.** Run the coordinator from a session rooted in the main checkout. The session must be able to write the issue worktree and its git metadata directory (`<main>/.git/worktrees/<name>`, printed by `git -C <worktree> rev-parse --absolute-git-dir`): the writer's `git commit` creates its index lock there. A sandboxed session writes only inside its own directory, and it cannot write a worktree it did not create: the `.git/worktrees/<name>` of a worktree that the runtime, a human, or another session created stays read-only. `worktree create` reports this as `session_write_access`. To open the access in Claude Code, call `EnterWorktree` with `path` set to the issue worktree, then `ExitWorktree` with `action: keep`. The session returns to the main checkout, and the worktree and its git metadata stay writable until the session ends, for the in-process workers of the session too. Run no coordinator command between the two calls. A new session repeats the two calls. A subagent started with `isolation: worktree` cannot enter an existing worktree. `/implement` probes these directories before it changes the ticket's `status::*` label. `batch create`, and `dispatch preflight` and `dispatch send` for a write role, refuse a worktree whose directory or git metadata the session cannot write and name that directory. The remedy is the pair of calls above from a session in the main checkout, or the single-session route (`/fast-implement`).
+
+**Recovery after a partial failure.** A repeated `worktree create` recovers by itself while the branch still points to the base. For a manual command: if `git worktree add -b` fails and `git branch --list feature/issue-<ID>-<slug>` shows the branch, the branch exists and the worktree does not. Do not create the branch again and do not delete it. Run:
 
 ```bash
 git worktree add .harness/.sandboxes/worktrees/issue-<ID>-<slug> feature/issue-<ID>-<slug>
@@ -55,7 +63,8 @@ In Claude Code the Agent tool cannot start a subagent in an existing checkout (i
 checkout and `EnterWorktree` refuses it there). For a worker whose CWD is the worktree, use the
 `external` transport with `.harness/adapters/claude_worker.py`:
 `dispatch send --adapter <main-repo>/.harness/adapters/claude_worker.py` runs it in `worker_worktree`
-and it starts a detached headless `claude -p` there. An `in-process` subagent works through absolute
+and it runs a headless `claude -p` there: in the foreground for the worker's whole run under the
+runtime (a brief with `execution`), detached otherwise. An `in-process` subagent works through absolute
 paths and `git -C <worker_worktree>`; its self-report proves the checkout it works in, not its CWD.
 The worker probes and self-reports its actual canonical Git top-level, branch and HEAD. A main
 checkout at the same SHA is still the wrong path for a writer. Keep the coordinator and its CLI

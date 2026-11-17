@@ -372,7 +372,7 @@ def sandbox_argv(
     status_fd: int,
     tmp: Path,
 ) -> list[str]:
-    """The bubblewrap argv of ADR 0014: a read-only root, private /dev and /proc, the launch's own
+    """The bubblewrap argv of ADR 0035: a read-only root, private /dev and /proc, the launch's own
     `tmp` as /tmp, an empty /run without host sockets, writable `binds`, every namespace unshared
     and no capabilities; `command` runs without a shell."""
     argv = [

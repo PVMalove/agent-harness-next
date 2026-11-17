@@ -181,6 +181,7 @@ def test_the_brief_pins_the_digest_of_the_installed_policy_file(tmp_path: Path) 
 
     from harness.orchestration import coordinator
     from tests.core.test_uninstall import git, harness
+    from tests.orchestration.legacy_state import seed_file_ledger
 
     cases = {case["name"]: case for case in _rust_golden()["normalized"] if isinstance(case, dict)}
     value = cases["reordered-and-duplicated-escalations"]["policy"]
@@ -207,6 +208,8 @@ def test_the_brief_pins_the_digest_of_the_installed_policy_file(tmp_path: Path) 
     branch = "feature/issue-829-thing"
     worktree = tmp_path / "worktree"
     git(repo, "worktree", "add", "-b", branch, str(worktree), "master")
+    # The state dir lies outside the repository: a 1.x ledger (ADR 0036, section 5, rule 5).
+    seed_file_ledger(tmp_path / "state")
     state = {"repo": str(repo), "state_dir": str(tmp_path / "state")}
     approval = {"approved_by": "Malove", "approved_at": "2026-11-03T00:00:00+00:00"}
     batch = coordinator.create_batch(

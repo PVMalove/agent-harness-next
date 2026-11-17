@@ -12,7 +12,7 @@ const DS_SHEETS = readdirSync(join(REPO, STYLES))
   .filter((name) => /^ds-.+\.css$/.test(name))
   .sort();
 const SHEETS: Record<string, string> = {
-  mockup: "docs/design/web-console-mockups/execution-console.css",
+  mockup: "harness/console/frontend/legacy/execution-console.css",
   app: `${STYLES}/app.css`,
   ...Object.fromEntries(DS_SHEETS.map((name) => [name, `${STYLES}/${name}`])),
 };

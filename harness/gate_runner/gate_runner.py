@@ -51,7 +51,7 @@ SENSITIVE_OUTPUT: tuple[
 )
 
 
-# Bound for one Git plumbing command of the clean checkout: `worktree add` checks out a full tree.
+# Bound for one Git plumbing command of the clean checkout: `checkout` writes a full tree.
 GIT_TIMEOUT_SECONDS = 300
 _PYTHON_LAUNCHERS = frozenset({"python", "python3", "py"})
 # The first word of a shell command when it is a bare token: no quote, escape or whitespace.
@@ -110,14 +110,14 @@ class LocalPolicy:
 
 @dataclass(frozen=True)
 class CleanRoomPolicy:
-    """Запуск проверок качества в изолированном worktree, привязанном к коммиту-кандидату."""
+    """Запуск проверок качества в изолированном checkout, привязанном к коммиту-кандидату."""
 
     repository: Path
     candidate_commit: str
 
     @contextmanager
     def checkout(self) -> Iterator[Path]:
-        """Создать временное изолированное worktree для коммита-кандидата и удалить его при выходе."""
+        """Создать временный отдельный репозиторий на коммите-кандидате и удалить его при выходе."""
         if (
             not isinstance(self.candidate_commit, str)
             or re.fullmatch(r"[0-9a-fA-F]{7,64}", self.candidate_commit.strip()) is None
@@ -130,35 +130,17 @@ class CleanRoomPolicy:
         temporary_parent = storage_path(self.repository, "runs", "qa")
         try:
             temporary_parent.mkdir(parents=True, exist_ok=True)
-            worktree_root = Path(
+            checkout_root = Path(
                 tempfile.mkdtemp(prefix="agent-harness-qa-", dir=temporary_parent)
             )
         except OSError as exc:
             raise GateRunnerError(
                 f"could not prepare clean QA checkout storage {temporary_parent}: {sanitise(str(exc))}",
-                remedy=f"grant the coordinator process write access to {temporary_parent} and run the QA runner again",
+                remedy=_environment_remedy(temporary_parent),
             ) from exc
-        checkout = worktree_root / "checkout"
+        checkout = checkout_root / "checkout"
         try:
-            created: subprocess.CompletedProcess[str] = _run_git(
-                [
-                    "git",
-                    "-C",
-                    str(self.repository),
-                    "worktree",
-                    "add",
-                    "--detach",
-                    str(checkout),
-                    "--",
-                    self.candidate_commit,
-                ],
-            )
-            if created.returncode != 0:
-                detail: str = sanitise((created.stderr or created.stdout).strip())
-                raise GateRunnerError(
-                    f"could not create clean QA worktree: {detail or 'unknown error'}",
-                    remedy=f"inspect the git worktree error above and fix the repository/candidate commit {self.candidate_commit} before retrying",
-                )
+            self._populate(checkout)
             resolved: subprocess.CompletedProcess[str] = _run_git(
                 ["git", "-C", str(checkout), "rev-parse", "--verify", "HEAD^{commit}"]
             )
@@ -167,7 +149,7 @@ class CleanRoomPolicy:
                 or resolved.stdout.strip() != self.candidate_commit
             ):
                 raise GateRunnerError(
-                    "clean QA worktree HEAD does not match the pinned candidate commit",
+                    "clean QA checkout HEAD does not match the pinned candidate commit",
                     remedy=f"verify commit {self.candidate_commit} exists and resolves cleanly, then retry",
                 )
             status: subprocess.CompletedProcess[str] = _run_git(
@@ -182,35 +164,150 @@ class CleanRoomPolicy:
             )
             if status.returncode != 0 or status.stdout:
                 raise GateRunnerError(
-                    "clean QA worktree contains mutable files",
+                    "clean QA checkout contains mutable files",
                     remedy=(
-                        "inspect the 'git status' error above and fix the worktree/repository before retrying"
+                        "inspect the 'git status' error above and fix the repository before retrying"
                         if status.returncode != 0
-                        else "the freshly created clean-room worktree should start clean -- "
+                        else "the freshly created clean QA checkout should start clean -- "
                         + INTERNAL_INVARIANT_REMEDY
                     ),
                 )
             yield checkout
         finally:
-            if checkout.exists():
-                try:
-                    _run_git(
-                        [
-                            "git",
-                            "-C",
-                            str(self.repository),
-                            "worktree",
-                            "remove",
-                            "--force",
-                            "--",
-                            str(checkout),
-                        ]
-                    )
-                except GateRunnerError:
-                    # Best-effort cleanup must not mask the QA outcome; the directory is still
-                    # removed below and `git worktree prune` drops the stale registration.
-                    pass
-            shutil.rmtree(worktree_root, ignore_errors=True)
+            # The checkout is a standalone repository: removing the directory leaves nothing
+            # registered in the main repository's .git.
+            shutil.rmtree(checkout_root, ignore_errors=True)
+
+    def _populate(self, checkout: Path) -> None:
+        """Build a standalone repository at the candidate without writing to the main repository's .git.
+
+        The checkout borrows objects through alternates and copies the local and remote-tracking
+        refs, so `git status` and `merge-base HEAD origin/<branch>` behave as in a linked worktree.
+        """
+        repository = str(self.repository)
+        found = _run_git(
+            [
+                "git",
+                "-C",
+                repository,
+                "cat-file",
+                "-e",
+                f"{self.candidate_commit}^{{commit}}",
+            ]
+        )
+        if found.returncode != 0 and not _is_environment_refusal(_git_detail(found)):
+            raise GateRunnerError(
+                f"candidate commit {self.candidate_commit} is not a commit in {self.repository}",
+                remedy=f"repository or candidate problem: commit {self.candidate_commit} is missing; "
+                "fetch or publish the candidate commit into the repository, then run the QA runner again",
+            )
+        self._require(found, "cat-file", self.repository)
+        common_dir = _run_git(
+            ["git", "-C", repository, "rev-parse", "--path-format=absolute", "--git-common-dir"]
+        )
+        self._require(common_dir, "rev-parse", self.repository)
+        common = Path(common_dir.stdout.strip())
+        self._require(
+            _run_git(["git", "init", "--quiet", "--template=", str(checkout)]),
+            "init",
+            checkout,
+        )
+        alternates = checkout / ".git" / "objects" / "info" / "alternates"
+        try:
+            alternates.parent.mkdir(parents=True, exist_ok=True)
+            alternates.write_text(f"{common / 'objects'}\n", encoding="utf-8")
+            # A shallow source ends its history at a boundary; the checkout must share it,
+            # as a linked worktree would, or history walks stop at missing parents.
+            if (common / "shallow").is_file():
+                shutil.copyfile(common / "shallow", checkout / ".git" / "shallow")
+        except OSError as exc:
+            raise _checkout_failure(
+                "alternates", sanitise(str(exc)), alternates.parent, self.candidate_commit, refused=True
+            ) from exc
+        self._require(
+            _run_git(
+                [
+                    "git",
+                    "-C",
+                    str(checkout),
+                    "fetch",
+                    "--quiet",
+                    "--no-tags",
+                    "--update-head-ok",
+                    str(common),
+                    "+refs/heads/*:refs/heads/*",
+                    "+refs/remotes/*:refs/remotes/*",
+                ]
+            ),
+            "fetch",
+            checkout,
+        )
+        self._require(
+            _run_git(
+                [
+                    "git",
+                    "-C",
+                    str(checkout),
+                    "-c",
+                    "advice.detachedHead=false",
+                    "checkout",
+                    "--quiet",
+                    "--detach",
+                    self.candidate_commit,
+                ]
+            ),
+            "checkout",
+            checkout,
+        )
+
+    def _require(
+        self, completed: subprocess.CompletedProcess[str], step: str, path: Path
+    ) -> None:
+        """Raise a classified gate error when one Git step of the clean checkout failed."""
+        if completed.returncode != 0:
+            raise _checkout_failure(step, _git_detail(completed), path, self.candidate_commit)
+
+
+# Git and OS wording of a write the environment refused (permissions, read-only mount, sandbox).
+_ENVIRONMENT_REFUSALS = (
+    "permission denied",
+    "read-only file system",
+    "operation not permitted",
+)
+
+
+def _git_detail(completed: subprocess.CompletedProcess[str]) -> str:
+    """The sanitised diagnostic of a finished Git command."""
+    return sanitise((completed.stderr or completed.stdout).strip())
+
+
+def _is_environment_refusal(detail: str) -> bool:
+    """Whether a failure text names a write the environment refused."""
+    lowered = detail.lower()
+    return any(marker in lowered for marker in _ENVIRONMENT_REFUSALS)
+
+
+def _environment_remedy(path: Path) -> str:
+    """The REMEDY of an environment refusal: the refused path and a ready operator command."""
+    return (
+        f"environment refusal: grant the coordinator process write access to {path}; "
+        f"check it with `test -w {shlex.quote(str(path))} || ls -ld {shlex.quote(str(path))}`, "
+        "then run the same qa run or integration local-qa command again outside the sandbox"
+    )
+
+
+def _checkout_failure(
+    step: str, detail: str, path: Path, candidate: str, *, refused: bool = False
+) -> GateRunnerError:
+    """Classify a failed clean-checkout step as an environment refusal or a repository problem."""
+    message = f"could not create clean QA checkout ({step}): {detail or 'unknown error'}"
+    if refused or _is_environment_refusal(detail):
+        return GateRunnerError(message, remedy=_environment_remedy(path))
+    return GateRunnerError(
+        message,
+        remedy=f"repository or candidate problem: inspect the git error above and fix the "
+        f"repository or candidate commit {candidate} before retrying",
+    )
 
 
 @dataclass(frozen=True)
@@ -486,7 +583,7 @@ def concise_evidence(text: str) -> str:
 
 
 @contextmanager
-def _command_environment(checkout: Path) -> Iterator[dict[str, str]]:
+def _command_environment(storage_owner: Path) -> Iterator[dict[str, str]]:
     """The environment of the QA commands: temporary data in a fresh directory of the harness
     storage (`.harness/.sandboxes/runs/qa/tmp-*`), removed afterwards.
 
@@ -495,7 +592,7 @@ def _command_environment(checkout: Path) -> Iterator[dict[str, str]]:
     there never finds the checkout's own.
     """
     try:
-        parent = storage_path(checkout, "runs", "qa")
+        parent = storage_path(storage_owner, "runs", "qa")
         parent.mkdir(parents=True, exist_ok=True)
         directory = Path(tempfile.mkdtemp(prefix="tmp-", dir=parent))
     except (OSError, ValueError) as exc:
@@ -723,16 +820,23 @@ def _runs(group: CommandGroup, failed: bool) -> bool:
     return True
 
 
+@dataclass(frozen=True)
 class HostExecutor:
     """The groups as host processes of the coordinator, in one temporary directory: the
-    historical behaviour of ``run_gate`` and ``run_qa_stages``."""
+    historical behaviour of ``run_gate`` and ``run_qa_stages``.
+
+    ``repository`` owns the harness storage of the temporary directory; without it the checkout
+    does. A clean checkout is a standalone repository, so its storage is the source repository's.
+    """
+
+    repository: Path | None = None
 
     def run_groups(
         self, groups: Sequence[CommandGroup], checkout: Path, run: GroupContext
     ) -> list[GroupRun]:
         runs: list[GroupRun] = []
         failed = False
-        with _command_environment(checkout) as env:
+        with _command_environment(self.repository or checkout) as env:
             for group in groups:
                 if not _runs(group, failed):
                     unreached = [approved_command_text(item) for item in group.commands]
@@ -761,7 +865,11 @@ class HostExecutor:
 
 def _executor(policy: ExecutionPolicy) -> GroupExecutor:
     """The policy's own executor of command groups, or the host one."""
-    return policy if isinstance(policy, GroupExecutor) else HostExecutor()
+    if isinstance(policy, GroupExecutor):
+        return policy
+    if isinstance(policy, CleanRoomPolicy):
+        return HostExecutor(policy.repository)
+    return HostExecutor()
 
 
 def run_gate(

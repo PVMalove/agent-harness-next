@@ -39,11 +39,30 @@ GITIGNORE_LINES = ("/docs/tasks/", "/.harness/.sandboxes/")
 # Template folders `init`/`adopt` seed, in seeding order: (folder in harness/project, target in
 # the project, seeded file suffixes). The CLI copies exactly these, so uninstall finds them all.
 SEED_FOLDERS: tuple[tuple[str, str, frozenset[str]], ...] = (
-    ("docs-agents", "docs/agents", frozenset({".md"})),
+    ("instructions", "docs/agents", frozenset({".md"})),
     ("hooks", ".claude/hooks", frozenset({".sh", ".py"})),
     ("rules", ".claude/rules", frozenset({".md"})),
     ("agents", ".claude/agents", frozenset({".md"})),
 )
+# Instructions of `harness/project/instructions/` that are managed files, not seeds: the CLI installs
+# them into `.harness/instructions/` (`technical-english.md` in every install, the others with their
+# capability), and `update` overwrites them as any managed file (#814).
+MANAGED_INSTRUCTIONS = frozenset(
+    {"technical-english.md", "project-memory.md", "container-executor.md"}
+)
+
+
+def seed_sources(templates: Path, folder: str, suffixes: frozenset[str]) -> list[Path]:
+    """The seed templates of one `SEED_FOLDERS` folder, without the managed instructions."""
+    return [
+        source
+        for source in sorted((templates / folder).iterdir())
+        if source.is_file()
+        and source.suffix in suffixes
+        and not (folder == "instructions" and source.name in MANAGED_INSTRUCTIONS)
+    ]
+
+
 # Regenerated or disposable content inside .harness that is never worth a backup.
 _NO_BACKUP_PREFIXES = (".sandboxes/", ".venv/")
 _NO_BACKUP_FILES = {
@@ -100,9 +119,8 @@ def seed_templates() -> dict[str, bytes | None]:
     не с чем и он всегда копируется в резервную копию."""
     seeds: dict[str, bytes | None] = {}
     for folder, target, suffixes in SEED_FOLDERS:
-        for source in sorted((PROJECT_TEMPLATE_DIR / folder).iterdir()):
-            if source.is_file() and source.suffix in suffixes:
-                seeds[f"{target}/{source.name}"] = source.read_bytes()
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
+            seeds[f"{target}/{source.name}"] = source.read_bytes()
     for adapter in ADAPTERS:
         seeds[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
     seeds["CLAUDE.md"] = CLAUDE_MD_SEED.encode("utf-8")

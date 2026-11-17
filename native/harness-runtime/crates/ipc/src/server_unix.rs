@@ -10,9 +10,11 @@ use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
+use std::time::{Duration, Instant};
 
 use contracts::FrameError;
 
+use crate::lifetime::Lifetime;
 use crate::paths::RuntimePaths;
 use crate::peer::{PeerId, own_uid, peer_pid, peer_uid, same_user};
 use crate::server::{
@@ -28,6 +30,8 @@ pub struct Server {
     listener: UnixListener,
     paths: RuntimePaths,
     shared: Arc<Shared>,
+    /// Set by a `shutdown` request; the accept loop ends as when the caller's stop flag is set.
+    shutdown: Arc<AtomicBool>,
     /// Holds the exclusive lock of this repository's runtime until the server is dropped.
     _lock: File,
     /// A shared lock on the runtime directory: `systemd-tmpfiles` never ages a directory that a
@@ -48,6 +52,16 @@ impl Server {
     pub fn bind_serving(
         paths: RuntimePaths,
         state_dir: Option<std::path::PathBuf>,
+    ) -> Result<Self, StartError> {
+        Self::bind_with_lifetime(paths, state_dir, Lifetime::manual())
+    }
+
+    /// Like [`Server::bind_serving`] with the owners of `lifetime`: an owned lifetime stops the
+    /// accept loop once no owner is left and the store is idle (ADR 0031, section 2).
+    pub fn bind_with_lifetime(
+        paths: RuntimePaths,
+        state_dir: Option<std::path::PathBuf>,
+        lifetime: Lifetime,
     ) -> Result<Self, StartError> {
         secure_directory(&paths.dir, own_uid())?;
         let directory = hold_directory(&paths.dir)?;
@@ -71,11 +85,13 @@ impl Server {
             supervisor: Arc::new(crate::server::supervisor_of(&paths, state_dir.as_deref())),
             state_dir,
             snapshots: Arc::default(),
+            lifetime: Arc::new(lifetime),
         });
         Ok(Self {
             listener,
             paths,
             shared,
+            shutdown: Arc::default(),
             _lock: lock,
             _directory: directory,
         })
@@ -85,12 +101,20 @@ impl Server {
         &self.paths
     }
 
+    /// The owners of this runtime (ADR 0031).
+    pub fn lifetime(&self) -> &Arc<Lifetime> {
+        &self.shared.lifetime
+    }
+
     /// The process supervisor of this server's executions (ADR 0022).
     pub fn supervisor(&self) -> &Arc<supervisor::Supervisor> {
         &self.shared.supervisor
     }
 
-    /// Serve connections until `stop` is set. A connection runs on its own thread.
+    /// Serve connections until `stop` is set, a client sends `shutdown`, or an owned runtime
+    /// decides to stop (ADR 0031, section 2): then the socket is removed before the loop returns.
+    /// A connection runs on
+    /// its own thread.
     pub fn serve_until(&self, stop: &AtomicBool) -> io::Result<()> {
         self.serve_until_as(stop, own_uid())
     }
@@ -99,17 +123,29 @@ impl Server {
     /// uid to see the refusal of a foreign peer on a real socket.
     pub fn serve_until_as(&self, stop: &AtomicBool, expected_uid: PeerId) -> io::Result<()> {
         let own = expected_uid;
-        while !stop.load(Ordering::Relaxed) {
+        let mut checked = Instant::now();
+        while !stop.load(Ordering::Relaxed) && !self.shutdown.load(Ordering::Relaxed) {
             match self.listener.accept() {
                 Ok((stream, _)) => {
                     let shared = Arc::clone(&self.shared);
+                    let shutdown = Arc::clone(&self.shutdown);
+                    // Counted on the accept thread, so the exit decision below sees it.
+                    let counted = self.shared.lifetime.connection();
                     thread::spawn(move || {
+                        let _counted = counted;
                         // A broken connection ends its own thread, never the server.
-                        let _ = serve_unix_stream(stream, own, &shared);
+                        let _ = serve_unix_stream(stream, own, &shared, &shutdown);
                     });
                 }
                 Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                    thread::sleep(ACCEPT_POLL);
+                    if checked.elapsed() >= LIFETIME_CHECK {
+                        checked = Instant::now();
+                        if self.no_longer_needed(checked) {
+                            let _ = fs::remove_file(&self.paths.socket);
+                            return Ok(());
+                        }
+                    }
+                    wait_for_a_connection(&self.listener);
                 }
                 Err(err) if err.kind() == io::ErrorKind::Interrupted => {}
                 Err(err) => return Err(err),
@@ -118,6 +154,24 @@ impl Server {
         Ok(())
     }
 }
+
+impl Server {
+    /// Whether an owned runtime stops now: no owner, no connection, no open read snapshot and an
+    /// idle store (ADR 0031, section 2).
+    fn no_longer_needed(&self, now: Instant) -> bool {
+        let shared = &self.shared;
+        shared.lifetime.should_exit(now, || {
+            shared.snapshots.live() == 0
+                && shared
+                    .state_dir
+                    .as_deref()
+                    .is_none_or(|state| state::idle::busy(state).is_empty())
+        })
+    }
+}
+
+/// How often the accept loop asks whether an owned runtime is still needed.
+const LIFETIME_CHECK: Duration = Duration::from_secs(1);
 
 impl Drop for Server {
     fn drop(&mut self) {
@@ -172,6 +226,7 @@ fn serve_unix_stream(
     mut stream: UnixStream,
     own: PeerId,
     shared: &Shared,
+    shutdown: &AtomicBool,
 ) -> Result<(), FrameError> {
     // The accepted socket must block, whatever the listener's mode was.
     stream.set_nonblocking(false).map_err(FrameError::Io)?;
@@ -180,7 +235,22 @@ fn serve_unix_stream(
         .map_err(FrameError::Io)?;
     let permitted = peer_uid(&stream).is_ok_and(|uid| same_user(uid, own));
     let pid = peer_pid(&stream);
-    serve_connection(&mut stream, permitted, pid, shared)
+    serve_connection(&mut stream, permitted, pid, shared, shutdown)
+}
+
+/// Wait until a client connects or `ACCEPT_POLL` passes, whichever comes first: the loop sees the
+/// stop flag at least that often, and a connection is accepted as soon as it arrives instead of at
+/// the next tick.
+fn wait_for_a_connection(listener: &UnixListener) {
+    use nix::poll::{PollFd, PollFlags, PollTimeout, poll};
+    use std::os::fd::AsFd;
+
+    let timeout = PollTimeout::try_from(ACCEPT_POLL).unwrap_or(PollTimeout::MAX);
+    let mut fds = [PollFd::new(listener.as_fd(), PollFlags::POLLIN)];
+    if poll(&mut fds, timeout).is_err() {
+        // EINTR or a failed poll: fall back to the old tick, so the loop never spins.
+        thread::sleep(ACCEPT_POLL);
+    }
 }
 
 #[cfg(test)]

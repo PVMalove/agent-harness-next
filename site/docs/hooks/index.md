@@ -25,6 +25,7 @@
 | [require-bounded-check](require-bounded-check.md) | `PreToolUse(Bash)` | Ограниченный вывод полного тестового прогона через обёртку `test_summary.py`. |
 | [targeted-check-reminder](targeted-check-reminder.md) | `PreToolUse(Write/Edit)`, `Stop`, `SubagentStop` | Напоминание в конце хода роли отчитать targeted-проверки brief. |
 | [run-test](run-test.md) | скрипт, не hook | Изолированный запуск одного выбранного теста в bubblewrap. |
+| [runtime-autostart](../guides/orchestration/operations.md#runtime-autostart) | `PreToolUse(Bash)`, `Stop`, `SubagentStop` | Только Claude Code: запуск `harness-runtime serve` перед командой coordinator и освобождение в конце хода (ADR 0031). |
 
 ## Политика и рискованные пути
 

@@ -15,7 +15,7 @@ The `to-pull-requests` skill calls the same script from the PR branch checkout a
 The script computes the current project state from the hash of the last commit (`git rev-parse HEAD`) and the hash of the current uncommitted changes (`git diff HEAD | git hash-object --stdin`). It writes the resulting composite state hash to the file `.claude/.qa-gate/passed`. This confirms that the current code state passed the quality check.
 ## 3. Contracts
 - **Input (Input/Brief):** The optional environment variable `CLAUDE_PROJECT_DIR` (default: the current directory `.`), which points to the project root directory. The current working directory selects the checkout for which the marker is written, so run the script from the checkout of the tested branch or the PR branch.
-- **Output (Output/Report):** Creation or update of the marker file `.claude/.qa-gate/passed`, which contains a string of the form `<HEAD_hash>:<diff_hash>`.
+- **Output (Output/Report):** Creation or update of the marker file `.claude/.qa-gate/passed`, which contains a string of the form `<HEAD_hash>:<diff_hash>`. If the state cannot be computed, the script exits with code `2`.
 ## Source
 
 [record-qa-gate-pass.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/record-qa-gate-pass.sh)

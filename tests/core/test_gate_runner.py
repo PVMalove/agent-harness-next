@@ -30,6 +30,7 @@ from harness.gate_runner.gate_runner import (
     GateRunnerError,
     LocalPolicy,
     PlannedStage,
+    STAGE_ENV_COLD,
     _clean_room_python,
     diagnose,
     format_evidence_trailer,
@@ -212,8 +213,8 @@ class GateRunnerTests(unittest.TestCase):
             abbreviated_commit = candidate_commit[:12]
 
             for candidate, expected_message in (
-                (unknown_commit, "could not create clean QA worktree"),
-                (abbreviated_commit, "does not match the pinned candidate commit"),
+                (unknown_commit, "is not a commit in"),
+                (abbreviated_commit, "clean QA checkout HEAD does not match the pinned candidate commit"),
             ):
                 with self.subTest(candidate=candidate):
                     with self.assertRaises(GateRunnerError) as raised:
@@ -272,7 +273,7 @@ class GateRunnerTests(unittest.TestCase):
             for status_result, expected_remedy in (
                 (
                     subprocess.CompletedProcess([], 128, stdout="", stderr="fatal"),
-                    "inspect the 'git status' error",
+                    "inspect the 'git status' error above and fix the repository before retrying",
                 ),
                 (
                     subprocess.CompletedProcess(
@@ -293,8 +294,9 @@ class GateRunnerTests(unittest.TestCase):
                             CleanRoomPolicy(repo, candidate_commit),
                             stop_on_failure=True,
                         )
-                    self.assertIn("contains mutable files", raised.exception.message)
+                    self.assertIn("clean QA checkout contains mutable files", raised.exception.message)
                     self.assertIn(expected_remedy, raised.exception.remedy)
+                    self.assertNotIn("worktree", raised.exception.remedy)
 
     def test_clean_room_python_prefers_harness_venv_over_root_venv(self) -> None:
         """Проверить, что clean room python отдает предпочтение .harness/.venv перед корневым .venv."""
@@ -427,7 +429,119 @@ def test_an_unwritable_checkout_storage_is_a_gate_error_not_an_os_error(
     finally:
         harness.chmod(0o755)
     assert "could not prepare clean QA checkout storage" in raised.value.message
+    assert raised.value.remedy.startswith("environment refusal:")
     assert "write access" in raised.value.remedy
+
+
+@pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="a privileged process is not denied by file permissions",
+)
+@pytest.mark.skipif(
+    os.name == "nt", reason="Windows does not deny writes by POSIX mode bits"
+)
+def test_a_read_only_git_worktrees_directory_still_gives_a_clean_checkout(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    registry = repo / ".git" / "worktrees"
+    registry.mkdir()
+    registry.chmod(0o555)
+    try:
+        result = run_gate(
+            ["git rev-parse HEAD"], CleanRoomPolicy(repo, head), stop_on_failure=True
+        )
+        assert list(registry.iterdir()) == []
+    finally:
+        registry.chmod(0o755)
+    assert result.passed
+    runs = storage_path(repo, "runs", "qa")
+    assert list(runs.iterdir()) == []
+
+
+def _git_step_answering(
+    step: str, completed: subprocess.CompletedProcess[str]
+) -> _RunFn:
+    real_run = cast(_RunFn, subprocess.run)
+
+    def run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[0] == "git" and step in command:
+            return completed
+        return real_run(command, **kwargs)
+
+    return run
+
+
+@pytest.mark.parametrize("step", ["init", "fetch", "checkout"])
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "fatal: could not create directory: Permission denied",
+        "error: unable to write file: Read-only file system",
+        "fatal: Operation not permitted",
+    ],
+)
+def test_a_refused_write_of_the_checkout_is_an_environment_refusal_with_an_operator_command(
+    tmp_path: Path, step: str, stderr: str
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    refused = subprocess.CompletedProcess(["git"], 128, stdout="", stderr=stderr)
+    with mock.patch(
+        "harness.gate_runner.gate_runner.subprocess.run",
+        side_effect=_git_step_answering(step, refused),
+    ):
+        with pytest.raises(GateRunnerError) as raised:
+            run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    runs = storage_path(repo, "runs", "qa")
+    assert raised.value.remedy.startswith("environment refusal:")
+    assert str(runs) in raised.value.remedy
+    assert "test -w" in raised.value.remedy
+    assert "outside the sandbox" in raised.value.remedy
+    assert list(runs.iterdir()) == []
+
+
+def test_an_unknown_candidate_commit_is_a_repository_or_candidate_problem(
+    tmp_path: Path,
+) -> None:
+    repo, _head = _committed_repo(tmp_path)
+    unknown = "0" * 40
+    with pytest.raises(GateRunnerError) as raised:
+        run_gate(["true"], CleanRoomPolicy(repo, unknown), stop_on_failure=True)
+    assert raised.value.remedy.startswith("repository or candidate problem:")
+    assert unknown in raised.value.remedy
+    assert "environment refusal" not in raised.value.remedy
+
+
+def test_a_git_error_without_a_refused_write_is_a_repository_or_candidate_problem(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    broken = subprocess.CompletedProcess(
+        ["git"], 128, stdout="", stderr="fatal: bad object refs/heads/broken"
+    )
+    with mock.patch(
+        "harness.gate_runner.gate_runner.subprocess.run",
+        side_effect=_git_step_answering("fetch", broken),
+    ):
+        with pytest.raises(GateRunnerError) as raised:
+            run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    assert "could not create clean QA checkout (fetch)" in raised.value.message
+    assert raised.value.remedy.startswith("repository or candidate problem:")
+    assert head in raised.value.remedy
+
+
+def test_an_unwritable_alternates_file_is_an_environment_refusal(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    with mock.patch(
+        "pathlib.Path.write_text", side_effect=PermissionError("Permission denied")
+    ):
+        with pytest.raises(GateRunnerError) as raised:
+            run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    assert "(alternates)" in raised.value.message
+    assert raised.value.remedy.startswith("environment refusal:")
+    assert "objects" in raised.value.remedy
 
 
 def test_an_unlaunchable_git_is_a_gate_error_and_leaves_no_checkout_directory(
@@ -729,7 +843,7 @@ def test_a_hung_git_is_a_gate_error_and_leaves_no_checkout_directory(
     with mock.patch(
         "harness.gate_runner.gate_runner.subprocess.run",
         side_effect=_git_failing_run(
-            "worktree", subprocess.TimeoutExpired(["git"], 300)
+            "fetch", subprocess.TimeoutExpired(["git"], 300)
         ),
     ):
         with pytest.raises(GateRunnerError) as raised:
@@ -740,18 +854,81 @@ def test_a_hung_git_is_a_gate_error_and_leaves_no_checkout_directory(
     assert not runs.is_dir() or list(runs.iterdir()) == []
 
 
-def test_a_failed_worktree_cleanup_does_not_mask_the_gate_result(
+def _worktree_list(repo: Path) -> str:
+    return subprocess.run(
+        ["git", "worktree", "list", "--porcelain"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+
+
+def test_a_clean_run_registers_no_git_worktree_and_leaves_no_checkout_directory(
     tmp_path: Path,
 ) -> None:
     repo, head = _committed_repo(tmp_path)
-    with mock.patch(
-        "harness.gate_runner.gate_runner.subprocess.run",
-        side_effect=_git_failing_run("remove", FileNotFoundError("git")),
-    ):
-        result = run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
+    before = _worktree_list(repo)
+    result = run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
     assert result.passed
-    runs = storage_path(repo, "runs", "qa")
-    assert list(runs.iterdir()) == []
+    assert _worktree_list(repo) == before
+    assert not (repo / ".git" / "worktrees").exists()
+    assert list(storage_path(repo, "runs", "qa").iterdir()) == []
+
+
+def test_the_clean_checkout_is_a_detached_candidate_with_the_source_refs(
+    tmp_path: Path,
+) -> None:
+    repo, head = _committed_repo(tmp_path)
+    subprocess.run(["git", "update-ref", "refs/remotes/origin/main", head], cwd=repo, check=True)
+    (repo / "candidate.txt").write_text("unreferenced\n", encoding="utf-8")
+    subprocess.run(["git", "add", "candidate.txt"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "test: unreferenced"], cwd=repo, check=True)
+    candidate = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    subprocess.run(["git", "reset", "-q", "--hard", head], cwd=repo, check=True)
+    seen = tmp_path / "seen"
+    probe = (
+        "import subprocess,sys; g=lambda *a: subprocess.run(['git',*a],capture_output=True,text=True); "
+        "open(sys.argv[1],'w').write('|'.join([g('rev-parse','HEAD').stdout.strip(), "
+        "str(g('symbolic-ref','-q','HEAD').returncode), g('merge-base','HEAD','origin/main').stdout.strip(), "
+        "g('status','--porcelain','--untracked-files=all').stdout, open('candidate.txt').read().strip()]))"
+    )
+    result = run_gate(
+        [[sys.executable, "-c", probe, str(seen)]],
+        CleanRoomPolicy(repo, candidate),
+        stop_on_failure=True,
+    )
+    assert result.passed
+    resolved, symbolic, merge_base, status, content = seen.read_text().split("|")
+    assert resolved == candidate
+    assert symbolic == "1"
+    assert merge_base == head
+    assert status == ""
+    assert content == "unreferenced"
+
+
+def test_the_clean_checkout_of_a_shallow_clone_keeps_its_history_walkable(
+    tmp_path: Path,
+) -> None:
+    source, _ = _committed_repo(tmp_path)
+    (source / "candidate.txt").write_text("second\n", encoding="utf-8")
+    subprocess.run(["git", "commit", "-qam", "test: second"], cwd=source, check=True)
+    shallow = tmp_path / "shallow"
+    subprocess.run(
+        ["git", "clone", "-q", "--depth", "1", source.as_uri(), str(shallow)], check=True
+    )
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=shallow, check=True, capture_output=True, text=True
+    ).stdout.strip()
+    assert (shallow / ".git" / "shallow").is_file()
+    result = run_gate(
+        ["git log --oneline", "git fsck --connectivity-only"],
+        CleanRoomPolicy(shallow, head),
+        stop_on_failure=True,
+    )
+    assert result.passed, result
 
 
 def test_an_unlaunchable_git_during_diagnosis_keeps_the_stage_evidence(
@@ -920,26 +1097,52 @@ def test_the_clean_room_gate_is_marked_cold_and_each_command_has_its_own_junit_p
     assert first[1] != second[1] and first[1].endswith(".junit.xml")
 
 
+_OPEN_CACHE = (
+    "import os,sys; sys.path.insert(0, sys.argv[2]); from pathlib import Path; "
+    "from scripts.verification.cache import open_cache; "
+    "open(sys.argv[1],'w').write(str(open_cache(Path(sys.argv[3]), os.environ).directory))"
+)
+
+
 def test_a_local_run_through_the_bounded_wrapper_is_not_cold_and_may_use_the_worktree_cache(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # The test itself may run inside a cold clean-room QA run, whose mark every child inherits;
+    # this test is about what a local run adds, so it starts from a caller that is not cold.
+    monkeypatch.delenv(STAGE_ENV_COLD, raising=False)
     repo, _ = _committed_repo(tmp_path)
     seen = tmp_path / "seen"
     source = Path(__file__).resolve().parents[2]
-    open_cache = (
-        "import os,sys; sys.path.insert(0, sys.argv[2]); from pathlib import Path; "
-        "from scripts.verification.cache import open_cache; "
-        "open(sys.argv[1],'w').write(str(open_cache(Path(sys.argv[3]), os.environ).directory))"
-    )
 
     result = run_gate(
-        [[sys.executable, "-c", open_cache, str(seen), str(source), str(repo)]],
+        [[sys.executable, "-c", _OPEN_CACHE, str(seen), str(source), str(repo)]],
         LocalPolicy(repo),
         stop_on_failure=True,
     )
 
     assert result.passed, result.checks
     assert Path(seen.read_text()).is_dir()
+
+
+def test_a_local_run_inside_a_cold_clean_room_run_stays_cold_and_refuses_the_worktree_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The environment a clean-room QA run gives its commands: a nested local gate run, such as
+    # the bounded wrapper, must not escape the cold mark of the QA run that started it.
+    monkeypatch.setenv(STAGE_ENV_COLD, "1")
+    repo, _ = _committed_repo(tmp_path)
+    seen = tmp_path / "seen"
+    source = Path(__file__).resolve().parents[2]
+
+    result = run_gate(
+        [[sys.executable, "-c", _OPEN_CACHE, str(seen), str(source), str(repo)]],
+        LocalPolicy(repo),
+        stop_on_failure=True,
+    )
+
+    assert not result.passed
+    assert "must not use a worktree cache" in result.artifact
+    assert seen.read_text() == ""
 
 
 def test_a_local_run_without_an_evidence_context_has_no_stage_evidence(

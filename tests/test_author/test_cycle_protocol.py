@@ -23,7 +23,7 @@ FAST_IMPLEMENT = (
     ROOT / "skills" / "first-party" / "engineering" / "fast-implement" / "SKILL.md"
 )
 TDD = ROOT / "skills" / "first-party" / "engineering" / "tdd" / "SKILL.md"
-GUIDE = ROOT / "harness" / "project" / "docs-agents" / "test-author.md"
+GUIDE = ROOT / "harness" / "project" / "instructions" / "test-author.md"
 ROOT_GUIDE = ROOT / "docs" / "agents" / "test-author.md"
 
 DEVELOPER_MARKERS = (
@@ -48,12 +48,12 @@ FULL_ROUTE_MARKERS = (
     "never creates a blocker",
 )
 FULL_ROUTE_GUIDE_MARKERS = (
-    "Полный маршрут `/implement`",
+    "full `/implement` route",
     "test-author-preflight.sh --worktree",
     "`checkout_mismatch`",
     "`agent_tool_unavailable`",
-    "обычный TDD",
-    "без blocker",
+    "usual TDD",
+    "without a blocker",
 )
 FULL_ROUTE_DESCRIPTION_MARKERS = (
     "--worktree",
@@ -87,14 +87,14 @@ AGENT_MARKERS = (
 GUIDE_MARKERS = (
     "needs_skeleton",
     "contract_gap",
-    "три",
-    "не ослабляется",
+    "three failed calls",
+    "is not weakened",
     "ledger",
-    "Короткий маршрут `/fast-implement`",
-    "Включение (opt-in)",
-    "Защищённое окружение",
+    "short `/fast-implement` route",
+    "Opt-in.",
+    "Protected environment.",
     "bubblewrap 0.9.0+",
-    "Откат на обычный маршрут",
+    "Fallback to the usual route.",
 )
 
 
@@ -124,7 +124,8 @@ def test_protocol_markers(path: Path, markers: tuple[str, ...]) -> None:
 
 
 def test_changelog_records_the_full_route_worktree_fix() -> None:
-    unreleased = _text(CHANGELOG).split("\n## [", 2)[1]
+    # The release cut moves the entry from Unreleased into the newest release section.
+    unreleased = "".join(_text(CHANGELOG).split("\n## [", 3)[1:3])
     assert "#768" in unreleased
     assert "checkout_mismatch" in unreleased
 

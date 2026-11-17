@@ -50,7 +50,7 @@ them, not the runtime.
 
 | Entity | Writer | What it means |
 | --- | --- | --- |
-| Batch/dispatch lifecycle | Rust runtime | A transaction saves the transitions; Python does not write to the store directly. |
+| Batch/dispatch lifecycle | Rust runtime | Python makes the decision and the runtime saves it in a transaction. Python does not write to the store directly, only through IPC. |
 | Approvals and policy | Python | A human and the policy layer make the decision; the runtime executes the saved decision. |
 | Operational intent | Rust store | The idempotency key, the attempt, and reconcile live in one transaction. |
 | Git history and candidate | Git | The candidate, the branches, and the worktrees are ordinary Git objects; the runtime does not rewrite them. |
@@ -99,7 +99,7 @@ own: the source clone of the harness is not needed at run time.
 Context moves between sessions through verifiable artifacts, not through a retelling in chat:
 
 1. `/grilling` proposes candidate paths and writes only the explicitly approved files into the artifact.
-2. `/to-spec` saves this list in the epic, in the `Relevant Files` section.
+2. `/to-spec` saves this list in the epic, in the `## Relevant Files (Discovery Context)` section.
 3. `/to-tickets` assigns the paths to tickets and builds the Path inventory.
 4. The context builder reads the pinned commit and collects the exact diff, the start files, the
    related tests, the ADRs, and the precedent cards into an immutable Context Package.

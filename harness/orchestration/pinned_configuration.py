@@ -89,9 +89,17 @@ def read_snapshot(dispatch: JsonObject) -> JsonObject:
 
 
 def capture_unaccepted(
-    root: Path, dispatch: JsonObject, payload: JsonObject, error: CoordinatorError
+    root: Path,
+    dispatch: JsonObject,
+    payload: JsonObject,
+    error: CoordinatorError,
+    *,
+    acceptance: JsonObject | None = None,
 ) -> Path:
-    """Preserve safe input without a report/checkpoint record or lifecycle decision."""
+    """Preserve safe input without a report/checkpoint record or lifecycle decision.
+
+    ``acceptance`` records why and when the acceptance refused the input, for a repeat of the
+    command that may accept it without producing it again (``qa run``)."""
     from harness.orchestration.core.utils import _safe_id
     from harness.orchestration.ledger.lifecycle import LifecycleLedger
 
@@ -105,6 +113,8 @@ def capture_unaccepted(
         "diagnostic": error.message,
         "remedy": error.remedy,
     }
+    if acceptance is not None:
+        record["acceptance"] = acceptance
     identifier = hashlib.sha256(_canonical(record).encode("utf-8")).hexdigest()
     path = (
         ledger.records_root()

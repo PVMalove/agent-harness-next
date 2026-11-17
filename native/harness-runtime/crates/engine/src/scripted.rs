@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{self, Write};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use crate::{Answer, Attached, Engine, Exit, Kind};
@@ -57,6 +57,12 @@ impl Run {
 
 type Ended = Arc<Mutex<HashMap<String, i32>>>;
 
+/// Lock `mutex`, even when a holder panicked: a scripted engine keeps answering after a test
+/// thread panicked while it held one of the locks.
+fn lock_unpoisoned<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    mutex.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
 /// An attached scripted run.
 struct Running {
     name: String,
@@ -74,7 +80,7 @@ impl Attached for Running {
         if let Some(code) = self.code {
             return Ok(Some(Exit { code: Some(code) }));
         }
-        let ended = self.ended.lock().unwrap_or_else(PoisonError::into_inner);
+        let ended = lock_unpoisoned(&self.ended);
         Ok(match ended.get(&self.name) {
             Some(&KILLED) => Some(Exit { code: Some(KILLED) }),
             Some(&code) if self.stoppable => Some(Exit { code: Some(code) }),
@@ -118,7 +124,7 @@ impl Scripted {
     /// Run every attached command that starts with `prefix` as `run`; the longest prefix wins.
     pub fn attach(&self, prefix: &[&str], run: Run) -> &Self {
         let prefix: Vec<String> = prefix.iter().map(|part| (*part).to_owned()).collect();
-        let mut runs = self.runs.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut runs = lock_unpoisoned(&self.runs);
         runs.retain(|(known, _)| *known != prefix);
         runs.push((prefix, run));
         self
@@ -127,7 +133,7 @@ impl Scripted {
     /// Answer every command that starts with `prefix`; a rule for the same prefix is replaced.
     pub fn answer(&self, prefix: &[&str], answer: Answer) -> &Self {
         let prefix: Vec<String> = prefix.iter().map(|part| (*part).to_owned()).collect();
-        let mut rules = self.rules.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut rules = lock_unpoisoned(&self.rules);
         rules.retain(|(known, _)| *known != prefix);
         rules.push((prefix, answer));
         self
@@ -135,18 +141,12 @@ impl Scripted {
 
     /// Every argv run so far, in order.
     pub fn calls(&self) -> Vec<Vec<String>> {
-        self.calls
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clone()
+        lock_unpoisoned(&self.calls).clone()
     }
 
     /// Forget the argv run so far.
     pub fn clear(&self) {
-        self.calls
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .clear();
+        lock_unpoisoned(&self.calls).clear();
     }
 }
 
@@ -156,10 +156,7 @@ impl Engine for Scripted {
     }
 
     fn run(&self, argv: &[String], _timeout: Duration) -> Answer {
-        self.calls
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(argv.to_vec());
+        lock_unpoisoned(&self.calls).push(argv.to_vec());
         if argv.first().map(String::as_str) != Some(self.kind.as_str()) {
             return Answer::silent(format!("not a {} command: {argv:?}", self.kind.as_str()));
         }
@@ -169,11 +166,11 @@ impl Engine for Scripted {
             _ => None,
         };
         if let (Some(code), Some(name)) = (code, argv.last()) {
-            let mut ended = self.ended.lock().unwrap_or_else(PoisonError::into_inner);
+            let mut ended = lock_unpoisoned(&self.ended);
             // A kill after a stop that did not end the run is what ends it.
             ended.insert(name.clone(), code);
         }
-        let rules = self.rules.lock().unwrap_or_else(PoisonError::into_inner);
+        let rules = lock_unpoisoned(&self.rules);
         rules
             .iter()
             .filter(|(prefix, _)| argv.starts_with(prefix))
@@ -190,17 +187,11 @@ impl Engine for Scripted {
         mut stdout: File,
         mut stderr: File,
     ) -> Result<Box<dyn Attached>, String> {
-        self.calls
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .push(argv.to_vec());
+        lock_unpoisoned(&self.calls).push(argv.to_vec());
         if argv.first().map(String::as_str) != Some(self.kind.as_str()) {
             return Err(format!("not a {} command: {argv:?}", self.kind.as_str()));
         }
-        let run = self
-            .runs
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
+        let run = lock_unpoisoned(&self.runs)
             .iter()
             .filter(|(prefix, _)| argv.starts_with(prefix))
             .max_by_key(|(prefix, _)| prefix.len())

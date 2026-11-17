@@ -1,0 +1,37 @@
+{
+  "budgets": {
+    "dispatch status": 2.0,
+    "dispatch status --batch": 0.5
+  },
+  "ledger": {
+    "audit_records": 1164,
+    "batches": 116,
+    "bytes": 88989696,
+    "dispatches": 694,
+    "statuses": 694
+  },
+  "runs": {
+    "runtime_store": 30
+  },
+  "seconds": {
+    "runtime_store": {
+      "dispatch status": {
+        "max": 0.932,
+        "min": 0.85,
+        "p50": 0.887,
+        "p95": 0.924,
+        "p99": 0.932,
+        "runs": 30.0
+      },
+      "dispatch status --batch": {
+        "max": 0.29,
+        "min": 0.232,
+        "p50": 0.253,
+        "p95": 0.283,
+        "p99": 0.29,
+        "runs": 30.0
+      }
+    }
+  },
+  "source_epoch": "runtime-store"
+}

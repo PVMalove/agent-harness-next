@@ -105,6 +105,17 @@ QA_ENVIRONMENT_REMEDIES = {
         "developer retry cannot fix it: set a short absolute XDG_RUNTIME_DIR (or TMPDIR) for QA, "
         "then a human re-runs QA on the same candidate with batch rewind --to qa"
     ),
+    # Keyed by the failure domain the runtime recorded on the failed gate stage (#1096).
+    "tooling": (
+        "a gate command was not found or not executable in the QA environment (exit 126/127): "
+        "install it in the QA image, rebuild, repeat dispatch propose (the image id is pinned), "
+        "then a human re-runs QA on the same candidate with batch rewind --to qa"
+    ),
+    "timeout": (
+        "a gate command ran past the QA command timeout: raise "
+        "execution_policy.qa_command_timeout_seconds or speed up the QA environment, then a "
+        "human re-runs QA on the same candidate with batch rewind --to qa"
+    ),
 }
 CLEAN_BASIS = (
     "the report is clean: completed, no blockers, every check passed, and nothing is left "
@@ -342,8 +353,10 @@ def category(
 def environment_stop(stage: str, report: JsonObject, repo: Path) -> Stop | None:
     """The stop for a QA gate that failed on its environment, not on the code (no I/O, #769).
 
-    Only the failed gate stage's recorded diagnostics are read; ``failure_classifier`` keeps every
-    code-defect sign and every other failed test on the developer-retry path.
+    A failure domain the runtime recorded on the failed gate stage (a tooling or timeout ending,
+    #1096) decides by itself. Otherwise only the stage's recorded diagnostics are read;
+    ``failure_classifier`` keeps every code-defect sign and every other failed test on the
+    developer-retry path.
     """
     stages = report.get("qa_stages")
     if (
@@ -364,7 +377,13 @@ def environment_stop(stage: str, report: JsonObject, repo: Path) -> Stop | None:
     )
     if failed is None:
         return None
-    found = failure_classifier.classify_environment(failed.get("diagnostics"), repo)
+    domain = failed.get("domain")
+    # A domain the runtime recorded on the stage is structured; otherwise only the diagnostics speak.
+    found = (
+        {"method": "structured", "category": str(domain)}
+        if domain is not None
+        else failure_classifier.classify_environment(failed.get("diagnostics"), repo)
+    )
     if found is None:
         return None
     failure = failure_domains.of_qa_stages(stages, repo=repo)

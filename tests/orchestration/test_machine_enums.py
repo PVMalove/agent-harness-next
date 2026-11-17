@@ -25,10 +25,10 @@ from harness.orchestration.ledger import (
     DispatchStatusRecord,
     LedgerError,
     JsonValue,
-    LifecycleLedger,
     ledger_ops,
 )
 from harness.orchestration.workflow import decisions, history, reports
+from tests.orchestration.legacy_state import seed_file_ledger
 
 
 class MachineStateBoundaryTests(unittest.TestCase):
@@ -53,8 +53,7 @@ class MachineStateBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(directory=directory):
                 with tempfile.TemporaryDirectory() as temporary:
-                    ledger = LifecycleLedger(Path(temporary) / "state")
-                    ledger.ensure()
+                    ledger = seed_file_ledger(Path(temporary) / "state")
                     root = ledger.records_root()
                     path = root / directory / "test.json"
                     ledger.write_immutable(path, {"state": state, "dispatches": []})
@@ -80,8 +79,7 @@ class MachineStateBoundaryTests(unittest.TestCase):
             for state in invalid:
                 with self.subTest(directory=directory, state=state):
                     with tempfile.TemporaryDirectory() as temporary:
-                        ledger = LifecycleLedger(Path(temporary) / "state")
-                        ledger.ensure()
+                        ledger = seed_file_ledger(Path(temporary) / "state")
                         root = ledger.records_root()
                         before = {
                             p: p.read_bytes() for p in root.rglob("*") if p.is_file()
@@ -120,8 +118,7 @@ class MachineStateBoundaryTests(unittest.TestCase):
             with self.subTest(directory=directory):
                 with tempfile.TemporaryDirectory() as temporary:
                     root = Path(temporary) / "state"
-                    ledger = LifecycleLedger(root)
-                    ledger.ensure()
+                    ledger = seed_file_ledger(root)
                     path = ledger.records_root() / directory / f"{record_id}.json"
                     path.write_text('{"state": "работает"}', encoding="utf-8")
                     with self.assertRaises(CoordinatorError):

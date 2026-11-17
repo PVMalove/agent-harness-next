@@ -1,4 +1,4 @@
-/* Line icons ported from docs/design/web-console-mockups/harness-icons.js: local SVG only.
+/* Line icons, the same set as legacy/harness-icons.js: local SVG only.
    The geometry is Lucide 1.73.0 (ISC, third_party/lucide-icons/LICENSE); the product mark `harness`
    and the hosting marks are drawn here. One 24px grid and one stroke for the whole set. */
 import type { ReactElement } from "react";

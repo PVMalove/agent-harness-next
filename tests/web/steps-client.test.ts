@@ -102,6 +102,28 @@ describe("the steps reducer", () => {
     expect(state.steps).toEqual([]);
   });
 
+  test("a roster entry's observation keeps exactly its allowlisted fields", () => {
+    const observation = {
+      stream_reason: "in_process",
+      heartbeat_at: "2026-11-05T10:20:00+00:00",
+      self_report: { reported_model: "claude-opus-5-5", match: true, reported_at: "2026-11-05T10:01:00+00:00" },
+      checkpoints: [{ checkpoint_id: "cp-1", commit_sha: "1111111aaaa", created_at: "2026-11-05T10:12:00+00:00" }],
+      checkpoint_count: 1,
+    };
+    const roster = (value: unknown) => parseStepsReply(rosterReply(1, true, [{ ...ROSTER[0], observation: value }]));
+
+    expect(roster(observation)).toEqual({
+      type: "roster",
+      reset: true,
+      orchestration: "available",
+      dispatches: [{ ...ROSTER[0], observation }],
+    });
+    expect(roster({ ...observation, extra: 1 })).toBeNull();
+    expect(roster({ ...observation, checkpoint_count: 0 })).toBeNull();
+    expect(roster({ ...observation, self_report: { reported_model: "x", match: "yes", reported_at: "" } })).toBeNull();
+    expect(roster({ ...observation, checkpoints: [{ checkpoint_id: "cp-1" }] })).toBeNull();
+  });
+
   test("the list keeps the newest steps with unique keys", () => {
     const many = Array.from({ length: MAX_STEPS + 20 }, (_, index) => ({ ...AGENT_STEP, text: `s${index}` }));
     const state = reduceSteps(EMPTY_STEPS, { type: "steps", steps: many });

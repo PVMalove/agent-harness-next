@@ -11,13 +11,33 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <div class="ah-releases" markdown="1">
 
+## v2.0.0 {.ah-release-title}
+
+<p class="ah-release-meta">Breaking: 4 · Added: 63 · Changed: 26 · Fixed: 44</p>
+
+<p class="ah-release-summary">Highlights: required Rust runtime and runtime store · ledger version 4 · migrate and rollback with human approval · web console.</p>
+
+Moving from 1.x and rolling back are described in the [upgrade guide](../guides/upgrade-2-0.md); the
+supported platforms are on the [Platforms](../project/platforms.md) page.
+
+???+ note "Breaking changes"
+
+    - **[Required Rust runtime]:** Orchestration operational state lives in the runtime store `state/runtime.db`, and only `harness-runtime serve` writes to it. An unavailable runtime gives `runtime_unavailable` and exit code 2 (#792, #801, #807).
+    - **[Ledger version 4]:** `harness-runtime migrate` moves ledger version 3 to the runtime store and writes `ledger.json` with `version: 4`; after that, a 1.x installation refuses with exit code 2 (#797).
+    - **[File epoch until migrate]:** Coordinator 2.0.0 runs on the file `ledger.json` version 3 until a human runs `harness-runtime migrate`; a version 1 or 2 ledger must first be converted with `coordinator.py ledger migrate`. The container QA, the docker executor, the `recovery` commands and the operational hold need the runtime store, and in the file epoch they exit with code 2 and name `harness-runtime migrate` in the remedy (#814).
+    - **[New project on the runtime store]:** A project without orchestration state gets its store from `harness-runtime init` with a human approval, with no file ledger and no `migrate`. The coordinator creates no file ledger on such a project: `batch create`, `batch plan` and `ledger reset` exit with code 2 and name `harness-runtime init` in the remedy. ADR 0036 (#1146).
+    - **[Migrate with approval]:** `harness-runtime migrate` and `rollback --to-legacy` require `--approved-by`, `--approved-at`, and `--reason`, and only a human runs them (#803, #826).
+
+The full list of additions, changes, and fixes is in the `[2.0.0]` section of
+[CHANGELOG.md](https://github.com/PVMalove/agent-harness-next/blob/master/CHANGELOG.md).
+
 ## v1.5.1 — 18 October 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Added: 4 · Changed: 2 · Fixed: 4 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.5.1">Open on GitHub</a></p>
 
 <p class="ah-release-summary">Highlights: Batch verification profiles · Fast developer-retry checks · Lock ledger state.</p>
 
-???+ note "Full notes"
+??? note "Full notes"
 
     **Added**
 
@@ -334,7 +354,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <p class="ah-release-meta">Added: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.1.0">Open on GitHub</a></p>
 
-<p class="ah-release-summary">Highlights: harness uninstall <repo>: full removal of the harness from a project —  · harness console, Harness section: plan and application of the harness removal (enter UNINSTALL).</p>
+<p class="ah-release-summary">Highlights: <code>harness uninstall</code> fully removes the harness from a project · the Harness section in <code>harness console</code>: plan and application of the removal (enter UNINSTALL).</p>
 
 ??? note "Full notes"
 
@@ -369,7 +389,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <p class="ah-release-meta">Added: 10 · Changed: 2 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v1.0.0">Open on GitHub</a></p>
 
-<p class="ah-release-summary">Highlights: The first stable release of the portable Agent Harness with capability snapshots, the installation CLI, orchestration, and Repo Map · A GitHub Release with the installation archive, SHA-256, and notes from this section; it is published automatically after a merge into master if the version tag from harness/VERSION does not exist yet · A managed example .</p>
+<p class="ah-release-summary">Highlights: The first stable release of the portable Agent Harness with capability snapshots, the installation CLI, orchestration, and Repo Map · A GitHub Release with the installation archive, SHA-256, and notes from this section; it is published automatically after a merge into master if the version tag from harness/VERSION does not exist yet · A managed example <code>.harness/orchestration.example.json</code>.</p>
 
 ??? note "Full notes"
 

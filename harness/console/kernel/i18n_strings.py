@@ -147,12 +147,15 @@ EN: dict[str, str] = {
     "В тикете не указана ветка интеграции": "A ticket names no integration branch",
     "Ошибка в настройках оркестрации": "Error in the orchestration settings",
     "Каталог состояния оркестрации недоступен": "The orchestration state directory is unavailable",
+    "Runtime не отвечает": "The runtime does not answer",
     "Ledger оркестрации требует внимания": "The orchestration ledger needs attention",
     "Есть незавершённые batch": "There are unfinished batches",
     "Есть заблокированные batch": "There are blocked batches",
     "Есть зависшие dispatch": "There are stale dispatches",
     "Есть worktree без batch": "There are orphaned worktrees",
     "Накопились временные данные оркестрации": "Disposable orchestration data has piled up",
+    "Адаптеры worker не совпадают с версией harness": "Worker adapters do not match the harness version",
+    "Runtime не находит claude или codex": "The runtime does not find claude or codex",
     "Repo Map работает в ограниченном режиме": "Repo Map runs in a limited mode",
     "Индекс памяти проекта требует внимания": "The project memory index needs attention",
     "Модель памяти недоступна": "The memory model is unavailable",
@@ -165,6 +168,9 @@ EN: dict[str, str] = {
     "uv недоступен": "uv is unavailable",
     "Версия glab устарела": "glab is outdated",
     "Окружение .harness/.venv не совпадает с uv.lock": "The .harness/.venv environment does not match uv.lock",
+    "Исполняемые файлы QA-команд не найдены": "QA command executables are not found",
+    "Нет C-компоновщика cc": "The cc C linker is missing",
+    "Путь сокета runtime слишком длинный": "The runtime socket path is too long",
     "Кодировка вывода не UTF-8": "The output encoding is not UTF-8",
     "Песочница Codex настроена неверно": "The Codex sandbox is misconfigured",
     "Песочница Claude настроена неверно": "The Claude sandbox is misconfigured",
@@ -177,6 +183,12 @@ EN: dict[str, str] = {
     "Bash для hooks не найден": "Bash for hooks is not found",
     "Политика hooks проекта требует внимания": "The project hook policy needs attention",
     "Тест-автор недоступен": "The test author is unavailable",
+    "Нет блока test_author": "The test_author block is missing",
+    "Корень проекта не совпадает с Git": "The project root does not match Git",
+    "Проект не доверен для тест-автора": "The project is not trusted for the test author",
+    "Guard тест-автора недоступен": "The test author guard is unavailable",
+    "Runner тест-автора недоступен": "The test author runner is unavailable",
+    "Изоляция runner недоступна": "Runner isolation is unavailable",
     "Каталог .sandboxes настроен неверно": "The .sandboxes directory is misconfigured",
     "Каталог Harness недоступен": "A Harness directory is unavailable",
     "НАБЛЮДЕНИЕ · БЕЗ LLM\n\nОткрытие сессии подключает локальный монитор. Новый worker не запускается.": "OBSERVATION · NO LLM\n\nOpening a session attaches a local monitor. No new worker is started.",
@@ -715,6 +727,10 @@ EN: dict[str, str] = {
     "Поиск задачи по номеру": "Find a task by number",
     "Задача #{number} не найдена среди последних сессий": "Task #{number} is not among the recent sessions",
     "Схема показывает устройство контура, а не поток конкретного batch. Python решает; Rust пишет состояние и исполняет.": "The diagram shows how the contour is built, not the flow of a batch. Python decides; Rust writes the state and executes.",
+    "Runtime: работает": "Runtime: running",
+    "Runtime: не отвечает": "Runtime: not answering",
+    "Без runtime оркестрация не работает. Запустите его вне песочницы агента:": "Orchestration does not work without the runtime. Start it outside the agent sandbox:",
+    "Скопировать команду": "Copy the command",
 }
 
 # The runtime probe reasons of the Home and Harness pages (backend home_facts.runtime_reason): one
@@ -2855,6 +2871,22 @@ EN.update(
     }
 )
 
+# The step feed of an in-process worker (#1108).
+EN.update(
+    {
+        "Heartbeat": "Heartbeat",
+        "Self-report модели": "Model self-report",
+        "Нет потока событий": "No event stream",
+        "Показаны последние {shown} из {count}.": "Showing the latest {shown} of {count}.",
+        "Чекпоинтов пока нет.": "No checkpoints yet.",
+        "Чекпоинты": "Checkpoints",
+        "данные ledger": "ledger data",
+        "ещё не отправлен": "not sent yet",
+        "не совпадает с назначенной": "differs from the assigned model",
+        "совпадает с назначенной": "matches the assigned model",
+        "In-process воркер работает внутри сессии coordinator и не отдаёт поток событий. Ход работы виден по heartbeat, self-report модели и чекпоинтам.": "An in-process worker runs inside the coordinator session and has no event stream. Follow its progress through the heartbeat, the model self-report and the checkpoints.",
+    }
+)
 
 STATE_LABELS: dict[str, tuple[str, str]] = {
     "abandoned": ("Брошен", "Abandoned"),

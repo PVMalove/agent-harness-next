@@ -1,20 +1,22 @@
 # Ручная приёмка Главной SPA веб-консоли
 
-Основание: ADR 0029 и принятый
-[макет](../demo/console.html). Главная — React SPA из
+Чек-лист описывает, как человек принимает Главную веб-консоли перед PR. Основание: ADR 0029 и
+принятый [макет](../demo/console.html). Главная написана как React SPA в
 `harness/console/frontend`. Сервер консоли отдаёт её статической сборкой `dist/`, а факты
 приходят только по аутентифицированному WebSocket `/ws`.
 
-Проверять реальный `harness console --web` в изолированном проекте. Не включать в скриншоты,
+Проверяйте реальный `harness console --web` в изолированном проекте. Не включайте в скриншоты,
 отчёты и логи токен, адрес входа с `?token=`, cookie и содержимое discovery-файла.
 
 ## Что проверено автоматически
 
-- `tests/console/test_web.py` поднимает настоящий сервер. Адрес `/?token=` отвечает 303 на
-  чистый `/#/?lang=ru` и выставляет cookie `console_token_<port>` (HttpOnly, SameSite=Strict,
-  Path=/). С этой cookie `/ws` отдаёт снимок Главной. Неверный токен, лишние параметры, HEAD,
-  повторная cookie и cookie чужого порта отклоняются; токен не попадает в ответ.
-- `tests/console/test_console_admission.py` проверяет разбор заголовка Cookie и правило входа.
+- `tests/console/test_console_admission.py` проверяет разбор заголовка Cookie и правило входа:
+  адрес `/?token=` отвечает 303, неверный токен, лишние параметры, HEAD, повторная cookie и cookie
+  чужого порта отклоняются.
+- Playwright `tests/web/home.spec.ts` против настоящего сервера проверяет, что адрес входа
+  открывает чистый `/#/?lang=ru` и выставляет cookie `console_token_<port>` (HttpOnly,
+  SameSite=Strict, Path=/), что с этой cookie Главная получает снимок по `/ws`, а неверный токен
+  получает 401 без cookie.
 - `tests/console/test_web_catalog.py` сверяет `src/i18n/catalog.json` с таблицами переводов TUI.
 - Vitest в `tests/web/*.test.ts(x)` проверяет оболочку (13 разделов в трёх группах,
   `aria-current`, сворачивание, мобильное меню, Esc, клавиши g/d/o/?), ru/en без перезагрузки,
@@ -23,8 +25,8 @@
   `dist/execution-console.css` стилям макета и отсутствие внешних URL.
 - Playwright в `tests/web/*.spec.ts` проверяет в Chromium вход по ссылке, cookie, переключение
   языка без перезагрузки, отсутствие нарушений CSP, ошибок консоли и запросов к другим origin, все
-  пять состояний и скриншоты оболочки и Главной при 1440 и 390 px. Допуск сравнения:
-  `maxDiffPixelRatio: 0.01`, `threshold: 0.2`.
+  пять состояний и структуру оболочки и Главной при 1440 и 390 px. Это проверки DOM без сравнения
+  скриншотов (ADR 0029): внешний вид владелец принимает вручную по макету.
 
 Автотесты не заменяют просмотр человеком: масштаб 200 %, реальный трекер и долгий обрыв связи
 проверяются вручную.
@@ -41,12 +43,12 @@ npm run test:e2e
 ```
 
 Из корня репозитория: `make web-install`, `make web-build`, `make web-test`, `make web-e2e`.
-Python-часть: `.harness/.venv/bin/python -m pytest tests/console/test_web.py
-tests/console/test_console_admission.py tests/console/test_web_catalog.py`.
+Python-часть: `.harness/.venv/bin/python -m pytest tests/console/test_console_admission.py
+tests/console/test_web_catalog.py`.
 
 ## Ручной список для PR
 
-В PR указать браузер, viewport, масштаб, commit SHA, результат по каждому пункту и ссылки на снимки
+В PR укажите браузер, viewport, масштаб, commit SHA, результат по каждому пункту и ссылки на снимки
 без credentials. Частичное наблюдение не закрывает пункт.
 
 - [ ] Широкий экран (≥ 1440 px), узкий (390 px) и масштаб 200 %: нет горизонтальной прокрутки

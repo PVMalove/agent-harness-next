@@ -38,12 +38,17 @@ Every comment or issue posted to the issue tracker during triage **must** start 
 
 #### Roles { #roles }
 
-This project uses a namespaced state-label taxonomy on top of the upstream `bug`/`enhancement` category pair. Every triaged issue has exactly one `bug`/`enhancement` label and exactly one `status::*` label. While the issue holds `status::specs`, the execution-mode axis below is not yet applied (see that role). In every other state, the issue also carries exactly one of `hitl`/`afk`. If any required axis has zero or several labels, flag it and ask the maintainer before you do anything else.
+This project uses a namespace-based, enterprise-style label taxonomy. Every triaged issue has exactly one `type::*` label and exactly one `status::*` label. While the issue holds `status::specs`, the execution-mode axis below is not yet applied (see that role). In every other state, the issue also carries exactly one of `hitl`/`afk`. Optional `priority::*`/`severity::*` labels are purely informational and are not part of this required-axis check. If any required axis has zero or several labels, flag it and ask the maintainer before you do anything else.
 
-**Category** — unchanged from upstream:
+**Type** (`type::*`):
 
-- `bug` — something is broken
-- `enhancement` — a new feature or an improvement
+- `type::bug` — something is broken
+- `type::feature` — a new feature or an improvement
+- `type::refactoring` — internal restructuring, no behavior change
+- `type::chore` — maintenance, tooling, or dependency upkeep
+- `type::security` — a security fix or hardening
+- `type::performance` — a performance improvement
+- `type::hotfix` — an urgent production fix
 
 **Workflow state** (`status::*`) — where the issue is in the pipeline:
 
@@ -71,7 +76,7 @@ These are the actual label strings for this repository. See `docs/agents/triage-
 
 Never apply the upstream canonical labels (`ready-for-agent`, `ready-for-human`, `needs-triage`, `needs-info`, `wontfix`) or an `epic::<slug>` label. This repository groups a ticket under an epic with the tracker's parent link: a GitHub sub-issue, on GitLab a `## Parent: #<epic>` section plus an issue `relates_to` link, or the folder structure of the local tracker (see `docs/agents/issue-tracker.md#wayfinding-operations`). Explain this if a maintainer asks for an epic label.
 
-State transitions: analyze an unlabeled issue to determine `bug`/`enhancement` and whether it is `hitl` or `afk`. Then move it to `status::ready` or `status::blocked` (a dependency or missing information). If it is too large to specify in one triage pass, set `status::specs` and point the maintainer to `/to-spec`. `status::blocked` returns to `status::ready` as soon as the blocker clears or the reporter replies. `/to-pull-requests` moves the dependent tickets of a closed ticket, and `/implement`/`/fast-implement` re-check blockers in pre-flight. `triage` does not perform this cleanup on its own initiative. A maintainer may override this at any time. Flag transitions that look unusual and ask before you continue.
+State transitions: analyze an unlabeled issue to determine its `type::*` label and whether it is `hitl` or `afk`. Then move it to `status::ready` or `status::blocked` (a dependency or missing information). If it is too large to specify in one triage pass, set `status::specs` and point the maintainer to `/to-spec`. `status::blocked` returns to `status::ready` as soon as the blocker clears or the reporter replies. `/to-pull-requests` moves the dependent tickets of a closed ticket, and `/implement`/`/fast-implement` re-check blockers in pre-flight. `triage` does not perform this cleanup on its own initiative. A maintainer may override this at any time. Flag transitions that look unusual and ask before you continue.
 
 #### Tracker commands
 
@@ -97,19 +102,19 @@ Query the issue tracker and list three buckets, oldest first:
 
 1. **Unlabeled** — triage has not been done.
 2. **Missing one of the required axes** — partly triaged, assessment in progress.
-3. **`status::blocked` with reporter activity since the last triage** — re-assessment is required.
+3. **`status::blocked` with reporter activity since the last triage notes** — re-assessment is required.
 
-If PRs are in scope, include external PRs in these buckets and mark each row `[PR]` or `[issue]`. Discovery shows only *external* PRs (the tracker configuration defines who counts as external). A contributor's in-flight PR is not triage work. This filter is for discovery only. A PR that is named explicitly is always reviewed, regardless of the author.
+If PRs are in scope, include external PRs in these buckets and mark each row `[PR]` or `[issue]`. Discovery shows only *external* PRs (the tracker configuration defines who counts as external). A contributor's in-flight PR is not triage work. This filter is for discovery only. A PR that is named explicitly is always triaged, regardless of the author.
 
 Show the count and a one-line summary for each item. Let the maintainer choose.
 
 #### Triage a specific issue or PR
 
-1. **Gather context.** Read the whole issue or PR (text, comments, labels, author, dates; for a PR, also the diff). Parse all previous triage notes, so that you do not ask again about questions that are already resolved. Explore the codebase using the project's domain glossary and respecting the ADRs in that area. Perform two codebase checks: (a) **redundancy** — find an existing implementation of the requested behavior by the domain concept (not only by the wording of the request) and report where you looked. If you find one, this is an already-implemented rejection, handled as `out-of-scope` (step 5). (b) **prior rejection** — read `.out-of-scope/*.md` and name every request similar to this one.
+1. **Gather context.** Read the whole issue or PR (text, comments, labels, author, dates; for a PR, also the diff). Parse all previous triage notes, so that you do not ask again about questions that are already resolved. Explore the codebase using the project's domain glossary and respecting the ADRs in that area. Perform two codebase checks: (a) **redundancy** — find an existing implementation of the requested behavior by the domain concept (not only by the wording of the request) and report where you looked. If you find one, this is an already-implemented rejection, handled under `resolution::wontfix` (step 5). (b) **prior rejection** — read `.out-of-scope/*.md` and name every request similar to this one.
 
-2. **Recommend.** Tell the maintainer your recommended category (`bug`/`enhancement`), execution mode (`hitl`/`afk`), and workflow state, with the reasoning, and a short summary of the codebase relevant to the request, including whether it is already implemented. If the request is epic-sized (too large to specify in this pass), recommend `status::specs` and point to `/to-spec` instead of a state/mode pair. Wait for direction.
+2. **Recommend.** Tell the maintainer your recommended type (`type::*`), execution mode (`hitl`/`afk`), and workflow state, with the reasoning, and a short summary of the codebase relevant to the request, including whether it is already implemented. If the request is epic-sized (too large to specify in this pass), recommend `status::specs` and point to `/to-spec` instead of a state/mode pair. Wait for direction.
 
-3. **Verify the claim.** Before you start grilling, make sure the claim is real. For a bug, reproduce it by the reporter's steps. For a PR, confirm that the diff matches the stated characteristics: inspect it and run the relevant tests or commands. Report what happened: confirmed (with the code path), failed, or insufficiently detailed (a strong signal to route to `status::blocked` while waiting for more information). A confirmed verification makes the agent brief much more reliable.
+3. **Verify the claim.** Before you start grilling, make sure the claim is real. For a bug, reproduce it by the reporter's steps. For a PR, confirm that the diff does what it claims: check it out and run the relevant tests or commands. Report what happened: confirmed (with the code path), failed, or insufficiently detailed (a strong signal to route to `status::blocked` while waiting for more information). A confirmed verification makes the agent brief much more reliable.
 
 4. **Grill (if needed).** If the request needs to be specified in more detail, call the Skill tool twice, for "grilling" and "domain-modeling". Grill it into shape a few questions at a time, sharpen the domain terms, and update `CONTEXT.md`/ADRs as decisions are made.
 
@@ -126,7 +131,7 @@ Show the count and a one-line summary for each item. Let the maintainer choose.
 
 #### Quick state override
 
-If the maintainer says "move #42 to `status::ready`", trust them and apply the label directly. Ask only if the execution mode (`hitl`/`afk`) is not yet clear from the context. Confirm what you are about to do (change a label, comment, close), then act. Skip grilling. If you move to `status::ready` + `afk` without prior preparation, ask whether they want to write an agent brief.
+If the maintainer says "move #42 to `status::ready`", trust them and apply the label directly. Ask only if the execution mode (`hitl`/`afk`) is not yet clear from the context. Confirm what you are about to do (change a label, comment, close), then act. Skip grilling. If you move to `status::ready` + `afk` without a grilling session, ask whether they want to write an agent brief.
 
 #### Triage notes template (for `status::blocked`)
 

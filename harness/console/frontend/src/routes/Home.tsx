@@ -136,7 +136,7 @@ function CheckRows({ rows }: { rows: Problem[] }) {
   );
 }
 
-/** The mockup's icon of each health area (docs/design/web-console-mockups, homeAreas). */
+/** The icon of each health area, as in the accepted mockup. */
 const AREA_ICON: Record<string, string> = {
   files: "harness",
   skills: "skills",

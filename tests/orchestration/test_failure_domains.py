@@ -326,6 +326,33 @@ def test_a_failed_gate_with_an_environment_sign_is_environment_preparation(
     )
 
 
+def _with_domain(stages: dict[str, object], domain: str = "tooling") -> dict[str, object]:
+    stages["stages"][-1]["domain"] = domain  # type: ignore[index]
+    return stages
+
+
+@pytest.mark.parametrize(
+    ("stages", "outcome"),
+    [
+        ({"failed_stage": None}, "completed"),
+        (_stages(failed_stage="gate", started="started"), "failed"),
+        (_stages(category="project-defect", probe=None, checks=("fail",)), "failed"),
+        (_stages(), "blocked"),
+        (_stages(category="unknown", probe=None, checks=()), "blocked"),
+        (_with_domain(_stages(failed_stage="gate", started="started")), "blocked"),
+        (_with_domain(_stages(failed_stage="gate", started="started"), "timeout"), "blocked"),
+        (
+            _with_domain(_stages(category="project-defect", probe=None, checks=("fail",))),
+            "blocked",
+        ),
+    ],
+)
+def test_the_qa_report_outcome_follows_the_failing_stage_and_its_runtime_domain(
+    stages: dict[str, object], outcome: str
+) -> None:
+    assert failure_domains.qa_report_outcome(stages) == outcome
+
+
 @pytest.mark.parametrize("stages", [None, {}, "x", {"failed_stage": None}, {"failed_stage": "other"}])
 def test_a_report_without_a_failed_qa_stage_has_no_qa_failure(stages: object) -> None:
     assert failure_domains.of_qa_stages(stages) is None
@@ -569,6 +596,42 @@ def test_a_confirmed_qa_environment_failure_routes_with_its_proof() -> None:
 
     assert routing["reason_category"] == "verification-infrastructure"
     assert routing["failure"]["domain"] == "environment_preparation"  # type: ignore[index]
+    assert routing["failure"]["method"] == "structured"  # type: ignore[index]
+
+
+@pytest.mark.parametrize("domain", ["tooling", "timeout"])
+def test_a_blocked_qa_report_with_a_runtime_stage_domain_reruns_the_same_candidate(
+    domain: str,
+) -> None:
+    # The failed check of a command whose ending the runtime classified is no code defect.
+    report = {
+        "outcome": "blocked",
+        "checks_run": [
+            {"command": "make lint", "result": "pass", "evidence": "exit 0"},
+            {"command": "cargo test", "result": "fail", "evidence": "exit 127"},
+        ],
+        "qa_stages": {
+            "failed_stage": "gate",
+            "code_checks_started": "started",
+            "stages": [
+                {"stage": "gate", "command": "make lint", "result": "pass", "exit_code": 0},
+                {
+                    "stage": "gate",
+                    "command": "cargo test",
+                    "result": "fail",
+                    "exit_code": 127,
+                    "diagnostics": "sh: cargo: not found",
+                    "domain": domain,
+                },
+            ],
+        },
+    }
+
+    routing = _route("qa", report)
+
+    assert routing["route"] == "same-candidate-rerun"
+    assert routing["reason_category"] == "verification-infrastructure"
+    assert routing["failure"]["domain"] == domain  # type: ignore[index]
     assert routing["failure"]["method"] == "structured"  # type: ignore[index]
 
 

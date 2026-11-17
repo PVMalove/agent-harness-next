@@ -52,11 +52,8 @@ const END_WAIT: Duration = Duration::from_secs(30);
 const COMMAND_MARGIN_SECONDS: i64 = 60;
 
 fn malformed(detail: &str) -> ErrorBody {
-    ErrorBody::new(
-        ErrorCode::MalformedRequest,
-        FailureDomain::Tooling,
-        false,
-        format!("the request is not valid: {detail}"),
+    ErrorBody::malformed(
+        detail,
         "send {\"dispatch_id\", \"attempt\", \"run_root\", \"workdir\", \"tmpdir\", \"groups\"} as the payload of qa.run",
     )
 }
@@ -498,6 +495,18 @@ impl Supervisor {
             .iter()
             .map(|name| ((*name).to_owned(), tmp.clone()))
             .chain([("HARNESS_VERIFY_COLD".to_owned(), "1".to_owned())])
+            // One build directory for every cargo stage of this run, removed with its run root:
+            // no compiled code reaches another candidate's run (ADR 0032).
+            .chain([(
+                "CARGO_TARGET_DIR".to_owned(),
+                admitted
+                    .room
+                    .run_root
+                    .join("cargo-target")
+                    .to_string_lossy()
+                    .into_owned(),
+            )])
+            .chain(admitted.checked.plan.cache_variables())
             .collect();
         let observation = &admitted.observation;
         let launch = json!({
@@ -776,11 +785,8 @@ impl Supervisor {
             _ => (None, None),
         };
         let (Some(dispatch_id), Some(attempt)) = (dispatch_id, attempt) else {
-            return Err(ErrorBody::new(
-                ErrorCode::MalformedRequest,
-                FailureDomain::Tooling,
-                false,
-                "the request is not valid: the payload is {\"dispatch_id\", \"attempt\"}",
+            return Err(ErrorBody::malformed(
+                "the payload is {\"dispatch_id\", \"attempt\"}",
                 "send the dispatch id and the attempt of the QA run to stop",
             ));
         };

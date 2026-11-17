@@ -28,6 +28,8 @@ def test_external_adapter_gets_a_durable_copy_of_the_approved_brief(
     tmp_path: Path, cut_over: bool, conflicting_copy: bool
 ) -> None:
     fixture = recovery_support.RecoveryTests()
+    # Both epochs start from a 1.x history; the store epoch is its cut-over (ADR 0036, section 5).
+    fixture.file_ledger = True
     fixture.setUp()
     runtime = None
     try:

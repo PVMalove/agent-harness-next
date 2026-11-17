@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -34,6 +36,7 @@ def run(ctx: SimpleNamespace) -> None:
     # dispatch creation once that ref has moved — cleared only by a new developer (rebase)
     # dispatch, whose resulting commit is a new candidate that must be risk-assessed again.
     stale_state = test_root / "stale-base-state"
+    seed_file_ledger(stale_state)
     sync_origin_base()
     run_step(
         ["git", "branch", "feature/issue-134-stale-base"],

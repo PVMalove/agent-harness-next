@@ -159,6 +159,41 @@ def build_parser(
     )
     runtime_status.set_defaults(handler=handlers.runtime_status)
 
+    worktree = commands.add_parser(
+        "worktree",
+        help="create or remove a managed issue worktree through harness-runtime, which "
+        "works outside the agent sandbox",
+    )
+    worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
+    worktree_create = worktree_commands.add_parser(
+        "create", help="Create a new branch from --base in a managed worktree"
+    )
+    worktree_create.add_argument("--branch", required=True, help="the new issue branch")
+    worktree_create.add_argument(
+        "--base", required=True, help="the commit or ref the branch starts from"
+    )
+    worktree_create.add_argument(
+        "--path",
+        help="worktree directory; default: .harness/.sandboxes/worktrees/<last branch segment>",
+    )
+    worktree_create.set_defaults(handler=handlers.create_worktree)
+    worktree_remove = worktree_commands.add_parser(
+        "remove", help="Remove a clean managed worktree; its branch stays"
+    )
+    worktree_remove.add_argument("--path", required=True, help="worktree directory")
+    worktree_remove.set_defaults(handler=handlers.remove_worktree)
+    for worktree_command in (worktree_create, worktree_remove):
+        # The runtime serves one repository and reads no coordinator state: no `--state-dir` here.
+        worktree_command.add_argument(
+            "--repo", default=argparse.SUPPRESS, help="target project root"
+        )
+        worktree_command.add_argument(
+            "--timeout",
+            type=float,
+            default=120.0,
+            help="seconds to wait for the runtime to finish the git command",
+        )
+
     batch = commands.add_parser("batch")
     batch_commands = batch.add_subparsers(dest="batch_command", required=True)
     create = batch_commands.add_parser("create", aliases=["plan"])
@@ -212,12 +247,31 @@ def build_parser(
     create.add_argument(
         "--supersedes",
         help="abandoned batch of the same ticket and issue branch this batch resumes from its "
-        "abandoned.last_accepted record; requires --approved-by and --approved-at",
+        "abandoned.last_accepted record, or whose confirmed architect report it carries with "
+        "--carry-architect; requires --approved-by and --approved-at",
     )
     create.add_argument(
         "--approved-by", help="human who approved --supersedes; never a policy"
     )
     create.add_argument("--approved-at", help="time of the --supersedes approval")
+    create.add_argument(
+        "--carry-architect",
+        help="architect dispatch of the --supersedes batch whose never-accepted report this "
+        "batch carries instead of running the architect again; same Definition of Done only; "
+        "requires --architect-report-sha256, --architect-confirmed-by and "
+        "--architect-confirmed-at",
+    )
+    create.add_argument(
+        "--architect-report-sha256",
+        help="report_sha256 of the --carry-architect report the human confirmed",
+    )
+    create.add_argument(
+        "--architect-confirmed-by",
+        help="human who confirmed the --carry-architect report; never a policy",
+    )
+    create.add_argument(
+        "--architect-confirmed-at", help="time of the --carry-architect confirmation"
+    )
     create.set_defaults(handler=handlers.create_batch)
     batch_preflight = batch_commands.add_parser(
         "preflight", help="reject an oversized ticket before creating a batch"
@@ -690,6 +744,17 @@ def build_parser(
     dispatch_observe.add_argument("--dispatch", required=True)
     dispatch_observe.add_argument("--offset", type=int, default=0)
     dispatch_observe.set_defaults(handler=handlers.observe_dispatch)
+    dispatch_logs = dispatch_commands.add_parser(
+        "logs",
+        help="read the visible events of a worker's log; --follow prints each as a JSON line "
+        "until the execution ends; no model calls, lifecycle changes or ledger lock while following",
+    )
+    _common(dispatch_logs)
+    dispatch_logs.add_argument("--dispatch", required=True)
+    dispatch_logs.add_argument("--offset", type=int, default=0)
+    dispatch_logs.add_argument("--follow", action="store_true")
+    dispatch_logs.add_argument("--poll-seconds", type=float, default=1.0)
+    dispatch_logs.set_defaults(handler=handlers.dispatch_logs)
     dispatch_cancel = dispatch_commands.add_parser("cancel")
     _common(dispatch_cancel)
     dispatch_cancel.add_argument("--dispatch", required=True)

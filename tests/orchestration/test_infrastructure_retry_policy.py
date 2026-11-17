@@ -183,7 +183,7 @@ class InfrastructureRetryTests(preparation.PreparationFixture):
         )
         self.assertEqual(self.developer_retries(), 0)
         self.assertEqual(self.report_of(self.run_qa(second))["outcome"], "completed")
-        self.assertTrue(Path(original["report"]).exists())
+        self.assertTrue(self.fx._stored(original["report"]).exists())
 
     def test_an_offline_uv_sync_is_retried_by_policy_once_the_environment_is_ready(
         self,
@@ -408,6 +408,8 @@ class InfrastructureRetryTests(preparation.PreparationFixture):
 class CoordinatorOperationRetryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.fx = fixtures.CoordinatorRetryRoutingTests()
+        # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+        self.fx.file_ledger = True
         self.fx.setUp()
         self.addCleanup(self.fx.tearDown)
 

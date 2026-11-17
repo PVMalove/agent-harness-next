@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import hashlib
 import json
 import sys
@@ -33,6 +35,7 @@ def run(ctx: SimpleNamespace) -> None:
     # ownership pattern as a risk assessment -- and checks its freshness before every new dispatch
     # brief.  A package is shared across role sessions when the pinned base/candidate is unchanged.
     ctxpkg_state = test_root / "context-package-state"
+    seed_file_ledger(ctxpkg_state)
     run_step(
         ["git", "branch", "feature/issue-138-context-package"],
         cwd=orchestration_project,

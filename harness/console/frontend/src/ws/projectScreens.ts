@@ -160,6 +160,7 @@ const storeFacts = exact({
   audit_records: nullable(count),
   cutover_at: nullable(string),
   reason: string,
+  start_command: string,
 });
 const updateHarness = exact({
   state: harnessState,

@@ -144,7 +144,8 @@ dispatch does not change the conditions under which the dispatch was approved:
 - `attention_policy` — the thresholds of the `needs_attention` flag (see [Attention state](decisions.md#attention-state)): how long an accepted retry may wait
   for its dispatch, how many operational retries (`verification-infrastructure`, `transport`,
   `context-pressure`) are allowed per candidate (`0` means none), and after how much silence a live
-  dispatch counts as stale.
+  dispatch counts as stale. `heartbeat_interval_seconds` (default 300) sets how often a worker sends a
+  heartbeat; the brief records an interval no longer than a third of `stale_dispatch_seconds`.
 - `approval_ttl_seconds` — the lifetime of an explicit `--approved-at`. The coordinator rejects an older
   approval (or one dated in the future) and does not reuse it. Without the field, approval does not expire.
   The `orchestration.example.json` example sets `14400`; `harness init` creates the config from it.

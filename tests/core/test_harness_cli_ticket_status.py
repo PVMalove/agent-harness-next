@@ -16,11 +16,11 @@ import pytest
 CLI = Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"
 
 FAKE_TOOL = """\
-import json, os, sys
+import json, os, sys, uuid
 folder = os.environ["FAKE_TRACKER_DIR"]
-argv = [os.path.basename(sys.argv[0]), *sys.argv[1:]]
-with open(os.path.join(folder, "calls.jsonl"), "a", encoding="utf-8") as log:
-    log.write(json.dumps(argv) + "\\n")
+argv = [os.path.splitext(os.path.basename(sys.argv[0]))[0], *sys.argv[1:]]
+with open(os.path.join(folder, "call-" + uuid.uuid4().hex + ".json"), "w", encoding="utf-8") as log:
+    json.dump(argv, log)
 line = " ".join(argv)
 with open(os.path.join(folder, "fixture.json"), encoding="utf-8") as handle:
     rules = json.load(handle)
@@ -47,6 +47,13 @@ class Project:
         self.tools.mkdir()
         for name in ("gh", "glab"):
             tool = self.tools / name
+            if sys.platform == "win32":
+                script = self.tools / f"{name}.py"
+                script.write_text(FAKE_TOOL, encoding="utf-8", newline="\n")
+                tool.with_suffix(".cmd").write_text(
+                    f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8", newline=""
+                )
+                continue
             tool.write_text(f"#!{sys.executable}\n{FAKE_TOOL}", encoding="utf-8")
             tool.chmod(0o755)
         self.rules: list[dict[str, object]] = []
@@ -76,21 +83,19 @@ class Project:
             **os.environ,
             "PATH": f"{self.tools}{os.pathsep}{os.environ.get('PATH', '')}",
             "FAKE_TRACKER_DIR": str(self.tools),
+            "PYTHONIOENCODING": "utf-8",  # the CLI prints "…"; a piped Windows stdout is cp1252
         }
         done = subprocess.run(
             [sys.executable, str(CLI), "ticket-status", str(self.repo),
              "--spec", spec, "--ticket", ticket, "--to", to],
-            capture_output=True, text=True, env=env, timeout=60, check=False,
+            capture_output=True, text=True, encoding="utf-8", env=env, timeout=60, check=False,
         )  # fmt: skip
         lines = [line for line in done.stdout.splitlines() if line.strip()]
         assert lines, done.stderr
         return done.returncode, json.loads(lines[-1])
 
     def calls(self) -> list[list[str]]:
-        log = self.tools / "calls.jsonl"
-        if not log.exists():
-            return []
-        return [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+        return [json.loads(log.read_text(encoding="utf-8")) for log in self.tools.glob("call-*.json")]
 
     def writes(self) -> list[list[str]]:
         return [
@@ -323,6 +328,9 @@ def test_an_unreadable_tracker_is_a_write_error_without_a_write(github: Project)
     assert github.writes() == []
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32", reason="a .cmd shim cannot take the & of a GitLab query"
+)
 def test_gitlab_move_unlabels_the_previous_status_explicitly(tmp_path: Path) -> None:
     project = Project(
         tmp_path, {"type": "gitlab", "host": "gitlab.example.com", "project": "g/p"}

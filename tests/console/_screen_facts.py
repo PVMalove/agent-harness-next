@@ -181,6 +181,7 @@ class Facts:
                 "audit_records": 4,
                 "cutover_at": None,
                 "reason": "",
+                "start_command": "",
             },
             "adapters": [
                 {"path": ".harness/adapters/a.json", "status": "current", "problem": None}

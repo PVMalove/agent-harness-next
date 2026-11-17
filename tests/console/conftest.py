@@ -9,7 +9,12 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def unit_boundaries(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def unit_boundaries(
+    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
+    if request.node.get_closest_marker("real_process"):
+        yield
+        return
     attempted: list[str] = []
 
     def forbidden_process(*args: object, **kwargs: object) -> None:

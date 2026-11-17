@@ -117,6 +117,7 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "directories.orchestration_state": CheckRoute(
         "Каталог состояния оркестрации недоступен", "Orchestration"
     ),
+    "orchestration.runtime": CheckRoute("Runtime не отвечает", "Orchestration"),
     "orchestration.ledger_summary": CheckRoute(
         "Ledger оркестрации требует внимания", "Orchestration"
     ),
@@ -134,6 +135,12 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     ),
     "orchestration.disposable_data": CheckRoute(
         "Накопились временные данные оркестрации", "Orchestration"
+    ),
+    "orchestration.adapters": CheckRoute(
+        "Адаптеры worker не совпадают с версией harness", "Orchestration"
+    ),
+    "orchestration.worker_binaries": CheckRoute(
+        "Runtime не находит claude или codex", "Orchestration"
     ),
     "repo_map.tier": CheckRoute("Repo Map работает в ограниченном режиме", "Repo Map"),
     "memory.index": CheckRoute("Индекс памяти проекта требует внимания", "Repo Map"),
@@ -154,6 +161,13 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "environment.glab": CheckRoute("Версия glab устарела", "Diagnostics"),
     "environment.dev_env": CheckRoute(
         "Окружение .harness/.venv не совпадает с uv.lock", "Diagnostics"
+    ),
+    "environment.qa_executables": CheckRoute(
+        "Исполняемые файлы QA-команд не найдены", "Diagnostics"
+    ),
+    "environment.c_linker": CheckRoute("Нет C-компоновщика cc", "Diagnostics"),
+    "environment.runtime_socket_path": CheckRoute(
+        "Путь сокета runtime слишком длинный", "Diagnostics"
     ),
     "environment.output_encoding": CheckRoute(
         "Кодировка вывода не UTF-8", "Diagnostics"
@@ -189,6 +203,12 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
         "Политика hooks проекта требует внимания", "Diagnostics"
     ),
     "hooks.test_author": CheckRoute("Тест-автор недоступен", "Diagnostics"),
+    "hooks.test_author_config": CheckRoute("Нет блока test_author", "Diagnostics"),
+    "hooks.test_author_root": CheckRoute("Корень проекта не совпадает с Git", "Diagnostics"),
+    "hooks.test_author_trust": CheckRoute("Проект не доверен для тест-автора", "Diagnostics"),
+    "hooks.test_author_guard": CheckRoute("Guard тест-автора недоступен", "Diagnostics"),
+    "hooks.test_author_runner": CheckRoute("Runner тест-автора недоступен", "Diagnostics"),
+    "hooks.test_author_probe": CheckRoute("Изоляция runner недоступна", "Diagnostics"),
     "files.sandboxes": CheckRoute("Каталог .sandboxes настроен неверно", "Diagnostics"),
     "directories.harness": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
     "directories.sandboxes": CheckRoute("Каталог Harness недоступен", "Diagnostics"),

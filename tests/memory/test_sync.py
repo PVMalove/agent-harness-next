@@ -584,7 +584,7 @@ def test_context_package_assembles_from_snapshot_without_tracker(
     remote_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from harness.memory import sync
-    from harness.orchestration.ledger.lifecycle import LifecycleLedger
+    from tests.orchestration.legacy_state import seed_file_ledger
     from harness.orchestration.workflow.context_package import _persist_context_package
     from .test_build import git
 
@@ -616,8 +616,9 @@ def test_context_package_assembles_from_snapshot_without_tracker(
         importlib.import_module("harness.memory.sync"), "fetch_page", offline
     )
     root = remote_repo / "state"
-    ledger = LifecycleLedger(root)
-    ledger.ensure()
+    # The Context Package reads records as files of a generation: a 1.x ledger (ADR 0036,
+    # section 5, rules 2 and 3).
+    ledger = seed_file_ledger(root)
     batch: dict[str, object] = {
         "batch_id": "batch-memory",
         "base_commit": sha,

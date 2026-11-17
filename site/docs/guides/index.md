@@ -1,6 +1,6 @@
 # Руководства
 
-Выберите маршрут для задачи или найдите главу по названию. Установка и настройки проекта — в разделе [Начало](../getting-started/index.md), переводы скиллов, hooks и агентов — в [Справочнике](../reference/index.md).
+Выберите маршрут для задачи или найдите главу по названию. Установка и настройки проекта описаны в разделе [Начало](../getting-started/index.md), переводы скиллов, hooks и агентов собраны в [Справочнике](../reference/index.md).
 
 <div data-ah-directory>
   <div class="ah-ref-glossary">
@@ -60,6 +60,11 @@
         <span class="i">⌁</span>
         <b>Troubleshooting</b>
         <span>Причины отказов и следующие действия.</span>
+      </a>
+      <a class="ah-card" data-ah-entry href="upgrade-2-0/">
+        <span class="i">⇪</span>
+        <b>Миграция на 2.0</b>
+        <span>Обновление с 1.x, migrate и откат.</span>
       </a>
     </div>
   </section>

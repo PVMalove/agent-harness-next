@@ -11,21 +11,30 @@ infrastructure ending leaves no report but a new attempt of the same dispatch.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sqlite3
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Protocol
 
 import pytest
 
 from harness.json_types import JsonObject
+from harness.orchestration import qa_lane
+from harness.orchestration.core.utils import CoordinatorError
+from harness.orchestration.ledger import ledger_ops
+from harness.orchestration.ledger.ledger_ops import LedgerBusyError
+from harness.orchestration.qa_execution import executable_check, gate_executables, with_executable_checks
+from harness.orchestration.workflow import qa_integration
 from tests.orchestration import test_coordinator as coordinator_tests
 from tests.orchestration.fake_clock import FakeClock
+from tests.orchestration.legacy_state import seed_file_ledger
 from tests.orchestration.runtime_store_support import (
     STATE_REL,
+    RuntimeHandle,
     ServingRuntime,
     coordinator_popen,
     coordinator_with,
@@ -60,13 +69,16 @@ class ContainerQa:
     the runtime that serves it and the scripted engine on its ``PATH``.
 
     ``engine``, the image tags and ``gate`` default to the scripted Podman setup; with
-    ``scripted_engine=False`` the runtime keeps the host ``PATH`` and its real engine (#710)."""
+    ``scripted_engine=False`` the runtime keeps the host ``PATH`` and its real engine (#710).
+    ``runtime_factory`` starts the runtime from the repository and the environment the runtime
+    needs instead of ``ServingRuntime`` (the autostart hook of ADR 0031)."""
 
     def __init__(
         self,
         tmp: Path,
         *,
         preparation: list[str] | None = None,
+        file_checks: bool = True,
         timeout: int = 600,
         hosts: list[str] | None = None,
         cache: Path | None = None,
@@ -79,9 +91,13 @@ class ContainerQa:
         host_runtime_dir: Path | None = None,
         selinux: bool = False,
         clock: FakeClock | None = None,
+        runtime_factory: Callable[[Path, dict[str, str]], RuntimeHandle] | None = None,
     ) -> None:
         gate = GATE if gate is None else gate
         self.fx = coordinator_tests.CoordinatorRetryRoutingTests()
+        # A 1.x history cut over by `migrate`: the runtime this class starts (scripted engine on
+        # its PATH, fake clock, autostart) is the only `serve` of the store (ADR 0036, section 5).
+        self.fx.file_ledger = True
         self.fx.setUp()
         repo = self.repo = self.fx.repo
         (repo / ".harness/project.json").write_text(
@@ -91,6 +107,7 @@ class ContainerQa:
         _git(repo, "commit", "-m", "declare the QA gate")
         _git(repo, "push", "origin", "master")
         self.fx.state_dir = repo / STATE_REL
+        seed_file_ledger(self.fx.state_dir)
         self.batch = str(self.fx._create_batch()["batch_id"])
         self.fx._accepted_architect(self.batch)
         self.candidate = self.fx._accepted_candidate(self.batch)
@@ -124,7 +141,8 @@ class ContainerQa:
         if preparation is not None:
             config["qa_preparation"] = preparation
             config["qa_environment_probes"] = ["probe registry"]
-            config["qa_project_file_checks"] = ["check lock"]
+            if file_checks:
+                config["qa_project_file_checks"] = ["check lock"]
         (repo / ".harness/orchestration.json").write_text(
             json.dumps(config), encoding="utf-8"
         )
@@ -143,8 +161,12 @@ class ContainerQa:
         assert migrate(repo).returncode == 0
         engine_path = {"PATH": str(self.engine.bin)} if scripted_engine else {}
         self.environ = {**engine_path, SECRET_NAME: SECRET}
-        self.runtime = ServingRuntime(
-            repo, env=self.environ, host_runtime_dir=host_runtime_dir, clock=clock
+        self.runtime: RuntimeHandle = (
+            runtime_factory(repo, self.environ)
+            if runtime_factory is not None
+            else ServingRuntime(
+                repo, env=self.environ, host_runtime_dir=host_runtime_dir, clock=clock
+            )
         )
         self.dispatch = self.create()
 
@@ -219,12 +241,14 @@ class Make(Protocol):
         self,
         *,
         preparation: list[str] | None = ...,
+        file_checks: bool = ...,
         timeout: int = ...,
         hosts: list[str] | None = ...,
         cache: Path | None = ...,
         lease_ttl: int | None = ...,
         selinux: bool = ...,
         clocked: bool = ...,
+        gate: list[str] | None = ...,
     ) -> ContainerQa: ...
 
 
@@ -235,12 +259,14 @@ def qa(tmp_path: Path) -> Iterator[Make]:
     def make(
         *,
         preparation: list[str] | None = None,
+        file_checks: bool = True,
         timeout: int = 600,
         hosts: list[str] | None = None,
         cache: Path | None = None,
         lease_ttl: int | None = None,
         selinux: bool = False,
         clocked: bool = False,
+        gate: list[str] | None = None,
     ) -> ContainerQa:
         root = tmp_path / f"q{len(made)}"
         clock_dir = tmp_path / f"clock{len(made)}"
@@ -251,11 +277,13 @@ def qa(tmp_path: Path) -> Iterator[Make]:
             "cache": cache,
             "lease_ttl": lease_ttl,
             "selinux": selinux,
+            "gate": gate,
         }
         made.append(
             ContainerQa(
                 root,
                 preparation=preparation,
+                file_checks=file_checks,
                 clock=FakeClock(clock_dir) if clocked else None,
                 **options,  # type: ignore[arg-type]
             )
@@ -446,14 +474,16 @@ def test_a_partial_command_record_left_by_a_killed_runtime_is_not_run_and_never_
     execution_id = str(repo.execution()["execution_id"])
 
     # SIGKILL while gate-2 runs, and its record half written: what write_record leaves behind.
-    repo.runtime.kill()
+    served = repo.runtime
+    assert isinstance(served, ServingRuntime)
+    served.kill()
     commands = repo.repo / STATE_REL / "executions" / execution_id / "commands"
     (commands / "001.json.partial").write_text(
         '{"index":1,"stage_id":"gate-2","result":"ran","exit_code":0,"stdout":{"tail":"'
         + _MARKER,
         encoding="utf-8",
     )
-    repo.runtime = ServingRuntime(repo.repo, env=repo.environ, xdg=repo.runtime.xdg)
+    repo.runtime = ServingRuntime(repo.repo, env=repo.environ, xdg=served.xdg)
     _, err = run.communicate(timeout=120)
 
     assert run.returncode == 2, err
@@ -507,6 +537,34 @@ def test_tooling_and_timeout_endings_block_the_report_with_their_domain(
     assert (lane["lease"], lane["queue"]) == (None, [])
 
 
+def test_a_tooling_gate_ending_after_a_declared_preparation_records_a_blocked_report(
+    qa: Make,
+) -> None:
+    # The runner and the report validator decide the outcome by one rule: a gate command the
+    # runtime classified as tooling (exit 127) is a recorded blocked report, never a refusal.
+    repo = qa(preparation=PREPARATION)
+    repo.engine.script("gate-2", stderr="sh: cargo: not found\n", exit_code=127)
+
+    status, result, err = repo.qa_run()
+
+    assert status == 0 and result is not None, err
+    report = repo.report()
+    assert report["outcome"] == "blocked"
+    assert "tooling" in report["blockers"]["details"]
+    assert [c["result"] for c in report["checks_run"]] == ["pass", "fail", "not_run"]
+    stages = report["qa_stages"]
+    assert stages["failed_stage"] == "gate"
+    [failed] = [e for e in stages["stages"] if e["result"] == "fail"]
+    assert (failed["stage"], failed["exit_code"], failed["domain"]) == (
+        "gate",
+        127,
+        "tooling",
+    )
+    assert repo.attempts() == []
+    lane = repo.lane()
+    assert (lane["lease"], lane["queue"]) == (None, [])
+
+
 @pytest.mark.fault_injection
 def test_an_selinux_permission_denied_command_blocks_the_report_as_tooling_without_a_new_attempt(
     qa: Make,
@@ -532,6 +590,110 @@ def test_an_selinux_permission_denied_command_blocks_the_report_as_tooling_witho
     assert (lane["lease"], lane["queue"]) == (None, [])
 
 
+def test_the_gate_executables_are_bare_names_once_and_checked_after_the_preparation() -> None:
+    commands: list[str | list[str]] = [
+        "make lint",
+        "RUSTFLAGS=-Dwarnings env CARGO_TERM_COLOR=never cargo test --locked",
+        ".venv/bin/python -m pytest",
+        ["cargo", "clippy"],
+        "make test",
+        "echo 'unclosed",
+    ]
+
+    assert gate_executables(commands) == [
+        ("make", "make lint"),
+        ("cargo", "RUSTFLAGS=-Dwarnings env CARGO_TERM_COLOR=never cargo test --locked"),
+    ]
+    policy: JsonObject = {
+        "enabled": False,
+        "max_infrastructure_retries": 1,
+        "qa_preparation": ["make bootstrap"],
+        "qa_environment_probes": ["probe registry"],
+        "qa_project_file_checks": ["check lock"],
+    }
+    checked = with_executable_checks(policy, commands)
+    checks = [executable_check("make"), executable_check("cargo")]
+    assert checked["qa_preparation"] == ["make bootstrap", *checks]
+    assert checked["qa_environment_probes"] == ["probe registry", *checks]
+    assert checked["qa_project_file_checks"] == ["check lock"]
+    # Without a declared preparation the brief pins no check.
+    assert with_executable_checks({**policy, "qa_preparation": []}, commands)[
+        "qa_environment_probes"
+    ] == ["probe registry"]
+
+
+def test_a_gate_executable_missing_from_the_image_stops_before_any_gate_command(
+    qa: Make,
+) -> None:
+    repo = qa(preparation=PREPARATION, gate=["make lint", "cargo test --locked"])
+    # The image has make but no cargo: the generated check fails in preparation and as a probe.
+    repo.engine.script("preparation-3", stderr="no cargo\n", exit_code=1)
+    repo.engine.script("environment-probe-3", stderr="no cargo\n", exit_code=1)
+
+    code, _, err = repo.qa_run()
+
+    assert code == 2, err
+    assert "cargo" in err and "cargo test --locked" in err, err
+    assert "QA image" in err, err
+    stages = [
+        call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
+        for call in repo.engine.runs()
+    ]
+    assert stages == [
+        "preparation-1",
+        "preparation-2",
+        "preparation-3",
+        "environment-probe-1",
+        "environment-probe-2",
+        "environment-probe-3",
+        "project-file-check-1",
+    ]
+    commands = [call[-1] for call in repo.engine.runs()]
+    assert commands[1].startswith("command -v make ")
+    assert commands[2].startswith("command -v cargo ")
+    [attempt] = repo.attempts()
+    assert attempt["domain"] == "environment_preparation"
+    assert repo.status()["state"] == "approved"
+
+
+def test_a_missing_gate_executable_without_project_file_checks_blocks_the_report_before_the_gate(
+    qa: Make,
+) -> None:
+    # Without project-file checks a failed probe proves no environment cause: the pinned
+    # `command -v cargo` check still stops QA before any gate command, but as a blocked report.
+    repo = qa(
+        preparation=PREPARATION, file_checks=False, gate=["make lint", "cargo test --locked"]
+    )
+    repo.engine.script("preparation-3", stderr="no cargo\n", exit_code=1)
+    repo.engine.script("environment-probe-3", stderr="no cargo\n", exit_code=1)
+
+    code, result, err = repo.qa_run()
+
+    assert code == 0 and result is not None, err
+    stages = [
+        call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
+        for call in repo.engine.runs()
+    ]
+    assert not any(stage.startswith("gate") for stage in stages), stages
+    report = repo.report()
+    assert report["outcome"] == "blocked"
+    assert [c["result"] for c in report["checks_run"]] == ["not_run", "not_run"]
+    qa_stages = report["qa_stages"]
+    assert qa_stages["failed_stage"] == "preparation"
+    assert qa_stages["diagnosis"]["category"] == "unknown"
+    check = executable_check("cargo")
+    failed = [
+        (entry["stage"], entry["command"], entry["exit_code"])
+        for entry in qa_stages["stages"]
+        if entry["result"] == "fail"
+    ]
+    assert failed == [("preparation", check, 1), ("environment-probe", check, 1)]
+    assert f"environment-probe-failed:{check}" in qa_stages["diagnosis"]["signals"]
+    # No environment cause is confirmed: triage, no new attempt and no image remedy.
+    assert report["blockers"]["details"] == "coordinator triage required; no automatic retry"
+    assert repo.attempts() == []
+
+
 @pytest.mark.fault_injection
 def test_an_offline_dependency_install_is_environment_preparation_and_a_new_attempt(
     qa: Make,
@@ -554,7 +716,13 @@ def test_an_offline_dependency_install_is_environment_preparation_and_a_new_atte
         call[call.index("--name") + 1].rsplit("-qa1-", 1)[1]
         for call in repo.engine.runs()
     ]
-    assert stages == ["preparation-1", "environment-probe-1", "project-file-check-1"]
+    # The brief pins a probe of the gate executable (make) after the project's own probe.
+    assert stages == [
+        "preparation-1",
+        "environment-probe-1",
+        "environment-probe-2",
+        "project-file-check-1",
+    ]
     assert repo.status()["state"] == "approved"
 
 
@@ -594,6 +762,11 @@ def test_the_runs_share_one_sidecar_and_network_and_mount_the_pinned_cache(
             and _flag(run, "--env").count(SECRET_NAME) == 1
         )
     assert not any("volume" in part for call in calls for part in call)
+    # The runtime records the exit first and removes the objects after it, so qa run may
+    # answer while the removal still runs: wait for it instead of racing it under load.
+    deadline = time.monotonic() + 60
+    while repo.engine.state()["objects"] and time.monotonic() < deadline:
+        time.sleep(0.05)
     assert repo.engine.state()["objects"] == {}
 
 
@@ -616,3 +789,56 @@ def test_a_rebuilt_image_or_a_missing_variable_blocks_the_run_before_any_command
     assert repo.status()["state"] == "approved"
     lane = repo.lane()
     assert (lane["lease"], lane["queue"]) == (None, [])
+
+
+def test_evidence_a_busy_store_refused_at_acceptance_is_kept_and_a_rerun_accepts_it(
+    qa: Make, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = qa()
+    for stage in ("gate-1", "gate-2", "gate-3"):
+        repo.engine.script(stage, stdout=f"{stage} ok\n", exit_code=0)
+    real = qa_integration._ops()
+    validations: list[str] = []
+
+    class BusyAtAcceptance:
+        """The coordinator's ops; every read of the acceptance, after the QA run, is refused
+        as a read snapshot the runtime no longer holds."""
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(real, name)
+
+        @staticmethod
+        def _validate_batch_integrity(root: Path, batch: JsonObject) -> None:
+            validations.append("validated")
+            if len(validations) > 1:
+                raise LedgerBusyError(
+                    "the read snapshot cannot answer: the snapshot is closed or expired",
+                    remedy="[store_busy] read again from a new snapshot",
+                )
+            real._validate_batch_integrity(root, batch)
+
+    args = argparse.Namespace(
+        repo=str(repo.repo), state_dir=None, dispatch=repo.dispatch, lease_seconds=None
+    )
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(getattr(repo.runtime, "xdg")))
+    monkeypatch.setattr(qa_lane, "ACCEPT_BUSY_WAIT_SECONDS", 0.0)
+
+    with pytest.raises(CoordinatorError) as refused, ledger_ops.command_state(args):
+        qa_lane.run(args, BusyAtAcceptance())  # type: ignore[arg-type]
+
+    assert f"qa run --dispatch {repo.dispatch}" in refused.value.remedy
+    kept = store_call(
+        repo.repo, repo.runtime, "state.read", {"collections": ["unaccepted-evidence"]}
+    )["records"]
+    assert isinstance(kept, dict)
+    assert [path for path in kept if repo.dispatch in path], kept
+    assert repo.status()["state"] == "approved"
+    containers = len(repo.engine.runs())
+    assert containers == 3
+
+    code, result, err = repo.qa_run()
+
+    assert code == 0 and result is not None, err
+    assert result["state"] == "reported"
+    assert repo.report()["outcome"] == "completed"
+    assert len(repo.engine.runs()) == containers

@@ -50,6 +50,7 @@
     "Git-защита": "Git guard",
     "Git-проект найден": "Git project found",
     "Git-проект найден · действие:": "Git project found · action:",
+    "Guard тест-автора недоступен": "The test author guard is unavailable",
     "HEAD не найден": "HEAD was not found",
     "Harness не установлен": "Harness is not installed",
     "Harness не установлен в проект": "Harness is not installed in the project",
@@ -58,9 +59,11 @@
     "Health-отчёт": "Health report",
     "Health-отчёт с локальными фиксами": "Health report with local fixes",
     "Health-отчёт с онлайн-проверками и созданием лейблов": "Health report with online checks and label creation",
+    "Heartbeat": "Heartbeat",
     "Heartbeat p95": "Heartbeat p95",
     "Hooks проекта": "Project hooks",
     "ID диагностики": "Diagnostic ID",
+    "In-process воркер работает внутри сессии coordinator и не отдаёт поток событий. Ход работы виден по heartbeat, self-report модели и чекпоинтам.": "An in-process worker runs inside the coordinator session and has no event stream. Follow its progress through the heartbeat, the model self-report and the checkpoints.",
     "Job уже не выполняется": "The job is no longer running",
     "Ledger оркестрации требует внимания": "The orchestration ledger needs attention",
     "Lock обновлён": "Lock updated",
@@ -91,6 +94,11 @@
     "Review": "Review",
     "Review / QA": "Review / QA",
     "Rootless Podman · среда, этапы и свидетельства.": "Rootless Podman · environment, stages and evidence.",
+    "Runner тест-автора недоступен": "The test author runner is unavailable",
+    "Runtime не находит claude или codex": "The runtime does not find claude or codex",
+    "Runtime не отвечает": "The runtime does not answer",
+    "Runtime: не отвечает": "Runtime: not answering",
+    "Runtime: работает": "Runtime: running",
     "Seed-режим: отметьте файлы в панели Seed-файлы.": "Seed mode: tick the files in the Seed files panel.",
     "Seed-файл отличается от шаблона: обновление его не трогает, пока не выбрана перезапись.": "The seed file differs from the template: the update leaves it alone unless overwriting is chosen.",
     "Seed-файл: «взять версию пакета» отмечает его для перезаписи выбранных seed-файлов, «оставить мой файл» снимает отметку.": "A seed file: \"take the package version\" ticks it for the overwrite of the selected seed files, \"keep my file\" unticks it.",
@@ -98,6 +106,7 @@
     "Seed-файлы перезаписывает только режим «С перезаписью выбранных seed-файлов».": "Only the mode \"Overwrite the selected seed files\" overwrites seed files.",
     "Seed-файлы совпадают с шаблоном — перезаписывать нечего.": "Seed files match the template — nothing to overwrite.",
     "Seed-файлы сохраняются: ": "Seed files are preserved: ",
+    "Self-report модели": "Model self-report",
     "Stale evidence остаётся видимым, но не считается актуальным доказательством.": "Stale evidence stays visible but does not count as current proof.",
     "Upstream": "Upstream",
     "Upstream — полный закреплённый набор навыков": "Upstream — the complete pinned skill set",
@@ -241,6 +250,7 @@
     "Агенты ищут по коду без индекса.": "Agents search the code without an index.",
     "Адаптеры": "Adapters",
     "Адаптеры runtime": "Runtime adapters",
+    "Адаптеры worker не совпадают с версией harness": "Worker adapters do not match the harness version",
     "Адаптеры не собраны в этом снимке": "The adapters are not collected in this snapshot",
     "Активное время роли не отделено от ожидания в ledger": "The ledger does not separate a role's active time from waiting",
     "Активные": "Active",
@@ -259,6 +269,7 @@
     "Батчи в работе": "Batches in progress",
     "Батчи по состояниям": "Batches by state",
     "Батчи, dispatch и роли: путь задачи от плана до PR.": "Batches, dispatches and roles: a task's path from plan to PR.",
+    "Без runtime оркестрация не работает. Запустите его вне песочницы агента:": "Orchestration does not work without the runtime. Start it outside the agent sandbox:",
     "Без ИИ": "No AI",
     "Без блокеров": "No blockers",
     "Без движения": "Stalled",
@@ -557,6 +568,7 @@
     "Изменить в мастере настройки": "Edit in the setup wizard",
     "Изменён и у вас, и в пакете: обычное обновление остановится, перезапись заменит файл версией пакета.": "Changed both by you and in the package: a normal update stops; overwriting replaces the file with the package version.",
     "Изолированные worktree": "Isolated worktrees",
+    "Изоляция runner недоступна": "Runner isolation is unavailable",
     "Изучить Repo Map": "Explore Repo Map",
     "Имя новой записи": "New entry name",
     "Инвентарь движка контейнеров не собран": "The container engine inventory was not collected",
@@ -572,6 +584,7 @@
     "Инфраструктурные повторы": "Infrastructure retries",
     "Инфраструктурных повторов до остановки": "Infrastructure retries before stopping",
     "Исполнение": "Execution",
+    "Исполняемые файлы QA-команд не найдены": "QA command executables are not found",
     "Использование пайплайна": "Pipeline usage",
     "Использовать блок (снять — убрать его целиком)": "Use the block (clear to remove it entirely)",
     "Использовать параметр (снять — оставить его отсутствующим)": "Use the parameter (untick to leave it absent)",
@@ -671,6 +684,7 @@
     "Копировать CLI": "Copy CLI",
     "Копировать команду": "Copy command",
     "Копировать настройки из:": "Copy settings from:",
+    "Корень проекта не совпадает с Git": "The project root does not match Git",
     "Критерии": "Acceptance",
     "Курсор вне вывода job": "The cursor is outside the job output",
     "Кэш": "Cache",
@@ -769,6 +783,8 @@
     "Неизвестный исход не считается успехом. Действия восстановления выполняются только после подтверждения.": "An unknown outcome is not a success. Recovery actions run only after a confirmation.",
     "Некорректный запрос": "Bad request",
     "Неподходящая версия Python": "Unsuitable Python version",
+    "Нет C-компоновщика cc": "The cc C linker is missing",
+    "Нет блока test_author": "The test_author block is missing",
     "Нет булевого ключа конфигурации для переключения": "No boolean configuration key to switch",
     "Нет данных": "No data",
     "Нет доступа к трекеру": "No access to the tracker",
@@ -777,6 +793,7 @@
     "Нет или повреждён baseline seed-файлов": "The seed file baseline is missing or broken",
     "Нет карты для HEAD": "No map for HEAD",
     "Нет ожидающих решений": "No pending decisions",
+    "Нет потока событий": "No event stream",
     "Нет проверок в этом фильтре. Это не доказывает отсутствие проблем вне списка.": "No checks in this filter. This does not prove there are no problems outside the list.",
     "Нет проверок для этого фильтра": "No checks match this filter",
     "Нет связи с сервером консоли": "No connection to the console server",
@@ -1031,6 +1048,7 @@
     "Показан снимок {age} назад.": "Showing the snapshot from {age} ago.",
     "Показана часть решений. Обновите список после обработки.": "Only part of the decisions is shown. Refresh the list after handling them.",
     "Показано {shown} из {total} · Полный каталог проверок недоступен": "Showing {shown} of {total} · Full check catalog unavailable",
+    "Показаны последние {shown} из {count}.": "Showing the latest {shown} of {count}.",
     "Показатели": "Indicators",
     "Показать": "Show",
     "Показать evidence": "Show evidence",
@@ -1137,6 +1155,7 @@
     "Прогресс": "Progress",
     "Продолжите работу в выбранной сессии или откройте другой проект.": "Continue a session or open another project.",
     "Проект": "Project",
+    "Проект не доверен для тест-автора": "The project is not trusted for the test author",
     "Проект →": "Project →",
     "Проект: {name} · режим: {mode} · отчёт не построен": "Project: {name} · mode: {mode} · no report",
     "Проект: {name} · режим: {mode} · отчёт построен {when}": "Project: {name} · mode: {mode} · report built {when}",
@@ -1163,6 +1182,7 @@
     "Путь к другому проекту": "Path to another project",
     "Путь к локальному Git-проекту": "Path to a local Git project",
     "Путь к проекту слишком длинный": "The project path is too long",
+    "Путь сокета runtime слишком длинный": "The runtime socket path is too long",
     "РАБОТА": "WORK",
     "РАБОЧИЕ СЕССИИ": "WORKING SESSIONS",
     "Работа": "Work",
@@ -1274,6 +1294,7 @@
     "Скиллы": "Skills",
     "Скиллы отличаются от установленной версии Harness": "Skills differ from the installed Harness version",
     "Скилов": "Skills",
+    "Скопировать команду": "Copy the command",
     "Скопируйте текст вручную": "Copy the text manually",
     "Скрыто в этой сессии": "Hidden in this session",
     "Скрытое значение нельзя записать: введите его заново": "A hidden value cannot be written: enter it again",
@@ -1526,6 +1547,8 @@
     "Цикл до PR": "Cycle to PR",
     "Цикл до PR p50 / p95": "Cycle to PR p50 / p95",
     "Частично": "Partial",
+    "Чекпоинтов пока нет.": "No checkpoints yet.",
+    "Чекпоинты": "Checkpoints",
     "Через меню": "Through the menu",
     "Черновик PR консоль не формирует": "The console does not draft a PR",
     "Черновик и запись конфигурации": "Configuration draft and write",
@@ -1636,6 +1659,7 @@
     "да": "yes",
     "дальше": "next",
     "дальше: {role}": "next: {role}",
+    "данные ledger": "ledger data",
     "дата (2026-09-27)": "date (2026-09-27)",
     "дата неизвестна": "date unknown",
     "дерево · ←→ раскрыть": "tree · ←→ expand",
@@ -1651,6 +1675,7 @@
     "доступно {version}": "available {version}",
     "есть": "present",
     "ещё не запускалось": "not run yet",
+    "ещё не отправлен": "not sent yet",
     "ждёт": "waiting",
     "ждёт гейта": "awaiting the gate",
     "ждёт подтверждения": "awaiting approval",
@@ -1726,6 +1751,7 @@
     "не пров.": "unchecked",
     "не проверено": "not checked",
     "не проверено: qa status ещё не запрашивался": "not checked: qa status was not requested yet",
+    "не совпадает с назначенной": "differs from the assigned model",
     "не создан": "not created",
     "не создан: dispatch ещё не создан": "not created: the dispatch is not created yet",
     "не сообщается": "not reported",
@@ -1868,6 +1894,7 @@
     "снимок Home ещё не получен": "the Home snapshot has not arrived yet",
     "снимок проекта не читает runtime store": "the project snapshot does not read the runtime store",
     "совпадает": "matches",
+    "совпадает с назначенной": "matches the assigned model",
     "содержимое скрыто: файл не разобран как JSON": "contents hidden: the file is not valid JSON",
     "соединение": "connection",
     "создание не выполнялось": "not created",
@@ -2047,6 +2074,10 @@
       "en": "Task worktrees are created in worktrees; without write access a task cannot be isolated from the main checkout.",
       "ru": "Рабочие копии задач создаются в worktrees; без записи задачу нельзя изолировать от основного checkout."
     },
+    "environment.c_linker": {
+      "en": "Without the cc C linker cargo cannot link Rust binaries, and Rust tests in QA fail.",
+      "ru": "Без C-компоновщика cc cargo не собирает Rust-бинарники, и Rust-тесты в QA падают."
+    },
     "environment.claude_sandbox": {
       "en": "Without the filesystem sandbox and local Unix socket permission Claude cannot reach the harness runtime.",
       "ru": "Без файлового sandbox и разрешения на локальные Unix-сокеты Claude не достучится до runtime харнесса."
@@ -2115,6 +2146,14 @@
       "en": "The harness and its checks need a minimum Python; an older interpreter fails on syntax and APIs.",
       "ru": "Харнесс и его проверки требуют минимальной версии Python; старый интерпретатор падает на синтаксисе и API."
     },
+    "environment.qa_executables": {
+      "en": "If a QA command's executable is missing from the agent environment, required QA fails only after it starts.",
+      "ru": "Если исполняемого файла QA-команды нет в среде агента, обязательный QA падает уже после запуска."
+    },
+    "environment.runtime_socket_path": {
+      "en": "A socket path over 100 bytes cannot be created: the runtime and the tests that start it fail.",
+      "ru": "Путь сокета длиннее 100 байт не принимается: runtime и тесты, которые его запускают, падают."
+    },
     "environment.symlinks": {
       "en": "Without the right to create symlinks the skill discovery links and some tests do not work.",
       "ru": "Без права создавать symlink discovery-ссылки навыков и часть тестов не работают."
@@ -2179,6 +2218,30 @@
       "en": "The test author writes tests through a protected adapter; without it the TDD Red step is unavailable or not isolated.",
       "ru": "Test-author пишет тесты через защищённый адаптер; без него шаг Red в TDD недоступен или не изолирован."
     },
+    "hooks.test_author_config": {
+      "en": "Without the test_author block the short /fast-implement route does not start the test author.",
+      "ru": "Без блока test_author короткий маршрут /fast-implement не запускает тест-автора."
+    },
+    "hooks.test_author_guard": {
+      "en": "The guard keeps the test author out of everything but test_paths; without it the author stays off.",
+      "ru": "Guard не даёт тест-автору писать вне test_paths; без него автор не включается."
+    },
+    "hooks.test_author_probe": {
+      "en": "The probe checks the runner sandbox before any test runs; without isolation the test author stays off.",
+      "ru": "Probe проверяет песочницу runner до запуска теста; без изоляции тест-автор выключен."
+    },
+    "hooks.test_author_root": {
+      "en": "The preflight takes the project root from Git; another CLAUDE_PROJECT_DIR would bind the author to a different checkout.",
+      "ru": "Preflight берёт корень проекта из Git; другой CLAUDE_PROJECT_DIR привязал бы автора к чужому checkout."
+    },
+    "hooks.test_author_runner": {
+      "en": "The runner runs the selected test in isolation and confirms Red; without it the author cannot hand a test over.",
+      "ru": "Runner запускает выбранный тест в изоляции и подтверждает Red; без него автор не сдаёт тест."
+    },
+    "hooks.test_author_trust": {
+      "en": "The test author starts without a trust dialog, so trust must already be accepted for the checkout or the main checkout of its repository.",
+      "ru": "Тест-автор запускается без диалога доверия, поэтому нужно уже принятое доверие к checkout или к основному checkout его репозитория."
+    },
     "memory.index": {
       "en": "Without the memory index search over ADRs and the glossary is unavailable, and the agent relies on random files.",
       "ru": "Без индекса памяти поиск по ADR и глоссарию недоступен, и агент опирается на случайные файлы."
@@ -2186,6 +2249,10 @@
     "memory.model": {
       "en": "Shows which search slice (FTS5 or vector) answers memory queries, so its answers are not overrated.",
       "ru": "Показывает, каким срезом поиска (FTS5 или векторным) отвечает память, чтобы не переоценивать её ответы."
+    },
+    "orchestration.adapters": {
+      "en": "An outdated or missing adapter starts the worker other than the runtime expects, and the dispatch gets blocked.",
+      "ru": "Устаревший или отсутствующий адаптер запускает worker не так, как ждёт runtime, и dispatch блокируется."
     },
     "orchestration.blocked_batches": {
       "en": "A blocked batch does not move without a human decision.",
@@ -2203,6 +2270,10 @@
       "en": "Orphaned worktrees take space and may hold unsaved work.",
       "ru": "Осиротевшие worktree занимают место и могут содержать несохранённую работу."
     },
+    "orchestration.runtime": {
+      "en": "Without a running harness-runtime serve, orchestration and worktree cleanup do not work.",
+      "ru": "Без запущенного harness-runtime serve оркестрация и очистка worktree не работают."
+    },
     "orchestration.stale_dispatches": {
       "en": "A dispatch without a heartbeat has likely hung or lost its worker and holds the slot.",
       "ru": "Dispatch без heartbeat, скорее всего, завис или потерял worker и держит слот."
@@ -2210,6 +2281,10 @@
     "orchestration.unfinished_batches": {
       "en": "Unfinished batches hold branches and worktrees; the list shows what still waits for a decision.",
       "ru": "Незавершённые batch держат ветки и worktree; список показывает, что ещё ждёт решения."
+    },
+    "orchestration.worker_binaries": {
+      "en": "The runtime starts workers in the serve environment; without claude or codex on its PATH an external worker does not start.",
+      "ru": "Runtime запускает worker в окружении serve; без claude или codex в его PATH внешний worker не стартует."
     },
     "repo_map.tier": {
       "en": "Dispatches get their context from the Repo Map; an incomplete map gives roles a wrong picture of the code.",
@@ -2250,8 +2325,10 @@
     "not a local directory": "каталог вне локального хранилища",
     "referenced by an active batch": "используется активным batch",
     "registered QA worktree or Git unavailable": "зарегистрированный QA worktree или Git недоступен",
+    "runtime does not answer: start `harness-runtime serve --repo <repo>`": "runtime не отвечает: запустите `harness-runtime serve --repo <repo>`",
     "unowned local branch": "ветка вне шаблона проекта",
     "worktree has uncommitted changes": "есть незакоммиченные изменения",
+    "worktree is locked": "worktree заблокирован (`git worktree lock`)",
     "worktree is not registered": "worktree не зарегистрирован",
     "worktree newer than minimum age": "worktree моложе 24 ч",
     "worktree status unavailable": "статус Git недоступен"
@@ -2576,6 +2653,10 @@
       "en": "Worktrees directory",
       "ru": "Каталог рабочих копий"
     },
+    "environment.c_linker": {
+      "en": "C linker for Rust",
+      "ru": "C-компоновщик для Rust"
+    },
     "environment.claude_sandbox": {
       "en": "Claude Code sandbox",
       "ru": "Песочница Claude Code"
@@ -2644,6 +2725,14 @@
       "en": "Python interpreter",
       "ru": "Интерпретатор Python"
     },
+    "environment.qa_executables": {
+      "en": "QA command executables",
+      "ru": "Исполняемые файлы QA-команд"
+    },
+    "environment.runtime_socket_path": {
+      "en": "Runtime socket path",
+      "ru": "Путь сокета runtime"
+    },
     "environment.symlinks": {
       "en": "Symbolic links",
       "ru": "Символические ссылки"
@@ -2708,6 +2797,30 @@
       "en": "Test author hook",
       "ru": "Хук автора тестов"
     },
+    "hooks.test_author_config": {
+      "en": "test_author block",
+      "ru": "Блок test_author"
+    },
+    "hooks.test_author_guard": {
+      "en": "Test author guard",
+      "ru": "Guard тест-автора"
+    },
+    "hooks.test_author_probe": {
+      "en": "Runner isolation probe",
+      "ru": "Probe изоляции runner"
+    },
+    "hooks.test_author_root": {
+      "en": "Test author project root",
+      "ru": "Корень проекта тест-автора"
+    },
+    "hooks.test_author_runner": {
+      "en": "Test author runner",
+      "ru": "Runner тест-автора"
+    },
+    "hooks.test_author_trust": {
+      "en": "Test author trust",
+      "ru": "Доверие для тест-автора"
+    },
     "memory.index": {
       "en": "Memory index",
       "ru": "Индекс памяти"
@@ -2715,6 +2828,10 @@
     "memory.model": {
       "en": "Memory model",
       "ru": "Модель памяти"
+    },
+    "orchestration.adapters": {
+      "en": "Worker adapters",
+      "ru": "Адаптеры worker"
     },
     "orchestration.blocked_batches": {
       "en": "Blocked batches",
@@ -2732,6 +2849,10 @@
       "en": "Orphaned worktrees",
       "ru": "Брошенные рабочие копии"
     },
+    "orchestration.runtime": {
+      "en": "Runtime process",
+      "ru": "Процесс runtime"
+    },
     "orchestration.stale_dispatches": {
       "en": "Stale dispatches",
       "ru": "Зависшие dispatch"
@@ -2739,6 +2860,10 @@
     "orchestration.unfinished_batches": {
       "en": "Unfinished batches",
       "ru": "Незавершённые batch"
+    },
+    "orchestration.worker_binaries": {
+      "en": "Worker binaries",
+      "ru": "Бинарники worker"
     },
     "repo_map.tier": {
       "en": "Repo Map tier",

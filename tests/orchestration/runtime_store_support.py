@@ -3,12 +3,14 @@ and the real ``harness-runtime`` binary."""
 
 from __future__ import annotations
 
+import atexit
 import collections
 import contextlib
 import hashlib
 import json
 import os
 import queue
+import re
 import shutil
 import signal
 import subprocess
@@ -16,9 +18,12 @@ import sys
 import tempfile
 import threading
 import time
+import unittest
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
+from unittest import mock
 
 import pytest
 
@@ -31,12 +36,14 @@ from harness.orchestration.ledger.lifecycle import (
     DispatchStatusRecord,
     JsonObject,
     JsonValue,
+    RECORD_DIRECTORIES,
     LifecycleLedger,
     PlanRecord,
     _canonical,
 )
 
 from .fake_clock import SITE, FakeClock
+from .legacy_state import seed_file_ledger
 
 ROOT = Path(__file__).resolve().parents[2]
 STATE_REL = Path(".harness/orchestration/state")
@@ -109,8 +116,7 @@ def build_state(
 ) -> LifecycleLedger:
     """A repository whose state directory a 1.x installation wrote: one batch of two dispatches,
     the first reported."""
-    ledger = LifecycleLedger(repo / STATE_REL)
-    ledger.ensure()
+    ledger = seed_file_ledger(repo / STATE_REL)
     generation = ledger.records_root()
     first, second = DISPATCH_IDS
     dispatches = [
@@ -420,16 +426,21 @@ def add_coordinator_batch(
     ticket: str,
     dispatch: bool = True,
     allowed_paths: tuple[str, ...] = ("**",),
+    seed: bool = True,
 ) -> tuple[dict[str, str], JsonObject]:
     """A planned and approved batch of the file ledger of ``repo`` with one approved architect
     dispatch, in its own issue branch and ``worktree``: the ids and the brief. Without
-    ``dispatch`` the batch stays planned, and the ids and the brief name no dispatch."""
+    ``dispatch`` the batch stays planned, and the ids and the brief name no dispatch. A repository
+    without state gets an empty file ledger first, unless ``seed`` is false."""
     import argparse
 
     from harness.orchestration import coordinator
 
     branch = f"feature/issue-{ticket.removeprefix('#')}-seam"
     _git(repo, "worktree", "add", "-b", branch, str(worktree), "master")
+    if seed and LifecycleLedger(repo / STATE_REL).is_new_project():
+        # The file ledger of installation 1.x, the source of a migration (ADR 0036).
+        seed_file_ledger(repo / STATE_REL)
 
     def args(**values: object) -> argparse.Namespace:
         return argparse.Namespace(repo=str(repo), state_dir=None, **values)
@@ -695,9 +706,291 @@ class ServingRuntime:
             shutil.rmtree(self.xdg, ignore_errors=True)
 
 
+# -- the runtime store of a new project (ADR 0036) ----------------------------------------------------
+
+_STORE_TEMPLATE: list[Path] = []
+
+
+def store_template() -> Path:
+    """The state directory of an empty runtime store, made once per test process by
+    ``harness-runtime init``: a test copies it instead of paying for the init."""
+    if not _STORE_TEMPLATE:
+        base = Path(tempfile.mkdtemp(prefix="store-template-"))
+        atexit.register(shutil.rmtree, base, True)
+        result = subprocess.run(
+            [str(runtime_binary()), "init", "--repo", str(base), *MIGRATE_APPROVAL],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        _STORE_TEMPLATE.append(base / STATE_REL)
+    return _STORE_TEMPLATE[0]
+
+
+def new_project_store(repo: Path) -> Path:
+    """Give ``repo``, a repository without orchestration state, the runtime store
+    ``harness-runtime init`` would create: a copy of ``store_template``. Returns the state
+    directory."""
+    state = repo / STATE_REL
+    state.mkdir(parents=True, exist_ok=True)
+    # A project ignores its state directory; `info/exclude` keeps the committed tree unchanged.
+    exclude = Path(_git(repo, "rev-parse", "--git-path", "info/exclude"))
+    exclude = exclude if exclude.is_absolute() else repo / exclude
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    with exclude.open("a", encoding="utf-8") as handle:
+        handle.write(f"/{STATE_REL.as_posix()}/\n")
+    for name in ("runtime.db", "AUTHORITY.json", "ledger.json"):
+        shutil.copyfile(store_template() / name, state / name)
+    return state
+
+
+def serve_new_project(repo: Path) -> ServingRuntime:
+    """``new_project_store`` and a runtime serving it; the caller stops it."""
+    new_project_store(repo)
+    return ServingRuntime(repo)
+
+
+def serve_new_project_for(
+    case: unittest.TestCase,
+    repo: Path,
+    *,
+    register: Callable[[Callable[[], object]], object] | None = None,
+) -> ServingRuntime:
+    """``serve_new_project`` for a ``unittest`` case: the runtime stops at its cleanup, and the
+    in-process coordinator of the case reaches it through ``XDG_RUNTIME_DIR``. ``register`` takes
+    the cleanups instead of ``case.addCleanup``."""
+    cleanup = register or case.addCleanup
+    runtime = serve_new_project(repo)
+    cleanup(runtime.stop)
+    patch = mock.patch.dict(os.environ, runtime.environ)
+    patch.start()
+    cleanup(patch.stop)
+    return runtime
+
+
+def bind_store_view_for(
+    case: unittest.TestCase,
+    repo: Path,
+    *,
+    register: Callable[[Callable[[], object]], object] | None = None,
+) -> StoreRecords:
+    """Bind one read view of the store of ``repo`` for the whole ``unittest`` case, as the view of
+    one command (``command_state``) is bound: every coordinator block refreshes it, and the record
+    readers of the coordinator answer from it. Returns the ``StoreRecords`` of the case.
+    ``register`` takes the cleanups instead of ``case.addCleanup``."""
+    cleanup = register or case.addCleanup
+    from harness.orchestration.core import state_view
+    from harness.orchestration.ledger import ledger_ops
+
+    view = state_view.StateView((repo / STATE_REL).resolve(), ledger_ops._runtime_fetch(repo))
+    bound = state_view.bind(view)
+    bound.__enter__()
+    cleanup(lambda: bound.__exit__(None, None, None))
+    records = StoreRecords(repo, view)
+    cleanup(lambda: shutil.rmtree(records.snapshot, True))
+    return records
+
+
+class StoreRecords:
+    """The store counterpart of ``LifecycleLedger.records_root()`` for a test.
+
+    Calling it reads every record collection of the store in one ``state.read`` and the text
+    artifacts from ``runtime.db`` read-only, and writes them into a real directory in the layout of
+    the file ledger, so a test reads them with ``pathlib``. The copy is a snapshot: a test that
+    writes into it does not change the store."""
+
+    def __init__(self, repo: Path, view: object) -> None:
+        self.repo = repo
+        self.view = view
+        self.snapshot = Path(tempfile.mkdtemp(prefix="store-records-"))
+        self.virtual_root = (repo / STATE_REL).resolve() / "runtime.db"
+
+    def __call__(self) -> Path:
+        import sqlite3
+
+        from harness.orchestration.ledger import ledger_ops
+
+        refresh = getattr(self.view, "refresh", None)
+        if refresh is not None:
+            refresh()
+        fetched, _, _ = ledger_ops._runtime_fetch(self.repo)(STORE_RECORD_COLLECTIONS, [], None)
+        shutil.rmtree(self.snapshot, ignore_errors=True)
+        for name in STORE_RECORD_COLLECTIONS:
+            (self.snapshot / name).mkdir(parents=True)
+        for relative, record in fetched.items():
+            path = self.snapshot / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        database = self.repo / STATE_REL / "runtime.db"
+        with contextlib.closing(
+            sqlite3.connect(f"file:{database}?mode=ro", uri=True)
+        ) as connection:
+            for relative, data in connection.execute("SELECT path, bytes FROM artifact"):
+                path = self.snapshot / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data if isinstance(data, bytes) else str(data).encode("utf-8"))
+        return self.snapshot
+
+    def stored(self, path: Path | str) -> Path:
+        """The snapshot copy of ``path``, a virtual store path a coordinator answer names (such as
+        the ``report`` of ``report complete``); a real path stays as it is."""
+        try:
+            relative = Path(path).relative_to(self.virtual_root)
+        except ValueError:
+            return Path(path)
+        return self() / relative
+
+
+# The record collections of the store a test snapshot holds: the record directories of the file
+# ledger, which the runtime serves as collections (``audit`` is the chain and the imported audit).
+STORE_RECORD_COLLECTIONS = RECORD_DIRECTORIES
+
+
+class RuntimeHandle(Protocol):
+    """What a client of a test needs from a serving runtime: its environment and its clock."""
+
+    environ: dict[str, str]
+    clock: FakeClock | None
+
+    def stop(self) -> None: ...
+
+
+HOOKS = ROOT / "harness" / "project" / "hooks"
+
+
+def install_project_hooks(project: Path) -> Path:
+    """The project hooks and the Claude Code settings of the template in ``project``: the files
+    ``harness init`` installs into ``.claude/``; the settings document."""
+    shutil.copytree(
+        HOOKS, project / ".claude" / "hooks", ignore=shutil.ignore_patterns("__pycache__")
+    )
+    settings = project / ".claude" / "settings.local.json"
+    shutil.copyfile(ROOT / "harness" / "project" / "settings.local.json.tmpl", settings)
+    return settings
+
+
+def hook_handlers(settings: Path, event: str, tool: str = "") -> list[str]:
+    """The commands of the handlers that Claude Code runs for ``event`` and ``tool``."""
+    document = json.loads(settings.read_text(encoding="utf-8"))
+    commands: list[str] = []
+    for group in document["hooks"].get(event, []):
+        matcher = str(group.get("matcher", ""))
+        if matcher in ("", "*") or (tool and re.fullmatch(matcher, tool)):
+            commands.extend(str(handler["command"]) for handler in group["hooks"])
+    return commands
+
+
+def run_handler(
+    command: str, project: Path, payload: JsonObject, env: dict[str, str]
+) -> subprocess.CompletedProcess[str]:
+    """One hook handler as Claude Code runs it: ``/bin/sh -c`` in a new session, the payload on
+    stdin, ``CLAUDE_PROJECT_DIR`` and ``CLAUDE_PID`` set."""
+    environ = {
+        key: value for key, value in os.environ.items() if key != "SANDBOX_RUNTIME"
+    }
+    environ.update(
+        {"CLAUDE_PROJECT_DIR": str(project), "CLAUDE_PID": str(os.getpid()), **env}
+    )
+    return subprocess.run(
+        ["/bin/sh", "-c", command],
+        input=json.dumps(payload),
+        capture_output=True,
+        text=True,
+        env=environ,
+        cwd=project,
+        start_new_session=True,
+        check=False,
+        timeout=120,
+    )
+
+
+def autostart_message(done: subprocess.CompletedProcess[str]) -> str:
+    """The ``systemMessage`` of the ``runtime-autostart`` handler, or an empty string."""
+    text = done.stdout.strip()
+    return str(json.loads(text).get("systemMessage", "")) if text else ""
+
+
+class HookStartedRuntime:
+    """``harness-runtime serve`` that the installed ``runtime-autostart`` hook started before a
+    coordinator command of ``repo`` (ADR 0031): the binary is ``harness-runtime`` on the ``PATH``
+    of the hook, ``env`` reaches the runtime through the hook. ``stop`` runs the ``Stop`` handler
+    and waits until the runtime stopped itself."""
+
+    def __init__(self, repo: Path, project: Path, env: dict[str, str]) -> None:
+        self.repo = repo
+        self.project = project
+        self.settings = install_project_hooks(project)
+        self.clock: FakeClock | None = None
+        self.xdg = Path(tempfile.mkdtemp(prefix="hr", dir=SHORT_TMP)).resolve()
+        self.environ = {"XDG_RUNTIME_DIR": str(self.xdg)}
+        binaries = project / "bin"
+        binaries.mkdir()
+        (binaries / "harness-runtime").symlink_to(runtime_binary())
+        path = os.pathsep.join(
+            part
+            for part in (env.get("PATH", ""), str(binaries), os.environ.get("PATH", ""))
+            if part
+        )
+        # The session project is ``repo``: the hook runs only its main checkout's binary. The
+        # handlers name the hooks installed in ``project`` by their path.
+        self.hook_env = {**env, "PATH": path, "CLAUDE_PROJECT_DIR": str(repo), **self.environ}
+        [command] = self.handlers("PreToolUse", "Bash")
+        self.command = command
+        done = self.pre_tool(f"--repo {repo} dispatch status")
+        message = autostart_message(done)
+        found = _PID.search(message)
+        assert done.returncode == 0 and found, (done.stdout, done.stderr)
+        self.pid = int(found.group(1))
+        self.message = message
+
+    def handlers(self, event: str, tool: str = "") -> list[str]:
+        """The ``runtime-autostart`` handlers of ``event`` with the installed hook path."""
+        return [
+            handler.replace("${CLAUDE_PROJECT_DIR}", str(self.project))
+            for handler in hook_handlers(self.settings, event, tool)
+            if "runtime-autostart.sh" in handler
+        ]
+
+    def pre_tool(self, arguments: str) -> subprocess.CompletedProcess[str]:
+        """The autostart handler before ``coordinator.py <arguments>`` of this repository."""
+        coordinator = self.repo / ".harness" / "orchestration" / "coordinator.py"
+        payload: JsonObject = {
+            "session_id": "hook-runtime",
+            "hook_event_name": "PreToolUse",
+            "tool_name": "Bash",
+            "tool_input": {"command": f'python3 "{coordinator}" {arguments}'},
+            "cwd": str(self.repo),
+        }
+        return run_handler(self.command, self.project, payload, self.hook_env)
+
+    def socket_exists(self) -> bool:
+        return any(self.xdg.rglob("*.sock"))
+
+    def stop(self) -> None:
+        payload: JsonObject = {
+            "session_id": "hook-runtime",
+            "hook_event_name": "Stop",
+            "stop_hook_active": False,
+            "cwd": str(self.repo),
+        }
+        for command in self.handlers("Stop"):
+            run_handler(command, self.project, payload, self.hook_env)
+        deadline = time.monotonic() + 15
+        while self.socket_exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        if sys.platform != "win32":  # signal.SIGKILL is POSIX-only
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(self.pid, signal.SIGKILL)
+        shutil.rmtree(self.xdg, ignore_errors=True)
+
+
+_PID = re.compile(r"pid (\d+)")
+
+
 def store_call(
     repo: Path,
-    runtime: ServingRuntime,
+    runtime: RuntimeHandle,
     operation: str,
     payload: JsonObject | None = None,
     *,
@@ -726,7 +1019,7 @@ def store_call(
     return {**reply.result, "_revision": reply.revision}
 
 
-def store_records(repo: Path, runtime: ServingRuntime, *paths: str) -> dict[str, JsonObject]:
+def store_records(repo: Path, runtime: RuntimeHandle, *paths: str) -> dict[str, JsonObject]:
     """The records of the runtime store at ``paths``."""
     answer = store_call(repo, runtime, "state.read", {"paths": list(paths)})
     records = answer["records"]
@@ -834,7 +1127,7 @@ class Store:
 
 
 def coordinator_popen(
-    repo: Path, runtime: ServingRuntime, *args: str
+    repo: Path, runtime: RuntimeHandle, *args: str
 ) -> subprocess.Popen[str]:
     """The coordinator CLI against ``repo`` as a process that the test waits for later."""
     return subprocess.Popen(
@@ -852,7 +1145,7 @@ def coordinator_popen(
     )
 
 
-def cli_environ(runtime: ServingRuntime | None) -> dict[str, str]:
+def cli_environ(runtime: RuntimeHandle | None) -> dict[str, str]:
     """The environment of a coordinator CLI process that reaches ``runtime`` and shares its clock."""
     environ = {**os.environ, **(runtime.environ if runtime else {})}
     site = [str(SITE)] if runtime is not None and runtime.clock is not None else []
@@ -861,7 +1154,7 @@ def cli_environ(runtime: ServingRuntime | None) -> dict[str, str]:
 
 
 def coordinator_with(
-    repo: Path, runtime: ServingRuntime | None, *args: str, python: str | None = None
+    repo: Path, runtime: RuntimeHandle | None, *args: str, python: str | None = None
 ) -> subprocess.CompletedProcess[str]:
     """The coordinator CLI against ``repo``, reaching the runtime of ``runtime``."""
     command = (
@@ -906,6 +1199,103 @@ while not (control / "release").exists():
     time.sleep(0.05)
 code = control / "exit_code"
 sys.exit(int(code.read_text()) if code.exists() else 0)
+"""
+
+# The worker part of a fake `claude` or `codex app-server` behind a real adapter; it lives in the
+# control directory and follows ``worker.json`` there: ``hang`` sleeps until it is killed;
+# otherwise it waits ``delay`` seconds, writes each ``writes`` path (absolute path -> text) as its
+# native filesystem policy ``may_write`` allows, with ``report`` runs the lifecycle the prompt asks
+# for (self-report from its Git top-level, heartbeat, report submit) and returns ``exit_code``.
+# ``worker.log`` holds one JSON line per event and per coordinator answer.
+FAKE_WORKER = """
+import json, os, subprocess, sys, time
+from pathlib import Path
+control = Path(__file__).resolve().parent
+plan = json.loads((control / "worker.json").read_text(encoding="utf-8"))
+
+def record(**fields):
+    with open(control / "worker.log", "a", encoding="utf-8") as log:
+        log.write(json.dumps(fields) + "\\n")
+
+def may_write(path):
+    return True
+
+def lifecycle():
+    record(event="started", pid=os.getpid(), pgid=os.getpgid(0))
+    while plan.get("hang"):
+        time.sleep(0.05)
+    time.sleep(plan.get("delay", 0))
+    for target, text in plan.get("writes", {}).items():
+        if may_write(target):
+            Path(target).write_text(text, encoding="utf-8")
+        record(event="write", path=target, written=may_write(target))
+    if plan.get("report"):
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True,
+                             text=True, check=True).stdout.strip()
+        cli = [sys.executable, plan["coordinator"], "--repo", plan["repo"]]
+        path = os.pathsep.join(p for p in (os.environ.get("PYTHONPATH"), plan["root"]) if p)
+        for step in (
+            ["dispatch", "self-report", "--dispatch", plan["dispatch"], "--model",
+             plan["model"], "--worktree", top],
+            ["dispatch", "heartbeat", "--dispatch", plan["dispatch"]],
+            ["report", "submit", "--file", plan["report"]],
+        ):
+            done = subprocess.run(cli + step, capture_output=True, text=True,
+                                  stdin=subprocess.DEVNULL, env={**os.environ, "PYTHONPATH": path})
+            record(event=" ".join(step[:2]), code=done.returncode, stderr=done.stderr[-2000:])
+    return plan.get("exit_code", 0)
+"""
+
+FAKE_CLAUDE = """
+record(event="claude", argv=sys.argv[1:], stdin=sys.stdin.read())
+sys.exit(lifecycle())
+"""
+
+# A fake `codex app-server`: it answers the adapter's requests with the identity it was asked
+# for and, after turn/start, runs the worker and ends the turn (or exits with its code). The worker
+# writes only where the adapter's ``--config`` permission profile grants ``write`` to the most
+# specific path entry, the way the native profile resolves a path.
+FAKE_CODEX = """
+import tomllib
+if sys.argv[1:2] != ["app-server"]:
+    sys.exit(9)
+config = {}
+for flag, value in zip(sys.argv, sys.argv[1:]):
+    if flag == "--config":
+        config.update(tomllib.loads(value))
+filesystem = config["permissions"][config["default_permissions"]]["filesystem"]
+
+def may_write(path):
+    target = os.path.realpath(path)
+    matched, access = "", filesystem.get(":root", "none")
+    for root, mode in filesystem.items():
+        root = os.path.realpath(root) if not root.startswith(":") else ""
+        if root and len(root) > len(matched) and (
+            target == root or target.startswith(root + os.sep)
+        ):
+            matched, access = root, mode
+    return access == "write"
+for line in sys.stdin:
+    request = json.loads(line)
+    method, params = request.get("method"), request.get("params", {})
+    if method == "initialize":
+        result = {}
+    elif method == "thread/start":
+        result = {"thread": {"id": "thread-supervised"}, "model": params["model"],
+                  "cwd": params["cwd"],
+                  "reasoningEffort": params.get("config", {}).get("model_reasoning_effort"),
+                  "activePermissionProfile": {"id": params["permissions"]}}
+    elif method == "turn/start":
+        result = {"turn": {"id": "turn-supervised", "status": "inProgress"}}
+    else:
+        continue
+    print(json.dumps({"id": request["id"], "result": result}), flush=True)
+    if method == "turn/start":
+        code = lifecycle()
+        if code:
+            sys.exit(code)
+        print(json.dumps({"method": "turn/completed",
+                          "params": {"turn": {"status": "completed"}}}), flush=True)
 """
 
 
@@ -1026,6 +1416,7 @@ class Supervised:
         self.adapter.write_text(
             FAKE_ADAPTER.format(control=str(self.control)), encoding="utf-8"
         )
+        self.adapter_args: list[str] = []
         self.runtime = ServingRuntime(
             repo, env=env, host_runtime_dir=host_runtime_dir, clock=clock
         )
@@ -1076,7 +1467,38 @@ class Supervised:
             self.dispatch,
             "--adapter",
             str(self.adapter),
+            *(f"--adapter-arg={argument}" for argument in self.adapter_args),
         ]
+
+    def use_adapter(self, runtime: str, **plan: object) -> None:
+        """Send through the real ``harness/adapters/<runtime>_worker.py`` (claude or codex)
+        with a fake binary that follows ``plan`` (``FAKE_WORKER``)."""
+        binary = self.control / f"fake-{runtime}"
+        script = FAKE_CLAUDE if runtime == "claude" else FAKE_CODEX
+        binary.write_text(
+            f"#!{sys.executable}\n{FAKE_WORKER}{script}", encoding="utf-8"
+        )
+        binary.chmod(0o755)
+        defaults = {
+            "repo": str(self.repo),
+            "root": str(ROOT),
+            "coordinator": str(ROOT / "harness/orchestration/coordinator.py"),
+            "dispatch": self.dispatch,
+            "model": self.brief["resolved_model"],
+        }
+        (self.control / "worker.json").write_text(
+            json.dumps({**defaults, **plan}), encoding="utf-8"
+        )
+        self.adapter = ROOT / "harness" / "adapters" / f"{runtime}_worker.py"
+        self.adapter_args = [f"--{runtime}-bin={binary}"]
+
+    def worker_log(self) -> list[JsonObject]:
+        """The events the fake binary of ``use_adapter`` logged."""
+        log = self.control / "worker.log"
+        if not log.exists():
+            return []
+        lines = log.read_text(encoding="utf-8").splitlines()
+        return [json.loads(line) for line in lines]
 
     def send(self) -> subprocess.CompletedProcess[str]:
         return self.run(*self.send_command())

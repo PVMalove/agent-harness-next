@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -31,6 +33,7 @@ def run(ctx: SimpleNamespace) -> None:
     # the Standards/Spec axis that was Clean is inherited without re-analysis, only the axis that
     # was Warning is re-checked, and the follow-up is always a new independent dispatch.
     delta_state = test_root / "delta-review-state"
+    seed_file_ledger(delta_state)
     run_step(
         ["git", "branch", "feature/issue-906-delta-review"],
         cwd=orchestration_project,

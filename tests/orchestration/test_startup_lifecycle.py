@@ -18,9 +18,9 @@ from tests.orchestration.fake_clock import FakeClock
 from tests.orchestration.test_coordinator import ORCHESTRATION_ROOT
 
 
-@pytest.fixture
-def launch() -> Iterator[recovery_tests.RecoveryTests]:
+def _external_launch(*, file_ledger: bool) -> Iterator[recovery_tests.RecoveryTests]:
     fixture = recovery_tests.RecoveryTests()
+    fixture.file_ledger = file_ledger
     fixture.setUp()
     try:
         fixture._use_external_developer()
@@ -31,6 +31,18 @@ def launch() -> Iterator[recovery_tests.RecoveryTests]:
         yield fixture
     finally:
         fixture.tearDown()
+
+
+@pytest.fixture
+def launch() -> Iterator[recovery_tests.RecoveryTests]:
+    yield from _external_launch(file_ledger=False)
+
+
+@pytest.fixture
+def adapter_launch() -> Iterator[recovery_tests.RecoveryTests]:
+    """The adapter launch of ``dispatch send`` and its receipt: on the runtime store the runtime
+    supervises an external dispatch itself (ADR 0022), so these tests run on a 1.x ledger."""
+    yield from _external_launch(file_ledger=True)
 
 
 def cli(
@@ -61,8 +73,9 @@ def cli(
 
 
 def test_send_keeps_the_adapter_receipt_for_observation(
-    launch: recovery_tests.RecoveryTests,
+    adapter_launch: recovery_tests.RecoveryTests,
 ) -> None:
+    launch = adapter_launch
     batch = launch._create_batch()
     brief = launch._dispatch(batch["batch_id"], "architect")["brief"]
     adapter = launch.tmp / "adapter.py"
@@ -89,8 +102,9 @@ def test_send_keeps_the_adapter_receipt_for_observation(
 
 
 def test_worker_can_self_report_before_adapter_returns(
-    launch: recovery_tests.RecoveryTests,
+    adapter_launch: recovery_tests.RecoveryTests,
 ) -> None:
+    launch = adapter_launch
     batch = launch._create_batch()
     brief = launch._dispatch(batch["batch_id"], "architect")["brief"]
     adapter = launch.tmp / "reporting-adapter.py"
@@ -136,8 +150,9 @@ def test_worker_can_self_report_before_adapter_returns(
     not sys.platform.startswith("linux"), reason="local /proc identity evidence"
 )
 def test_worker_that_exited_after_self_report_without_a_report_is_observed(
-    launch: recovery_tests.RecoveryTests,
+    adapter_launch: recovery_tests.RecoveryTests,
 ) -> None:
+    launch = adapter_launch
     batch = launch._create_batch()
     brief = launch._dispatch(batch["batch_id"], "architect")["brief"]
     worker_command = [
@@ -212,9 +227,10 @@ def test_worker_that_exited_after_self_report_without_a_report_is_observed(
 )
 @pytest.mark.parametrize("terminal_only", [False, True])
 def test_dead_worker_is_observed_before_the_heartbeat_stale_deadline(
-    launch: recovery_tests.RecoveryTests,
+    adapter_launch: recovery_tests.RecoveryTests,
     terminal_only: bool,
 ) -> None:
+    launch = adapter_launch
     config_path = launch.repo / ".harness/orchestration.json"
     config = json.loads(config_path.read_text())
     config["approval_policy"] = "auto"
@@ -299,8 +315,9 @@ def test_dead_worker_is_observed_before_the_heartbeat_stale_deadline(
 
 
 def test_startup_timeout_never_proves_termination_for_legacy_adapter(
-    launch: recovery_tests.RecoveryTests,
+    adapter_launch: recovery_tests.RecoveryTests,
 ) -> None:
+    launch = adapter_launch
     config_path = launch.repo / ".harness/orchestration.json"
     config = json.loads(config_path.read_text())
     config["execution_policy"] = {"worker_startup_timeout_seconds": 1}
@@ -344,8 +361,9 @@ def test_startup_timeout_never_proves_termination_for_legacy_adapter(
 
 
 def test_observe_reads_incremental_runtime_output_without_exposing_thinking(
-    launch: recovery_tests.RecoveryTests,
+    adapter_launch: recovery_tests.RecoveryTests,
 ) -> None:
+    launch = adapter_launch
     batch = launch._create_batch()
     brief = launch._dispatch(batch["batch_id"], "architect")["brief"]
     log = launch.repo / ".harness/.sandboxes/logs/workers/stream.jsonl"
@@ -478,8 +496,9 @@ def test_observe_explains_in_process_stream_and_lists_checkpoints(
 
 
 def test_receipt_does_not_forward_unrelated_adapter_output(
-    launch: recovery_tests.RecoveryTests,
+    adapter_launch: recovery_tests.RecoveryTests,
 ) -> None:
+    launch = adapter_launch
     batch = launch._create_batch()
     brief = launch._dispatch(batch["batch_id"], "architect")["brief"]
     adapter = launch.tmp / "noisy-adapter.py"

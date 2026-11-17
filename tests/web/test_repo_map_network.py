@@ -15,6 +15,7 @@ from harness.console.kernel import web_catalog
 from harness.console.kernel.repo_map import BUILD_WARNING
 from harness.console.kernel.repo_map_snapshot import RepoMapFacts
 from harness.repo_map.contract import validation_error
+from tests.console._posix import posix
 
 
 def test_browser_reads_tui_facts_and_builds_a_pinned_map_across_disconnect(
@@ -130,4 +131,6 @@ def test_browser_fixture_is_the_existing_tui_snapshot() -> None:
     from tests.console._screen_facts import repo_map_facts
 
     path = Path(__file__).parent / "fixtures" / "repo-map.json"
-    assert json.loads(path.read_text(encoding="utf-8")) == repo_map_facts().to_payload()
+    assert json.loads(path.read_text(encoding="utf-8")) == posix(
+        repo_map_facts().to_payload()
+    )
