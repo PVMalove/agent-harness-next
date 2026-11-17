@@ -46,7 +46,7 @@
 /* Diagnostics: the applied fixes under the master-detail grid, the fix commands below them and
    the copy confirmation beside the command button. */
 .diag-page > .command-refusal { margin-bottom: 12px; }
-.diag-fixes { margin-top: 20px; }
+.diag-fixes { margin: 20px 16px 0; }
 /* Inside the v3 panels of Diagnostics · Проверки the list and the detail drop their own frame. */
 .ds-diag-checks .diag-list-bare,
 .ds-diag-checks .diag-detail-panel { border: 0; border-radius: 0; }
@@ -54,28 +54,44 @@
 .ds-diag-checks #diag-detail { display: block; }
 .diag-fixes .panel-head { padding: 12px 16px; }
 .diag-fixes-list { margin: 0; padding: 12px 16px 12px 32px; font-size: var(--fs-1); line-height: 1.6; }
-.diag-commands { margin-top: 20px; }
+.diag-commands { margin: 20px 16px 16px; }
 .diag-action { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .diag-facts dd code { color: var(--selfg); font: var(--fs-1) var(--mono); word-break: break-all; }
+/* Check rows: line icons at 14 px (the mockup draws 12 and 13). */
+.diag-status-icon .hi,
+.diag-chevron .hi { width: 14px; height: 14px; }
+/* The snapshot age in the summary: the clock and the time stay on one line. */
+#diag-cache { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+/* The fix commands live in a narrow detail panel: rows stack instead of a 700 px table that scrolls the run button away. */
+.diag-commands .harness-command-head { display: none; }
+.diag-commands .harness-command-table { overflow: visible; }
+.diag-commands .harness-command-row { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 8px; min-width: 0; }
+.diag-commands .harness-command-row > code { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+.diag-commands .harness-command-row > .btn { grid-column: 2; grid-row: 1; justify-self: end; }
+.diag-commands .harness-command-row > span,
+.diag-commands .harness-command-row > em { grid-column: 1 / -1; }
+.diag-commands .harness-command-row > span { white-space: normal; }
+.diag-commands .harness-command-row > .command-inputs:empty { display: none; }
 /* Harness · Обзор: the maintenance panel under the installation and pipeline usage panels. */
 .harness-page > .command-refusal { margin-bottom: 12px; }
 .harness-maintenance .panel-head { padding: 12px 16px; flex-wrap: wrap; gap: 8px; }
 .harness-maintenance-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .harness-maintenance-actions .btn { padding: 4px 8px; font-size: var(--fs-1); }
 .harness-maintenance-body { padding: 12px 16px 12px; font-size: var(--fs-1); }
-.harness-maintenance-body h3 { margin: 8px 0 4px; color: var(--muted); font-size: var(--fs-1); }
+.harness-maintenance-body h3 { display: flex; align-items: center; gap: 8px; margin: 8px 0 4px; color: var(--muted); font-size: var(--fs-1); }
 .harness-maintenance-body h3:first-child { margin-top: 0; }
 .harness-maintenance-body p { margin: 0 0 8px; }
 .harness-maintenance-lines { margin: 0; padding: 0; list-style: none; font: var(--fs-1)/1.7 var(--mono); }
 .harness-maintenance-error { color: var(--err); }
-.harness-plan { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 6px; background: #222832; font: var(--fs-1)/1.7 var(--mono); overflow-wrap: anywhere; }
-.worktree-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px solid #363f4b; font: var(--fs-1) var(--mono); }
+.harness-plan { margin: 8px 0; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 8px; background: var(--bg); font: var(--fs-1)/1.7 var(--mono); overflow-wrap: anywhere; }
+.harness-plan code { word-break: break-all; }
+.worktree-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 4px 0; border-top: 1px solid var(--rule); font: var(--fs-1) var(--mono); }
 .worktree-row > span { min-width: 0; overflow-wrap: anywhere; }
 .worktree-row .btn { flex: none; padding: 4px 8px; font-size: var(--fs-1); }
 /* Reports: the mockup's report rows and one status/search row; the TUI's text filters fold under
    «Ещё фильтры», the report sections and the QA log keep the untrusted text wrapped. */
 .reports-page > .command-refusal { margin-bottom: 12px; }
-.reports-page .report-row.on { background: #2d3540; }
+.reports-page .report-row.on { background: var(--ds-raised); }
 .report-more-filters { margin-top: 8px; font-size: var(--fs-1); }
 .report-more-filters > summary { color: var(--muted); cursor: pointer; }
 .report-more-filters .report-filters { display: grid; gap: 8px; padding: 8px 0 0; }
@@ -94,13 +110,12 @@
 .report-line-title { color: var(--muted); }
 .qa-lane-panel .report-qa-log { border-top: 1px solid var(--rule); }
 .qa-lane-panel .report-qa-log > summary { padding: 8px 16px; color: var(--muted); font-size: var(--fs-1); cursor: pointer; }
-#reports-quality-kpi { margin-bottom: 12px; }
+#reports-quality-kpi { margin: 0 0 12px; padding: 12px 12px 0; }
 #reports-readiness .orch-pill { white-space: nowrap; min-width: max-content; }
 /* Publication: the batch selector sits in the Release candidate head, a preflight pill column
    fits its widest word, and the human decision words its reasons. */
-.publish-batch select { max-width: 220px; padding: 2px 8px; border: 1px solid var(--rule); border-radius: 5px; background: #1e242d; color: var(--fg); font: var(--fs-1) var(--mono); }
 .publish-meta > span { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-.publish-meta .hi { width: 12px; height: 12px; flex: none; }
+.publish-meta .hi { width: 14px; height: 14px; flex: none; }
 .publish-check { grid-template-columns: minmax(96px, max-content) minmax(0, 1fr); }
 .publish-check .orch-pill { white-space: nowrap; }
 .publish-decision-text { min-width: 0; flex: 1 1 320px; }
@@ -166,6 +181,8 @@
 .recovery-inputs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
 .recovery-inputs input { flex: 1 1 160px; min-width: 0; }
 .command-confirm .board-confirm-note { white-space: pre-line; overflow-wrap: anywhere; }
+/* The run confirmation is a small centred modal; the ticket drawer rules (.board-dialog above) must not stretch it to the window height. */
+.board-dialog.command-confirm { margin: auto; width: min(520px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); border-radius: 9px; border-right-width: 1px; animation: none; }
 @media (max-width: 600px) {
   .view-row { grid-template-columns: 1fr; }
 }
@@ -189,7 +206,13 @@ button.diff-file { width: 100%; border: 0; border-bottom: 1px solid var(--rule);
 .settings-history > code, .settings-history > .field, .settings-history > .settings-history-foot, .settings-history > .settings-note { margin: 8px 16px; }
 .settings-page .settings-textarea { box-sizing: border-box; font-family: var(--mono); }
 /* Task Board: main#content takes the mockup's main.board-main layout; ticket text wraps in place. */
-main#content:has(> .board-page) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 12px; }
+main#content:has(> .board-page) { display: flex; flex-direction: column; min-height: 0; overflow-x: hidden; overflow-y: auto; padding-bottom: 12px; }
+/* The columns keep a readable height: where the header, KPIs and filters leave less (a window under
+   about 900px, a wrapped title, a phone), the page scrolls instead of squeezing the cards to a strip. */
+/* The page keeps the window height and only the columns scroll (layout-fit.spec.ts); in a window
+   too short for the header, filters and 420 px of columns, the columns keep that height and the
+   content area scrolls instead of crushing them to a strip. */
+#board-columns { min-height: 420px; }
 @media (max-width: 980px) { main#content:has(> .board-page) { padding-bottom: 8px; } }
 .board-card h3, .board-card p, .board-spec-meta, .board-banner span { overflow-wrap: anywhere; }
 .board-specbar select { max-width: 100%; }
@@ -216,19 +239,40 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 /* A multi-line kernel value renders as lines, not as a string with line breaks. */
 .view-line { display: block; overflow-wrap: anywhere; }
 /* The gate latency trend of Orchestration → Гейты: a lone hour of the mockup's line chart is a dot. */
-.gate-trend { margin: 0 16px 12px; }
+.gate-trend { margin: 0; }
 .orch-line-avg-dot { fill: var(--orch-cyan); }
 .orch-line-p95-dot { fill: var(--orch-lav); }
-/* Task Board: the mint "Agent prompt" button and the updating overlay over a kept board (#1045). */
+/* Task Board: the accent "Agent prompt" button and the updating overlay over a kept board (#1045). */
 .board-modal-tabs .btn.board-agent-prompt { display: inline-flex; align-items: center; gap: 4px; border-color: var(--primary); background: var(--primary); color: #0b1a2e; font-weight: 600; }
-.board-modal-tabs .btn.board-agent-prompt:hover { background: #a3c9ff; }
-.board-agent-prompt .hi { width: 11px; height: 11px; }
+.board-modal-tabs .btn.board-agent-prompt:hover { background: #c4d6f8; }
+.board-agent-prompt .hi { width: 14px; height: 14px; }
 .board-page { position: relative; }
-.board-updating { position: absolute; inset: 0; z-index: 5; display: flex; justify-content: center; align-items: flex-start; padding-top: 96px; pointer-events: none; }
-.board-updating-card { display: inline-flex; align-items: center; gap: 12px; padding: 8px 16px; border: 1px solid #5a6b80; border-radius: 7px; background: #1d2927ee; color: var(--orch-mint); font: var(--fs-1) var(--mono); box-shadow: 0 10px 30px #0008; }
-.board-mascot { width: 34px; height: 44px; animation: board-mascot-jump 0.9s ease-in-out infinite; }
-@keyframes board-mascot-jump { 0%, 100% { transform: translateY(0); } 45%, 55% { transform: translateY(-9px); } }
-@media (prefers-reduced-motion: reduce) { .board-mascot { animation: none; } }
+.board-updating { position: absolute; inset: 0; z-index: 5; display: flex; justify-content: center; align-items: flex-start; pointer-events: none; animation: board-updating-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both; }
+/* No card: a soft neutral scrim fades out around the mascot, so the caption reads over the cards
+   of a kept board. The overlay appears 150 ms late, so a quick answer never flashes it. */
+/* Sticky inside the page-tall overlay: the mascot stays in the visible part of a board that scrolls
+   (a short or narrow window), a little above the middle of the view. */
+.board-updating-body { position: sticky; top: 35%; margin-top: 96px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px 64px; background: radial-gradient(closest-side, rgb(31 37 46 / 0.94) 55%, rgb(31 37 46 / 0)); color: var(--fg); font: var(--fs-2) var(--text); text-align: center; }
+.board-mascot-stage { position: relative; display: block; width: 48px; height: 72px; }
+/* The drawing carries its own floor shadow; it is cut off, and the shadow below stays on the floor. */
+.board-mascot { position: absolute; left: 0; bottom: 4px; width: 48px; height: 62px; clip-path: inset(0 0 6% 0); transform-origin: 50% 94%; animation: board-mascot-jump 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+.board-mascot-shadow { position: absolute; left: 8px; bottom: 2px; width: 32px; height: 6px; border-radius: 50%; background: #0b0e13; opacity: 0.55; animation: board-mascot-shadow 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+/* One hop: a squat before the push, a stretch on the way up, a squash on landing, then a rest. */
+@keyframes board-mascot-jump {
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  14% { transform: translateY(0) scale(1.08, 0.9); }
+  34% { transform: translateY(-15px) scale(0.96, 1.05); }
+  46% { transform: translateY(-18px) scale(1, 1); }
+  58% { transform: translateY(-15px) scale(0.98, 1.03); }
+  72% { transform: translateY(0) scale(1.07, 0.92); }
+  84% { transform: translateY(0) scale(0.99, 1.02); }
+}
+@keyframes board-mascot-shadow {
+  0%, 14%, 72%, 100% { transform: scale(1); opacity: 0.55; }
+  46% { transform: scale(0.62); opacity: 0.25; }
+}
+@keyframes board-updating-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .board-updating, .board-mascot, .board-mascot-shadow { animation: none; } }
 .board-modal-tablist { display: flex; align-items: center; gap: 4px; }
 
 /* WCAG 2.1 AA (#1066): a visible focus ring on every surface, 24px targets. */
@@ -319,7 +363,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* Orchestration: the live step of a coordinator or human gate pulses like a live role (the
    mockup's global reduced-motion rule stops it), the statusbar names the live step, and long
    dispatch lists scroll inside their panel. */
-.orch-map-node.live .orch-map-bg { stroke: #82b6ff; stroke-width: 1.5; animation: orchMapPulse 2s ease-in-out infinite; }
+.orch-map-node.live .orch-map-bg { stroke: #a9c4f5; stroke-width: 1.5; animation: orchMapPulse 2s ease-in-out infinite; }
 .orch-map-statusbar .orch-live { margin-left: auto; color: var(--primary); }
 .orch-dispatch-scroll { max-height: 448px; overflow-y: auto; }
 .orch-ticket-table .orch-pill { justify-self: start; white-space: nowrap; }
@@ -328,7 +372,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 }
 .orch-heartbeat { white-space: nowrap; }
 .board-open { display: inline-flex; align-items: center; gap: 4px; }
-.board-open .hi { width: 12px; height: 12px; }
+.board-open .hi { width: 14px; height: 14px; }
 /* Harness · Commands: the maintenance panel follows the command panel inside the legacy island. */
 #harness-tab-commands .harness-maintenance { margin-top: 16px; }
 /* Settings: the adapter plan text and the per-file change list sit inside mockup panels; the
@@ -361,6 +405,19 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 @media (max-width: 600px) { .home-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 #home .home-attn .panel-head { gap: 12px; }
 #home .home-attn .panel-head #problem-count { margin-left: auto; }
+/* A long unbroken id or message wraps inside its column instead of running under the link. */
+#home .home-attn .t b,
+#home .home-attn .t small,
+#home .check-main b { overflow-wrap: anywhere; }
+/* Phone width: panel heads wrap their parts as whole words, the health mode switch stays inside
+   its panel and the four health counts take two columns so no label leaves its tile. */
+@media (max-width: 600px) {
+  #home .panel-head { flex-wrap: wrap; gap: 4px 12px; }
+  #home .panel-head h2,
+  #home .panel-head a { white-space: nowrap; }
+  #home .health-mode { flex-wrap: wrap; gap: 4px 12px; }
+  #home .health-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 /* A link moves only while events flow on it (.live); the mockup animates the blue edge only. */
 .ct-edge.flow.live { stroke: var(--primary); stroke-dasharray: 5 4; animation: ctflow 2.2s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ct-edge.flow.live { animation: none; } }
@@ -462,17 +519,70 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 @keyframes board-drawer-in { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .board-dialog[open] { animation: none; } }
 @media (max-width: 980px) { .board-dialog { width: 100vw; border-radius: 0; } }
+/* Task Board audit: the status confirmation is a small centred dialog, not the ticket drawer; its
+   head and body share one 16px inset; the copy status and the manual-copy text sit inside the
+   drawer's inset; chips and badges share one height and radius; icons keep the 14px size. */
+#board-confirm.board-dialog { margin: auto; width: min(520px, calc(100vw - 32px)); height: fit-content; max-height: calc(100dvh - 32px); border-radius: 9px; border-right-width: 1px; animation: none; }
+#board-confirm-body { padding: 0 0 16px; }
+#board-confirm-body > :not(.board-modal-head) { margin-left: 16px; margin-right: 16px; }
+.board-copy-status { margin: 8px 16px 0; overflow-wrap: anywhere; }
+#board-copy-text { margin-bottom: 16px; overflow-wrap: anywhere; }
+.board-chip, .board-prio, .board-sp { border-radius: 4px; line-height: 14px; }
+.board-col header > span { border-radius: 4px; }
+.board-search .hi, .board-banner .hi { width: 14px; height: 14px; }
+.board-state-icon { width: 40px; height: 40px; }
+.board-state-icon .hi { width: 18px; height: 18px; }
+#board-facts { gap: 4px 16px; }
+#board-facts span + span::before { content: none; }
+/* The ticket drawer on a phone: the UA max-width of a modal dialog (100% minus 2em) is lifted, and
+   ids, paths and branch names wrap inside the drawer instead of running past its edge. */
+.board-dialog { max-width: 100vw; }
+.board-modal-head > div { min-width: 0; }
+.board-modal-head h2, .board-modal-head p, .board-modal-head .eyebrow { overflow-wrap: anywhere; }
+.board-modal-labels em { max-width: 100%; overflow-wrap: anywhere; }
+.board-modal-links .branch-inline { min-width: 0; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.board-modal-tabs { flex-wrap: wrap; }
+.board-modal-tablist { flex-wrap: wrap; }
+.board-modal-tablist button { white-space: nowrap; }
 
 /* Agent activity (#1092): the step cluster toggle, its members and the duration at the right of an
    event; on a desktop window the page fits the window and only the events and the run detail scroll. */
 .work-events-panel .work-event { grid-template-columns: 62px 92px minmax(0, 1fr) max-content; }
 .work-event-duration { color: var(--muted); font: var(--fs-1) var(--mono); white-space: nowrap; text-align: right; }
 .work-cluster-toggle { flex: none; margin-left: auto; padding: 0 4px; border: 1px solid var(--rule); border-radius: 4px; background: transparent; color: var(--primary); font: var(--fs-1) var(--mono); cursor: pointer; }
-.work-cluster-toggle[aria-expanded="true"] { background: #343c49; }
+.work-cluster-toggle[aria-expanded="true"] { background: var(--ds-raised); }
 .work-cluster-members { grid-column: 3 / -1; margin: 4px 0 0; padding: 0 0 0 12px; list-style: none; border-left: 2px solid var(--rule); font-size: var(--fs-1); }
 .work-cluster-members li { display: flex; gap: 8px; padding: 2px 0; overflow-wrap: anywhere; }
 .work-cluster-members li span { flex: none; color: var(--muted); font-family: var(--mono); }
 .work-stats { display: block; }
+/* UI audit: the age column of a session row sizes to its text, so "5 ч 21 мин" never pushes the
+   status past the row edge; the two selects of the session filter share one row; the route dot of
+   the running step keeps its motion without a glow. */
+@media (min-width: 601px) { .work-row { grid-template-columns: 22px minmax(0, 1fr) auto max-content; } }
+.work-filters .chips { flex: 1 1 100%; }
+.work-filters select, .work-filters #work-ticket { flex: 1 1 120px; min-width: 0; max-width: 240px; margin-left: 0; }
+.work-flow-edge.active::after { box-shadow: none; }
+.work-flow-node.current, .work-flow-node.current.ok, .work-flow-node.current.err, .work-flow-node.current.warn { box-shadow: none; }
+.work-task-meta .branch-inline { flex: 0 1 auto; min-width: 0; white-space: normal; overflow-wrap: anywhere; }
+/* A phone: the event grid is time | role over main (the mockup's two columns plus the duration), and
+   a session row keeps its full id on the first line, with the status and age on the second. A
+   desktop window of 981-1279 px has the same narrow session panel, so its rows stack the same way. */
+@media (min-width: 981px) and (max-width: 1279px) {
+  .work-row-main { grid-column: 2 / -1; }
+  .work-row .work-status { grid-column: 2; grid-row: 2; }
+  .work-row .work-time { grid-column: 4; grid-row: 2; }
+}
+@media (max-width: 600px) {
+  .work-events-panel .work-event { grid-template-columns: 52px minmax(0, 1fr) max-content; }
+  .work-events-panel .work-event-main, .work-events-panel .work-cluster-members { grid-column: 2 / -1; }
+  .work-events-panel .work-event-duration { grid-column: 3; grid-row: 1; }
+  .work-row-main { grid-column: 2 / -1; }
+  .work-row .work-status { grid-column: 2; grid-row: 2; }
+  .work-row .work-time { grid-column: 3; grid-row: 2; }
+}
+@media (min-width: 981px) and (max-width: 1199px) {
+  .work-stats .work-summary, .work-stats .work-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 @media (min-width: 981px) {
   main#content:has(> .work-fit) { display: flex; flex-direction: column; min-height: 0; overflow: hidden; padding-bottom: 12px; }
   .work-fit { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
@@ -486,7 +596,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .work-stats b { margin: 0; font-size: var(--fs-3); }
   .work-stats small { display: none; }
   .work-fit > .work-tabbar { flex: none; margin-bottom: 8px; }
-  .work-fit > .work-panel { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1.1fr) minmax(0, 1fr); overflow: hidden; margin: 0; }
+  .work-fit > .work-panel { flex: 1 1 auto; min-height: 0; display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto minmax(0, 1.3fr) minmax(0, 1fr); overflow: hidden; margin: 0; }
   .work-fit > .work-panel > * { min-width: 0; min-height: 0; margin: 0; }
   .work-fit .work-sources, .work-fit .work-grid { grid-column: 1 / -1; }
   .work-fit .work-sources .panel-head { padding: 4px 16px; }
@@ -494,7 +604,8 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .work-fit .work-sources .work-source { padding: 4px 12px; }
   .work-fit .work-grid { display: grid; gap: 12px; align-items: stretch; margin: 0; }
   .work-fit .work-grid > .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
-  .work-fit .work-sessions .work-list { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
+  .work-fit .work-sessions .work-list { flex: 1 1 auto; min-height: 120px; max-height: none; overflow-y: auto; }
+  .work-fit .work-grid > .work-sessions { overflow-y: auto; }
   .work-fit .work-route-panel { overflow-y: auto; }
   .work-fit .work-events-panel { display: flex; flex-direction: column; overflow: hidden; }
   .work-fit .work-events-panel .work-events { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
@@ -535,6 +646,44 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .orch-scheme .orch-map-scroll { overflow-x: auto; }
   .orch-scheme .orch-map { min-width: 760px; max-height: none; }
 }
+/* Orchestration polish: the blocks a tab places under its chart grid keep the 16 px gutter of the
+   chart cards; a phone lets the split take its content height (a 280 px basis made the two panels
+   overlap); series that must be told apart keep their own pastel hue. */
+.orch-page .orch-extras { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; padding: 0 16px 16px; }
+.orch-page .orch-runtime-extras { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 0 16px 16px; }
+.orch-page .orch-runtime-extras > .orch-chart.wide { grid-column: auto; }
+.orch-page #orch-dispatch .ds-panel-head { flex-wrap: wrap; }
+.orch-page #orch-dispatch .ds-chip { flex: none; white-space: nowrap; }
+.orch-page .orch-dispatch-filters .ds-select { max-width: 160px; }
+.orch-page .orch-ticket-row > span { min-width: 0; overflow-wrap: anywhere; }
+.orch-page .orch-dispatch-main b { overflow-wrap: anywhere; }
+.orch-page .orch-runtime-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }
+.orch-page #orch-mini-flow { margin: 0 16px 12px; }
+.orch-page #pipeline-stats { margin: 0 16px 16px; }
+.orch-page #orch-quality .qa-lane-panel { margin: 0 16px 16px; }
+.orch-page .orch-history-grid { margin: 0; padding: 0 16px 16px; }
+.orch-page .orch-history .orch-batches { margin: 0; padding: 12px; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.orch-page .orch-history .orch-batch b { font-weight: 600; overflow-wrap: normal; }
+.recovery-page .grid, .route-page .grid { margin-bottom: 12px; }
+.recovery-history .report-row { grid-template-columns: minmax(0, 1fr); }
+.recovery-history .report-row-main { white-space: normal; overflow-wrap: anywhere; }
+@media (min-width: 601px) {
+  .recovery-page .harness-command-head, .recovery-page .harness-command-row { grid-template-columns: 180px minmax(160px, 1fr) 104px minmax(150px, 1fr) 88px; }
+}
+.orch-page .orch-stage-bars small { flex: none; width: 32px; white-space: nowrap; }
+.orch-page #orch-container-detail .ds-panel-head { flex-wrap: wrap; }
+.orch-page #orch-container-detail .ds-panel-title { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .orch-page .orch-state { grid-column: 2; }
+  .orch-page .orch-heartbeat { grid-column: 3; text-align: right; }
+}
+.orch-map-edge.sky { stroke: #a6d5e8; }
+.orch-map-edge.rose { stroke: #cbb8f0; }
+.orch-stack > i.blue, .orch-legend i.blue { background: #cbb8f0; }
+@media (max-width: 900px) {
+  .orch-page .ds-split { flex: none; }
+  .orch-page .orch-extras { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* Reports on the v3 shell: the split takes the free height without the mockup's bottom margin, the
    hidden status words stay inside the scrolling bodies, and a report row has a column for the status
@@ -542,16 +691,112 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
    the time under the title. */
 .reports-page .reports-grid { margin-bottom: 0; }
 .reports-page .ds-panel-body { position: relative; }
-.reports-page .report-row { grid-template-columns: 22px minmax(0, 1fr) 24px auto 44px; }
+.reports-page .report-row { grid-template-columns: 24px minmax(0, 1fr) 24px auto 44px; }
 @media (max-width: 600px) {
-  .reports-page .report-row { grid-template-columns: 22px minmax(0, 1fr) auto; }
+  .reports-page .report-row { grid-template-columns: 24px minmax(0, 1fr) auto; }
   .reports-page .report-row > .ds-status { grid-column: 3; grid-row: 1; }
   .reports-page .report-row > .report-status { display: block; grid-column: 2; grid-row: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .reports-page .report-row > .report-time { grid-column: 3; grid-row: 2; text-align: right; }
 }
+/* Reports polish (UI audit): the list scrolls in its own block instead of inside the panel body
+   (two nested scrollers before), a phone lets the split take its content height, the KPI tiles stop
+   overlapping the stat bar, controls and chips share one height and the DS field look, icons keep
+   the 14 px size, ids are mono, weights stay 400-600 and fills come from the DS tokens. */
+.reports-page :is(h2, h3, b) { font-weight: 600; }
+#reports-list > .ds-panel-body { display: flex; flex-direction: column; }
+#reports-list .report-filters, #reports-list .report-list-foot { flex: none; }
+@media (min-width: 901px) {
+  #reports-list #report-list { flex: 1 1 auto; min-height: 120px; max-height: none; overflow-y: auto; }
+  #reports-list > .ds-panel-body { overflow-y: auto; }
+}
+@media (max-width: 900px) {
+  .reports-page .ds-tabpanel, .reports-page .ds-split { flex: none; }
+}
+.reports-page .report-kpis { margin: 0; gap: 8px; }
+.reports-page .report-kpis > div, #reports-quality-kpi > div { padding: 4px 8px; border-color: var(--ds-line); border-radius: 6px; background: var(--ds-bg); }
+.reports-page .report-kpis b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1100px) {
+  .reports-page .report-kpis b { font-size: var(--ds-fs-2); }
+}
+.reports-page .chips .chip { display: inline-flex; align-items: center; box-sizing: border-box; font-size: var(--ds-fs-2); }
+.reports-page .chip.on { background: var(--ds-accent-bg); }
+.reports-page .report-filter-row select, .reports-page .report-search {
+  box-sizing: border-box; min-height: 36px; border: 1px solid var(--ds-control); border-radius: 8px; background: var(--ds-bg); color: var(--ds-fg);
+}
+.reports-page .report-filter-row select { padding: 4px 12px; font: var(--ds-fs-2) var(--ds-sans); }
+.reports-page .report-filter-row input { box-sizing: border-box; min-height: 36px; padding: 4px 12px; border: 1px solid var(--ds-control); border-radius: 8px; background: var(--ds-bg); color: var(--ds-fg); font: var(--ds-fs-2) var(--ds-sans); }
+.reports-page .report-search { gap: 8px; padding: 0 12px; }
+.reports-page .report-search:focus-within { border-color: var(--ds-accent); }
+.reports-page .report-search .hi { width: 14px; height: 14px; }
+.reports-page .report-search input { min-height: 0; padding: 0; border: 0; background: none; box-shadow: none; font: var(--ds-fs-2) var(--ds-sans); }
+.reports-page .report-type-icon { width: 24px; height: 24px; border-color: var(--ds-line); border-radius: 6px; color: var(--ds-accent); }
+.reports-page .report-type-icon .hi, .reports-page .report-type-label .hi, .reports-page .report-conclusion .hi { width: 14px; height: 14px; }
+.reports-page .report-type-label { color: var(--ds-accent); }
+.reports-page .report-row-main small, .reports-page .report-meta { font-family: var(--ds-mono); }
+.reports-page .report-detail-top code { color: var(--ds-muted); font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.reports-page .report-detail-status { display: flex; align-items: center; gap: 8px; padding: 8px 16px 0; font-size: var(--ds-fs-1); }
+.reports-page .report-detail-body { padding-top: 8px; }
+.reports-page .report-evidence { grid-template-columns: 24px minmax(0, 1fr) auto; }
+.reports-page .report-evidence b { font-family: var(--ds-mono); overflow-wrap: anywhere; }
+.reports-page .report-evidence-icon { width: 24px; height: 24px; border-color: transparent; }
+.reports-page .report-evidence-icon .hi { width: 14px; height: 14px; }
+.reports-page .report-evidence-icon.passed { background: var(--ds-ok-bg); }
+.reports-page .report-evidence-icon.attention { background: var(--ds-warn-bg); }
+.reports-page .report-evidence-icon.blocked { background: var(--ds-err-bg); }
+.reports-page .report-conclusion { border-color: var(--ds-line); border-radius: 6px; background: var(--ds-bg); }
+.reports-page .report-conclusion.passed { background: var(--ds-ok-bg); }
+.reports-page .report-conclusion.attention { background: var(--ds-warn-bg); }
+.reports-page .report-conclusion.blocked { background: var(--ds-err-bg); }
+.reports-page .qa-attempt { border-color: var(--ds-line); border-radius: 6px; background: var(--ds-bg); }
+.reports-page .qa-attempt.fail { border-color: var(--ds-err-bg); }
+.reports-page .qa-attempt.pass { border-color: var(--ds-ok-bg); }
+.reports-page .qa-attempt.wait { border-color: var(--ds-warn-bg); }
+.report-timeline .panel-head { flex-wrap: wrap; }
+.report-timeline .panel-head code { min-width: 0; font: var(--ds-fs-1) var(--ds-mono); overflow-wrap: anywhere; }
+.report-timeline .timeline li { border-left-color: var(--ds-line-strong); }
+.report-timeline .timeline li::before { top: 4px; width: 8px; height: 8px; background: var(--ds-accent); }
 
 /* Publication on the v3 shell: the candidate facts of the summary wrap, and a long target ref breaks,
    so the summary keeps its width on a phone. */
 .ds-facts-main .publish-facts { flex-wrap: wrap; gap: 4px 16px; min-width: 0; max-width: 100%; }
 .ds-facts-main .publish-facts > span { display: block; min-width: 0; overflow-wrap: anywhere; }
 .publish-page .ds-panel-body { position: relative; }
+/* On a phone the page scrolls and the stacked candidate list and detail take their content height:
+   the split keeps its 280px basis otherwise and the detail is drawn over the list. */
+@media (max-width: 900px) {
+  .publish-page .publish-workspace { flex: none; }
+  /* The count sits under the title, in the title column, instead of dropping to the left edge. */
+  #publish-candidates .ds-row { display: grid; grid-template-columns: 136px minmax(0, 1fr); gap: 0 12px; }
+  #publish-candidates .ds-row-end { grid-column: 2; }
+}
+/* Equal things, equal sizes: the status words of a row take one column, so every title starts on
+   one line (the words differ in width), in the candidate list and in the drawer. */
+#publish-candidates .ds-row > .ds-status-line,
+#candidate-drawer .ds-row > .ds-status-line { flex: none; min-width: 136px; }
+/* The detail head keeps its title on one line; the button drops under it when the panel is narrow. */
+#publish-candidate .ds-panel-head { flex-wrap: wrap; }
+#publish-candidate .ds-panel-title { white-space: nowrap; }
+/* Group titles: the status chip is 24px tall, so the title is centred on it and starts on the same
+   16px line as the bodies below it. */
+.publish-tab .ds-group-title { display: flex; align-items: center; gap: 8px; padding-inline: 16px; }
+.publish-page .publish-sha { max-width: 100%; box-sizing: border-box; overflow-wrap: anywhere; }
+.publish-page .publish-gate-facts { margin: 8px 16px 12px; }
+/* The detail is a narrow panel: PR / MR and Publication stack, and the evidence rows are two lines
+   (artifact and status, then the details) instead of three columns that clip. */
+.publish-page .publish-pr-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+.publish-page .publish-evidence-table { overflow: visible; }
+.publish-page .publish-evidence-head { display: none; }
+.publish-page .publish-evidence-row { grid-template-columns: minmax(0, 1fr) auto; min-width: 0; }
+.publish-page .publish-evidence-row > small { grid-column: 1 / -1; overflow-wrap: anywhere; }
+/* The live decisions island: its note and card sit inside the panel, not on its edge. */
+.publish-page .publish-decisions .decision-panel > p { margin: 0 16px; }
+.publish-page .publish-decisions .decision-panel { padding-bottom: 12px; }
+.publish-page .publish-decisions .decision-card { margin: 0 12px; }
+/* Candidate drawer: the batch chronology keeps the drawer's gutter, and a readiness row shows its
+   status word above the detail so the detail wraps on its own lines. */
+#candidate-drawer .report-route,
+.publish-page .report-route { margin: 8px 16px; }
+.publish-page b,
+.publish-page h3,
+#candidate-drawer b { font-weight: 600; }
+#candidate-readiness dd { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }

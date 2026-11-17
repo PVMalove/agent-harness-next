@@ -172,13 +172,13 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
         </a>
         {project ? (
           <span id="project" className="ds-where">
-            {project.name}
+            <span className="ds-where-text">{project.name}</span>
           </span>
         ) : null}
         {project?.branch ? (
           <span id="branch" className="ds-where ds-muted">
             <Icon name="branch" className="ds-ic-sm" />
-            {project.branch}
+            <span className="ds-where-text">{project.branch}</span>
           </span>
         ) : null}
         <div className="ds-top-end">

@@ -3,9 +3,9 @@
    (/execution-console.css, loaded first) keeps its meaning. Dark theme only: the not yet moved
    screens and their sheet are dark, so a light or system theme waits until they move.
    Sizes are rem, so the type follows the browser and OS text scale.
-   Palette «Сланец» with restrained statuses (owner choice 2026-11-16): a mid slate ground, a blue
-   accent, ready and attention in light grey-blue and sand, only a blocker in colour; the status
-   shape (StatusIcon) and its word carry the meaning. */
+   Palette «Сланец» in pastels (owner request 2026-11-16): the mid slate ground stays neutral, the
+   accent is a pastel blue, ready is a pastel mint, attention a pastel butter and a blocker a pastel
+   rose; the status shape (StatusIcon) and its word still carry the meaning. */
 :root {
   --ds-bg: #1f252e;
   --ds-rail: #252c36;
@@ -20,15 +20,15 @@
   --ds-muted: #b4bcc9;
   /* 4.5:1 on a selected (--ds-accent-bg) and a hovered row too. */
   --ds-faint: #a7b0be;
-  --ds-accent: #82b6ff;
-  --ds-accent-bg: #2b4260;
-  --ds-on-accent: #0b1a2e;
-  --ds-ok: #c3d3e6;
-  --ds-ok-bg: #34404f;
-  --ds-warn: #e6d6b0;
-  --ds-warn-bg: #3d3a33;
-  --ds-err: #ff9c94;
-  --ds-err-bg: #45292c;
+  --ds-accent: #a9c4f5;
+  --ds-accent-bg: #33435e;
+  --ds-on-accent: #0f1c33;
+  --ds-ok: #a9dcc0;
+  --ds-ok-bg: #2e4239;
+  --ds-warn: #f2d6a2;
+  --ds-warn-bg: #443c2c;
+  --ds-err: #f7a8a8;
+  --ds-err-bg: #4a2f34;
   --ds-sans: "Segoe UI", system-ui, -apple-system, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --ds-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --ds-radius: 8px;

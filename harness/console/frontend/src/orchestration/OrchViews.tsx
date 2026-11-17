@@ -157,7 +157,7 @@ export function GateTrend({ gates }: { gates: Record<string, Figure> }) {
             ))}
             {lines(p95, "orch-line-p95")}
             {lines(p50, "orch-line-avg")}
-            <text x={L - 8} y={T + 4} textAnchor="end" className="orch-line-axis">
+            <text x={0} y={T + 3} className="orch-line-axis">
               {t("мин")}
             </text>
           </svg>

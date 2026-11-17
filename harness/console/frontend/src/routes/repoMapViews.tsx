@@ -231,7 +231,8 @@ export function Links({ map, select }: { map: MapData; select: (path: string) =>
                 <g key={path} className="ds-node" role="button" tabIndex={0} aria-label={path}
                   onClick={() => select(path)} onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(path); } }}>
                   <rect x="0" y={i * 40} width="370" height="32" rx="8" />
-                  <text className="ds-node-title" x="12" y={i * 40 + 20}>{path}</text>
+                  <title>{path}</title>
+                  <text className="ds-node-title" x="12" y={i * 40 + 20}>{path.length > 42 ? `${path.slice(0, 14)}…${path.slice(-27)}` : path}</text>
                 </g>
               ))}
             </svg>

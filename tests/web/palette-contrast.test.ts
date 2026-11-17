@@ -80,3 +80,25 @@ describe("the design system v3 palette", () => {
     });
   }
 });
+
+/* Owner request 2026-11-16: the accent and the three status hues are pastels (light, low chroma),
+ * and the legacy sheet of the not yet moved screens carries the same four hues. */
+describe("the pastel hues", () => {
+  const ds = rootTokens(readFileSync(join(resolve(__dirname, "../.."), "harness/console/frontend/src/styles/ds-tokens.css"), "utf-8"));
+  const channels = (hex: string) => [1, 3, 5].map((start) => parseInt(hex.slice(start, start + 2), 16) / 255);
+
+  for (const tone of ["ds-accent", "ds-ok", "ds-warn", "ds-err"]) {
+    test(`--${tone} is light and low in chroma`, () => {
+      const rgb = channels(ds[tone]!);
+      const [max, min] = [Math.max(...rgb), Math.min(...rgb)];
+      expect((max + min) / 2).toBeGreaterThanOrEqual(0.75);
+      expect(max - min).toBeLessThanOrEqual(0.35);
+    });
+  }
+
+  for (const [legacy, tone] of [["primary", "ds-accent"], ["ok", "ds-ok"], ["warn", "ds-warn"], ["err", "ds-err"]] as const) {
+    test(`the legacy --${legacy} equals --${tone}`, () => {
+      expect(tokens[legacy]!.toLowerCase()).toBe(ds[tone]!.toLowerCase());
+    });
+  }
+});

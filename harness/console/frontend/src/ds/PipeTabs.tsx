@@ -8,6 +8,9 @@ export interface PipeTab {
   label: ReactNode;
   /** The number in the marker; the step number when absent. */
   count?: ReactNode;
+  /** A count shown after the label while the marker keeps the step number, so a step and a count
+      never read alike ("3 JSON" next to "3 Изменения"). Decorative: the panel says it too. */
+  badge?: ReactNode;
 }
 
 export function PipeTabs({ id, label, tabs, value, onChange }: {
@@ -28,6 +31,11 @@ export function PipeTabs({ id, label, tabs, value, onChange }: {
         <>
           <span className="ds-pipe-n">{tab.count ?? index + 1}</span>
           <span className="ds-pipe-label">{tab.label}</span>
+          {tab.badge !== undefined && (
+            <span className="ds-pipe-badge" aria-hidden="true">
+              {tab.badge}
+            </span>
+          )}
         </>,
       ])}
       value={value}
