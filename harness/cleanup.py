@@ -184,6 +184,45 @@ def _managed_worktree(checkout: Path, root: Path, path: Path) -> bool:
     )
 
 
+SANDBOX_MOUNT = "mount point of a live sandbox session; it goes away when that session ends"
+
+
+def sandbox_residue(path: Path) -> bool:
+    """An unregistered directory that holds only directories and empty files, no symlink.
+
+    The Claude Code sandbox recreates such a directory before every command of a session that
+    once had a write grant or its cwd there: the removed worktree path itself, or masks like
+    `.claude/.cc-writes` and empty `settings.json` under a `cd` target (#1194).
+    """
+    try:
+        for current, directories, files in os.walk(path, onerror=_raise):
+            for name in (*directories, *files):
+                entry = Path(current, name)
+                if entry.is_symlink() or (
+                    name in files and (not entry.is_file() or entry.stat().st_size)
+                ):
+                    return False
+    except OSError:
+        return False
+    return path.is_dir() and not path.is_symlink()
+
+
+def _raise(error: OSError) -> None:
+    raise error
+
+
+def holds_mount(path: Path) -> bool:
+    """Whether the path or anything below it is a mount point (a live sandbox binds it)."""
+    try:
+        return os.path.ismount(path) or any(
+            os.path.ismount(Path(current, name))
+            for current, directories, files in os.walk(path)
+            for name in (*directories, *files)
+        )
+    except OSError:
+        return True
+
+
 def _locked(worktree: Path) -> bool:
     """Whether `git worktree lock` protects the worktree; a live agent session locks its own."""
     git_dir = _git(worktree, "rev-parse", "--absolute-git-dir")
@@ -883,6 +922,18 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                         if batch is not None:
                             item["batch_id"], item["state"] = batch
                         remove.append(item)
+                for entry in sorted(worktrees.iterdir()):
+                    resolved = entry.resolve()
+                    if (
+                        resolved in registered
+                        or resolved in active
+                        or not sandbox_residue(entry)
+                    ):
+                        continue
+                    if holds_mount(entry):
+                        skipped.append({"path": str(entry), "reason": SANDBOX_MOUNT})
+                    else:
+                        remove.append({"kind": "residue", "path": str(entry)})
     _plan_containers(checkout, root, remove, skipped)
     return {
         "mode": mode,
@@ -926,7 +977,7 @@ def apply_cleanup(
         path = Path(item["path"])
         if not (
             _managed_worktree(checkout, root, path)
-            if item["kind"] == "worktree"
+            if item["kind"] in ("worktree", "residue")
             else _inside(root, path)
         ):
             failed.append({"path": str(path), "reason": "path escaped storage root"})
@@ -946,6 +997,12 @@ def apply_cleanup(
                             result.stderr.strip() or "local branch removal failed"
                         )
                 worktrees.append(item)
+            elif item["kind"] == "residue":
+                if not sandbox_residue(path):
+                    raise OSError("directory is no longer empty sandbox residue")
+                if holds_mount(path):
+                    raise OSError(SANDBOX_MOUNT)
+                shutil.rmtree(path, onexc=_clear_read_only)
             elif item["kind"] == "directory":
                 # Windows needs an extended-length path for nested test fixtures.
                 target = (

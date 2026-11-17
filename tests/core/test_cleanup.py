@@ -446,6 +446,50 @@ class CleanupTests(unittest.TestCase):
         self.assertFalse(tree.exists())
         self.assertEqual(git(self.repo, "branch", "--list", branch), "")
 
+    def test_hard_removes_an_empty_unregistered_worktree_directory(self) -> None:
+        """Пустой каталог, который песочница сессии оставила после `worktree remove` (#1194)."""
+        removed = self.repo / ".harness" / ".sandboxes" / "worktrees" / "issue-7-gone"
+        removed.mkdir(parents=True)
+        masks = self.repo / ".claude" / "worktrees" / ".claude"
+        (masks / ".cc-writes").mkdir(parents=True)
+        (masks / "settings.json").touch()
+        kept = self.repo / ".harness" / ".sandboxes" / "worktrees" / "issue-8-files"
+        kept.mkdir()
+        (kept / "notes.md").write_text("keep me", encoding="utf-8")
+
+        plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+
+        residue = [item for item in plan["remove"] if item["kind"] == "residue"]
+        self.assertEqual(
+            residue,
+            [
+                {"kind": "residue", "path": str(removed)},
+                {"kind": "residue", "path": str(masks)},
+            ],
+        )
+        self.assertNotIn(str(kept), {item["path"] for item in plan["remove"]})
+        result = apply_cleanup(self.repo, plan, confirm="HARD")
+        self.assertFalse(result["failed"])
+        self.assertFalse(removed.exists())
+        self.assertFalse(masks.exists())
+        self.assertEqual((kept / "notes.md").read_text(encoding="utf-8"), "keep me")
+
+    def test_hard_keeps_an_empty_directory_that_a_live_sandbox_mounts(self) -> None:
+        """Каталог, занятый точкой монтирования живой сессии, остаётся с причиной."""
+        mounted = self.repo / ".harness" / ".sandboxes" / "worktrees" / "issue-9-mounted"
+        mounted.mkdir(parents=True)
+        real_ismount = os.path.ismount
+        with mock.patch.object(
+            cleanup.os.path,
+            "ismount",
+            side_effect=lambda path: Path(path) == mounted or real_ismount(path),
+        ):
+            plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
+        self.assertNotIn(str(mounted), {item["path"] for item in plan["remove"]})
+        self.assertIn(
+            {"path": str(mounted), "reason": cleanup.SANDBOX_MOUNT}, plan["skipped"]
+        )
+
     def test_hard_keeps_an_agent_worktree_on_a_branch_outside_the_pattern(self) -> None:
         """Проверить, что worktree субагента с веткой вне шаблона проекта остаётся."""
         self._add_origin()
