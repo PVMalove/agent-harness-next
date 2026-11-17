@@ -479,9 +479,8 @@ class CleanupTests(unittest.TestCase):
         mounted = self.repo / ".harness" / ".sandboxes" / "worktrees" / "issue-9-mounted"
         mounted.mkdir(parents=True)
         real_ismount = os.path.ismount
-        with mock.patch.object(
-            cleanup.os.path,
-            "ismount",
+        with mock.patch(
+            "os.path.ismount",
             side_effect=lambda path: Path(path) == mounted or real_ismount(path),
         ):
             plan = plan_cleanup(self.repo, "hard", min_age_hours=0)
