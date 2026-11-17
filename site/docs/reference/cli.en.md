@@ -21,6 +21,7 @@ repository at that path and copies a verifiable snapshot into it.
 | `list` | List of installed skills | no |
 | `cleanup` | Plan and removal of disposable `.harness` data and abandoned container resources | only with `--apply` |
 | `worktree-remove` | Removes a managed worktree and keeps the branch | yes |
+| `branch-delete` | Deletes the local branch of a merged ticket: the branch matches `branch_pattern`, no worktree has it checked out, and its tip is reachable from `refs/remotes/origin/*` or is the head of a merged PR/MR; a refusal names the unmet condition | yes |
 | `worktree-venv` | Links an issue worktree's `.harness/.venv` to the main checkout's venv when `uv.lock` and `pyproject.toml` match | yes |
 | `self-update` | Moves the harness clone this CLI runs from to the latest commit of an `origin` branch (`--ref`, default `origin/HEAD`); takes no `<repo>` | yes, in the harness clone |
 | `uninstall` | Plan and full removal of harness from the project | only with `--apply` |
