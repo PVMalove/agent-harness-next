@@ -112,6 +112,13 @@ Before a first checkpoint, a stopped writer session may continue only at its pro
 SHA through recognized 429 handling or human `startup-failure` authorization with unchanged facts.
 Never manufacture a checkpoint, completion, checks or remaining DoD to make continuation possible.
 
+Prepare the issue worktree for the brief's checks without touching the main checkout's environment,
+as the worktrees guide (`docs/agents/worktrees.md`, "Worker checkout environment") describes: a
+Python venv linked by `harness worktree-venv`, browsers for an e2e suite in the main checkout's
+`.harness/.sandboxes/cache/`, and a build before e2e. Never shift file mtimes to keep a tool from
+re-syncing a shared environment. When a check needs a download that the sandbox's network blocks,
+report it as `not_run` with the blocked host instead of skipping it silently.
+
 Write work happens only on the handoff's issue branch and isolated worktree, only inside the brief's
 allowed paths. Protected branches and `integration/*` are never direct write targets. A batch has one
 active writer; role handoffs are sequential. A commit is evidence only after the required checks pass and its

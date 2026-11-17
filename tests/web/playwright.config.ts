@@ -1,4 +1,4 @@
-/* Run from harness/console/frontend: `npm run test:e2e` (build first). Chromium only. */
+/* Run from harness/console/frontend: `npm run test:e2e` builds dist first (scripts/e2e.mjs). Chromium only. */
 import { resolve } from "node:path";
 import { defineConfig } from "@playwright/test";
 
