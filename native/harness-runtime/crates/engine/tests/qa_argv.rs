@@ -153,6 +153,45 @@ fn an_argv_command_keeps_its_words_and_hosts_route_through_the_run_sidecar() {
     assert_eq!(argv::qa_base("d1", 2), "harness-d1-qa2");
 }
 
+/// The runtime's own upstream proxy settings, passed by name only to the egress sidecar (#1201).
+const UPSTREAM_PROXY_NAMES: [&str; 6] = [
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "NO_PROXY",
+    "no_proxy",
+];
+
+/// The `--env NAME` words without `=`: the engine copies their values from its own environment.
+fn value_less_proxy_names(argv: &[String]) -> Vec<&str> {
+    argv.windows(2)
+        .filter(|pair| pair[0] == "--env" && UPSTREAM_PROXY_NAMES.contains(&pair[1].as_str()))
+        .map(|pair| pair[1].as_str())
+        .collect()
+}
+
+#[test]
+fn the_upstream_proxy_names_reach_the_sidecar_only_and_never_with_a_value() {
+    let plan = plan(&["pypi.org"]);
+    let labels = labels();
+    let spec = spec(&plan, &labels);
+    let qa = run(&labels, true, &[], &[], &[]);
+
+    let sidecar = argv::proxy_argv(&spec, "harness-d1-qa2", &[]);
+    let worker = argv::create_argv(&spec);
+    let command = argv::qa_run_argv(&qa, "probe-1", &QaCommand::Shell("make lint".to_owned()));
+
+    assert_eq!(value_less_proxy_names(&sidecar), UPSTREAM_PROXY_NAMES);
+    assert!(
+        sidecar
+            .iter()
+            .all(|part| !part.contains("PROXY=") && !part.contains("proxy="))
+    );
+    assert!(value_less_proxy_names(&worker).is_empty(), "{worker:?}");
+    assert!(value_less_proxy_names(&command).is_empty(), "{command:?}");
+}
+
 fn plan(hosts: &[&str]) -> Plan {
     Plan::parse(&json!({
         "container": {"engine": "podman", "worker_image": "w:1", "proxy_image": "p:1"},
@@ -225,6 +264,7 @@ fn the_podman_sidecar_has_dns_egress_separate_from_the_internal_network() {
         ])
     );
     assert!(calls[2].contains(&"HARNESS_EGRESS_ALLOWED_HOSTS=pypi.org".to_owned()));
+    assert_eq!(value_less_proxy_names(&calls[2]), UPSTREAM_PROXY_NAMES);
     assert_eq!(
         calls[3],
         strings(&[
@@ -542,4 +582,64 @@ fn a_qa_command_gets_the_cache_path_and_a_run_scoped_target_dir_without_a_volume
             "{forbidden} in {joined}"
         );
     }
+}
+
+#[test]
+fn the_upstream_proxy_name_is_pinned_in_the_sidecar_hosts_only() {
+    let plan = plan(&["pypi.org"]);
+    let labels = labels();
+    let spec = spec(&plan, &labels);
+    let upstream = [(
+        "proxy.corp.example".to_owned(),
+        std::net::Ipv4Addr::new(10, 1, 2, 3),
+    )];
+
+    let sidecar = argv::proxy_argv(&spec, "harness-d1-qa2", &upstream);
+    let worker = argv::create_argv(&spec);
+
+    let at = sidecar
+        .iter()
+        .position(|part| part == "--add-host")
+        .expect("add-host");
+    assert_eq!(sidecar[at + 1], "proxy.corp.example:10.1.2.3");
+    assert_eq!(sidecar.last().map(String::as_str), Some("sha256:p"));
+    assert!(
+        !worker.iter().any(|part| part == "--add-host"),
+        "{worker:?}"
+    );
+    assert!(
+        !argv::proxy_argv(&spec, "harness-d1-qa2", &[])
+            .iter()
+            .any(|part| part == "--add-host")
+    );
+}
+
+#[test]
+fn an_upstream_proxy_url_yields_the_name_to_resolve_without_credentials() {
+    let host = |url: &str| argv::upstream_proxy_host(url);
+    assert_eq!(
+        host("http://Proxy.Corp.example:3128"),
+        Some(("proxy.corp.example".to_owned(), 3128))
+    );
+    assert_eq!(
+        host("http://user:secret@proxy.corp.example:8080/"),
+        Some(("proxy.corp.example".to_owned(), 8080))
+    );
+    assert_eq!(
+        host("proxy.corp.example:3128"),
+        Some(("proxy.corp.example".to_owned(), 3128))
+    );
+    assert_eq!(
+        host("https://proxy.corp.example"),
+        Some(("proxy.corp.example".to_owned(), 443))
+    );
+    assert_eq!(
+        host("http://proxy.corp.example"),
+        Some(("proxy.corp.example".to_owned(), 80))
+    );
+    assert_eq!(host("http://10.0.0.5:3128"), None);
+    assert_eq!(host("http://[fd00::5]:3128"), None);
+    assert_eq!(host(""), None);
+    assert_eq!(host("http://proxy:notaport"), None);
+    assert_eq!(host("http://bad name:3128"), None);
 }

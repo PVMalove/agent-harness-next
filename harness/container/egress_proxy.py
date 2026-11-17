@@ -15,10 +15,19 @@ Rules, applied to every request before any upstream connection:
 
 Everything else gets ``403``. The resolver, the address policy and the port set are injectable so a
 test can reach a local server without weakening the defaults.
+
+When the sidecar's environment names an upstream proxy (``https_proxy``/``HTTPS_PROXY`` for
+``CONNECT``, ``http_proxy``/``HTTP_PROXY`` for plain HTTP; lower case wins), an allowed request is
+chained through it: ``CONNECT`` for tunnels, an absolute-form request line for HTTP, with
+``Proxy-Authorization`` from the proxy URL's credentials. The checks above still run first on the
+target; the upstream proxy is configuration, never a target. A host matching ``no_proxy``/``NO_PROXY``,
+a scheme without an upstream, and a loopback or unspecified upstream (unreachable from a container)
+connect directly (issue #1201).
 """
 
 from __future__ import annotations
 
+import base64
 import ipaddress
 import os
 import select
@@ -27,8 +36,12 @@ import socket
 import socketserver
 import sys
 from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from types import FrameType
-from urllib.parse import urlsplit
+from urllib.parse import unquote, urlsplit
+from urllib.request import (  # type: ignore[attr-defined]  # absent from typeshed
+    proxy_bypass_environment,
+)
 
 ALLOWED_HOSTS_ENV = "HARNESS_EGRESS_ALLOWED_HOSTS"
 LISTEN_PORT = 3128
@@ -59,6 +72,36 @@ class Unreachable(Exception):
 
 class BadRequest(Exception):
     """The request head is not a well-formed proxy request: ``400``."""
+
+
+@dataclass(frozen=True)
+class Upstream:
+    """An upstream proxy: its address and the ready ``Proxy-Authorization`` value, if any."""
+
+    host: str
+    port: int
+    authorization: str | None = None
+
+    def __str__(self) -> str:
+        return f"{self.host}:{self.port}"
+
+
+@dataclass(frozen=True)
+class Upstreams:
+    """The upstream proxy per scheme and the ``no_proxy`` bypass list; all empty means direct."""
+
+    http: Upstream | None = None
+    https: Upstream | None = None
+    no_proxy: str = ""
+
+
+@dataclass(frozen=True)
+class Route:
+    """The opened connection and how to address the request on it."""
+
+    socket: socket.socket
+    via_upstream: bool
+    authorization: str | None = None
 
 
 def resolve(host: str, port: int) -> list[str]:
@@ -102,11 +145,13 @@ class EgressPolicy:
         ports: Collection[int] = DEFAULT_PORTS,
         resolver: Resolver = resolve,
         address_allowed: AddressPolicy = default_address_allowed,
+        upstreams: Upstreams | None = None,
     ) -> None:
         self.hosts = frozenset(normalize_host(host) for host in hosts if host.strip())
         self.ports = frozenset(ports)
         self._resolver = resolver
         self._address_allowed = address_allowed
+        self.upstreams = upstreams or Upstreams()
 
     def _usable(self, address: str) -> bool:
         try:
@@ -114,9 +159,35 @@ class EgressPolicy:
         except ValueError:
             return False
 
-    def connect(self, host: str, port: int) -> socket.socket:
-        """Open the upstream connection, or raise ``Refused`` or ``Unreachable``."""
+    def connect(self, host: str, port: int, *, tunnel: bool) -> Route:
+        """Open the connection for ``host:port``, or raise ``Refused`` or ``Unreachable``.
+
+        The target checks always run first; only then is the route chosen: the upstream proxy of
+        the scheme unless ``no_proxy`` matches, otherwise a direct connection to a checked address.
+        """
         host = normalize_host(host)
+        addresses = self._checked_addresses(host, port)
+        upstream = self.upstreams.https if tunnel else self.upstreams.http
+        if upstream is not None and not (
+            self.upstreams.no_proxy
+            and proxy_bypass_environment(host, {"no": self.upstreams.no_proxy})
+        ):
+            return _via_upstream(upstream, host, port, tunnel=tunnel)
+        failure: OSError | None = None
+        for address in addresses:
+            try:
+                return Route(
+                    socket.create_connection(
+                        (address, port), timeout=CONNECT_TIMEOUT_SECONDS
+                    ),
+                    via_upstream=False,
+                )
+            except OSError as exc:
+                failure = exc
+        raise Unreachable(f"cannot connect to {host}:{port}: {failure}")
+
+    def _checked_addresses(self, host: str, port: int) -> list[str]:
+        """The resolved addresses of an allowed target; every policy check happens here."""
         if _is_ip_literal(host):
             raise Refused("an IP-literal target is not allowed")
         if host not in self.hosts:
@@ -131,15 +202,42 @@ class EgressPolicy:
             raise Unreachable(f"cannot resolve {host}: no address")
         if not all(self._usable(address) for address in addresses):
             raise Refused(f"host {host} resolves to a refused address")
-        failure: OSError | None = None
-        for address in addresses:
-            try:
-                return socket.create_connection(
-                    (address, port), timeout=CONNECT_TIMEOUT_SECONDS
-                )
-            except OSError as exc:
-                failure = exc
-        raise Unreachable(f"cannot connect to {host}:{port}: {failure}")
+        return addresses
+
+
+def _via_upstream(upstream: Upstream, host: str, port: int, *, tunnel: bool) -> Route:
+    """Connect to the upstream proxy and, for a tunnel, have it open ``host:port``."""
+    try:
+        connection = socket.create_connection(
+            (upstream.host, upstream.port), timeout=CONNECT_TIMEOUT_SECONDS
+        )
+    except OSError as exc:
+        raise Unreachable(
+            f"cannot connect to upstream proxy {upstream} for {host}:{port}: {exc}"
+        ) from exc
+    if not tunnel:
+        return Route(
+            connection, via_upstream=True, authorization=upstream.authorization
+        )
+    lines = [f"CONNECT {host}:{port} HTTP/1.1", f"Host: {host}:{port}"]
+    if upstream.authorization:
+        lines.append(f"Proxy-Authorization: {upstream.authorization}")
+    try:
+        connection.sendall(("\r\n".join(lines) + "\r\n\r\n").encode("latin-1"))
+        head, extra = _read_head(connection)
+    except (OSError, BadRequest) as exc:
+        connection.close()
+        raise Unreachable(
+            f"upstream proxy {upstream} failed the tunnel to {host}:{port}: {exc}"
+        ) from exc
+    status = head.split(b"\r\n", 1)[0].decode("latin-1")
+    fields = status.split(" ", 2)
+    if len(fields) < 2 or not fields[1].startswith("2") or extra:
+        connection.close()
+        raise Unreachable(
+            f"upstream proxy {upstream} answered {status!r} for {host}:{port}"
+        )
+    return Route(connection, via_upstream=True)
 
 
 def _stderr_log(message: str) -> None:
@@ -186,9 +284,9 @@ def _parse_authority(target: str) -> tuple[str, int]:
 
 
 def _rewrite_http(
-    method: str, target: str, version: str, headers: list[tuple[str, str]]
-) -> tuple[str, int, bytes]:
-    """The upstream host, its port and the origin-form request head for an absolute-URI request."""
+    target: str, headers: list[tuple[str, str]]
+) -> tuple[str, int, str, str, list[str]]:
+    """Host, port, origin-form target, authority and forwarded header lines of an absolute URI."""
     parts = urlsplit(target)
     if parts.scheme.lower() != "http" or not parts.hostname:
         raise Refused("only absolute http:// requests and CONNECT are proxied")
@@ -201,14 +299,14 @@ def _rewrite_http(
     port = explicit_port or 80
     path = (parts.path or "/") + (f"?{parts.query}" if parts.query else "")
     authority = parts.hostname + (f":{explicit_port}" if explicit_port else "")
-    lines = [f"{method} {path} {version}", f"Host: {authority}"]
+    lines = [f"Host: {authority}"]
     lines += [
         f"{name}: {value}"
         for name, value in headers
         if name.lower() not in _HOP_HEADERS and name.lower() != "host"
     ]
     lines.append("Connection: close")
-    return parts.hostname, port, ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1")
+    return parts.hostname, port, path, authority, lines
 
 
 def _relay(first: socket.socket, second: socket.socket) -> None:
@@ -261,15 +359,26 @@ class _Handler(socketserver.BaseRequestHandler):
             if method.upper() == "CONNECT":
                 host, port = _parse_authority(target)
                 subject = f"CONNECT {host}:{port}"
-                upstream = self.server.policy.connect(host, port)
+                route = self.server.policy.connect(host, port, tunnel=True)
+                upstream = route.socket
                 client.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
                 forwarded = rest
             else:
-                host, port, forwarded = _rewrite_http(method, target, version, headers)
+                host, port, path, authority, lines = _rewrite_http(target, headers)
                 subject = f"{method.upper()} {host}:{port}"
-                upstream = self.server.policy.connect(host, port)
-                forwarded += rest
-            self.server.log(f"allow {subject}")
+                route = self.server.policy.connect(host, port, tunnel=False)
+                upstream = route.socket
+                request_target = (
+                    f"http://{authority}{path}" if route.via_upstream else path
+                )
+                lines.insert(0, f"{method} {request_target} {version}")
+                if route.authorization:
+                    lines.append(f"Proxy-Authorization: {route.authorization}")
+                forwarded = ("\r\n".join(lines) + "\r\n\r\n").encode("latin-1") + rest
+            self.server.log(
+                f"allow {subject}"
+                + (" via upstream proxy" if route.via_upstream else "")
+            )
             if forwarded:
                 upstream.sendall(forwarded)
             _relay(client, upstream)
@@ -306,13 +415,79 @@ def allowed_hosts_from_env(environ: Mapping[str, str]) -> list[str]:
     return hosts
 
 
+_PROXY_VARIABLES = {
+    "http": ("http_proxy", "HTTP_PROXY"),
+    "https": ("https_proxy", "HTTPS_PROXY"),
+}
+
+
+def _local_upstream(host: str) -> bool:
+    if normalize_host(host) == "localhost":
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
+    return address.is_loopback or address.is_unspecified
+
+
+def _upstream_from_url(name: str, value: str, log: Log) -> Upstream | None:
+    """One ``http://[user:password@]host[:port]`` proxy URL; a bare ``host[:port]`` is http."""
+    text = value.strip()
+    if "://" not in text:
+        text = f"http://{text}"
+    parts = urlsplit(text)
+    if parts.scheme.lower() != "http":
+        raise SystemExit(
+            f"{name} must name an http:// upstream proxy, not {parts.scheme}://; refusing to start"
+        )
+    if not parts.hostname:
+        raise SystemExit(f"{name} names no upstream proxy host; refusing to start")
+    try:
+        port = parts.port or 80
+    except ValueError as exc:
+        raise SystemExit(f"{name} has an invalid port; refusing to start") from exc
+    shown = f"{parts.hostname}:{port}"
+    if _local_upstream(parts.hostname):
+        log(
+            f"ignoring {name}: upstream proxy {shown} is a loopback or unspecified address, "
+            "unreachable from the container; connecting directly"
+        )
+        return None
+    authorization = None
+    if parts.username is not None:
+        credentials = f"{unquote(parts.username)}:{unquote(parts.password or '')}"
+        authorization = "Basic " + base64.b64encode(credentials.encode()).decode(
+            "ascii"
+        )
+    log(f"upstream proxy from {name}: {shown}")
+    return Upstream(parts.hostname, port, authorization)
+
+
+def upstreams_from_env(environ: Mapping[str, str], log: Log) -> Upstreams:
+    """The upstream proxies the runtime passed to the sidecar; none means direct connections."""
+    chosen: dict[str, Upstream | None] = {}
+    for scheme, names in _PROXY_VARIABLES.items():
+        name = next((name for name in names if environ.get(name, "").strip()), None)
+        chosen[scheme] = (
+            _upstream_from_url(name, environ[name], log) if name is not None else None
+        )
+    no_proxy = (environ.get("no_proxy") or environ.get("NO_PROXY") or "").strip()
+    return Upstreams(http=chosen["http"], https=chosen["https"], no_proxy=no_proxy)
+
+
 def _stop(signum: int, frame: FrameType | None) -> None:
     raise SystemExit(0)
 
 
 def main() -> int:
     """Serve on every interface of the container: the internal network reaches it by name."""
-    policy = EgressPolicy(allowed_hosts_from_env(os.environ))
+    policy = EgressPolicy(
+        allowed_hosts_from_env(os.environ),
+        upstreams=upstreams_from_env(os.environ, _stderr_log),
+    )
     # PID 1 ignores SIGTERM without a handler, which would make ``docker stop`` wait for a kill.
     signal.signal(signal.SIGTERM, _stop)
     with EgressServer(("0.0.0.0", LISTEN_PORT), policy) as server:

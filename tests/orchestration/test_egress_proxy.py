@@ -386,6 +386,257 @@ class AddressPolicyTests(ProxyFixture):
         self.assertEqual(calls, [ALLOWED])
 
 
+class FakeUpstreamProxy:
+    """A loopback upstream proxy: it records each head, accepts CONNECT and echoes the tunnel."""
+
+    def __init__(self) -> None:
+        self.server = socket.create_server(("127.0.0.1", 0))
+        self.port: int = self.server.getsockname()[1]
+        self.heads: list[str] = []
+        self.connections = 0
+        self.connect_reply = b"HTTP/1.1 200 Connection established\r\n\r\n"
+        threading.Thread(target=self._accept, daemon=True).start()
+
+    def close(self) -> None:
+        self.server.close()
+
+    def _accept(self) -> None:
+        while True:
+            try:
+                connection, _ = self.server.accept()
+            except OSError:
+                return
+            self.connections += 1
+            threading.Thread(
+                target=self._serve, args=(connection,), daemon=True
+            ).start()
+
+    def _serve(self, connection: socket.socket) -> None:
+        with connection:
+            buffer = b""
+            while b"\r\n\r\n" not in buffer:
+                chunk = connection.recv(4096)
+                if not chunk:
+                    return
+                buffer += chunk
+            head = buffer.partition(b"\r\n\r\n")[0].decode("latin-1")
+            self.heads.append(head)
+            if not head.startswith("CONNECT "):
+                connection.sendall(
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\nConnection: close\r\n\r\nproxied"
+                )
+                return
+            connection.sendall(self.connect_reply)
+            if not self.connect_reply.startswith(b"HTTP/1.1 200"):
+                return
+            while data := connection.recv(4096):
+                connection.sendall(b"echo:" + data)
+
+
+class UpstreamProxyTests(ProxyFixture):
+    """The sidecar chains allowed requests through the operator's upstream proxy (#1201)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.proxy = FakeUpstreamProxy()
+        self.addCleanup(self.proxy.close)
+        self.answers["public.test"] = ["93.184.216.34"]
+        self.answers["loop.test"] = ["127.0.0.1"]
+
+    def chained(self, upstreams: egress_proxy.Upstreams) -> int:
+        return self.start(
+            egress_proxy.EgressPolicy(
+                ["public.test", "loop.test"],
+                resolver=self.resolver,
+                upstreams=upstreams,
+            )
+        )
+
+    def via_proxy(self, authorization: str | None = None) -> egress_proxy.Upstream:
+        return egress_proxy.Upstream("127.0.0.1", self.proxy.port, authorization)
+
+    def test_an_allowed_connect_is_chained_through_the_upstream_proxy(self) -> None:
+        port = self.chained(egress_proxy.Upstreams(https=self.via_proxy("Basic dTpw")))
+
+        with self.client(port) as connection:
+            connection.sendall(
+                b"CONNECT public.test:443 HTTP/1.1\r\nHost: public.test:443\r\n\r\n"
+            )
+            established = connection.recv(4096)
+            connection.sendall(b"ping")
+            answer = connection.recv(4096)
+
+        self.assertTrue(established.startswith(b"HTTP/1.1 200"), established)
+        self.assertEqual(answer, b"echo:ping")
+        self.assertEqual(
+            self.proxy.heads,
+            [
+                "CONNECT public.test:443 HTTP/1.1\r\nHost: public.test:443\r\n"
+                "Proxy-Authorization: Basic dTpw"
+            ],
+        )
+        self.assertEqual(self.resolved, [("public.test", 443)])
+
+    def test_an_allowed_http_request_goes_to_the_upstream_proxy_in_absolute_form(
+        self,
+    ) -> None:
+        port = self.chained(egress_proxy.Upstreams(http=self.via_proxy("Basic dTpw")))
+
+        response = self.exchange(
+            "GET http://public.test/path?q=1 HTTP/1.1\r\nHost: public.test\r\n"
+            "Proxy-Authorization: Basic c2VjcmV0\r\nAccept: */*\r\n\r\n",
+            port,
+        )
+
+        self.assertTrue(response.endswith(b"proxied"), response)
+        [head] = self.proxy.heads
+        lines = head.split("\r\n")
+        self.assertEqual(lines[0], "GET http://public.test/path?q=1 HTTP/1.1")
+        self.assertIn("Host: public.test", lines)
+        self.assertIn("Accept: */*", lines)
+        self.assertIn("Proxy-Authorization: Basic dTpw", lines)
+        self.assertNotIn("c2VjcmV0", head)
+
+    def test_without_an_upstream_for_the_scheme_or_under_no_proxy_it_connects_directly(
+        self,
+    ) -> None:
+        origin = self.upstream.port
+        cases = {
+            "no upstream": egress_proxy.Upstreams(),
+            "https only": egress_proxy.Upstreams(https=self.via_proxy()),
+            "no_proxy": egress_proxy.Upstreams(
+                http=self.via_proxy(), no_proxy="example.org, .ALLOWED.test"
+            ),
+        }
+        for name, upstreams in cases.items():
+            with self.subTest(case=name):
+                port = self.start(
+                    egress_proxy.EgressPolicy(
+                        [ALLOWED],
+                        ports={origin},
+                        resolver=self.resolver,
+                        address_allowed=lambda address: True,
+                        upstreams=upstreams,
+                    )
+                )
+
+                response = self.exchange(
+                    f"GET http://{ALLOWED}:{origin}/x HTTP/1.1\r\n\r\n", port
+                )
+
+                self.assertTrue(response.endswith(b"hello"), response)
+                self.assertEqual(
+                    self.upstream.heads[-1].split("\r\n")[0], "GET /x HTTP/1.1"
+                )
+        self.assertEqual(self.proxy.connections, 0)
+
+    def test_refused_targets_never_reach_the_upstream_proxy(self) -> None:
+        both = self.via_proxy()
+        port = self.chained(egress_proxy.Upstreams(http=both, https=both))
+
+        statuses = {
+            self.exchange(request, port).split(b"\r\n", 1)[0]
+            for request in (
+                "CONNECT denied.test:443 HTTP/1.1\r\n\r\n",
+                "GET http://denied.test/ HTTP/1.1\r\n\r\n",
+                f"CONNECT 127.0.0.1:{self.proxy.port} HTTP/1.1\r\n\r\n",
+                f"GET http://127.0.0.1:{self.proxy.port}/ HTTP/1.1\r\n\r\n",
+                "CONNECT public.test:22 HTTP/1.1\r\n\r\n",
+                "CONNECT loop.test:443 HTTP/1.1\r\n\r\n",
+                "GET http://loop.test/ HTTP/1.1\r\n\r\n",
+            )
+        }
+
+        self.assertEqual(statuses, {b"HTTP/1.1 403 Forbidden"})
+        self.assertEqual(self.proxy.connections, 0)
+
+    def test_a_failing_or_refusing_upstream_proxy_is_a_bad_gateway(self) -> None:
+        free = socket.create_server(("127.0.0.1", 0))
+        closed_port: int = free.getsockname()[1]
+        free.close()
+        self.proxy.connect_reply = b"HTTP/1.1 407 Proxy Authentication Required\r\n\r\n"
+        refusing = self.chained(egress_proxy.Upstreams(https=self.via_proxy()))
+        gone = self.chained(
+            egress_proxy.Upstreams(
+                https=egress_proxy.Upstream("127.0.0.1", closed_port, None),
+                http=egress_proxy.Upstream("127.0.0.1", closed_port, None),
+            )
+        )
+
+        statuses = {
+            self.exchange("CONNECT public.test:443 HTTP/1.1\r\n\r\n", refusing)[:12],
+            self.exchange("CONNECT public.test:443 HTTP/1.1\r\n\r\n", gone)[:12],
+            self.exchange("GET http://public.test/ HTTP/1.1\r\n\r\n", gone)[:12],
+        }
+
+        self.assertEqual(statuses, {b"HTTP/1.1 502"})
+        self.assertTrue(
+            any("unreachable" in line and "407" in line for line in self.logs),
+            self.logs,
+        )
+
+
+class UpstreamsFromEnvTests(unittest.TestCase):
+    def parse(
+        self, environ: dict[str, str]
+    ) -> tuple[egress_proxy.Upstreams, list[str]]:
+        logs: list[str] = []
+        return egress_proxy.upstreams_from_env(environ, logs.append), logs
+
+    def test_no_proxy_variables_mean_direct_connections(self) -> None:
+        upstreams, _ = self.parse({})
+
+        self.assertEqual(upstreams, egress_proxy.Upstreams())
+
+    def test_lower_case_wins_and_no_proxy_is_kept(self) -> None:
+        upstreams, logs = self.parse(
+            {
+                "https_proxy": "http://user:p%40ss@proxy.corp:3128/",
+                "HTTPS_PROXY": "http://other.corp:9999",
+                "HTTP_PROXY": "proxy.corp",
+                "NO_PROXY": "localhost,.corp",
+            }
+        )
+
+        self.assertEqual(
+            upstreams,
+            egress_proxy.Upstreams(
+                http=egress_proxy.Upstream("proxy.corp", 80, None),
+                https=egress_proxy.Upstream("proxy.corp", 3128, "Basic dXNlcjpwQHNz"),
+                no_proxy="localhost,.corp",
+            ),
+        )
+        self.assertFalse([line for line in logs if "p%40ss" in line or "p@ss" in line])
+
+    def test_a_loopback_or_unspecified_upstream_is_ignored_with_a_log_line(
+        self,
+    ) -> None:
+        for value in (
+            "http://127.0.0.1:3128",
+            "http://localhost:3128",
+            "http://[::1]:3128",
+            "http://0.0.0.0:3128",
+        ):
+            with self.subTest(value=value):
+                upstreams, logs = self.parse({"HTTPS_PROXY": value})
+
+                self.assertIsNone(upstreams.https)
+                self.assertTrue(any("HTTPS_PROXY" in line for line in logs), logs)
+
+    def test_an_unsupported_proxy_url_refuses_to_start(self) -> None:
+        for value in (
+            "https://proxy.corp:443",
+            "socks5://proxy.corp:1080",
+            "http://:8080",
+        ):
+            with (
+                self.subTest(value=value),
+                self.assertRaises(SystemExit) as refused,
+            ):
+                self.parse({"HTTP_PROXY": value})
+            self.assertIn("HTTP_PROXY", str(refused.exception))
+
+
 class StartupTests(unittest.TestCase):
     def test_the_allowlist_comes_from_the_environment(self) -> None:
         hosts = egress_proxy.allowed_hosts_from_env(
