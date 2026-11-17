@@ -1132,6 +1132,21 @@ def seed_groups(repo: Path) -> dict[str, list[str]]:
     return groups
 
 
+def _missing_env(document: JsonObject, template: JsonObject) -> JsonObject | None:
+    """The document's `env` plus the template's, when the document sets none of its variables.
+
+    The template sets `gc.auto=0` for the git of every agent command (#1189); a project that
+    already sets one of these variables keeps its own value and gets nothing.
+    """
+    wanted = template.get("env")
+    present = document.get("env", {})
+    if not isinstance(wanted, dict) or not wanted or not isinstance(present, dict):
+        return None
+    if any(name in present for name in wanted):
+        return None
+    return {**present, **wanted}
+
+
 def _install_hook_config(
     repo: Path, adapter: RuntimeAdapter, seeds: SeedInstall
 ) -> list[str]:
@@ -1176,7 +1191,11 @@ def _install_hook_config(
                 f"{merge.problem or 'not valid JSON'}"
             )
         else:
-            if merge.changed:
+            env = _missing_env(merge.document, template_document)
+            if env is not None:
+                merge.document["env"] = env
+                print(f"hooks merge: {adapter.config}: env of the template added")
+            if merge.changed or env is not None:
                 if merge.document == template_document:
                     content = template_bytes
                 else:

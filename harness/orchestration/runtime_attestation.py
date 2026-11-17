@@ -89,6 +89,33 @@ def _git(path: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def _lost_worktree(repo: Path, checkout: Path, branch: object) -> AttestationError:
+    """The batch's issue worktree that git no longer lists, with the command that recreates it.
+
+    The branch outlives the worktree, so `git worktree add` over the missing or empty directory
+    restores it. The sandbox mounts `.git/worktrees` read-only, so the command runs outside it,
+    and a new worktree needs the session's write access again (#1189).
+    """
+    if not checkout.exists():
+        state = "is missing"
+    elif checkout.is_dir() and not any(checkout.iterdir()):
+        state = "is empty"
+    else:
+        state = "has no git metadata"
+    name = branch if isinstance(branch, str) and branch else "<issue-branch>"
+    return AttestationError(
+        f"the batch's issue worktree {checkout} is lost: it is not registered in "
+        f"git worktree list and the directory {state}",
+        remedy=(
+            "outside the agent sandbox, recreate it on the kept branch: "
+            f"git -C {repo.resolve()} worktree prune && "
+            f"git -C {repo.resolve()} worktree add {checkout} {name}; "
+            "then reopen the session write access (EnterWorktree with this path, ExitWorktree "
+            "with action keep) and repeat the command"
+        ),
+    )
+
+
 def _registered_worktrees(repo: Path) -> set[Path]:
     worktrees: set[Path] = set()
     for line in _git(repo, "worktree", "list", "--porcelain").splitlines():
@@ -119,12 +146,15 @@ def attest(repo: Path, dispatch: Mapping[str, object], worktree: str) -> dict[st
             "runtime worktree path does not match the expected worker checkout",
             remedy=f"start the worker in {Path(expected_path).resolve()} and report that canonical top-level path",
         )
+    registered = _registered_worktrees(repo)
+    if isinstance(expected_path, str) and checkout not in registered:
+        raise _lost_worktree(repo, checkout, dispatch.get("branch"))
     if not checkout.is_dir():
         raise AttestationError(
             "reported worktree does not exist",
             remedy=f"report the real worktree path instead of {checkout}",
         )
-    if checkout not in _registered_worktrees(repo):
+    if checkout not in registered:
         raise AttestationError(
             "reported worktree is not registered by the dispatch repository",
             remedy=f"run 'git worktree add' for {checkout} or report the correct registered worktree",
