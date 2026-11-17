@@ -274,6 +274,12 @@ pub fn proxy_argv(spec: &Spec<'_>, base: &str) -> Vec<String> {
         "--env",
     ]));
     argv.push(format!("{ALLOWED_HOSTS_ENV}={}", spec.plan.hosts.join(",")));
+    // The runtime's own upstream proxy reaches the sidecar only, by name: the engine CLI copies
+    // each value from its environment (or omits an unset one), so no proxy credential enters the
+    // argv, a log or the ledger (#1201).
+    for name in PROXY_URL_ENV_NAMES.iter().chain(&PROXY_BYPASS_ENV_NAMES) {
+        argv.extend(["--env".to_owned(), (*name).to_owned()]);
+    }
     argv.extend(labels_argv(spec.labels));
     argv.push(spec.proxy_image_id.unwrap_or_default().to_owned());
     argv
