@@ -325,6 +325,10 @@ worker and the QA command do not receive them and still egress only through the 
 - The upstream address must be reachable from containers. The sidecar ignores `localhost`,
   loopback and `0.0.0.0` with a log line and connects directly: the host's loopback is not
   reachable from a container.
+- The runtime resolves the upstream proxy name on the host and pins its IPv4 address in the
+  sidecar's hosts file (`--add-host`), so container DNS does not need corporate names and the
+  engine's DNS settings stay unchanged. The worker never gets this entry. An IP address in the URL
+  needs no lookup; a name the host cannot resolve is left to container DNS.
 - Hosts listed in `NO_PROXY` and a scheme without an upstream connect directly.
 - After `.harness/container/egress_proxy.py` changes, rebuild `harness-proxy:local` and repeat
   `dispatch propose`: the image id is pinned in the plan.
