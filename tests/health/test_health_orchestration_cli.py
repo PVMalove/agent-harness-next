@@ -135,6 +135,8 @@ def test_health_json_reports_every_orchestration_check_against_a_ledger_fixture(
         _build_ledger_fixture(StoreLedger(tmp_path, runtime))
         orphan = tmp_path / ".harness" / ".sandboxes" / "worktrees" / "orphan-1"
         orphan.mkdir(parents=True)
+        # A file makes it an orphan, not the empty directory a live sandbox recreates (#1194).
+        (orphan / "notes.md").write_text("left behind", encoding="utf-8")
 
         exit_code, data = _run_health_json(tmp_path)
     finally:
