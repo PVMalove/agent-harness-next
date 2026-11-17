@@ -308,11 +308,36 @@ Build a separate QA list from the project's registries: Python often needs `pypi
 Derive the exact list from manifests/registry configuration and tool failures; the two example
 hosts do not promise access to every dependency.
 
+### Host upstream proxy {#upstream-proxy}
+
+When the host reaches the internet only through a corporate proxy, set `HTTPS_PROXY`,
+`HTTP_PROXY` (or their lowercase variants) and, if needed, `NO_PROXY` in the environment that starts
+`harness-runtime serve`. The runtime passes these variables to the proxy sidecar only: the engine
+copies their values from its own environment, so they never enter the argv, logs or the ledger. The
+worker and the QA command do not receive them and still egress only through the sidecar.
+
+- The sidecar first checks the target host against the allowlist, port and DNS addresses, then
+  connects through the upstream proxy: `CONNECT` for HTTPS and an absolute-URI request for HTTP. The
+  upstream proxy itself never becomes a target: a request naming it as a host gets `403` unless it
+  is allowlisted.
+- Only `http://[user:password@]host[:port]` is supported; credentials go upstream in
+  `Proxy-Authorization`. Another scheme or a URL without a host stops the sidecar at startup.
+- The upstream address must be reachable from containers. The sidecar ignores `localhost`,
+  loopback and `0.0.0.0` with a log line and connects directly: the host's loopback is not
+  reachable from a container.
+- Hosts listed in `NO_PROXY` and a scheme without an upstream connect directly.
+- After `.harness/container/egress_proxy.py` changes, rebuild `harness-proxy:local` and repeat
+  `dispatch propose`: the image id is pinned in the plan.
+
+When QA preparation fails on a network timeout, the `qa run` error names the unreachable allowlisted
+host and this remedy.
+
 | Symptom | Check and action |
 | --- | --- |
 | `--network none` | Check the effective role/operation host list; an approved plan change needs a new propose. |
 | Proxy returns `403` | Check exact hostname, port and DNS addresses; do not add wildcards or the whole internet to bypass it. |
 | Host is allowed but connection fails | Check the tool's own proxy configuration and DNS/host availability. Test inside the selected image and plan. |
+| Timeout to an allowed host behind a corporate proxy | Start the runtime with `HTTPS_PROXY`/`HTTP_PROXY` and `NO_PROXY` per [upstream proxy](#upstream-proxy), rebuild `harness-proxy:local`, repeat `dispatch propose`. |
 
 ## Token {#token}
 
