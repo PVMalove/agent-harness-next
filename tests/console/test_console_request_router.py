@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 from collections.abc import AsyncGenerator
 from typing import cast
 
@@ -15,6 +16,7 @@ from harness.console.backend.api.request_router import (
     MAX_UNFINISHED_REQUESTS,
     RequestRouter,
 )
+from harness.console.backend.application.advisor import AdvisorService
 from harness.console.backend.application.decisions import DecisionService
 from harness.console.backend.application.events import OrchestrationEvents
 from harness.console.backend.application.jobs import JobService
@@ -106,6 +108,37 @@ def test_the_fifth_unfinished_request_gets_busy_and_finished_ones_free_slots(
         await connection.submit(_home(6))
         await _settle()
         assert sent[-1] == {"id": 6, "ok": True}
+        await connection.aclose()
+
+    asyncio.run(scenario())
+
+
+def test_an_advisor_cancel_is_answered_inline_when_every_request_slot_is_taken(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def scenario() -> None:
+        gate = Gate()
+        router, sent = _router(monkeypatch, gate)
+        router.advisor = cast(AdvisorService, object())
+
+        async def send(reply: str) -> bool:
+            sent.append(json.loads(reply))
+            return True
+
+        connection = router.open(send)
+        for id in range(1, MAX_UNFINISHED_REQUESTS + 1):
+            await connection.submit(_home(id))
+        await _settle()
+        assert connection.unfinished == MAX_UNFINISHED_REQUESTS and sent == []
+        stop = threading.Event()
+        connection._advice["a"] = stop
+        await connection.submit(
+            json.dumps({"id": "c", "type": "advisor.cancel", "request_id": "a"})
+        )
+        # Answered by the time submit returns, with no slot taken and no busy reply.
+        assert [(reply["id"], reply.get("cancelled")) for reply in sent] == [("c", True)]
+        assert stop.is_set()
+        assert connection.unfinished == MAX_UNFINISHED_REQUESTS
         await connection.aclose()
 
     asyncio.run(scenario())

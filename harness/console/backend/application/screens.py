@@ -85,6 +85,8 @@ class _Source(Generic[T]):
         self._value: T | None = None
         self._stamp = 0.0
         self._generation = 0
+        # Bumped by drop(): a rebuild that started before it never stores its value.
+        self._epoch = 0
         self._building: asyncio.Task[tuple[T, bool, float]] | None = None
 
     def _fresh(self) -> tuple[T, bool, float] | None:
@@ -100,10 +102,18 @@ class _Source(Generic[T]):
         if self._generation == generation:
             self._value = None
 
+    def drop(self) -> None:
+        """Forget the value now, whatever its age, and the one a running rebuild will produce."""
+        self._epoch += 1
+        self._value = None
+
     async def _rebuild(self, collect: Callable[[], T]) -> tuple[T, bool, float]:
         self._value = None
+        epoch = self._epoch
         try:
             value = await asyncio.to_thread(collect)
+            if epoch != self._epoch:
+                return value, False, 0.0
             self._value, self._stamp = value, self._clock()
             self._generation += 1
             asyncio.get_running_loop().call_later(
@@ -403,6 +413,13 @@ class ScreenService:
             "cached": cached,
             "age_seconds": round(age, 3),
         }
+
+    def job_finished(self, command_id: str) -> None:
+        """Drop the sources that a finished configuration job made stale: Settings and
+        Diagnostics both serve the configuration digests a write is checked against."""
+        if command_id.startswith("configuration-"):
+            self._configuration.drop()
+            self._features.drop()
 
     async def features(self, *, force: bool = False) -> dict[str, object]:
         """The Harness feature registry of Diagnostics with the configuration digests a toggle

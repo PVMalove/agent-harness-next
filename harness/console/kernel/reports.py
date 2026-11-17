@@ -204,10 +204,16 @@ _DIRECTORIES = (
 )
 # The runtime store answers each of these collections in one frame; all of them together, or the
 # dispatches and reports collections of a long-lived project, would not fit one.
-_STORE_COLLECTIONS = ("audit", "batches", "dispatch-status", "risk-assessments", "qa-lane")
+_STORE_COLLECTIONS = ("batches", "dispatch-status", "risk-assessments", "qa-lane")
+# The audit of a long-lived project can outgrow one frame, and the view uses it only for the first
+# write timestamps, so it is read last and its failure leaves the view without those timestamps.
+_AUDIT_COLLECTION = "audit"
 # The dispatch and report records are read by path, this many paths per ``state.read``.
 STORE_PATH_CHUNK = 100
 STORE_READ_TIMEOUT_SECONDS = 10
+# A caller that waits on the UI thread bounds its reads shorter: a runtime that is down or busy
+# then costs a moment, not the whole retry window of a background read.
+INTERACTIVE_STORE_READ_TIMEOUT_SECONDS = 2
 
 # ``state.read`` of the runtime store: the records by path of the collections and the paths.
 type StoreRead = Callable[[Sequence[str], Sequence[str]], Mapping[str, object]]
@@ -219,7 +225,7 @@ class StoreUnreadable(Exception):
     """The runtime store did not answer a ``state.read`` of the view."""
 
 
-def _runtime_read(repo: Path) -> StoreRead:
+def _runtime_read(repo: Path, timeout_seconds: float) -> StoreRead:
     """``state.read`` through the project's runtime; the console never starts the runtime."""
     from ...orchestration.runtime_client import RuntimeClient, RuntimeClientError
 
@@ -231,7 +237,7 @@ def _runtime_read(repo: Path) -> StoreRead:
                 "state.read",
                 operation_id=f"console.ledger-{uuid.uuid4().hex}",
                 payload={"collections": list(collections), "paths": list(paths)},
-                timeout_seconds=STORE_READ_TIMEOUT_SECONDS,
+                timeout_seconds=timeout_seconds,
             )
         except RuntimeClientError as exc:
             raise StoreUnreadable(
@@ -271,6 +277,10 @@ def _store_records(read: StoreRead) -> dict[str, list[JsonObject]]:
     ]
     for start in range(0, len(paths), STORE_PATH_CHUNK):
         add(read([], paths[start : start + STORE_PATH_CHUNK]))
+    try:
+        add(read([_AUDIT_COLLECTION], []))
+    except StoreUnreadable:
+        found["audit"] = []
     return found
 
 
@@ -307,16 +317,22 @@ def _first_write_at(view: LedgerView, relative: str) -> str:
     return ""
 
 
-def load_ledger_view(repo: Path, *, store_read: StoreRead | None = None) -> LedgerView:
+def load_ledger_view(
+    repo: Path,
+    *,
+    store_read: StoreRead | None = None,
+    read_timeout: float = STORE_READ_TIMEOUT_SECONDS,
+) -> LedgerView:
     """Загружает полное представление данных леджера оркестрации для указанного репозитория.
 
     In the runtime-store epoch the records come from the store (``store_read``, by default the
     project's runtime), never from the archived file generation; the store answers no QA gate log
-    to ``state.read``, so the view then has no QA runs."""
+    to ``state.read``, so the view then has no QA runs. ``read_timeout`` bounds each runtime
+    read; a caller on the UI thread passes ``INTERACTIVE_STORE_READ_TIMEOUT_SECONDS``."""
     state = repo / STATE_REL
     if store_is_authority(state):
         try:
-            records = _store_records(store_read or _runtime_read(repo))
+            records = _store_records(store_read or _runtime_read(repo, read_timeout))
         except StoreUnreadable as exc:
             return LedgerView(unavailable=str(exc))
         return _build_view(records, ())

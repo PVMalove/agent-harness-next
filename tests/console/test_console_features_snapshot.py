@@ -76,3 +76,64 @@ def test_an_unknown_or_malformed_field_is_a_bad_request(tmp_path: Path) -> None:
         reply = _ask(service, request)
         assert reply["ok"] is False
         assert cast(dict[str, object], reply["error"])["code"] == "bad_request"
+
+
+def test_a_finished_configuration_job_drops_the_cached_digests_of_both_screens(
+    tmp_path: Path,
+) -> None:
+    from harness.console.backend.application.jobs import JobService
+    from harness.console.kernel.catalog import CONFIGURATION_COMMANDS, HARNESS_COMMANDS
+
+    calls = {"features": 0, "configuration": 0}
+
+    def features(repo: Path) -> dict[str, object]:
+        calls["features"] += 1
+        return {"features": [], "config_digests": {"project.json": str(calls["features"])}}
+
+    def configuration(repo: Path) -> dict[str, object]:
+        calls["configuration"] += 1
+        return {"files": {}, "pending": None}
+
+    async def executor(
+        argv: object, *, cwd: Path, on_output: object, cancel_event: object
+    ) -> int:
+        return 0
+
+    jobs = JobService(
+        tmp_path,
+        catalog={entry.key: entry for entry in (*CONFIGURATION_COMMANDS, *HARNESS_COMMANDS)},
+        executor=executor,
+        journal=lambda repo, record: None,
+        new_id=iter(f"job-{index}" for index in range(10)).__next__,
+        now=lambda: "t",
+    )
+    screens = composition.screen_service(
+        tmp_path, features=features, configuration=configuration
+    )
+    composition.compose(tmp_path, jobs=jobs, screens=screens)
+
+    async def run(command_id: str) -> None:
+        job = jobs.start({"command_id": command_id, "client": "browser", "confirmed": True})
+        while job.phase == "running":
+            await asyncio.sleep(0.01)
+        assert job.phase == "completed"
+
+    async def scenario() -> None:
+        await screens.features()
+        await screens.configuration()
+        await screens.features()
+        await screens.configuration()
+        assert calls == {"features": 1, "configuration": 1}
+        # A job of another section leaves the digests cached.
+        await run("diff")
+        await screens.features()
+        await screens.configuration()
+        assert calls == {"features": 1, "configuration": 1}
+        # A configuration write makes both sources stale at once.
+        await run("configuration-recover")
+        served = await screens.features()
+        await screens.configuration()
+        assert served["cached"] is False
+        assert calls == {"features": 2, "configuration": 2}
+
+    asyncio.run(scenario())
