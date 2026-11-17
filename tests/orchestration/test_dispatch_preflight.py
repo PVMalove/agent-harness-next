@@ -226,8 +226,9 @@ class PrepareTests(_PreflightFixture):
     def test_rejects_unregistered_worktree(self) -> None:
         other = Path(self._tmp.name).resolve() / "other"
         other.mkdir()
-        error = self._assert_rejected("git worktree add", worktree=str(other))
+        error = self._assert_rejected(f"worktree add {other}", worktree=str(other))
         self.assertIn("not registered", error.message)
+        self.assertIn("is lost", error.message)
 
     def test_rejects_worktree_pinned_to_another_snapshot(self) -> None:
         error = self._assert_rejected("new dispatch", snapshot_sha="deadbeef")

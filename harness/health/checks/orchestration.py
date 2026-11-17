@@ -488,7 +488,11 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
     check_id = "orchestration.orphaned_worktrees"
     if not context.orchestration_enabled():
         return _skipped(check_id, context)
-    from harness.cleanup import _active_worktrees, _registered_worktrees
+    from harness.cleanup import (
+        _active_worktrees,
+        _registered_worktrees,
+        sandbox_residue,
+    )
     from harness.storage import sandboxes_root, storage_root
 
     repo = context.repo
@@ -505,6 +509,7 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
     known = set(registered) | active
     worktree_dirs = [sandboxes_root(repo) / "worktrees", root / "worktrees"]
     candidates: list[Path] = []
+    residue: list[Path] = []
     seen: set[Path] = set()
     for worktrees in worktree_dirs:
         if not worktrees.is_dir() or worktrees.is_symlink():
@@ -516,20 +521,30 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
             if resolved in known or resolved in seen:
                 continue
             seen.add(resolved)
-            candidates.append(entry)
+            (residue if sandbox_residue(entry) else candidates).append(entry)
+    # An empty directory is not a worktree: the sandbox of a live session recreates it (#1194).
+    residue_note = (
+        "; пустые каталоги без worktree (песочница сессии создаёт их заново до её конца,"
+        " после конца сессии их удаляет harness cleanup --mode hard): "
+        + "; ".join(str(path) for path in residue)
+        if residue
+        else ""
+    )
     if not candidates:
         return CheckResult(
             id=check_id,
             group="orchestration",
             status="ok",
-            message="осиротевших воркдеревьев нет",
+            message="осиротевших воркдеревьев нет" + residue_note,
         )
     described = [f"{path} (owner={_owner(path)})" for path in candidates]
     return CheckResult(
         id=check_id,
         group="orchestration",
         status="warn",
-        message="осиротевшие каталоги воркдеревьев: " + "; ".join(described),
+        message="осиротевшие каталоги воркдеревьев: "
+        + "; ".join(described)
+        + residue_note,
         fix=Fix(
             text="ничего не удалено; сначала git worktree prune, затем предпросмотр harness cleanup",
             command=context.harness_command("cleanup", str(repo), "--mode", "hard"),

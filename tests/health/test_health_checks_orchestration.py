@@ -496,6 +496,27 @@ def test_orphaned_worktrees_warns_with_owner_and_deletes_nothing(
     assert marker.read_text(encoding="utf-8") == "keep me"
 
 
+def test_orphaned_worktrees_names_an_empty_directory_apart_without_prune(
+    tmp_path: Path,
+) -> None:
+    """The sandbox of a live session recreates an empty directory after `worktree remove`."""
+    _init_repo(tmp_path)
+    empty = tmp_path / ".harness" / ".sandboxes" / "worktrees" / "issue-1180-live-probe"
+    (empty.parent / ".claude" / ".cc-writes").mkdir(parents=True)
+    empty.mkdir()
+
+    result = checks.check_orphaned_worktrees(
+        _context(tmp_path, lock=_ORCHESTRATION_LOCK)
+    )
+
+    assert result.status == "ok"
+    assert result.fix is None
+    assert "осиротевших воркдеревьев нет" in result.message
+    assert str(empty) in result.message
+    assert "git worktree prune" not in result.message
+    assert empty.is_dir()
+
+
 def test_orphaned_worktrees_ok_when_registered_by_git_worktree_list(
     tmp_path: Path,
 ) -> None:

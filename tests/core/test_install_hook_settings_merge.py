@@ -154,6 +154,27 @@ def test_update_replaces_outdated_managed_entry_recorded_in_baseline(
     )
 
 
+def test_update_adds_the_auto_gc_env_and_keeps_a_users_git_config_env(
+    repo: Path,
+) -> None:
+    """The template's `gc.auto=0` reaches an older settings file, never over the user's (#1189)."""
+    install(repo)
+    assert load(repo)["env"] == template_document()["env"]
+    document = load(repo)
+    document["env"] = {"EDITOR": "vim"}
+    save(repo, document)
+
+    assert harness("update", str(repo)).returncode == 0
+    assert load(repo)["env"] == {"EDITOR": "vim", **template_document()["env"]}
+
+    document = load(repo)
+    document["env"] = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.pager"}
+    save(repo, document)
+
+    assert harness("update", str(repo)).returncode == 0
+    assert load(repo)["env"] == {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "core.pager"}
+
+
 def test_update_leaves_user_modified_managed_entry_untouched(repo: Path) -> None:
     install(repo)
     document = load(repo)

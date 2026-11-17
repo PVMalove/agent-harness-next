@@ -51,6 +51,7 @@ sys.path[:] = [
 ]
 sys.path.insert(0, str(ROOT))
 from harness.errors import HarnessError, print_and_exit
+from harness.branch_delete import BranchDeleteRefused, delete_merged_branch
 from harness.cleanup import apply_cleanup, plan_cleanup, plan_digest, remove_worktree
 from harness.worktree_venv import WorktreeVenvError, link_worktree_venv
 from harness.source_checkout import SourceCheckoutError, update_source_checkout
@@ -1131,6 +1132,21 @@ def seed_groups(repo: Path) -> dict[str, list[str]]:
     return groups
 
 
+def _missing_env(document: JsonObject, template: JsonObject) -> JsonObject | None:
+    """The document's `env` plus the template's, when the document sets none of its variables.
+
+    The template sets `gc.auto=0` for the git of every agent command (#1189); a project that
+    already sets one of these variables keeps its own value and gets nothing.
+    """
+    wanted = template.get("env")
+    present = document.get("env", {})
+    if not isinstance(wanted, dict) or not wanted or not isinstance(present, dict):
+        return None
+    if any(name in present for name in wanted):
+        return None
+    return {**present, **wanted}
+
+
 def _install_hook_config(
     repo: Path, adapter: RuntimeAdapter, seeds: SeedInstall
 ) -> list[str]:
@@ -1175,7 +1191,11 @@ def _install_hook_config(
                 f"{merge.problem or 'not valid JSON'}"
             )
         else:
-            if merge.changed:
+            env = _missing_env(merge.document, template_document)
+            if env is not None:
+                merge.document["env"] = env
+                print(f"hooks merge: {adapter.config}: env of the template added")
+            if merge.changed or env is not None:
                 if merge.document == template_document:
                     content = template_bytes
                 else:
@@ -1848,6 +1868,16 @@ def cmd_worktree_remove(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_branch_delete(args: argparse.Namespace) -> int:
+    """Delete a merged ticket's local branch; a refusal names the unmet condition."""
+    try:
+        result: dict[str, str] = delete_merged_branch(Path(args.repo), args.branch)
+    except BranchDeleteRefused as exc:
+        result = {"status": "refused", "branch": args.branch, "reason": str(exc)}
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0 if result["status"] == "deleted" else 1
+
+
 def cmd_worktree_venv(args: argparse.Namespace) -> int:
     """Link an issue worktree's .harness/.venv to the main checkout's venv when locks match."""
     try:
@@ -2007,6 +2037,14 @@ def parser() -> argparse.ArgumentParser:
     worktree.add_argument("repo")
     worktree.add_argument("worktree")
     worktree.set_defaults(func=cmd_worktree_remove)
+
+    branch_delete = commands.add_parser(
+        "branch-delete",
+        help="delete the local branch of a merged ticket once its commits are preserved",
+    )
+    branch_delete.add_argument("repo")
+    branch_delete.add_argument("branch")
+    branch_delete.set_defaults(func=cmd_branch_delete)
 
     worktree_venv = commands.add_parser(
         "worktree-venv",

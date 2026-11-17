@@ -50,7 +50,16 @@ class HarnessEnvironmentContractTests(unittest.TestCase):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
         self.assertIn("HARNESS_VENV := .harness/.venv", makefile)
         self.assertIn("export UV_PROJECT_ENVIRONMENT := $(HARNESS_VENV)", makefile)
-        self.assertIn("\tuv sync --locked", makefile)
+        # The stamp rule syncs through scripts/sync_dev_venv.py, which never re-syncs a venv
+        # linked from the main checkout (#1188).
+        self.assertIn(
+            "\t$(PYTHON_BOOTSTRAP) scripts/sync_dev_venv.py $(HARNESS_VENV) $(PYTHON_BOOTSTRAP)",
+            makefile,
+        )
+        self.assertIn(
+            '["uv", "sync", "--locked", "--python", python]',
+            (ROOT / "scripts/sync_dev_venv.py").read_text(encoding="utf-8"),
+        )
         self.assertIn("$(HARNESS_PYTHON) -c", makefile)
         self.assertNotIn("\n\tpython -c", makefile)
         self.assertNotRegex(makefile, r"(?<!uv )\bpip install|-m pip\b")
