@@ -24,6 +24,7 @@
 
 ### Fixed
 
+- **[Сборка консоли без макетов]:** После удаления `docs/design/` фронтенд консоли не собирался: таблица стилей `execution-console.css` и `mascot.svg` теперь лежат в `harness/console/frontend/src/`, а эталон иконок для `tests/web/icons.test.ts` — в `tests/web/fixtures/` (#1188).
 - **[block-dangerous-git и глобальные опции git]:** Хук находит подкоманду после `-C`, `-c`, `--git-dir`, `--work-tree`, `--no-pager`, `-p` и других глобальных опций и читает опции подкоманды в любом порядке: `git -C dir branch -D`, `git branch --delete --force`, `git clean -df`, `git clean --force`, `git checkout -- .` больше не проходят. Сообщение для `git branch -D` называет `harness branch-delete` (#1196).
 - **[Пустой каталог worktree после remove]:** `harness health` не называет осиротевшим worktree каталог, в котором только каталоги и пустые файлы (его заново создаёт песочница живой сессии), и не советует `git worktree prune`; `harness cleanup --mode hard` удаляет такой каталог, а занятый точкой монтирования оставляет с причиной. Каталог `.claude` в `worktrees/` — маски песочницы после `cd` сессии туда (#1194).
 - **[Auto-gc и потеря worktree в песочнице]:** Git-команды coordinator и сессии агента (блок `env` в `.claude/settings.local.json`, который `harness update` добавляет, если файл не задаёт этих переменных) передают `gc.auto=0`, и auto-gc больше не падает на reflog чужих worktree. Потерянный issue worktree batch `dispatch preflight` и self-report называют до работы роли вместе с командой восстановления (#1189).
