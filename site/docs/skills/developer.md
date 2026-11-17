@@ -1,5 +1,26 @@
 # Developer: разработчик
 
+## Интерактивный скилл developer
+
+Источник: [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/developer/SKILL.md).
+Скилл поставляется в `engineering-suite` и реализует согласованное изменение в текущей issue-ветке
+в обычной сессии, вне dispatch координатора. До правки любого файла он проверяет три предусловия:
+задачу с критериями приёмки (существующий тикет, если репозиторий задаёт правило Issue First),
+читаемый `.harness/project.json` с `branch_pattern` и `base_branch` и текущую ветку, которая
+соответствует `branch_pattern` и не является `base_branch` или `integration/*`. Если предусловия
+нет, скилл ничего не меняет и возвращает отчёт с блокером, который его называет.
+
+Seam согласуется с человеком до первого теста, дальше работа идёт через `/tdd`. Скилл заканчивает
+человекочитаемым отчётом в чате из пяти разделов: изменения, проверки (pass, fail или not run),
+непроверенное, риски и блокеры. Скилл не коммитит, не пушит, не открывает PR, не запускает code
+review и не меняет метки трекера. В `/fast-implement` он выполняет шаги реализации, а review,
+commit, push и передачу в `/to-pull-requests` оставляет `/fast-implement`.
+
+## Роль оркестрации `developer`
+
+Интерактивный скилл и роль координатора `developer` разные. Внутри dispatch действуют манифест роли
+и brief, скилл их не повторяет и не расширяет. Дальше описан контракт роли.
+
 Источник: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
 
 ## 1. Название и локализация

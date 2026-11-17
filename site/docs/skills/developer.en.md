@@ -1,5 +1,26 @@
 # Developer — Developer
 
+## Interactive skill developer { #developer_1 }
+
+Source: [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/developer/SKILL.md).
+The skill ships in `engineering-suite` and implements an agreed change in the current issue branch in an
+ordinary session, outside a coordinator dispatch. Before it edits any file, it checks three prerequisites:
+a task with acceptance criteria (an existing ticket when the repository has an Issue First rule), a
+readable `.harness/project.json` with `branch_pattern` and `base_branch`, and a current branch that matches
+`branch_pattern` and is neither `base_branch` nor `integration/*`. When a prerequisite is missing, the
+skill changes nothing and returns a report with a blocker that names it.
+
+The seam is agreed with the human before the first test, then the work goes through `/tdd`. The skill
+finishes with a human-readable report in the chat with five sections: changes, checks (pass, fail or
+not run), unverified items, risks and blockers. The skill does not commit, push, open a PR, run code
+review or change tracker labels. In `/fast-implement` it runs the implementation steps, and
+`/fast-implement` keeps review, commit, push and the `/to-pull-requests` handoff.
+
+## Orchestration role `developer`
+
+The interactive skill and the coordinator's `developer` role are different. Inside a dispatch, the role
+manifest and the brief apply; the skill neither repeats nor widens them. The role contract follows.
+
 Source: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) and the shared contract [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
 
 ## 1. Name and localization
