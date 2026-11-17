@@ -74,6 +74,7 @@ These skills were added specially for this build — they do not exist upstream.
 | `fast-implement` (skill) | A single-pass path without gates for small tasks. |
 | `delivery-stats` (skill) | A cost report for a closed epic: tokens, cache, code volume, comparison with the baseline. |
 | `architect` (skill) | Manual comparison of architectural options; when memory is enabled, looks for precedents. |
+| `developer` (skill) | Implements an agreed change in the issue branch and reports changes, checks, unverified items, risks and blockers. |
 | `pr-composer` (subagent) | Fills in the PR body from the project template and returns the path to the file. |
 
 `pr-composer` ships as a subagent, not as a skill: a session or another skill calls it, and the model

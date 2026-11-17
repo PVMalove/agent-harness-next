@@ -57,7 +57,7 @@ python3 harness/bin/harness.py health /path/to/repository
 
 ## Состав `engineering-suite`
 
-В `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
+В `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`, `developer`.
 
 Сборка разворачивает проектные руководства `docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`
 и общий контракт `.harness/instructions/technical-english.md`. Корневой `docs/` остаётся документацией

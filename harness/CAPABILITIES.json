@@ -63,7 +63,8 @@
       "first-party/engineering/to-pull-requests",
       "first-party/engineering/fast-implement",
       "first-party/engineering/delivery-stats",
-      "first-party/engineering/architect"
+      "first-party/engineering/architect",
+      "first-party/engineering/developer"
     ],
     "resources": [
       "reporting",
