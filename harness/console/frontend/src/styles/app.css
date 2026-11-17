@@ -1,4 +1,4 @@
-/* Only what docs/design/web-console-mockups/execution-console.css lacks; never overrides it. */
+/* Only what execution-console.css lacks; never overrides it. */
 .lang-switch button { min-width: 34px; padding: 4px 8px; font-size: var(--fs-1); }
 .lang-switch button:focus-visible { outline: 2px solid var(--selfg); outline-offset: 2px; }
 /* Harness · Commands: the run panel over the mockup's harness-command rows and board dialog. */

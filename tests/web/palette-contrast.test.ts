@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { describe, expect, test } from "vitest";
 
 const MOCKUP_CSS = readFileSync(
-  join(resolve(__dirname, "../.."), "docs/design/web-console-mockups/execution-console.css"),
+  join(resolve(__dirname, "../.."), "harness/console/frontend/src/styles/execution-console.css"),
   "utf-8",
 );
 

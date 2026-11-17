@@ -7,7 +7,7 @@ import { describe, expect, test } from "vitest";
 
 const REPO = resolve(__dirname, "../..");
 const SHEETS = {
-  mockup: "docs/design/web-console-mockups/execution-console.css",
+  mockup: "harness/console/frontend/src/styles/execution-console.css",
   app: "harness/console/frontend/src/styles/app.css",
 };
 const read = (path: string) => readFileSync(join(REPO, path), "utf-8");

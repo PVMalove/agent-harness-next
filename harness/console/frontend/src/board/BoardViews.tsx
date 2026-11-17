@@ -4,7 +4,7 @@
    untrusted: React text only. */
 import { useState } from "react";
 // The docs-site mascot (docs/rfc/docs-site.md §5.2), shipped as a local file.
-import mascot from "../../../../../docs/design/docs-site-mockups/mascot.svg";
+import mascot from "../assets/mascot.svg";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";

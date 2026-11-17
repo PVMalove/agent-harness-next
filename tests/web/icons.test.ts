@@ -1,4 +1,4 @@
-/* Every icon of the mockup set (docs/design/web-console-mockups/harness-icons.js) is ported to the
+/* Every icon of the mockup set (tests/web/fixtures/harness-icons.js, kept from the accepted mockup) is ported to the
    SPA with the same geometry: roles, states, hosting marks, health areas and maintenance. */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, test } from "vitest";
 import { Icon } from "../../harness/console/frontend/src/icons";
 
-const SOURCE = readFileSync(resolve(__dirname, "../../docs/design/web-console-mockups/harness-icons.js"), "utf-8");
+const SOURCE = readFileSync(resolve(__dirname, "fixtures/harness-icons.js"), "utf-8");
 
 /** name → inner SVG markup; a repeated key keeps its last value, as in the JS object literal. */
 function mockupIcons(): Map<string, string> {
