@@ -24,9 +24,9 @@ help: ## Показать список команд с описанием
 export UV_PROJECT_ENVIRONMENT := $(HARNESS_VENV)
 export PYTHONPATH := .
 
+# A worktree venv linked to the main checkout's is compared by lock contents, never re-synced (#1188).
 $(HARNESS_ENV_STAMP): pyproject.toml uv.lock
-	uv sync --locked --python $(PYTHON_BOOTSTRAP)
-	$(HARNESS_PYTHON) -c "from pathlib import Path; Path(r'$(HARNESS_ENV_STAMP)').touch()"
+	$(PYTHON_BOOTSTRAP) scripts/sync_dev_venv.py $(HARNESS_VENV) $(PYTHON_BOOTSTRAP)
 
 bootstrap: $(HARNESS_ENV_STAMP) ## Создать .harness/.venv через uv sync и установить Python-зависимости
 
