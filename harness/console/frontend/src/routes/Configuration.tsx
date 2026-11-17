@@ -5,6 +5,7 @@
    Parameters and JSON tabs only edit the draft; every write (draft version, apply, adapters,
    current version, recovery) runs only through the CommandPanel of the job section
    `configuration`, and every run opens the confirmation first. Restore stays in the TUI. */
+import { downloadJson } from "../diagnostics/exportReport";
 import { useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
@@ -347,7 +348,7 @@ function Settings({ facts, store, run }: { facts: ConfigurationFacts; store: Sto
       <PipeTabs
         id="settings"
         label={section("Configuration")}
-        tabs={TABS.map(([key, label]) => ({ id: key, label: t(label), count: key === "changes" && draft.changes.length > 0 ? draft.changes.length : undefined }))}
+        tabs={TABS.map(([key, label]) => ({ id: key, label: t(label), badge: key === "changes" && draft.changes.length > 0 ? draft.changes.length : undefined }))}
         value={tab}
         onChange={(key) => setTab(key as Tab)}
       />
@@ -380,12 +381,7 @@ export function Configuration() {
   const exportConfigs = () => {
     if (!facts) return;
     const body = Object.fromEntries(CONFIG_NAMES.map((name) => [name, facts.files[name].document]));
-    const url = URL.createObjectURL(new Blob([JSON.stringify(body, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "harness-config.json";
-    link.click();
-    URL.revokeObjectURL(url);
+    downloadJson("harness-config.json", body);
   };
   const configs = facts ? CONFIG_NAMES.filter((name) => facts.files[name].exists).length : 0;
 

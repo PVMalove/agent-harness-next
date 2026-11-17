@@ -6,6 +6,7 @@
    rows, each opening the shared candidate drawer. The same facts as the TUI Reports screen for the
    same snapshot; report text is untrusted and stays text. The batch history and its chronology
    stay on Orchestration. */
+import { downloadJson } from "../diagnostics/exportReport";
 import { useMemo, useState } from "react";
 import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
 import { Icon } from "../icons";
@@ -73,13 +74,8 @@ function KpiTiles({ id, tiles }: { id: string; tiles: readonly Tile[] }) {
 
 /** The JSON of the shown stages and their report heads: the export of the current selection. */
 function exportSelection(stages: readonly unknown[], reports: readonly unknown[]) {
-  const blob = new Blob([JSON.stringify({ stages, reports }, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "reports.json";
-  link.click();
-  URL.revokeObjectURL(url);
+  // The shared helper revokes the URL after the download started, never in the same tick.
+  downloadJson("reports.json", { stages, reports });
 }
 
 export function Reports() {

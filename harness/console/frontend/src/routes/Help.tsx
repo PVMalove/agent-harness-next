@@ -15,6 +15,7 @@ import { NoData } from "../steps/ActivityViews";
 import { useConsole } from "../useConsole";
 import { preRelease } from "../AppShell";
 import { parseHelp } from "../ws/projectScreens";
+import { TabPanel } from "../views/Tabs";
 
 type Tab = "start" | "sections" | "keys" | "statuses" | "safety" | "faq" | "docs";
 /** The tabs with their Russian and English names (a tab name alone is not a catalog string) and the
@@ -215,9 +216,14 @@ export function Help() {
         </label>
         <button className="ds-btn ds-btn-sm" type="button" disabled={!query} onClick={() => setQuery("")}>{t("Сбросить")}</button>
       </div>
-      <PipeTabs id="help" label={section("Help")} value={tab} onChange={(id) => { setTab(id as Tab); }}
+      <PipeTabs id="help" label={section("Help")} value={tab} onChange={(id) => { setTab(id as Tab); setQuery(""); }}
         tabs={TABS.map((entry) => ({ id: entry[0], label: name(entry), count: counts[entry[0]] }))} />
-      <div id={`help-tab-${tab}`} className="ds-tabpanel" role="tabpanel" aria-labelledby={`help-tab-${tab}-button`} tabIndex={0}>{body}</div>
+      {/* Every tab names an existing panel (aria-controls); only the chosen one has content. */}
+      {TABS.map(([id]) => (
+        <TabPanel key={id} id="help" tab={id} value={tab} className="ds-tabpanel">
+          {body}
+        </TabPanel>
+      ))}
     </div>
   );
 }

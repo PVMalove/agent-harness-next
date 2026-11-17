@@ -66,7 +66,8 @@ export function KpiStrip({ snapshot, activity }: { snapshot: HomeSnapshot | null
 /** The last orchestration events the console saw since it opened, newest first. */
 export function RecentEvents({ events }: { events: HomeEvent[] }) {
   const { t, language } = useI18n();
-  const clock = new Intl.DateTimeFormat(language, { timeStyle: "medium", timeZone: "UTC" });
+  // Local time, like the "checked at" clock of the same page (review of PR #1186).
+  const clock = new Intl.DateTimeFormat(language, { timeStyle: "medium" });
   return (
     <section id="home-events" className="panel events-panel">
       <div className="panel-head">

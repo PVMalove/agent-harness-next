@@ -11,7 +11,18 @@ import { GateTrend } from "./OrchViews";
 
 const ACTIVE = new Set(["working", "dispatched", "approved"]);
 const ATTENTION = new Set(["failed", "blocked", "auto_stop"]);
-const TONES = ["cyan", "mint", "violet", "lavender", "blue", "muted"];
+const DONE = new Set(["completed", "accepted", "merged", "done", "passed", "published", "closed"]);
+const WAITING = new Set(["awaiting", "awaiting_decision", "needs_decision", "queued", "pending", "held"]);
+/** A state's tone by its meaning, so a waiting state is never painted in the blocker hue: attention
+    in rose, live work in the accent, finished work in mint, waiting in sand; any other key takes the
+    neutral tones in turn (UI audit 2026-11-17: the tone used to follow the position). */
+function toneOf(key: string, index: number): string {
+  if (ATTENTION.has(key)) return "violet";
+  if (ACTIVE.has(key)) return "cyan";
+  if (DONE.has(key)) return "mint";
+  if (WAITING.has(key)) return "lavender";
+  return ["blue", "muted"][index % 2]!;
+}
 
 type Counts = Record<string, number>;
 const counts = (figure: Figure | undefined): Counts =>
@@ -64,13 +75,13 @@ function Stack({ values, name }: { values: Counts; name: (key: string) => string
     <>
       <div className="orch-stack">
         {entries.map(([key, value], index) => (
-          <i key={key} className={TONES[index % TONES.length]} style={{ width: `${Math.round((value / sum) * 100)}%` }} title={`${name(key)}: ${value}`} />
+          <i key={key} className={toneOf(key, index)} style={{ width: `${Math.round((value / sum) * 100)}%` }} title={`${name(key)}: ${value}`} />
         ))}
       </div>
       <div className="orch-legend">
         {entries.map(([key, value], index) => (
           <span key={key}>
-            <i className={TONES[index % TONES.length]} />
+            <i className={toneOf(key, index)} />
             {name(key)} <b>{value}</b>
           </span>
         ))}
@@ -91,7 +102,7 @@ function Pairs({ p50, p95 }: { p50: Counts; p95: Counts }) {
         <div className="orch-stage-row" key={key}>
           <span>{roleName(key)}</span>
           <div className="orch-stage-bars">
-            {([[p50[key], "cyan"], [p95[key], "violet"]] as const).map(([value, tone]) => (
+            {([[p50[key], "cyan"], [p95[key], "lavender"]] as const).map(([value, tone]) => (
               <div key={tone}>
                 <Bar value={minutes(value ?? 0)} max={max} tone={tone} />
                 <small>{value === undefined ? "—" : minutes(value)}</small>
@@ -106,7 +117,7 @@ function Pairs({ p50, p95 }: { p50: Counts; p95: Counts }) {
           p50
         </span>
         <span>
-          <i className="violet" />
+          <i className="lavender" />
           p95
         </span>
       </div>
@@ -387,10 +398,10 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
           <defs>
             {(
               [
-                ["aqua", "#7fc9bb"],
-                ["sky", "#70c2d8"],
-                ["rose", "#b79ae8"],
-                ["orange", "#6f9fe0"],
+                ["aqua", "#a9dcc0"],
+                ["sky", "#a6d5e8"], // matches `.orch-map-edge.sky` in app.css
+                ["rose", "#cbb8f0"], // matches `.orch-map-edge.rose` in app.css
+                ["orange", "#a9c4f5"],
               ] as const
             ).map(([id, fill]) => (
               <marker key={id} id={`om-${id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">

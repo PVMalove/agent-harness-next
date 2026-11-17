@@ -336,6 +336,10 @@ def compose(
     screens = screens or screen_service(repo)
     workers = workers or worker_steps_query(repo)
     steps = steps or live_steps(events, workers)
+    # A finished configuration write makes the cached configuration digests stale. Tests may
+    # hand in stand-ins for the services.
+    if isinstance(jobs, JobService) and isinstance(screens, ScreenService):
+        jobs.on_finished(screens.job_finished)
     return Composition(
         snapshots,
         jobs,

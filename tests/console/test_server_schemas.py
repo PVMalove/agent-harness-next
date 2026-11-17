@@ -412,6 +412,28 @@ def test_step_models_match_the_live_step_items_and_refuse_extra_fields() -> None
         schemas.REQUESTS.validate_python({"type": "steps.subscribe", "cursor": "x"})
 
 
+def test_request_ids_refuse_booleans_as_the_server_does() -> None:
+    ask = {
+        "id": "a",
+        "type": "advisor.ask",
+        "provider": "codex",
+        "file": "project.json",
+        "path": ["language"],
+    }
+    for broken in (
+        {**ask, "id": True},
+        {"id": False, "type": "job.list"},
+        {"id": True, "type": "advisor.check", "provider": "codex"},
+        {"type": "advisor.cancel", "request_id": True},
+    ):
+        with pytest.raises(ValueError):
+            schemas.REQUESTS.validate_python(broken)
+    assert schemas.REQUESTS.validate_python({**ask, "id": 7}).type == "advisor.ask"
+    assert schemas.REQUESTS.validate_python(
+        {"type": "advisor.cancel", "request_id": 7, "id": 1}
+    ).type == "advisor.cancel"
+
+
 def test_advisor_models_have_the_field_sets_of_the_advisor_protocol() -> None:
     from harness.console.backend.api.protocol import advisor
 

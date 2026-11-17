@@ -327,7 +327,7 @@ export function BoardStatePanel({ kind, onRefresh }: { kind: BoardStateKind; onR
       <div className="board-state-icon">
         <Icon name="board" />
       </div>
-      <span className="eyebrow">{t("ДОСКА · EMPTY")}</span>
+      <span className="eyebrow">{t("Доска · пусто")}</span>
       <h2>{title}</h2>
       <p>{text}</p>
       <div className="actions">
@@ -343,13 +343,17 @@ export function BoardStatePanel({ kind, onRefresh }: { kind: BoardStateKind; onR
 }
 
 /** Over the board while its snapshot is read (the first read, a refresh or a status change): the
-    frame stays readable under it, it never takes the focus, and reduced motion stops the jump. */
+    frame stays readable under it, it never takes the focus, and reduced motion stops the hop.
+    There is no card: the mascot hops on its own floor shadow over a soft scrim. */
 export function BoardUpdating() {
   const { t } = useI18n();
   return (
     <div className="board-updating" id="board-updating" role="status" aria-live="polite">
-      <span className="board-updating-card">
-        <img className="board-mascot" src={mascot} alt="" width={34} height={44} />
+      <span className="board-updating-body">
+        <span className="board-mascot-stage" aria-hidden="true">
+          <span className="board-mascot-shadow" />
+          <img className="board-mascot" src={mascot} alt="" width={48} height={62} />
+        </span>
         {t("Идёт обновление…")}
       </span>
     </div>

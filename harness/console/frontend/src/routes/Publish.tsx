@@ -64,7 +64,9 @@ export function Publish() {
   const entry = entries.find((item) => item.batch_id === batch) ?? null;
   const blocked = entry ? preflightRows(entry).some((row) => !passes(row)) : true;
   const targetRef = entry ? (entry.integration_ref ?? (entry.target ? short(entry.target) : t("нет данных"))) : "";
-  const reasons = entry ? blockingReasons(entry) : [t("Batch для публикации нет")];
+  // Before the first snapshot nothing is known: no "no batch" and no "blocked" verdict yet.
+  const empty = ledger ? t("Batch для публикации нет") : screen.error ? t("Нет данных") : t("Загрузка…");
+  const reasons = entry ? blockingReasons(entry) : [empty];
   const verdicts = (verdict: PublishEntry["verdict"]) => (ledger ? entries.filter((item) => item.verdict === verdict).length : "—");
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: tabLabel("Обзор") },
@@ -133,9 +135,9 @@ export function Publish() {
       <PipeTabs id="publish" label={section("Публикация")} tabs={tabs} value={tab} onChange={(id) => setTab(id as Tab)} />
 
       <div className="ds-split publish-workspace">
-        <Panel title={t("Кандидаты")} count={entries.length} fill scroll="list" id="publish-candidates" label={t("Кандидаты")}>
+        <Panel title={t("Кандидаты")} count={ledger ? entries.length : "—"} fill scroll="list" id="publish-candidates" label={t("Кандидаты")}>
           {entries.length === 0 ? (
-            <p className="ds-empty">{t("Batch для публикации нет")}</p>
+            <p className="ds-empty">{empty}</p>
           ) : (
             entries.map((item) => {
               const rows = preflightRows(item);
@@ -221,8 +223,9 @@ export function Publish() {
                 </section>
               </>
             ) : (
-              <p className="ds-empty">{t("Batch для публикации нет")}</p>
+              <p className="ds-empty">{empty}</p>
             )}
+            {ledger && (
             <section className="publish-decision" id="publish-decision" aria-label={t("Решение человека")}>
               <h3 className="ds-group-title">
                 {t("Решение человека")} · <StatusWord tone={blocked ? "violet" : "mint"} word={stateText(blocked ? "blocked" : "ready")} />
@@ -252,6 +255,7 @@ export function Publish() {
                 </div>
               </div>
             </section>
+            )}
             <div className="publish-decisions ds-legacy-island" id="publish-decisions">
               <DecisionPanel kinds={["report-decision", "attention"]} hideWhenEmpty />
             </div>
@@ -267,7 +271,7 @@ export function Publish() {
                 <p className="ds-note">{t("Publish evidence должен быть привязан к candidate SHA и target SHA. Merge остаётся человеку.")}</p>
               </section>
             ) : (
-              <p className="ds-empty">{t("Batch для публикации нет")}</p>
+              <p className="ds-empty">{empty}</p>
             )}
           </TabPanel>
 
@@ -336,10 +340,10 @@ export function Publish() {
                       ))}
                   </div>
                 </section>
-                <Timeline key={entry.batch_id} batchId={entry.batch_id} />
+                <Timeline key={entry.batch_id} batchId={entry.batch_id} id="publish-timeline" />
               </>
             ) : (
-              <p className="ds-empty">{t("Batch для публикации нет")}</p>
+              <p className="ds-empty">{empty}</p>
             )}
           </TabPanel>
         </Panel>

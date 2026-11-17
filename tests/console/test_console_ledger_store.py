@@ -6,6 +6,8 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import pytest
+
 from harness.console.kernel import reports
 from harness.console.kernel.dispatch_containers import container_payload
 from harness.console.kernel.reports import StoreUnreadable, load_ledger_view
@@ -157,3 +159,57 @@ def test_an_unanswered_store_read_makes_the_view_unavailable(tmp_path: Path) -> 
 
     assert view.unavailable == "runtime store не ответил на state.read (runtime_unavailable)"
     assert view.batches == [] and view.reports == []
+
+
+def test_the_read_timeout_of_the_caller_reaches_the_runtime_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _store_epoch(tmp_path)
+    timeouts: list[float] = []
+
+    def runtime_read(repo: Path, timeout_seconds: float) -> FakeStore:
+        timeouts.append(timeout_seconds)
+        return FakeStore({})
+
+    monkeypatch.setattr(reports, "_runtime_read", runtime_read)
+
+    load_ledger_view(tmp_path)
+    load_ledger_view(tmp_path, read_timeout=reports.INTERACTIVE_STORE_READ_TIMEOUT_SECONDS)
+
+    assert timeouts == [
+        reports.STORE_READ_TIMEOUT_SECONDS,
+        reports.INTERACTIVE_STORE_READ_TIMEOUT_SECONDS,
+    ]
+    assert reports.INTERACTIVE_STORE_READ_TIMEOUT_SECONDS < reports.STORE_READ_TIMEOUT_SECONDS
+
+
+def test_an_unreadable_audit_leaves_the_view_without_audit_timestamps(tmp_path: Path) -> None:
+    _store_epoch(tmp_path)
+    inner = FakeStore(
+        {
+            "batches/b-1.json": _batch("b-1", "d-1"),
+            "dispatches/d-1.json": {"dispatch_id": "d-1", "batch_id": "b-1", "role": "qa"},
+            "dispatch-status/d-1.json": {"dispatch_id": "d-1", "state": "reported"},
+            "reports/d-1.json": {"dispatch_id": "d-1", "ticket": "#1183", "role": "qa"},
+            "audit/audit-chain-000000000001.json": {
+                "at": "2026-11-16T09:30:00+00:00",
+                "action": "immutable-record",
+                "details": {"path": "reports/d-1.json"},
+            },
+        }
+    )
+
+    def audit_too_large(
+        collections: Sequence[str], paths: Sequence[str]
+    ) -> Mapping[str, object]:
+        if "audit" in collections:
+            raise StoreUnreadable("runtime store не ответил на state.read (frame_too_large)")
+        return inner(collections, paths)
+
+    view = load_ledger_view(tmp_path, store_read=audit_too_large)
+
+    assert view.unavailable is None
+    assert [batch.batch_id for batch in view.batches] == ["b-1"]
+    assert [entry.dispatch_id for entry in view.reports] == ["d-1"]
+    assert [(stage.dispatch_id, stage.state) for stage in view.stages] == [("d-1", "reported")]
+    assert view.reports[0].reported_at != "2026-11-16T09:30:00+00:00"

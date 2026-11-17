@@ -1,6 +1,7 @@
 /* Repo Map on the design system v3: the summary counts the whole snapshot, the three tabs (Files,
    Symbols, Links) show the fragment the server passed. It uses the same snapshot as the TUI;
    opening it never builds or installs anything. */
+import { downloadJson } from "../diagnostics/exportReport";
 import { useState } from "react";
 import { PageHeader, PipeTabs, Panel, StatusIcon, Summary } from "../ds";
 import { useI18n } from "../i18n";
@@ -46,9 +47,7 @@ export function RepoMap() {
     (shown.done && shown.returncode !== null && shown.returncode !== 0));
   const exportMap = () => {
     if (!map) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(map, null, 2)], { type: "application/json" }));
-    const a = document.createElement("a"); a.href = url; a.download = `repo-map-${map.commit.slice(0, 12)}.json`;
-    a.click(); URL.revokeObjectURL(url);
+    downloadJson(`repo-map-${map.commit.slice(0, 12)}.json`, map);
   };
   const rebuild = (className: string) => <button className={className} type="button" disabled={!facts?.head || starting || jobs.busy !== null || state.status !== "connected"}
     onClick={() => { if (facts?.head) setPending({ head: facts.head }); }}><Icon name="refresh" className="ds-ic-sm" /> {t("Перестроить")}</button>;

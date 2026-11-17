@@ -32,7 +32,11 @@ from ..application.live_steps import LiveSteps
 from .protocol.steps import is_steps_request
 from .protocol.steps import replies as step_replies
 from ..application.worker_steps import WorkerStepsQuery
-from ...kernel.protocol import ADVISOR_ASK_REQUEST, WORKER_SUBSCRIBE_REQUEST
+from ...kernel.protocol import (
+    ADVISOR_ASK_REQUEST,
+    ADVISOR_CANCEL_REQUEST,
+    WORKER_SUBSCRIBE_REQUEST,
+)
 from .protocol.workers import worker_request_type
 from .protocol.workers import replies as worker_replies
 
@@ -68,6 +72,11 @@ class RouterConnection:
 
     async def submit(self, raw: str) -> None:
         """Start answering one text frame, or reply busy when its slots are full."""
+        if advisor_request_type(raw) == ADVISOR_CANCEL_REQUEST:
+            # A cancel only sets an event and never awaits the CLI, so it takes no slot: a
+            # connection with every request slot busy can still stop its advice request.
+            await self._reply(await respond_advisor(raw, self._router.advisor, self._advice))
+            return
         job_type = job_request_type(raw)
         pending, limit = (
             (self._subscriptions, MAX_SUBSCRIPTIONS)

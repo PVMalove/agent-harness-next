@@ -90,6 +90,17 @@ describe("the Publication page in the mockup's order", () => {
     expect(rows[0]!.querySelector(".ds-row-end")!.textContent).toMatch(/^\d \/ 5 пройдено$/);
   });
 
+  // Review of PR #1186: before the first snapshot the page claimed "no batch" and a blocked PR.
+  test("before the first snapshot nothing is claimed: no empty list and no human decision", () => {
+    window.location.hash = "#/publish";
+    const client = createConsoleClient({ url: "ws://127.0.0.1:1/ws", WebSocket: FakeSocket, timers: new ManualClock(), probeHealth: async () => false });
+    render(createElement(LanguageProvider, null, createElement(App, { client })));
+    act(() => FakeSocket.last.open());
+    expect(document.querySelector("#publish-candidates")!.textContent).toContain("Загрузка…");
+    expect(document.querySelector("#publish-candidates")!.textContent).not.toContain("Batch для публикации нет");
+    expect(document.querySelector("#publish-decision")).toBeNull();
+  });
+
   test("Open candidate shows the shared drawer with Evidence, Quality and Readiness", () => {
     renderPublish();
     act(() => fireEvent.click(screen.getByRole("button", { name: "Открыть кандидата" })));

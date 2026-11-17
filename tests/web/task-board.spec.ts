@@ -96,7 +96,7 @@ for (const width of [1440, 390]) {
     await expect(dialog.locator("pre.board-prompt")).toContainText("/implement #511");
     const agent = dialog.getByRole("button", { name: "Промпт агента" });
     await expect(agent).toBeVisible();
-    expect(await agent.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(130, 182, 255)");
+    expect(await agent.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(169, 196, 245)"); // the pastel accent #a9c4f5 (2026-11-16)
     await dialog.getByRole("tab", { name: "Контекст" }).click();
     expect(await noOverflow(page)).toBe(true);
     await dialog.getByRole("button", { name: "Закрыть" }).click();

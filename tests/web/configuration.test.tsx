@@ -183,6 +183,25 @@ describe("the Configuration route", () => {
     });
   });
 
+  // Review of PR #1186: the controlled number field snapped back on Backspace and swallowed "-".
+  test("a number field can be emptied and retyped; only a valid number reaches the draft", () => {
+    renderPage({ ...CONFIGURATION, wizard: WIZARD });
+    tab("Параметры");
+    const wizard = document.querySelector("#configuration-wizard") as HTMLElement;
+    act(() => fireEvent.click(wizard.querySelectorAll(".ds-wz-group")[2]!));
+    const field = within(wizard).getByLabelText("Аренда QA lane, с") as HTMLInputElement;
+    act(() => fireEvent.change(field, { target: { value: "" } }));
+    expect(field.value).toBe("");
+    act(() => fireEvent.change(field, { target: { value: "-" } }));
+    expect(field.value).toBe("-");
+    expect(field.getAttribute("aria-invalid")).toBe("true");
+    act(() => fireEvent.change(field, { target: { value: "1200" } }));
+    expect(field.value).toBe("1200");
+    expect(field.getAttribute("aria-invalid")).toBeNull();
+    tab("Изменения");
+    expect(changeRows()).toEqual(["orchestration.json → execution_policy {\"qa_lease_seconds\":1200}"]);
+  });
+
   test("a JSON edit and a Parameters answer share one draft", () => {
     renderPage({ ...CONFIGURATION, wizard: WIZARD });
     tab("Параметры");

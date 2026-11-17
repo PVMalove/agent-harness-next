@@ -78,6 +78,8 @@
   font-size: var(--ds-fs-2);
   font-weight: 600;
   line-height: 20px;
+  /* A count like "6 из 6" never breaks across lines in a narrow panel head. */
+  white-space: nowrap;
   text-align: center;
 }
 .ds-tag {
@@ -210,6 +212,8 @@
 .ds-pipe-tab.ds-on::after { content: ""; position: absolute; right: 4px; bottom: 0; left: 4px; border-bottom: 2px solid var(--ds-accent); }
 .ds-pipe-tab + .ds-pipe-tab.ds-on::after { left: 28px; }
 .ds-pipe-tab.ds-on .ds-pipe-n { background: var(--ds-accent); border-color: var(--ds-accent); color: var(--ds-on-accent); }
+/* A count after the label (PipeTab.badge): quiet mono text on a raised step, not a second marker. */
+.ds-pipe-badge { padding: 0 4px; border-radius: 4px; background: var(--ds-raised); color: var(--ds-muted); font-family: var(--ds-mono); font-size: var(--ds-fs-1); line-height: 16px; }
 .ds-pipe-tab:hover { color: var(--ds-fg); }
 
 /* Panel */
@@ -242,6 +246,8 @@
   color: var(--ds-muted);
 }
 .ds-alert-warn { border-color: var(--ds-warn); background: var(--ds-warn-bg); color: var(--ds-warn); }
+/* The hue marks the title; the explanation under it reads in the body colour. */
+.ds-alert-warn p { color: var(--ds-muted); }
 .ds-alert-err { border-color: var(--ds-err); background: var(--ds-err-bg); color: var(--ds-err); }
 .ds-alert > div { flex: 1; min-width: 0; }
 .ds-alert p { margin: 0; }
@@ -401,6 +407,7 @@
 .ds-md th { color: var(--ds-muted); font-weight: 600; }
 .ds-md pre { padding: 8px 12px; border: 1px solid var(--ds-line); background: var(--ds-bg); font-family: var(--ds-mono); font-size: var(--ds-fs-2); white-space: pre-wrap; }
 .ds-md code { padding: 0 4px; border-radius: 4px; background: var(--ds-raised); }
+.ds-md td code { overflow-wrap: anywhere; }
 .ds-md pre code { padding: 0; background: none; }
 
 /* A not yet moved panel (command runner, confirmation dialog) keeps the old look inside a v3 page */
@@ -428,8 +435,12 @@
   .ds-grid-2,
   .ds-grid-3,
   .ds-tiles { grid-template-columns: minmax(0, 1fr); }
-  .ds-stats { grid-template-columns: minmax(0, 1fr); }
-  .ds-stat + .ds-stat { border-left: 0; border-top: 1px solid var(--ds-line); }
+  /* Two figures a row: one column took a third of the first phone screen (UI audit 2026-11-17). */
+  .ds-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ds-stat + .ds-stat { border-left: 0; }
+  .ds-stat:nth-child(even) { border-left: 1px solid var(--ds-line); }
+  .ds-stat:nth-child(n + 3) { border-top: 1px solid var(--ds-line); }
+  .ds-facts-main { gap: 4px 16px; }
   .ds-page-head { flex-wrap: wrap; }
 }
 .ds-table-wrap { overflow-x: auto; margin-bottom: 8px; }

@@ -190,7 +190,8 @@ export function Diagnostics() {
         ]}
       />
 
-      <TabPanel id="diagnostics" tab="features" value={tab} className="ds-tabpanel">
+      {/* Both panels stay mounted: a job started on one tab still reports back after a tab change. */}
+      <TabPanel id="diagnostics" tab="features" value={tab} className="ds-tabpanel" keepMounted>
         {features.error && !snapshot && (
           <p className="ds-alert ds-alert-err" role="alert" data-code={features.error.code}>
             {t("Функции недоступны")}: {features.error.message || features.error.code}
@@ -216,7 +217,7 @@ export function Diagnostics() {
         </div>
       </TabPanel>
 
-      <TabPanel id="diagnostics" tab="checks" value={tab} className="ds-tabpanel">
+      <TabPanel id="diagnostics" tab="checks" value={tab} className="ds-tabpanel" keepMounted>
         {screen.error && !report && (
           <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
             {t("Отчёт не построен")}: {screen.error.message || screen.error.code}

@@ -345,7 +345,9 @@ export function UpdateHarness() {
                       >
                         <StatusIcon tone={DS_TONE[kindTone]} label={t(item.tag)} />
                         <span className="ds-row-main">
-                          <code className="ds-row-title ds-diff-path">{item.path}</code>
+                          <code className="ds-row-title ds-diff-path" title={item.path}>
+                            <bdi>{item.path}</bdi>
+                          </code>
                         </span>
                         <span className="ds-row-end ds-diff-kind">{t(item.tag)}</span>
                       </button>

@@ -107,13 +107,20 @@ function flowNodes(facts: OpenProjectFacts, home: HomeSnapshot | null, chosen: s
   ];
 }
 
-function useCopy(): [string, (text: string) => void] {
+/** Copies through the clipboard API; resolves false where it is missing or refused (plain HTTP on
+    another host, a denied permission), so the caller can offer a manual copy. */
+function useCopy(): [string, (text: string) => Promise<boolean>] {
   const [copied, setCopied] = useState("");
-  const copy = (text: string) => {
-    void navigator.clipboard?.writeText(text).then(
-      () => setCopied(text),
-      () => setCopied(""),
-    );
+  const copy = async (text: string) => {
+    setCopied("");
+    try {
+      if (!navigator.clipboard) return false;
+      await navigator.clipboard.writeText(text);
+      setCopied(text);
+      return true;
+    } catch {
+      return false;
+    }
   };
   return [copied, copy];
 }
@@ -144,20 +151,39 @@ function ProjectCheck({ label, tone, text }: { label: string; tone: Tone; text: 
 }
 
 /** A command for another console with its copy button and the copied notice. */
-function CommandBlock({ command, id, copyId, copyLabel, disabled = false, copied, onCopy }: { command: string; id: string; copyId: string; copyLabel: string; disabled?: boolean; copied: string; onCopy: (text: string) => void }) {
+function CommandBlock({ command, id, copyId, copyLabel, disabled = false, copied, onCopy }: { command: string; id: string; copyId: string; copyLabel: string; disabled?: boolean; copied: string; onCopy: (text: string) => Promise<boolean> }) {
   const { t } = useI18n();
+  const [manual, setManual] = useState(false);
+  // No clipboard: the command is selected, so Ctrl+C copies it, and the note says so.
+  const copy = async () => {
+    setManual(false);
+    if (await onCopy(command)) return;
+    setManual(true);
+    const code = document.getElementById(id);
+    const selection = window.getSelection();
+    if (!code || !selection) return;
+    const range = document.createRange();
+    range.selectNodeContents(code);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
   return (
     <div className="ds-project-command">
       <div className="ds-actions">
         <span className="ds-sub">{t("Команда для другой консоли")}</span>
-        <button className="ds-btn ds-btn-sm" type="button" id={copyId} disabled={disabled} onClick={() => onCopy(command)}>
-          <Icon name="download" className="ds-ic-sm" /> {copyLabel}
+        <button className="ds-btn ds-btn-sm" type="button" id={copyId} disabled={disabled} onClick={() => void copy()}>
+          <Icon name="copy" className="ds-ic-sm" /> {copyLabel}
         </button>
       </div>
       <code id={id}>{command}</code>
       {copied === command && (
         <p className="ds-note" role="status">
           {t("Команда скопирована")}
+        </p>
+      )}
+      {manual && (
+        <p className="ds-note" role="status">
+          {t("Скопируйте текст вручную")}
         </p>
       )}
     </div>
@@ -169,7 +195,7 @@ const TRACKER_NAME: Readonly<Record<string, string>> = { github: "GitHub", gitla
 
 /** «Детали проекта». The facts of the served project come from its Home and Open Project
     snapshots; another candidate is only listed, so what the snapshots do not read says so. */
-function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidate; facts: OpenProjectFacts; home: HomeSnapshot | null; copied: string; onCopy: (text: string) => void }) {
+function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidate; facts: OpenProjectFacts; home: HomeSnapshot | null; copied: string; onCopy: (text: string) => Promise<boolean> }) {
   const { t, plural } = useI18n();
   const tracker = home?.project?.tracker ?? "";
   const notRead = t("нет данных · снимок читает только проект этого сервера");
@@ -216,7 +242,7 @@ function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidat
           <span className="ds-tag">harness</span>
         </p>
         <h3 className="ds-project-name">{projectName(item.path)}</h3>
-        <code className="ds-row-sub">{item.path}</code>
+        <code className="ds-row-sub" title={item.path}>{item.path}</code>
         <p className="ds-sub ds-project-meta">
           {item.current && home?.project ? (
             <>
@@ -361,7 +387,7 @@ export function OpenProject() {
         }
         snapshot={
           facts ? (
-            <span title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
+            <span className="ds-project-clock" title={`${screen.cached ? t("Кэш") : t("Новый снимок")} · ${screen.ageSeconds ?? 0} s`}>
               <Icon name="clock" className="ds-ic-sm" /> {snapshotClock(screen.ageSeconds, language)}
             </span>
           ) : undefined
@@ -385,11 +411,15 @@ export function OpenProject() {
                     </span>
                     <span className="ds-row-main">
                       <span className="ds-row-title">{home?.project?.name ?? projectName(facts.repo)}</span>
-                      <code className="ds-row-sub">{facts.repo}</code>
+                      <code className="ds-row-sub" title={facts.repo}>{facts.repo}</code>
                       {target ? (
                         <span className="ds-row-sub ds-project-meta">
-                          <Icon name="branch" className="ds-ic-sm" /> {home?.project?.branch ?? t("ветка неизвестна")} · <Icon name={TRACKER_ICON[tracker] ?? "folder"} className="ds-ic-sm" />{" "}
-                          {TRACKER_NAME[tracker] ?? (tracker || t("трекер не определён"))}
+                          <span>
+                            <Icon name="branch" className="ds-ic-sm" /> {home?.project?.branch ?? t("ветка неизвестна")}
+                          </span>
+                          <span>
+                            <Icon name={TRACKER_ICON[tracker] ?? "folder"} className="ds-ic-sm" /> {TRACKER_NAME[tracker] ?? (tracker || t("трекер не определён"))}
+                          </span>
                         </span>
                       ) : (
                         <span className="ds-alert ds-alert-err">{t(facts.error)}</span>
@@ -415,7 +445,7 @@ export function OpenProject() {
                         </span>
                         <span className="ds-row-main">
                           <span className="ds-row-title">{projectName(item.path)}</span>
-                          <span className="ds-row-sub">{item.path}</span>
+                          <span className="ds-row-sub" title={item.path}>{item.path}</span>
                           <span className="ds-row-sub">
                             {item.current && home?.project && home.harness?.installed
                               ? `${home.project.branch ?? "—"} · ${home.harness.installed_version}`

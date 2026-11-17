@@ -2351,7 +2351,7 @@ EN.update(
         "Снимка доски ещё нет": "No board snapshot yet",
         "Доска появится, когда трекер снова ответит.": "The board appears when the tracker answers again.",
         "ДОСКА · LOADING": "BOARD · LOADING",
-        "ДОСКА · EMPTY": "BOARD · EMPTY",
+        "Доска · пусто": "Board · empty",
         "Доска не построена": "The board was not built",
         "Номер спеки": "Spec number",
         "Найти спеку по номеру": "Find a spec by number",
@@ -2387,7 +2387,7 @@ EN.update(
     {
         "Сменить статус тикета": "Change the ticket status",
         "Сменить статус": "Change status",
-        "СМЕНА СТАТУСА": "STATUS CHANGE",
+        "Смена статуса": "Status change",
         "Сервер запустит смену метки в {tracker} как мутирующий job и обновит доску.": "The server runs the label change in {tracker} as a mutating job and refreshes the board.",
         "локальном трекере": "the local tracker",
         "Смена статуса…": "Changing the status…",

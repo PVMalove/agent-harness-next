@@ -180,8 +180,9 @@ describe("the Orchestration route", () => {
     const request = socket.request("orchestration.snapshot");
     act(() => socket.reply(screenPage(request.id, "orchestration.snapshot", JSON.stringify(older))));
     openTab("Контейнер");
+    // An older server says nothing about containers: unknown, not "none" (review of PR #1186).
     expect(view().querySelector("#orch-containers-empty")?.textContent).toBe(
-      "Контейнеров нет: ни один dispatch не запускался через контейнерный исполнитель",
+      "Контейнеры неизвестны: этот сервер не сообщает о контейнерах dispatch",
     );
     expect(view().querySelector("[data-container]")).toBeNull();
   });

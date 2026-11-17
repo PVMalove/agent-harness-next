@@ -167,6 +167,10 @@ describe("Drawer", () => {
     opener.focus();
     fireEvent.click(opener);
     const dialog = screen.getByRole("dialog", { name: "Ящик" });
+    // happy-dom's showModal() does not move the focus: move it into the dialog by hand, or the
+    // focus would never leave the opener and the restore would go unchecked (review of PR #1186).
+    within(dialog).getByRole("button", { name: "Закрыть" }).focus();
+    expect(document.activeElement).not.toBe(opener);
     fireEvent(dialog, new Event("cancel", { cancelable: true }));
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(opener);

@@ -360,9 +360,11 @@ describe("Home contour activity", () => {
       socket.reply({ v: 1, id: subscription, type: "orchestration.subscribe", ok: true, kind: "events", cursor: "j-2", events }),
     );
     const rows = Array.from(document.querySelectorAll("#home-events li")).map((row) => row.textContent);
+    // Event times are local, like the page's other clocks.
+    const local = (iso: string) => new Intl.DateTimeFormat("ru", { timeStyle: "medium" }).format(new Date(iso));
     expect(rows).toEqual([
-      "12:00:09dispatch.transitiondeveloper · queued → working",
-      "12:00:01batch.transition— → active",
+      `${local("2026-11-13T12:00:09Z")}dispatch.transitiondeveloper · queued → working`,
+      `${local("2026-11-13T12:00:01Z")}batch.transition— → active`,
     ]);
   });
 });

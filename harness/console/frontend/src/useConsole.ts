@@ -19,6 +19,8 @@ export interface ConsoleValue {
   recentEvents: HomeEvent[];
   /** When the last valid Home snapshot arrived; null before the first one. */
   snapshotAt: Date | null;
+  /** When the last Home reply arrived, valid or not; null before the first one. */
+  repliedAt: Date | null;
   /** The last valid Home snapshot (kept while reconnecting); null before the first one. Other
       pages read its facts (project, harness, store, health) instead of asking again. */
   snapshot: HomeSnapshot | null;
@@ -59,6 +61,7 @@ export function ConsoleProvider({
   const [replies, setReplies] = useState(0);
   const [events, setEvents] = useState(0);
   const [snapshotAt, setSnapshotAt] = useState<Date | null>(null);
+  const [repliedAt, setRepliedAt] = useState<Date | null>(null);
   const [recentEvents, setRecentEvents] = useState<HomeEvent[]>([]);
 
   useEffect(() => {
@@ -67,6 +70,7 @@ export function ConsoleProvider({
       if (event.type === "snapshot") setSnapshotAt(new Date());
       if (event.type === "snapshot" || event.type === "invalid" || event.type === "error") {
         setReplies((count) => count + 1);
+        setRepliedAt(new Date());
       }
       if (event.type === "events") {
         setEvents((count) => count + 1);
@@ -85,8 +89,8 @@ export function ConsoleProvider({
   }, [client]);
 
   const value = useMemo(
-    () => ({ state, client, replies, events, recentEvents, snapshotAt, snapshot: state.snapshot }),
-    [state, client, replies, events, recentEvents, snapshotAt],
+    () => ({ state, client, replies, events, recentEvents, snapshotAt, repliedAt, snapshot: state.snapshot }),
+    [state, client, replies, events, recentEvents, snapshotAt, repliedAt],
   );
   return createElement(ConsoleContext.Provider, { value }, children);
 }

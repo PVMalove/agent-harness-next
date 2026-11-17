@@ -242,7 +242,14 @@ def test_no_request_rebinds_the_served_project(tmp_path: Path) -> None:
 
 
 def _catalog_en() -> dict[str, str]:
-    return cast(dict[str, str], json.loads(web_catalog.render())["en"])
+    """The English texts the SPA looks up: the generated catalog plus the design-system table
+    `ds.en.json`, which the SPA's `translate` reads as well."""
+    generated = cast(dict[str, str], json.loads(web_catalog.render())["en"])
+    design = cast(
+        dict[str, str],
+        json.loads((FRONTEND / "i18n" / "ds.en.json").read_text(encoding="utf-8")),
+    )
+    return {**generated, **design}
 
 
 def _page_labels() -> set[str]:

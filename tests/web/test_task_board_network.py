@@ -97,7 +97,7 @@ BOARD_LABELS = (
     "Файлы не указаны.",
     # The status change: the select, the confirmation and the refusal captions.
     "Сменить статус",
-    "СМЕНА СТАТУСА",
+    "Смена статуса",
     "Сервер запустит смену метки в {tracker} как мутирующий job и обновит доску.",
     "локальном трекере",
     "Отмена",
@@ -296,5 +296,5 @@ def test_the_status_change_captions_have_their_english_text() -> None:
     assert english["Ошибка записи в трекер: изменение не сохранено"] == (
         "Tracker write error: the change was not saved"
     )
-    assert english["СМЕНА СТАТУСА"] == "STATUS CHANGE"
+    assert english["Смена статуса"] == "Status change"
     assert english["Сменить статус тикета"] == "Change the ticket status"

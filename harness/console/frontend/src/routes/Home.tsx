@@ -508,19 +508,17 @@ function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activi
 
 export function Home() {
   const { t, section, fact, language, state: stateText, plural } = useI18n();
-  const { state, client, replies, events, recentEvents } = useConsole();
+  const { state, client, replies, events, recentEvents, snapshotAt, repliedAt: checkedAt } = useConsole();
   const [online, setOnline] = useState(false);
-  const [checkedAt, setCheckedAt] = useState<Date | null>(null);
   const [filter, setFilter] = useState<"all" | "problem" | "skipped">("all");
   const firstEvents = useRef(events);
   const snapshot = state.snapshot;
-  const activity = useAgedActivity(state.activity);
+  const activity = useAgedActivity(state.activity, snapshotAt);
   const unavailable = t("Недоступно в текущем снимке");
 
   // Offline mode re-reads Home 15 s after each reply; online refreshes only on request.
   useEffect(() => {
     if (replies === 0) return;
-    setCheckedAt(new Date());
     if (online) return;
     const timer = window.setTimeout(() => client.requestHome(), OFFLINE_REFRESH_MS);
     return () => window.clearTimeout(timer);

@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, StrictInt, TypeAdapter
 
 from ...kernel.protocol import (
     CONFIGURATION_VERSION_ID,
@@ -26,7 +26,7 @@ HERE = Path(__file__).resolve().parent
 OPENAPI_PATH = HERE / "openapi.json"
 WS_SCHEMA_PATH = HERE / "ws-schema.json"
 
-RequestId = Annotated[str, Field(max_length=64)] | int | None
+RequestId = Annotated[str, Field(max_length=64)] | StrictInt | None
 
 
 # Pydantic's synthesized model signatures carry Any; as in harness/json_types.py the explicit-any
@@ -280,7 +280,7 @@ class ConfigurationSnapshotRequest(_Strict):  # type: ignore[explicit-any]
 
 AdvisorProvider = Literal["codex", "claude"]
 AdvisorPathPart = Annotated[str, Field(pattern="^[A-Za-z0-9_.-]{1,64}$")]
-RequiredId = Annotated[str, Field(min_length=1, max_length=64)] | int
+RequiredId = Annotated[str, Field(min_length=1, max_length=64)] | StrictInt
 
 
 class AdvisorCheckRequest(_Strict):  # type: ignore[explicit-any]
