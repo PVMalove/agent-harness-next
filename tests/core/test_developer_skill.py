@@ -185,5 +185,31 @@ class DeveloperSkillContractTests(unittest.TestCase):
         self.assertIn("`harness/orchestration/roles/developer.md`", text)
 
 
+class FastImplementUsesDeveloperSkillTests(unittest.TestCase):
+    """fast-implement отдаёт реализацию скиллу developer и сохраняет поставку."""
+
+    FAST = ROOT / "skills" / "first-party" / "engineering" / "fast-implement" / "SKILL.md"
+
+    def test_coding_phase_references_the_developer_skill_and_its_evidence(self) -> None:
+        """Проверить ссылку на скилл и показ его evidence до вопроса о review."""
+        text = _normalized(self.FAST)
+        self.assertIn("Run steps 1–4 under the `developer` skill", text)
+        self.assertIn(
+            "evidence (changes, checks, unverified items, risks, blockers) before asking about review",
+            text,
+        )
+
+    def test_review_commit_push_and_handoff_stay_with_fast_implement(self) -> None:
+        """Проверить, что review, commit, push и handoff остались в fast-implement."""
+        text = _normalized(self.FAST)
+        for marker in (
+            "Провести code review?",
+            "explicit permission to commit and push",
+            "offer `/to-pull-requests <ticket>`",
+            "the `developer` skill never performs them",
+        ):
+            self.assertIn(marker, text)
+
+
 if __name__ == "__main__":
     unittest.main()
