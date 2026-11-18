@@ -47,6 +47,7 @@ _HELP = {
     "story_points.fast_threshold": "Оценки не выше этого порога предлагают pipeline::fast; большой порог отправляет больше задач в короткий путь.",
     "story_points.full_threshold": "Оценки не ниже этого порога предлагают pipeline::full с отдельными этапами проверки.",
     "story_points.gray_zone": "Промежуточная оценка вызывает дополнительную оценку сложности. Настройте согласованно с обоими порогами.",
+    "story_points.hours": "Необязательно: сколько часов человеку нужно на задачу каждой оценки, ключи — значения шкалы. to-tickets показывает оценку времени в карточке и итоговой таблице.",
 }
 # value -> (what it does, limitation, when to choose it); plain strings are one-line effects.
 _EFFECTS: dict[str, str | tuple[str, str, str]] = {

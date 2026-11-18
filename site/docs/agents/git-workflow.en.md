@@ -3,7 +3,7 @@
 This guide defines only the rules for Git, tickets, and PRs. The opt-in backend orchestration, which `/implement` drives, follows `.harness/orchestration/playbook.md`.
 
 ### 1. Fundamental Constraints & Tooling { #1-fundamental-constraints-tooling }
-* **Zero Direct Commits:** `base_branch` and every `integration/*` branch are protected targets. Agents commit and push only from an isolated issue branch matching `branch_pattern`. The Git hooks allow two exceptions during separate, authorized epic setup for a new `integration/*` branch that is absent on the remote. First, the operator may commit the grill docs to that branch. The grill docs are `CONTEXT.md`, `CONTEXT-MAP.md`, `**/CONTEXT.md`, `docs/adr/**`, and `**/docs/adr/**`. The commit must be a standalone `git commit` with only message options. The index must contain only grill docs. Second, the operator may push that branch to create it. For the commit, the hook checks `origin`; for the push, it checks the remote in the command. The hook blocks the command when the branch exists there or when it cannot check the remote.
+* **Zero Direct Commits:** `base_branch` and every `integration/*` branch are protected targets. Agents commit and push only from an isolated issue branch matching `branch_pattern`. The Git hooks allow two exceptions for `/publish-epic` and a new `integration/*` branch that is absent on the remote. First, `/publish-epic` may commit the grill docs to that branch. The grill docs are `CONTEXT.md`, `CONTEXT-MAP.md`, `**/CONTEXT.md`, `docs/adr/**`, and `**/docs/adr/**`. The commit must be a standalone `git commit` with only message options. The index must contain only grill docs. Second, `/publish-epic` may push that branch to create it. For the commit, the hook checks `origin`; for the push, it checks the remote in the command. The hook blocks the command when the branch exists there or when it cannot check the remote.
 * **CLI Only:** Rely exclusively on `git` and your tracker's CLI — GitHub CLI (`gh`) or GitLab CLI (`glab`) — for repository and task operations. On GitLab, name the project explicitly in every command: each `glab` command takes `-R <project-url>`, and each `glab api` call is written `GITLAB_HOST=<host> glab api projects/<project-id>/...`. `<host>`, `<project-url>` and `<project-id>` are defined in [issue-tracker.md](issue-tracker.md) → GitLab → Conventions.
 * **Body via File, Not Inline:** Every body or comment published through `gh`/`glab` MUST come from a file at a readable literal path — never an inline `--body "..."`, `--description "..."` or `--message "..."`, a shell heredoc, a shell variable, or `-` (stdin). Nested quotes, backticks, and PowerShell's escaping rules all break inline text unpredictably, and the public-metadata hook (`block-public-attribution.sh`) checks the file's content and rejects a shell-variable, stdin, or missing path. Both trackers follow one publication contract:
   * **GitHub:** issue, PR, and comment bodies go through `--body-file <path>` (`gh issue create`/`edit`, `gh pr create`/`edit`, `gh issue comment`, `gh pr comment`).
@@ -18,9 +18,8 @@ This guide defines only the rules for Git, tickets, and PRs. The opt-in backend 
 ### 2. Workflow Sequence { #2-workflow-sequence }
 
 An epic selects one integration branch named `integration/<service-or-team>`. `/to-spec` writes the
-specification locally. Epic publication and branch setup are separate, authorized steps. The
-operator records the branch under `## Integration Branch` in the epic and creates it from
-`origin/<base_branch>` if needed. `/to-tickets` copies the exact value to every child ticket. The
+specification locally. `/publish-epic` publishes the epic, records the branch under
+`## Integration Branch`, and creates it from `origin/<base_branch>` when it is absent. `/to-tickets` copies the exact value to every child ticket. The
 integration branch is the PR target for child work. A separate release PR targets `base_branch`.
 
 1. **Initialization (Branching):**

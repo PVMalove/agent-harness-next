@@ -15,11 +15,13 @@
 
 ```yaml
 name: grill-with-docs
-description: A relentless interview to sharpen a plan or design, which also creates docs (ADR's and glossary) as we go.
+description: Stress-test an idea or plan with /domain-modeling. Update explicitly approved terms in CONTEXT.md and consider ADRs for significant decisions. Use /grill-me for interview and Discovery Context only.
 disable-model-invocation: true
 ```
 
-Run a `/grilling` session, using the `/domain-modeling` skill.
+Run `/grilling` with `/domain-modeling` for context selection, vocabulary, and document formats.
+Before any glossary or ADR edit, read `/grilling`'s `references/domain-doc-writes.md`
+(`../grilling/references/domain-doc-writes.md` from this skill) and follow it.
 
 </div>
 

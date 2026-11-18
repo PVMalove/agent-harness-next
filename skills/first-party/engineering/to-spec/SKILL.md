@@ -85,6 +85,6 @@ the approved file. If the user requests a revision, apply the same path and deci
 ## Finish
 
 Return the saved path and status. If the write fails, report the error and return the complete specification in chat.
-Offer revisions or, for an Approved spec, a manual next step with `/to-tickets` or `/implement`
-when its prerequisites are met. For a Draft, offer to resolve the blockers first.
+Offer revisions or, for an Approved spec, a manual next step: `/publish-epic` and then `/to-tickets`,
+or `/implement` when its prerequisites are met. For a Draft, offer to resolve the blockers first.
 Never invoke either skill automatically.

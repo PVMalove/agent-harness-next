@@ -22,6 +22,7 @@ Localized skills, hook descriptions, role manifests and agent guides. Command na
 </details>
 <details data-ah-group><summary>Specs and tickets</summary>
 <ul><li data-ah-entry><a href="../../skills/to-spec/">To Spec — Into a specification</a></li>
+<li data-ah-entry><a href="../../skills/publish-epic/">Publish Epic — Epic publication</a></li>
 <li data-ah-entry><a href="../../skills/to-tickets/">To Tickets — Into tickets</a></li>
 <li data-ah-entry><a href="../../skills/to-guide/">To Guide — Into a guide</a></li></ul>
 </details>

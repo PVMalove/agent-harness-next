@@ -1278,7 +1278,7 @@ def run(ctx: SimpleNamespace) -> None:
             "block-direct-master.sh allowed git push to refs/heads/integration/auth"
         )
 
-    # The epic setup operator publishes a new integration branch with `git push -u origin
+    # /publish-epic publishes a new integration branch with `git push -u origin
     # integration/<name>` without switching the worktree: creating a branch absent on the
     # remote passes, while updating an existing one or an unverifiable remote stays blocked.
     direct_remote = test_root / "direct-remote.git"
@@ -1368,7 +1368,7 @@ def run(ctx: SimpleNamespace) -> None:
                 f"block-direct-master.sh allowed a commit or push from an integration branch: {command!r}"
             )
 
-    # The epic setup operator commits grill docs before publishing a new integration branch
+    # /publish-epic commits grill docs before publishing a new integration branch
     # (#644): a lone `git commit` whose index holds only CONTEXT.md, CONTEXT-MAP.md and ADR
     # paths passes while the branch is absent on origin; any other commit stays blocked.
     grill_wt = test_root / "grill-wt"

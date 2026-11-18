@@ -87,6 +87,9 @@ Version 11 (#1150) re-evaluates the changed `CONTEXT.md` and ADR 0005: all query
 recall (0.95), noise (0.61), and the passing gate remain unchanged.
 Version 13 (#1205) re-evaluates `CONTEXT.md` after epic publication moves out of `/to-spec`: only
 the `CONTEXT.md` source hash changes, and the report is identical to the revision above.
+Version 14 (#1208) re-evaluates `CONTEXT.md` after `/publish-epic` joins the engineering-suite
+additions and owns the epic integration branch; only the source hash changes and the report is
+identical to version 13.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 

@@ -24,6 +24,7 @@
 </details>
 <details data-ah-group><summary>Спецификация и тикеты</summary>
 <ul><li data-ah-entry><a href="../../skills/to-spec/">To Spec: В спецификацию</a></li>
+<li data-ah-entry><a href="../../skills/publish-epic/">Publish Epic: Публикация эпика</a></li>
 <li data-ah-entry><a href="../../skills/to-tickets/">To Tickets: В тикеты</a></li>
 <li data-ah-entry><a href="../../skills/to-guide/">To Guide: В руководство</a></li></ul>
 </details>
