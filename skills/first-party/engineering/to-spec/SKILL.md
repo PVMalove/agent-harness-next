@@ -12,8 +12,9 @@ approved specification file. Never modify production code, tests, project config
 
 ## Load the handoff
 
-1. Identify the task folder under `docs/tasks/`. Use the known tracker ID and a descriptive
-   slug, or the slug alone when no ID exists. Propose the spec file at the root of that folder.
+1. Identify the task folder under `docs/tasks/` by `docs/agents/artifacts.md`, including the epic
+   folder for a child task. Look for `artifacts/discovery-context.md` there before treating the
+   handoff as a cold start. Propose the spec file at the root of that folder.
 2. Check `docs/tasks/.../artifacts/discovery-context.md` for this task and the final grilling summary in chat.
    Import the goal and scope, accepted decision IDs and selected option numbers, rejected
    alternatives and their reasons, open questions, assumptions, and confirmed glossary and ADR updates.
@@ -54,7 +55,7 @@ For each unresolved fork, stop assembling the specification and do the following
 3. Offer the displayed numbers as choices. Record only an explicit selection of a displayed number,
    with its decision ID and profile. Keep the reasons for rejecting the other approaches.
 4. Offer `подробнее 1`, `подробнее 2`, `подробнее 3` for displayed options and `подробнее все`.
-   Read `references/drill-down-template.md` ONLY when the user requests `подробнее <N>` (or `details <N>`).
+   Read `references/drill-down-template.md` when the user requests `подробнее <N>` (or `details <N>`).
    `все` / `all` expands every displayed option. Reply in chat without writing any files.
    Then show the same choices again and wait. A detail request never approves an option or a write.
 

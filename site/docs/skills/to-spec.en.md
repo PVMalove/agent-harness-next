@@ -18,7 +18,8 @@ into the specification. For a direct invocation, first approve the files the ski
 ## Output
 
 Once you approve the path, the skill saves the specification in its task folder under
-`docs/tasks/`. The document describes file and contract changes, edge cases, and verifiable
+`docs/tasks/`. For a child task this is the epic folder, where the skill first looks for
+`artifacts/discovery-context.md`. The document describes file and contract changes, edge cases, and verifiable
 acceptance criteria. If the write fails, the skill returns the full text in chat.
 
 Epic publication and branch setup are separate steps. Once the spec is approved, request

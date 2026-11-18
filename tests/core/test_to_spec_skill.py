@@ -18,14 +18,14 @@ def test_explicit_invocation_and_lazy_references() -> None:
     fields = _frontmatter(SKILL)
     assert fields["name"] == "to-spec"
     assert fields["disable-model-invocation"] == "true"
-    assert "allow_implicit_invocation: false" in (
-        SOURCE / "agents/openai.yaml"
-    ).read_text(encoding="utf-8")
+    metadata = (SOURCE / "agents/openai.yaml").read_text(encoding="utf-8")
+    assert "allow_implicit_invocation: false" in metadata
+    assert 'default_prompt: "Use $to-spec ' in metadata
     text = SKILL.read_text(encoding="utf-8")
     assert 60 <= len(text.splitlines()) <= 90
     assert f"Read `{SPEC_TEMPLATE}` when assembling the specification." in text
     assert (
-        f"Read `{DRILL_DOWN_TEMPLATE}` ONLY when the user requests `подробнее <N>` (or `details <N>`)."
+        f"Read `{DRILL_DOWN_TEMPLATE}` when the user requests `подробнее <N>` (or `details <N>`)."
         in text
     )
     assert text.count(SPEC_TEMPLATE) == text.count(DRILL_DOWN_TEMPLATE) == 1
@@ -38,6 +38,7 @@ def test_handoff_preserves_accepted_options_and_rejected_alternatives() -> None:
         "decision IDs and selected option numbers",
         "rejected alternatives and their reasons",
         "Preserve the approved lines in order",
+        "epic folder for a child task",
     ):
         assert marker in handoff
     template = (SOURCE / SPEC_TEMPLATE).read_text(encoding="utf-8")
