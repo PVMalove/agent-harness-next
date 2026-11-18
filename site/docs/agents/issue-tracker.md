@@ -12,7 +12,7 @@
 
 ### Соглашения { #conventions }
 
-- **Создать задачу:** `gh issue create --title "..." --body-file <path>`. Сначала запишите тело в файл: inline heredoc-ы `--body` ломаются на вложенных кавычках и обратных апострофах (см. `/to-tickets`).
+- **Создать задачу:** `gh issue create --title "..." --body-file <path>`. Сначала запишите тело в файл: inline heredoc-ы `--body` ломаются на вложенных кавычках и обратных апострофах (см. `/publish-epic`, `/to-tickets`).
 - **Прочитать задачу:** `gh issue view <number> --comments`; комментарии фильтруйте через `jq` и получайте метки.
 - **Список задач:** `gh issue list --state open --json number,title,body,labels,comments --jq '[.[] | {number, title, body, labels: [.labels[].name], comments: [.comments[].body]}]'` с подходящими фильтрами `--label` и `--state`.
 - **Прокомментировать задачу:** `gh issue comment <number> --body-file <path>`; путь берите по [git-workflow.md](git-workflow.md) §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`).

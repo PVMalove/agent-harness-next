@@ -9,9 +9,9 @@
 | --- | --- | --- |
 | Тип | `type::bug`, `type::feature`, `type::refactoring`, `type::chore`, `type::security`, `type::performance`, `type::hotfix` | `/triage` |
 | Режим исполнения | `hitl`, `afk` | `/triage`, `/to-tickets` |
-| Состояние | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked` | `/triage`, публикация эпика, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
+| Состояние | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked` | `/triage`, `/publish-epic`, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
 | Маршрут | `pipeline::fast`, `pipeline::full` | `/to-tickets` |
-| Контекст | `task-report::required`, `resolution::wontfix` | публикация эпика, `/to-tickets`, `/triage` |
+| Контекст | `task-report::required`, `resolution::wontfix` | `/publish-epic`, `/to-tickets`, `/triage` |
 | Wayfinder | `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, `wayfinder:task` | `/wayfinder` |
 
 `hitl` означает, что работу выполняет человек по руководству. `afk` означает, что задачу можно
@@ -53,7 +53,7 @@ points: мелкая задача идёт коротким путём, круп
 | Шаг | Что применяет |
 | --- | --- |
 | `/triage` | Тип, режим исполнения, состояние; отклонение закрывает тикет с `resolution::wontfix` |
-| Публикация эпика | `type::*`, `status::specs` и `task-report::required` на эпик |
+| `/publish-epic` | `type::*`, `status::specs` и `task-report::required` на эпик |
 | `/to-tickets` | Режим, маршрут `pipeline::*`, `status::ready` или `status::blocked` |
 | `/implement`, `/fast-implement` | `status::in-progress` вместо текущей метки состояния |
 | `/to-pull-requests` | После merge: `status::blocked` → `status::ready` у разблокированных зависимых |

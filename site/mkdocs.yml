@@ -228,6 +228,7 @@ nav:
                   - triage: skills/triage.md
               - Спецификация и тикеты:
                   - to-spec: skills/to-spec.md
+                  - publish-epic: skills/publish-epic.md
                   - to-tickets: skills/to-tickets.md
                   - to-guide: skills/to-guide.md
               - Реализация:

@@ -18,7 +18,8 @@ If you are unsure about the route, [/ask-matt](../skills/ask-matt.md) helps choo
 ## Stages and results {#steps}
 
 1. **Explore the idea.** Agree on the goal, scope and open questions.
-2. **Write the specification.** `/to-spec` saves the agreed specification locally.
+2. **Write the specification.** `/to-spec` saves the agreed specification locally;
+   `/publish-epic` publishes it as an epic and creates the integration branch.
 3. **Prepare tickets.** `/to-tickets` proposes slices, dependencies and estimates before publishing.
 4. **Implement and check.** `/implement` takes roles through orchestration gates;
    `/fast-implement` handles a small task in the current session; `/to-guide` prepares instructions for a person.
@@ -49,8 +50,8 @@ Detailed questions and rules belong in the [skills catalog](../skills/index.md).
 
 `/to-spec` carries over grilling decisions and uses approved Discovery Context. Approve the
 specification path and verification. Choose a displayed option for each new decision. If blockers
-remain, you can explicitly request a draft. [Publish the epic and set up its integration branch](../agents/git-workflow.md)
-as separate steps before decomposing it into child tickets.
+remain, you can explicitly request a draft. Then run `/publish-epic`
+to publish the epic and [set up its integration branch](../agents/git-workflow.md) before decomposing it into child tickets.
 
 ## Tickets {#tickets}
 

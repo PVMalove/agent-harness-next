@@ -575,22 +575,43 @@ def run(ctx: SimpleNamespace) -> None:
                 sys.exit(
                     f"engineering-suite did not expose {installed.relative_to(pv_project)}"
                 )
-    to_tickets_source = (
-        ROOT / "skills" / "first-party" / "engineering" / "to-tickets" / "SKILL.md"
+    # Issue #1208: to-tickets loads its ticket template and publication steps lazily, and
+    # publish-epic owns epic publication; every discovery root exposes both complete skills.
+    skill_files = {
+        "to-tickets": (
+            "SKILL.md",
+            "agents/openai.yaml",
+            "references/ticket-template.md",
+            "references/publish.md",
+        ),
+        "publish-epic": ("SKILL.md", "agents/openai.yaml"),
+    }
+    for name, relatives in skill_files.items():
+        source_dir = ROOT / "skills" / "first-party" / "engineering" / name
+        for discovery in (".harness", ".claude", ".agents"):
+            for relative in relatives:
+                installed = pv_project / discovery / "skills" / name / relative
+                if not installed.is_file() or not filecmp.cmp(
+                    source_dir / relative, installed, shallow=False
+                ):
+                    sys.exit(
+                        f"engineering-suite did not expose {installed.relative_to(pv_project)}"
+                    )
+    to_tickets_text = "\n".join(
+        (pv_project / ".harness" / "skills" / "to-tickets" / relative).read_text(
+            encoding="utf-8"
+        )
+        for relative in skill_files["to-tickets"]
     )
-    to_tickets_installed = (
-        pv_project / ".harness" / "skills" / "to-tickets" / "SKILL.md"
-    )
-    if not filecmp.cmp(to_tickets_source, to_tickets_installed, shallow=False):
-        sys.exit("engineering-suite override did not install the first-party to-tickets")
-    to_tickets_text = to_tickets_installed.read_text(encoding="utf-8")
     for required_text in (
-        "enumerate every path under those directories",
+        "Path inventory",
         "one advisory sub-agent call",
-        "stop and report blocker",
+        "stop and report it",
         "result dependency",
         "known requirement incompatibility",
-        "file overlap",
+        "File overlap alone is not a blocker",
+        "`**Status** — Approved`",
+        "## Parent: #<epic>",
     ):
         if required_text not in to_tickets_text:
             sys.exit(f"to-tickets discovery contract is missing: {required_text}")

@@ -11,7 +11,7 @@ changed, and this is expected.
 | --- | --- |
 | `triage` | A namespaced taxonomy of state labels and a separate execution-mode axis instead of the upstream names. |
 | `to-spec` | Converts grilling decisions and approved Discovery Context into a local technical specification. |
-| `to-tickets` | Links child tickets with the tracker's parent link, sets a block on a blocked ticket, and does not rewrite the epic. |
+| `to-tickets` | Splits an approved specification into verifiable tickets with waves and a traceability matrix, links them to the epic, and does not rewrite its decisions. |
 | `implement` | Gates with approval, separate roles, mandatory review and QA checks, an issue branch from the integration branch, an early blocker report, and a recovery route. |
 | `ask-matt` | Takes the developer's choice into account: a two-axis review, or a move to commit and push. |
 | `code-review` | Outputs the report in the language from the project configuration. |
@@ -33,7 +33,7 @@ changed, and this is expected.
 | `setup-matt-pocock-skills` | yes | One-time setup of the tracker, the label taxonomy, and the layout of domain documents. |
 | `tdd` | no | The red → green → refactor cycle. |
 | `to-spec` | yes | Write a verifiable specification after approval. |
-| `to-tickets` | yes | Decomposition of a specification into vertical slices with blocking links. |
+| `to-tickets` | yes | Decomposition of an approved specification into vertical slices with blocking links. |
 | `wayfinder` | yes | A decision map for work that does not fit into one session. |
 | `implement` | yes | A pipeline with roles and gates. |
 | `prototype` | no | A throwaway prototype for a design question. |
@@ -75,6 +75,7 @@ These skills were added specially for this build — they do not exist upstream.
 | `delivery-stats` (skill) | A cost report for a closed epic: tokens, cache, code volume, comparison with the baseline. |
 | `architect` (skill) | Manual comparison of architectural options; when memory is enabled, looks for precedents. |
 | `developer` (skill) | Implements an agreed change in the issue branch and reports changes, checks, unverified items, risks and blockers. |
+| `publish-epic` (skill) | Publishes an approved specification as the epic with its labels and creates the integration branch with the grill docs. |
 | `pr-composer` (subagent) | Fills in the PR body from the project template and returns the path to the file. |
 
 `pr-composer` ships as a subagent, not as a skill: a session or another skill calls it, and the model

@@ -9,9 +9,9 @@ does the work: a ticket can be `status::ready` and `hitl`, and these are two dif
 | --- | --- | --- |
 | Type | `type::bug`, `type::feature`, `type::refactoring`, `type::chore`, `type::security`, `type::performance`, `type::hotfix` | `/triage` |
 | Execution mode | `hitl`, `afk` | `/triage`, `/to-tickets` |
-| State | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked` | `/triage`, epic publication, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
+| State | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked` | `/triage`, `/publish-epic`, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
 | Route | `pipeline::fast`, `pipeline::full` | `/to-tickets` |
-| Context | `task-report::required`, `resolution::wontfix` | epic publication, `/to-tickets`, `/triage` |
+| Context | `task-report::required`, `resolution::wontfix` | `/publish-epic`, `/to-tickets`, `/triage` |
 | Wayfinder | `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, `wayfinder:task` | `/wayfinder` |
 
 `hitl` means that a human does the work following a guide; `afk` means that the task can be handed to an agent.
@@ -53,7 +53,7 @@ A rejected ticket loses its `status::*` label, gets `resolution::wontfix`, and i
 | Step | What it applies |
 | --- | --- |
 | `/triage` | Type, execution mode, state; a rejection closes the ticket with `resolution::wontfix` |
-| Epic publication | `type::*`, `status::specs` and `task-report::required` on the epic |
+| `/publish-epic` | `type::*`, `status::specs` and `task-report::required` on the epic |
 | `/to-tickets` | Mode, the `pipeline::*` route, `status::ready` or `status::blocked` |
 | `/implement`, `/fast-implement` | `status::in-progress` in place of the current state label |
 | `/to-pull-requests` | After a merge: `status::blocked` → `status::ready` on the unblocked dependents |

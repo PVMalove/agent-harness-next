@@ -64,7 +64,8 @@
       "first-party/engineering/fast-implement",
       "first-party/engineering/delivery-stats",
       "first-party/engineering/architect",
-      "first-party/engineering/developer"
+      "first-party/engineering/developer",
+      "first-party/engineering/publish-epic"
     ],
     "resources": [
       "reporting",

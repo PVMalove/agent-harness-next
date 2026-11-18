@@ -22,8 +22,9 @@ Once you approve the path, the skill saves the specification in its task folder 
 `artifacts/discovery-context.md`. The document describes file and contract changes, edge cases, and verifiable
 acceptance criteria. If the write fails, the skill returns the full text in chat.
 
-Epic publication and branch setup are separate steps. Once the spec is approved, request
-revisions or run `/to-tickets` or `/implement` manually when its prerequisites are met.
+`/publish-epic` publishes the epic and sets up its integration branch. Once the spec is approved,
+request revisions or run `/publish-epic` and then `/to-tickets`, or `/implement`, manually when
+its prerequisites are met.
 [Git and epic workflow](../agents/git-workflow.md)
 
 [Source SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/to-spec/SKILL.md)
