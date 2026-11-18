@@ -192,6 +192,81 @@ def _decision(done: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return parse_hook_response(done.stderr)
 
 
+def _codex_patch(project: Path, *lines: str) -> dict[str, object]:
+    return {
+        **_identity("coordinator"),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {
+            "command": "\n".join(("*** Begin Patch", *lines, "*** End Patch"))
+        },
+        "cwd": str(project),
+    }
+
+
+@needs_bash
+@pytest.mark.parametrize("hook_id", (FIRST_TOUCH, SENSITIVE))
+def test_codex_hooks_warn_about_every_risky_path_in_one_native_response(
+    tmp_path: Path, hook_id: str
+) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    patch = _codex_patch(
+        project,
+        "*** Add File: pyproject.toml",
+        "+[project]",
+        "*** Update File: .github/workflows/old.yml",
+        "*** Move to: .github/workflows/new.yml",
+        "@@",
+        "-name: old",
+        "+name: new",
+    )
+
+    result = _script(project, hook_id, patch)
+
+    assert _decision(result)["decision"] == "warn"
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+    for path in (
+        "pyproject.toml",
+        ".github/workflows/old.yml",
+        ".github/workflows/new.yml",
+    ):
+        assert path in context
+    assert not _script(project, hook_id, patch).stdout
+
+
+@needs_bash
+def test_codex_stop_reminds_about_all_files_touched_by_a_native_patch(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    patch = _codex_patch(
+        project, "*** Add File: app/a.py", "+a = 1", "*** Add File: app/b.py", "+b = 2"
+    )
+
+    assert _decision(_script(project, REMINDER, patch))["decision"] == "allow"
+    _write(project / "app/a.py", "a = 1\n")
+    _write(project / "app/b.py", "b = 2\n")
+    result = _script(project, REMINDER, _stop("coordinator"))
+
+    assert _decision(result)["decision"] == "warn"
+    assert "изменено файлов: 2" in json.loads(result.stdout)["systemMessage"]
+
+
+@needs_bash
+def test_codex_advisory_reports_an_unparseable_patch_without_blocking(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    invalid_patch = _codex_patch(project, "not a patch operation")
+
+    result = _script(project, FIRST_TOUCH, invalid_patch)
+
+    verdict = _decision(result)
+    assert verdict["decision"] == "warn"
+    assert verdict["reason_code"] == "internal-error"
+    assert not result.stdout
+
+
 @needs_bash
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize("profile", PROFILES)

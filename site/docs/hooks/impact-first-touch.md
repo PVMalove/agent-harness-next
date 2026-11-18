@@ -39,9 +39,7 @@ Hook сравнивает путь после `realpath` относительн�
 - **Внутренняя ошибка.** Нечитаемый JSON, нет `session_id` или `tool_input.file_path`, сбой
   хранилища, любое исключение, ненулевой код и тайм-аут 10 с (`ADVISORY_TIMEOUT_SECONDS`) дают `warn`
   `internal-error` с кодом `0` и пустым stdout ([hook-response.md](hook-response.md)).
-- **Второй runtime.** Там правка файла приходит как `apply_patch` без `file_path`, поэтому hook не
-  подключён, пока нет адаптера payload. `harness health` перечисляет его в строке `нет события или
-  payload` с проверкой вне hook: ChangeImpact-gate по ADR 0023.
+- **Codex.** Хук получает нативный `apply_patch` и сверяет пути из тела патча.
 
 ## 3. Контракт
 

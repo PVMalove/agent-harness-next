@@ -3,11 +3,11 @@
 
 ``change_impact_hooks.py <hook_id>`` читает JSON события runtime из stdin:
 
-- ``impact-first-touch`` (PreToolUse, Write|Edit) предупреждает о касании рискованного пути, влияние
+- ``impact-first-touch`` (PreToolUse, Write|Edit|apply_patch) предупреждает о касании рискованного пути, влияние
   которого ChangeImpact не вычисляет по графу (конфиг сборки и проверок, capabilities, skills);
-- ``sensitive-path-recheck`` (PreToolUse, Write|Edit) предупреждает о правке чувствительного пути
+- ``sensitive-path-recheck`` (PreToolUse, Write|Edit|apply_patch) предупреждает о правке чувствительного пути
   (манифест, CI, миграции, auth, права доступа, hooks);
-- ``targeted-check-reminder`` на PreToolUse Write|Edit ведёт журнал касаний операции, а на Stop и
+- ``targeted-check-reminder`` на PreToolUse Write|Edit|apply_patch ведёт журнал касаний операции, а на Stop и
   SubagentStop напоминает отчитать targeted-проверки brief, если файлы менялись после отчёта.
 
 Тело — advisory: оно всегда завершается кодом 0. Предупреждение — первая строка stderr
@@ -31,7 +31,7 @@ import sys
 from datetime import datetime, timezone
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
-from typing import Callable, Dict, List, NamedTuple, Optional, Tuple
+from typing import Callable, Dict, Iterator, List, NamedTuple, Optional, Tuple
 
 sys.dont_write_bytecode = True
 
@@ -120,7 +120,7 @@ REPORT_GLOB = ".harness/.sandboxes/scratch/inbox/*.json"
 UNWATCHED_PREFIXES = (".harness/", "docs/tasks/")
 STOP_EVENTS = ("Stop", "SubagentStop")
 
-Output = Tuple[Optional[Dict[str, object]], List[str]]
+Output = Tuple[Optional[str], List[str]]
 
 
 class HookInputError(Exception):
@@ -255,6 +255,26 @@ def edited_path(event: Event) -> Optional[Target]:
     return checkout_path(file_path, cwd if isinstance(cwd, str) else os.getcwd())
 
 
+def path_events(event: Event) -> Iterator[Event]:
+    """Normalize a native patch to file events, preserving the session and the patch identity."""
+    if event.name != "PreToolUse" or event.payload.get("tool_name") != "apply_patch":
+        yield event
+        return
+    adapter = importlib.import_module("apply_patch_payload")
+    operations = adapter.operations(event.payload)
+    digest = _sha256(event.payload["tool_input"])
+    paths = dict.fromkeys(
+        path for op in operations for path in (op.path, op.move_to) if path is not None
+    )
+    for path in paths:
+        yield event._replace(
+            payload={
+                **event.payload,
+                "tool_input": {"file_path": path, "patch_sha256": digest},
+            }
+        )
+
+
 class Store:
     """Каталог операции: записи создаются через O_EXCL и не меняются, число записей ограничено."""
 
@@ -342,14 +362,13 @@ def notify(
 
 
 class Notice(NamedTuple):
-    """Предупреждение hook-а: причина, текст, предмет дедупликации и вывод протокола runtime."""
+    """Предупреждение hook-а: причина, текст и предмет дедупликации."""
 
     hook_id: str
     reason: str
     text: str
     subject: object
     path: str
-    output: Dict[str, object]
 
 
 def announce(event: Event, root: Path, notice: Notice) -> Output:
@@ -363,17 +382,10 @@ def announce(event: Event, root: Path, notice: Notice) -> Output:
         return None, [f"уведомление не записано: {exc}"]
     if evidence is None:
         return None, []
-    return notice.output, [
+    return notice.text, [
         f"[{notice.reason}] {notice.text}",
         f"evidence_ref={evidence}",
     ]
-
-
-def _pre_tool_context(text: str) -> Dict[str, object]:
-    """Контекст для модели рядом с результатом инструмента; решение о разрешении не меняется."""
-    return {
-        "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}
-    }
 
 
 def impact_first_touch(event: Event, root: Path) -> Output:
@@ -392,7 +404,6 @@ def impact_first_touch(event: Event, root: Path) -> Output:
         text,
         target.rel,
         target.rel,
-        _pre_tool_context(text),
     )
     return announce(event, root, notice)
 
@@ -418,7 +429,6 @@ def sensitive_path_recheck(event: Event, root: Path) -> Output:
         text,
         subject,
         target.rel,
-        _pre_tool_context(text),
     )
     return announce(event, root, notice)
 
@@ -489,7 +499,6 @@ def targeted_check_reminder(event: Event, root: Path) -> Output:
         text,
         state,
         worktrees,
-        {"systemMessage": text},
     )
     return announce(event, root, notice)
 
@@ -511,14 +520,33 @@ def main(argv: List[str]) -> int:
         if len(argv) != 1 or argv[0] not in HANDLERS:
             raise HookInputError("ожидается один hook_id: " + ", ".join(HANDLERS))
         event = read_event(sys.stdin.read())
-        output, diagnostics = HANDLERS[argv[0]](event, project_root())
+        handler = HANDLERS[argv[0]]
+        root = project_root()
+        messages: List[str] = []
+        diagnostics: List[str] = []
+        for item in path_events(event):
+            message, lines = handler(item, root)
+            if message is not None:
+                messages.append(message)
+            diagnostics.extend(lines)
     except Exception as exc:  # advisory-hook не блокирует и не ломает протокол runtime
         print(
             f"[{REASON_INTERNAL_ERROR}] change_impact_hooks.py: {type(exc).__name__}: {exc}",
             file=sys.stderr,
         )
         return 0
-    if output is not None:
+    if messages:
+        context = "\n".join(messages)
+        output = (
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "additionalContext": context,
+                }
+            }
+            if event.name == "PreToolUse"
+            else {"systemMessage": context}
+        )
         sys.stdout.write(json.dumps(output, ensure_ascii=False))
         sys.stdout.flush()
     for line in diagnostics:

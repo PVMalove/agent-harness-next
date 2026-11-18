@@ -50,8 +50,7 @@ still blocked by the critical `protect-hook-policy`; this hook does not change t
 - **Remaining limitation.** A hardlink to a sensitive file bypasses only this warning:
   `realpath` does not resolve a hardlink. The critical `protect-hook-policy` and the diff check of
   the strict boundary, which sees the path from git, are authoritative.
-- **Second runtime.** It is not connected until the `apply_patch` adapter; `harness health` names
-  the check outside the hook — the strict boundary.
+- **Codex.** The hook receives native `apply_patch` events and checks the paths in the patch body.
 
 ## 3. Contract
 

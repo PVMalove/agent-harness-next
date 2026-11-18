@@ -427,6 +427,7 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         ("Write", "Edit"),
         False,
         "ChangeImpact-gate по ADR 0023",
+        apply_patch=True,
     ),
     HookSpec(
         "sensitive-path-recheck",
@@ -435,6 +436,7 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         ("Write", "Edit"),
         False,
         "граница strict (dispatch propose, qa run, publish)",
+        apply_patch=True,
     ),
     HookSpec(
         "targeted-check-reminder",
@@ -443,6 +445,7 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         ("Write", "Edit"),
         False,
         "сверка checks_run",
+        apply_patch=True,
     ),
     HookSpec(
         "targeted-check-reminder",
@@ -519,9 +522,8 @@ class RuntimeAdapter:
 # маркер `.claude/.qa-gate/passed` для упавшего QA-прогона, и `require-qa-gate` разрешил бы PR.
 # События Stop и SubagentStop подтверждены тем же источником (страница hooks, 2026-10-27): payload
 # несёт `session_id`, `hook_event_name`, `stop_hook_active`, а SubagentStop — ещё `agent_id`; при коде 0
-# stdout принимает только JSON или пустую строку. Журнал касаний `targeted-check-reminder` на Write и
-# Edit к `apply_patch` не подключается (учётный hook), поэтому напоминание второго runtime на
-# правки молчит.
+# stdout принимает только JSON или пустую строку. Журнал касаний `targeted-check-reminder`
+# заполняется через ту же группу `apply_patch|Write|Edit`, что и остальные ChangeImpact hooks.
 CODEX_SUPPORT: frozenset[EventTool] = frozenset(
     {
         ("PreToolUse", "Bash"),

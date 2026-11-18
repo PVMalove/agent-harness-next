@@ -380,7 +380,7 @@ def test_init_installs_the_second_runtime_adapter_from_the_same_scripts(
     install(repo)
 
     # The second runtime delivers PreToolUse for Bash and apply_patch and the end of a turn (Stop,
-    # SubagentStop); apply_patch reaches only the critical guards with the patch adapter.
+    # SubagentStop); apply_patch reaches the guards and advisories with the patch adapter.
     expected = sorted(
         [
             *(
@@ -402,6 +402,9 @@ def test_init_installs_the_second_runtime_adapter_from_the_same_scripts(
                 "apply_patch|Write|Edit",
                 "block-scratch-outside-docs-tasks.sh",
             ),
+            ("PreToolUse", "apply_patch|Write|Edit", "impact-first-touch.sh"),
+            ("PreToolUse", "apply_patch|Write|Edit", "sensitive-path-recheck.sh"),
+            ("PreToolUse", "apply_patch|Write|Edit", "targeted-check-reminder.sh"),
         ]
     )
     assert ("Stop", "", "targeted-check-reminder.sh") in expected
@@ -430,13 +433,11 @@ def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
         {
             "check-worktree-branch-name.sh",
             "count-skill-usage.sh",
-            "impact-first-touch.sh",
-            "sensitive-path-recheck.sh",
             "runtime-autostart.sh",
         }
     )
     assert "protect-hook-policy.sh" in scripts
-    # Write and Edit arrive as apply_patch: only the critical guards with the patch adapter take it.
+    # Write and Edit arrive as apply_patch: the handlers in this group can parse it.
     assert {
         (matcher, script)
         for event, matcher, script in codex_triples(load_codex(repo))
@@ -444,13 +445,17 @@ def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
     } == {
         ("apply_patch|Write|Edit", "protect-hook-policy.sh"),
         ("apply_patch|Write|Edit", "block-scratch-outside-docs-tasks.sh"),
+        ("apply_patch|Write|Edit", "impact-first-touch.sh"),
+        ("apply_patch|Write|Edit", "sensitive-path-recheck.sh"),
+        ("apply_patch|Write|Edit", "targeted-check-reminder.sh"),
     }
-    # The advisory Write/Edit rows stay unwired: only the end-of-turn rows of the reminder are.
+    # The reminder records touches before applying a patch and reads them at turn end.
     assert {
         (event, script)
         for event, _, script in codex_triples(load_codex(repo))
         if script == "targeted-check-reminder.sh"
     } == {
+        ("PreToolUse", "targeted-check-reminder.sh"),
         ("Stop", "targeted-check-reminder.sh"),
         ("SubagentStop", "targeted-check-reminder.sh"),
     }

@@ -32,9 +32,10 @@ Hooks проекта подключаются не через ссылки на 
   `apply_patch|Write|Edit`. Codex присылает правки файлов как `apply_patch`, и эти guards
   проверяют пути патча через адаптер `apply_patch_payload.py`.
 
-Hooks ChangeImpact из строк `Write` и `Edit` к `apply_patch` не подключаются. Проектные hooks
-Codex работают, только когда пользователь доверил слою `.codex/` и каждому hook по хэшу. Проверка
-`hooks.policy` в `harness health` показывает подключённые и отсутствующие hooks каждого runtime.
+Хуки ChangeImpact тоже обрабатывают нативный `apply_patch`. Журнал касаний используется на
+`Stop` и `SubagentStop`. Проектные hooks Codex работают после доверия слою `.codex/` и каждому
+hook по хэшу. Проверка `hooks.policy` в `harness health` показывает подключённые и отсутствующие
+хуки каждого runtime.
 Подробности: [install-and-update](hooks/install-and-update.md).
 
 Если в CLI есть маршрут для другого runtime, это ещё не подтверждает совместимость. Здесь описаны

@@ -44,17 +44,15 @@ hook uses no temporary `/tmp` directories and no `fcntl`.
 
 ### Second runtime
 
-The template `.codex/hooks.json` connects this hook only on `Stop` and `SubagentStop`: the second runtime
-delivers both events with `session_id`, `stop_hook_active`, and, for `SubagentStop`, `agent_id`. File edits
-arrive there as `apply_patch` without `file_path`, so the touch log on `Write` and `Edit` waits for the
-payload adapter. Until then the log of the second runtime is empty, and the reminder stays silent; `harness health`
-lists the line `PreToolUse` in `no event or payload` with a check outside the hook — the reconciliation of
-`checks_run` by the coordinator.
+The `.codex/hooks.json` template wires this hook to native `apply_patch` on `PreToolUse` and to
+`Stop` and `SubagentStop`. The log records paths from the patch body, including both sides of a rename.
+At the end of the turn the hook finds the touches by `session_id` and, for a subagent, `agent_id`.
 
 ## 3. Contract
 
 - **Input:** The JSON of the event in stdin: `session_id`, `agent_id` (for a subagent), `hook_event_name`;
-  for `PreToolUse` — `tool_input.file_path` and `cwd`, for `Stop` and `SubagentStop` — `stop_hook_active`.
+  `PreToolUse` also carries `cwd` and either `tool_input.file_path` or a patch in `tool_input.command`.
+  `Stop` and `SubagentStop` carry `stop_hook_active`.
 - **Output:** Code `0` always. The reminder — `systemMessage` in stdout, the first stderr line
   `[targeted-checks-unreported] <text>`, the line `evidence_ref=<path>`, and the verdict `warn`; all other
   calls — `allow` without stdout. An internal error — `warn` `internal-error` with empty stdout, so that

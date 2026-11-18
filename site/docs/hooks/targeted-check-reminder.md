@@ -48,17 +48,15 @@ Hook никогда не продолжает ход. У `Stop` и `SubagentStop
 
 ### Второй runtime
 
-Шаблон `.codex/hooks.json` подключает этот hook только на `Stop` и `SubagentStop`. Второй runtime
-доставляет оба события с `session_id`, `stop_hook_active` и, у `SubagentStop`, `agent_id`. Правки
-файлов там приходят как `apply_patch` без `file_path`, поэтому журнал касаний на `Write` и `Edit` ждёт
-адаптера payload. Пока адаптера нет, журнал второго runtime пуст и напоминание молчит. `harness health`
-перечисляет строку `PreToolUse` в `нет события или payload` с проверкой вне hook: coordinator сверяет
-`checks_run`.
+Шаблон `.codex/hooks.json` подключает этот хук на `PreToolUse` для нативного `apply_patch`, а также
+на `Stop` и `SubagentStop`. Журнал получает пути из тела патча, включая обе стороны переименования.
+При завершении хода хук ищет касания по тому же `session_id` и, для субагента, `agent_id`.
 
 ## 3. Контракт
 
 - **Вход:** JSON события в stdin: `session_id`, `agent_id` (у субагента), `hook_event_name`.
-  У `PreToolUse` ещё `tool_input.file_path` и `cwd`, у `Stop` и `SubagentStop` ещё `stop_hook_active`.
+  У `PreToolUse` есть `cwd` и либо `tool_input.file_path`, либо патч в `tool_input.command`.
+  У `Stop` и `SubagentStop` есть `stop_hook_active`.
 - **Выход:** всегда код `0`. Напоминание состоит из `systemMessage` в stdout, первой строки stderr
   `[targeted-checks-unreported] <текст>`, строки `evidence_ref=<путь>` и вердикта `warn`. Остальные
   вызовы получают `allow` без stdout. Внутренняя ошибка даёт `warn` `internal-error` с пустым stdout,

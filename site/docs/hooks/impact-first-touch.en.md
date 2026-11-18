@@ -39,9 +39,7 @@ The model receives the warning: stdout contains
 - **Internal error.** Unreadable JSON, no `session_id` or `tool_input.file_path`, a storage failure,
   any exception, a non-zero code, and the 10 s timeout (`ADVISORY_TIMEOUT_SECONDS`) give `warn`
   `internal-error` with code `0` and empty stdout ([hook-response.md](hook-response.md)).
-- **Second runtime.** A file edit arrives there as `apply_patch` without `file_path`, so the hook is not
-  connected until the payload adapter exists. `harness health` lists it in the line `no event or
-  payload` with a check outside the hook — the ChangeImpact gate under ADR 0023.
+- **Codex.** The hook receives native `apply_patch` events and checks the paths in the patch body.
 
 ## 3. Contract
 
