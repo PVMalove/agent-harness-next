@@ -29,7 +29,7 @@ A **flow** is a path through the skills. Most paths run along one **main flow**,
 
 The route that most work travels. You have an idea and want it built.
 
-1. **`/grill-with-docs`** — sharpen the idea by interview. Start here whenever you are **working in a working directory**: the skill is stateful and keeps what it learns in `CONTEXT.md` and ADRs. (No working directory? Use `/grill-me` — see "Standalone". Both run the same `/grilling` primitive. `grill-with-docs` leaves a paper trail, so it is the better choice wherever a repository exists to hold that trail.)
+1. **`/grill-me`** — sharpen the idea and collect approved Discovery Context. Choose **`/grill-with-docs`** when you also want to maintain the domain glossary or record architectural decisions.
 2. **Branch — can you settle every question in conversation?** If a question needs a runnable answer (state, business logic, a UI you have to see), take a detour through a prototype, bridged by **`/handoff`** in both directions (a prototype lives in its own directory, which is exactly what `/handoff` is for — see "Phase boundaries"):
    - run **`/handoff`** outward, then open a new session on that file;
    - run **`/prototype`** to answer the question with throwaway code;
@@ -89,7 +89,7 @@ Read [PHASE-BOUNDARIES.md](https://github.com/PVMalove/agent-harness-next/blob/m
 
 Off the main flow entirely.
 
-- **`/grill-me`** — the same relentless interview as `/grill-with-docs`, but **stateless**: it saves nothing locally and builds no `CONTEXT.md`. Use it when you are **not working in a working directory**: sharpening a plan, a design, a piece of writing — anything with no repository under it. If you are in a working directory, use `/grill-with-docs` instead. It runs the same interview and leaves a paper trail, so it is strictly better.
+- **`/grill-me`** — stress-test a plan or design and collect approved Discovery Context when there is a repository. Choose `/grill-with-docs` when you also want glossary updates or ADRs.
 - **`/grilling`** — the interview primitive itself: rounds, the frontier, facts are the agent's job and decisions are yours. `/grill-me` and `/grill-with-docs` are the two named ways in. `/triage`, `/wayfinder`, and `/improve-codebase-architecture` also run it internally. Use it directly only when you want the interview with no wrapper around it.
 - **`/resolving-merge-conflicts`** — work an in-progress merge or rebase conflict hunk by hunk. It resolves by **intent**, traced to the primary source of each side, not by picking lines, and then finishes the operation. It never runs `--abort`. It is standalone and off every flow: use it when you are already in the middle of a conflict.
 - **`/prototype`** — a small, throwaway program that answers one design question: does this state model feel right, or what should this UI look like. Throwaway is a constraint on how the code is written, not a promise to destroy it. The answer is folded into the real code, and the prototype itself is kept as a **primary source** on a `prototype/<name>` branch outside main, referenced from the implementation issue. It is the detour in step 2 of the main flow, but use it any time a design question is hard to settle on paper.
