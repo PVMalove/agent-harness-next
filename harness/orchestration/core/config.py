@@ -30,6 +30,7 @@ from harness.orchestration.contract import (
     COMMUNICATION_POLICY_FIELDS,
     EFFORT_LEVELS,
     HUMAN_APPROVAL_GATES,
+    ROLE_CONTRACT_STEM,
     ContractError,
     load_role_manifest,
     reject_sensitive,
@@ -398,7 +399,7 @@ def _role(repo: Path, name: str) -> JsonObject:
     """The installed manifest of exactly ``name``: never a case variant or a path elsewhere."""
     roles = _roles_dir(repo)
     installed = sorted(
-        path.stem for path in roles.glob("*.md") if path.stem != "_common"
+        path.stem for path in roles.glob("*.md") if path.stem != ROLE_CONTRACT_STEM
     )
     if installed and (problem := enum_problem("role", name, installed)):
         raise CoordinatorError(problem, remedy=enum_remedy("the role", installed))

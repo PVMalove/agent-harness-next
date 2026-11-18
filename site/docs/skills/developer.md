@@ -24,7 +24,7 @@ commit, push и передачу в `/to-pull-requests` оставляет `/fas
 Интерактивный скилл и роль координатора `developer` разные. Внутри dispatch действуют манифест роли
 и brief, скилл их не повторяет и не расширяет. Дальше описан контракт роли.
 
-Источник: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Источник: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) и общий контракт [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## 1. Название и локализация
 

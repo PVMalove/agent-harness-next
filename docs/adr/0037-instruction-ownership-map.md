@@ -184,7 +184,7 @@ Windows, правила тестов и QA). Это допустимое отл�
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| Вступление, Scope, Clear instructions, Exact tokens, Examples | shared procedure | перед английской передачей | `AGENTS.md.tmpl` Runtime, `harness/orchestration/roles/_common.md`, `harness/orchestration/playbook.md`, `harness/orchestration/adapters/claude_code.py:136`, `harness/seed_links.py:29` | без переноса |
+| Вступление, Scope, Clear instructions, Exact tokens, Examples | shared procedure | перед английской передачей | `AGENTS.md.tmpl` Runtime, `harness/orchestration/roles/common.md`, `harness/orchestration/playbook.md`, `harness/orchestration/adapters/claude_code.py:136`, `harness/seed_links.py:29` | без переноса |
 
 **`harness/project/instructions/test-author.md`** — seed → `docs/agents/test-author.md`.
 
@@ -230,7 +230,7 @@ Configuration validation and pinned evidence), поэтому перенос ф�
 
 | Файл | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| `harness/orchestration/roles/_common.md` (без разделов `##`) | orchestration contract | каждая роль | `harness/orchestration/adapters/claude_code.py:137`, `harness/orchestration/workflow/context_package.py:172` | #1161 (только ссылка на developer skill, если нужна общая) |
+| `harness/orchestration/roles/common.md` (без разделов `##`) | orchestration contract | каждая роль | `harness/orchestration/adapters/claude_code.py:137`, `harness/orchestration/workflow/context_package.py:172` | #1161 (только ссылка на developer skill, если нужна общая) |
 | `harness/orchestration/roles/developer.md`: манифест и основной контракт | orchestration contract | роль developer | coordinator, implement | #1161 |
 | `harness/orchestration/roles/developer.md`: Red-Green-Refactor with the optional test author | orchestration contract; единственный источник маршрута test-author в `/implement` (см. `test-author.md` §7) | роль developer | developer, test-author | #1162 |
 | `harness/orchestration/roles/developer.md`: Rerunning only the failed tests | orchestration contract | роль developer | developer | без переноса |
@@ -262,8 +262,8 @@ Configuration validation and pinned evidence), поэтому перенос ф�
    и в `ISSUE_WORKTREE_WRITER_ROLES` их нет. Проверено командой
    `rg -n 'database-migrations' harness -g '!**/tests/**'`. Модель dispatch проектирует #1159;
    регистрация имён требование не закрывает.
-3. **developer-worker.** Сейчас worker получает инструкции из брифа, `roles/_common.md` и
-   `roles/developer.md` (адаптер Claude Code требует прочитать `_common.md` и манифест роли —
+3. **developer-worker.** Сейчас worker получает инструкции из брифа, `roles/common.md` и
+   `roles/developer.md` (адаптер Claude Code требует прочитать `common.md` и манифест роли —
    `harness/orchestration/adapters/claude_code.py:136-137`). Developer skill нет. #1156 добавляет
    skill, #1161 подключает его к dispatch без изменения брифа, scope и схемы отчёта.
 
@@ -395,7 +395,7 @@ Helpers без собственного события: `harness/project/hooks/h
 | mandatory rule (глобально) | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` |
 | shared procedure | по ссылке из `AGENTS.md`, `SKILL.md` или роли; явное чтение | так же |
 | skill-specific procedure | `.claude/skills` → `.harness/skills`; запрет неявного вызова — `disable-model-invocation`; агенты `.claude/agents/` | `.agents/skills` → `.harness/skills`; запрет неявного вызова — `agents/openai.yaml`; агентов нет, нужно явное чтение |
-| orchestration contract | бриф и `.harness/orchestration/roles/`; адаптер требует чтения `_common.md` и манифеста | бриф и роли; явное чтение |
+| orchestration contract | бриф и `.harness/orchestration/roles/`; адаптер требует чтения `common.md` и манифеста | бриф и роли; явное чтение |
 | automatic enforcement | `.claude/settings.local.json`, hooks таблицы раздела 7 с колонкой «Claude Code: да»; строгость поведенческих hooks задаёт `hook_policy` | `.codex/hooks.json` после доверия; hooks с колонкой «Codex: да» |
 
 Runtime без механизма загрузки получает требование явного чтения. Автоматическую загрузку или
@@ -446,7 +446,7 @@ enforcement для такого runtime карта не обещает. Подд
 | Runtime rules | #1160 | `harness/project/rules/*`, Runtime в `AGENTS.md.tmpl`, `git-workflow.md` §1 (mandatory rule), правила из `worktrees.md` → Conventions, пробел Codex | — | да |
 | Workflow rules и процедуры | #1162 | `git-workflow.md` §2, `artifacts.md` (процедура), `test-author.md` §6–§7 и `roles/developer.md` → Red-Green-Refactor, `worktrees.md` → Coordinator issue worktree, повторы в to-guide, to-pull-requests, fast-implement, implement | #1160 (граница правила и процедуры в `git-workflow.md`) | после #1160 |
 | Developer skill | #1156 | новый first-party skill; fast-implement как потребитель | — | да |
-| Developer dispatch | #1161 | `roles/developer.md`, `roles/_common.md`, разделы playbook о брифе, implement | #1156 | после #1156 |
+| Developer dispatch | #1161 | `roles/developer.md`, `roles/common.md`, разделы playbook о брифе, implement | #1156 | после #1156 |
 | Triage и attribution | #1157 | `skills/first-party/engineering/triage/SKILL.md:16` | — | да |
 | Rebaser | #1158 | `roles/rebaser.md`, `roles/conflict-resolver.md`, дрейф установки и `assignment_plans` | — | да |
 | Специалисты | #1159 | `roles/database-migrations.md`, `roles/messaging-integration.md`; только дизайн | — | да |

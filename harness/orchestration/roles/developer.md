@@ -62,7 +62,7 @@ ledger record. Per step, in order:
 
 After three consecutive failed author calls on one test, stop the local retries and report through
 the ordinary blocker path. A guard denial counts as one failed call, and the denied call is never
-rephrased (see "Never work around a hook" in `_common.md`). A local author retry and a separate
+rephrased (see "Never work around a hook" in `common.md`). A local author retry and a separate
 guard denial create no new dispatch, add no ledger state and do not bypass the recovery rules of
 ADR 0012.
 

@@ -1,6 +1,6 @@
 # Conflict Resolver — Conflict resolution
 
-Source: [`harness/orchestration/roles/conflict-resolver.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/conflict-resolver.md) and the shared contract [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Source: [`harness/orchestration/roles/conflict-resolver.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/conflict-resolver.md) and the shared contract [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## 1. Name and localization
 

@@ -1,7 +1,7 @@
 # Verification: повтор проверки candidate
 
 Источник: [manifest роли](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/verification.md)
-и [общий контракт](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+и [общий контракт](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## Перевод манифеста
 

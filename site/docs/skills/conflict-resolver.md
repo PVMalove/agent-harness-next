@@ -1,6 +1,6 @@
 # Conflict Resolver: разрешение конфликтов
 
-Источник: [`harness/orchestration/roles/conflict-resolver.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/conflict-resolver.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Источник: [`harness/orchestration/roles/conflict-resolver.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/conflict-resolver.md) и общий контракт [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## 1. Название и локализация
 

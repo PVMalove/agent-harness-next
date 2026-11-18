@@ -585,7 +585,7 @@ ROLE_STEMS = tuple(
     sorted(
         path.stem
         for path in (Path(contract.__file__).parent / "roles").glob("*.md")
-        if path.stem != "_common"
+        if path.stem != contract.ROLE_CONTRACT_STEM
     )
 )
 CODE_REVIEW_TRIGGERS = tuple(

@@ -24,7 +24,7 @@ review or change tracker labels. In `/fast-implement` it runs the implementation
 The interactive skill and the coordinator's `developer` role are different. Inside a dispatch, the role
 manifest and the brief apply; the skill neither repeats nor widens them. The role contract follows.
 
-Source: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) and the shared contract [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Source: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) and the shared contract [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## 1. Name and localization
 

@@ -15,7 +15,7 @@ test_author_cycle = importlib.import_module("scripts.clean_room.test_author_cycl
 
 ROOT = Path(__file__).resolve().parents[2]
 DEVELOPER = ROOT / "harness" / "orchestration" / "roles" / "developer.md"
-COMMON = ROOT / "harness" / "orchestration" / "roles" / "_common.md"
+COMMON = ROOT / "harness" / "orchestration" / "roles" / "common.md"
 AGENT = ROOT / "harness" / "project" / "agents" / "test-author.md"
 IMPLEMENT = (
     ROOT

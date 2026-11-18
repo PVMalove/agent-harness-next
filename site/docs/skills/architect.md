@@ -28,7 +28,7 @@ superseded исключаются. Скилл открывает источни�
 Context Package. Скилл не расширяет её tool policy: роль не вызывает поиск по памяти напрямую и
 сообщает координатору о недостающих свидетельствах. Дальше описан контракт роли.
 
-Источник: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md) и общий контракт [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Источник: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md) и общий контракт [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## 1. Название и локализация
 

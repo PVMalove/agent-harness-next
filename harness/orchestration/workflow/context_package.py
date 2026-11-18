@@ -169,7 +169,7 @@ def _persist_context_package(
         *task_files,
         "AGENTS.md",
         "README.md",
-        ".harness/orchestration/roles/_common.md",
+        ".harness/orchestration/roles/common.md",
         ".harness/orchestration/contract.py",
     ]
     try:

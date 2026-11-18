@@ -1,6 +1,6 @@
 # Verification: recheck the candidate
 
-Source: [role manifest](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/verification.md) and [shared contract](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Source: [role manifest](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/verification.md) and [shared contract](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## Role manifest
 

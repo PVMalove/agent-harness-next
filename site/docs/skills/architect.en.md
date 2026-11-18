@@ -28,7 +28,7 @@ The interactive skill and the coordinator's `architect` role are separate. The r
 tool policy: a direct memory search call stays unavailable, and missing evidence is
 escalated to the coordinator. The following contract applies to the role.
 
-Source: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md) and the shared contract [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Source: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md) and the shared contract [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## 1. Name and localization
 

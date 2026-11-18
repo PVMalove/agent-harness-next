@@ -12,7 +12,7 @@ batch из [ADR 0013](0013-explicit-batch-scope.md).
 ## Действующий контракт
 
 Markdown manifests в `harness/orchestration/roles/` задают `name`, `mode`,
-`required_capabilities` и `risk_triggers`; `_common.md` задаёт общие правила handoff,
+`required_capabilities` и `risk_triggers`; `common.md` задаёт общие правила handoff,
 completion, commit proof и escalation. Конкретный provider и model не зашиваются в manifest.
 Проектная `.harness/orchestration.json` содержит provider profiles, ordered assignment plans
 с потолком записи `write_paths`, бюджеты и команды проверки. `contract.py` проверяет
