@@ -19,7 +19,8 @@ creates branches, and never starts `/implement`.
 - Tickets name only paths from the spec's `## Relevant Files (Discovery Context)` and
   `## Surgical File & Contract Changes`. A new path appears in the plan with its reason and enters
   a ticket only after your approval.
-- Items from `## Non-Goals & Rejected Alternatives` never become tickets.
+- Applicable non-goals from `## Non-Goals & Rejected Alternatives` go into the affected tickets'
+  `Out of scope`. The rationale for rejected alternatives stays in the spec.
 - Each ticket is a vertical slice that carries its change and its checks; the build and tests stay
   green after every ticket. There are no tickets for drive-by cleanup or "all tests at the end".
 - A blocking edge requires a result dependency or a requirement incompatibility. Tickets without
@@ -31,7 +32,8 @@ creates branches, and never starts `/implement`.
 Before writing, the skill checks that every requirement `R<n>` and every acceptance criterion is
 covered by at least one ticket and that the dependency graph has no cycles. It then shows the
 cards, waves, traceability matrix, new paths, and drafted epic sections, and waits for explicit
-approval.
+approval. Criteria with IDs from the spec keep those IDs in published lines such as
+`[R3] Action -> Verify`.
 
 After approval, the skill publishes the tickets to GitHub, GitLab, or
 `.scratch/<feature-slug>/issues/`, links them to the epic, and shows a summary table: link, title, wave, short summary, story

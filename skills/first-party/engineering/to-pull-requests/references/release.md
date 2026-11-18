@@ -33,7 +33,8 @@ A child closed as `resolution::wontfix` has no PR; list it separately.
 ## 3. Verify the integration branch
 
 Work in a clean checkout of `<integration-branch>` whose `HEAD` equals `origin/<integration-branch>` after
-a fetch, so the PR hook finds a checkout for the PR head. Never commit to it.
+a fetch, so the PR hook finds a checkout for the PR head. Never commit to it. Record the full `HEAD`
+SHA as the release candidate before running checks.
 
 - Run `/qa-gate` there and stop on failure. A failure is fixed by new child tickets based on
   `<integration-branch>`, never by a commit on the integration branch itself.
@@ -41,20 +42,42 @@ a fetch, so the PR hook finds a checkout for the PR head. Never commit to it.
   needs the `full` run: a `-light` check never confirms it (see "Test policy by PR target" in
   `references/integration-route.md`).
 
+### Verify the epic criteria
+
+- Read `## Acceptance criteria` from the child ticket bodies through the tracker CLI or the local
+  ticket files.
+- For each row of `## Acceptance & Verification Criteria` in the published spec, record its
+  requirement ID, observable scenario, related tickets or PRs, the exact check, and the result and
+  evidence on the release candidate. Use `[R<n>]` in child `Action -> Verify` lines to find related
+  work. For older tickets without IDs, match the observable scenario and check when the match is
+  clear. Use the spec's check directly for criteria without a clear child match.
+- Reuse QA results that provide evidence for that criterion on the release candidate. Otherwise,
+  run the spec's check on that SHA, including scenarios that span several tickets. For a manual
+  check, record the steps and observed result. A check with no result is `not_run`.
+- Treat a closed ticket or a merged child PR as a reference to the work. A criterion linked to a
+  child closed as `resolution::wontfix` still needs evidence. If a required check failed or lacks
+  evidence, list the affected criteria and stop before requesting release confirmation. Resolve
+  the gap through a child ticket or an approved update to the epic spec.
+- If the epic has no structured criteria, record epic acceptance as unverified and continue with
+  the existing child and QA checks.
+
 ## 4. Prepare the body
 
 Follow `docs/agents/git-workflow.md` §3 and store the body at
 `.harness/.sandboxes/pr_body/pr-body-<epic>-release.md`. The summary comes from the epic. Under What
 changed, write one line per child: `#<pr> <title> (#<ticket>)`. Under Verification, give the `/qa-gate`
-result of part 3. Under Not verified & risks, list children without a merged PR and any check that did
-not run. The footer is `Closes #<epic>` when `<base-branch>` is the repository default branch (resolved as
-in skill step 4), otherwise `Related to #<epic>`.
+result, the results by epic criterion and the release candidate SHA. Under Not verified & risks,
+list unverified criteria, including the legacy case above, children without a merged PR, and any
+check that did not run. The footer is `Closes #<epic>` when `<base-branch>` is the repository default
+branch (resolved as in skill step 4), otherwise `Related to #<epic>`.
 
 ## 5. Confirm and open
 
 Ask the developer for explicit, separate confirmation that the release PR may be opened; state the
-`HEAD` SHA of `<integration-branch>`, the QA result and the child list. Stop for their answer. Then,
-from the checkout of part 3, with the epic title as `<title>`:
+release candidate SHA, the QA and epic acceptance results, and the child list. Stop for their
+answer. After approval, fetch and recheck that both the local and remote integration refs match the
+release candidate SHA. If either changed, repeat verification and request fresh confirmation.
+Then, from the checkout of part 3, with the epic title as `<title>`:
 
 - **GitHub:** `gh pr create --base <base-branch> --head <integration-branch> --title '<title>' --body-file <path>`.
 - **GitLab:** `glab mr create -R <project-url> --source-branch <integration-branch> --target-branch <base-branch> --title '<title>' --description-file <path> --yes`.
@@ -74,7 +97,11 @@ Act only after the developer confirms the merge.
 
 ## Local markdown tracker
 
-There is no PR or epic issue. Run part 2 on `.scratch/<feature>/issues/*.md`: every ticket must read
-`**Workflow:** done`. Run part 3, ask for the same separate confirmation, then ask the developer to merge
-`<integration-branch>` into `<base-branch>` themselves. After they confirm, require
-`git merge-base --is-ancestor <integration-ref> <base-ref>` to succeed and offer `/delivery-stats`.
+Read the published spec from `.scratch/<feature>/spec.md`. Check that every ticket in
+`.scratch/<feature>/issues/*.md` reads `**Workflow:** done` and use those files as the references
+to the work. Run part 3 using the local integration ref if there is no remote. In place of the PR
+body, show the criterion results before asking for confirmation. Recheck the integration ref against
+the release candidate SHA
+before asking the developer to merge `<integration-branch>` into `<base-branch>`. If it changed,
+repeat verification and request fresh confirmation. After the developer confirms the merge, require
+`git merge-base --is-ancestor <release-candidate-sha> <base-ref>` to succeed and offer `/delivery-stats`.

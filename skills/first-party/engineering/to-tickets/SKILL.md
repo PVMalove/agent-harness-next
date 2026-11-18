@@ -32,6 +32,8 @@ or the specification's decisions. Never create branches or worktrees and never s
 - A ticket names only allowlisted paths. If a ticket needs another path, show the path and the
   reason in the plan and add it only after the user explicitly approves it.
 - Never create a ticket for an item in `## Non-Goals & Rejected Alternatives`.
+- Copy each applicable, verifiable non-goal from that section into the affected ticket's
+  `## Out of scope`. Keep the rationale for rejected alternatives in the spec.
 
 ## Decompose
 
@@ -56,6 +58,7 @@ Read references/ticket-template.md when formatting the decomposition plan and ti
 Before showing the plan, check that:
 
 - every requirement `R<n>` and every acceptance criterion of the spec maps to at least one ticket
+- the IDs in each ticket criterion agree with the traceability matrix
 - the blocking graph has no cycles
 - no ticket names an unapproved path or implements a non-goal
 

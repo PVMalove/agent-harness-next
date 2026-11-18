@@ -49,8 +49,10 @@ the epic's last child ticket closes, the skill offers `/to-pull-requests --relea
 
 Following `references/release.md`, the mode opens the PR of the epic's integration branch into
 `base_branch`. It checks that every child ticket is closed, runs the full `/qa-gate` on the
-integration branch and writes a body with one line per child PR and a `Closes #<epic>` footer. The
-PR opens only after a separate confirmation. After the confirmed merge, the skill closes the epic and
+integration branch, and checks the epic criteria against evidence on the same SHA. The release PR
+lists child PRs and the results by epic criterion. Missing evidence for a required criterion
+blocks the release before the confirmation request. The separate confirmation applies to the
+verified SHA. After the confirmed merge, the skill closes the epic and
 offers `/delivery-stats <epic>`. This mode never changes `CHANGELOG.md` or the project version.
 
 ![PR continuation after an accepted publish](../diagrams/previews/pr-continuation.workflow.png)

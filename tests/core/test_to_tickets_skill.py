@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from harness.bin.harness import package_files
 from harness.console.backend.domain.task_board import parse_body
 from tests.core.test_developer_skill import _frontmatter, _section
@@ -76,6 +78,33 @@ def test_plan_is_traced_acyclic_and_approved_before_any_write() -> None:
     assert "vertical slice" in decompose
     assert "File overlap alone is not a blocker" in decompose
     assert "Wave 1 has no blockers" in decompose
+
+
+@pytest.mark.parametrize("heading", ["Local ticket file", "Tracker issue body"])
+def test_published_acceptance_criteria_keep_the_spec_ids(heading: str) -> None:
+    template = (TICKETS / TEMPLATE).read_text(encoding="utf-8")
+    card = template.split(f"## {heading}", 1)[1].split("```markdown", 1)[1]
+    card = card.split("```", 1)[0]
+    criterion = card.split("## Acceptance criteria", 1)[1].strip().splitlines()[0]
+    assert criterion == "- [ ] [R<n>] <Action> -> <Verify: exact test or command>"
+
+    body = parse_body(
+        card.replace("R<n>", "R3")
+        .replace("<Action>", "Export active records")
+        .replace("<Verify: exact test or command>", "pytest -k active_exports")
+    )
+    assert body.criteria == ("[R3] Export active records -> pytest -k active_exports",)
+    approve = _section(TICKETS / "SKILL.md", "Approve the plan")
+    assert (
+        "the IDs in each ticket criterion agree with the traceability matrix" in approve
+    )
+
+
+def test_applicable_epic_non_goals_become_ticket_scope_boundaries() -> None:
+    scope = _section(TICKETS / "SKILL.md", "Keep to the approved scope")
+    assert "Copy each applicable, verifiable non-goal" in scope
+    assert "into the affected ticket's `## Out of scope`" in scope
+    assert "Keep the rationale for rejected alternatives in the spec" in scope
 
 
 def test_tickets_never_start_implementation() -> None:
