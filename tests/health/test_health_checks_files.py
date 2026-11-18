@@ -275,6 +275,53 @@ def test_project_schema_tracker_matches_the_validator_contract() -> None:
     assert set(schema["properties"]) == project_files.PROJECT_JSON_ALLOWED_FIELDS
 
 
+_STORY_POINTS: dict[str, object] = {
+    "scale": [1, 2, 3, 5],
+    "fast_threshold": 3,
+    "full_threshold": 5,
+    "gray_zone": 4,
+}
+
+
+@pytest.mark.parametrize(
+    ("hours", "valid"),
+    [
+        (None, True),
+        ({"1": 1, "3": 4.5, "5": 8}, True),
+        ({}, False),
+        ({"4": 6}, False),
+        ({"3": 0}, False),
+        ({"3": True}, False),
+        ([1, 2], False),
+    ],
+)
+def test_story_point_hours_map_scale_values_to_positive_hours(
+    tmp_path: Path, hours: object, valid: bool
+) -> None:
+    """`story_points.hours` необязателен; ключи — значения шкалы, значения — часы больше нуля."""
+    story_points = dict(_STORY_POINTS)
+    if hours is not None:
+        story_points["hours"] = hours
+    project_json = tmp_path / ".harness" / "project.json"
+    project_json.parent.mkdir(parents=True)
+    project_json.write_text(
+        json.dumps({**_REQUIRED_PROJECT_FIELDS, "story_points": story_points}),
+        encoding="utf-8",
+    )
+    problems: list[str] = []
+
+    project_files.validate_project_json(tmp_path, problems)
+
+    expected = (
+        []
+        if valid
+        else [
+            ".harness/project.json story_points.hours must map values from scale to positive hours"
+        ]
+    )
+    assert problems == expected
+
+
 def _render_project_template(values: dict[str, str]) -> str:
     """Отрендерить project.json.tmpl так же, как render() в harness/bin/harness.py."""
     rendered = _PROJECT_TEMPLATE_DIR.joinpath("project.json.tmpl").read_text("utf-8")

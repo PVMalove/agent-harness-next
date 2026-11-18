@@ -174,7 +174,13 @@ def _check_documentation() -> None:
     check_diagram_previews()
     check_no_retired_path_inventory_term()
     grep_contains(
-        ROOT / "skills" / "first-party" / "engineering" / "to-tickets" / "SKILL.md",
+        ROOT
+        / "skills"
+        / "first-party"
+        / "engineering"
+        / "to-tickets"
+        / "references"
+        / "ticket-template.md",
         "or symbol signatures",
     )
     agents_seed = ROOT / "harness" / "project" / "AGENTS.md.tmpl"

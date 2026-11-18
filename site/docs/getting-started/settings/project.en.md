@@ -173,7 +173,7 @@ described separately.
 | --- | --- |
 | `$schema` | Optional editor reference string, usually `./project.schema.json`. Harness code does not read this field. |
 | `language` | Required string: `ru` or `en`. Language of code-review reports and the PR body template. |
-| `base_branch` | Required non-empty string. Project release/base branch: `/to-spec` creates an epic's integration branch from it; without an epic, it is the fallback base. Example: `main`. |
+| `base_branch` | Required non-empty string. Project release/base branch: epic setup uses it as the base for the integration branch; without an epic, it is the fallback base. Example: `main`. |
 | `branch_pattern` | Required non-empty string containing a valid regular expression for issue branch names. Enforced by branch hooks. Example: `^feature/issue-[0-9]+-.+`. |
 | `qa_gate_commands` | Required array of strings; the schema requires each string to be non-empty. QA gate runs commands in order. An empty array is valid configuration, but qa-gate stops and asks you to supply checks. |
 | `shell` | Optional string: `bash` or `powershell`. If absent, qa-gate uses `bash`. |
@@ -183,7 +183,7 @@ described separately.
 | `test_runner` | Optional isolated single-test runner object. Requires `test_runner.command`; build and database are separate opt-ins. |
 | `test_author` | Optional object: the test-author executor for the short `/fast-implement` route: runtime, model, and effort are explicit. The full route uses the approved developer brief's selection. |
 | `hook_policy` | Optional object with required profile and optional escalations. If the entire object is absent, the profile resolves to `standard`. |
-| `story_points` | Optional scoring scale and routing thresholds object. All four nested fields are required when present. Without it, story-point routing is not configured. |
+| `story_points` | Optional scoring scale and routing thresholds object. The four threshold and scale fields are required when present; `hours` is optional. Without it, story-point routing is not configured. |
 | `memory` | Optional object containing only the required `memory.enabled` field. Without the object, memory is off. |
 | `memory_policy` | Optional object selecting sources, redaction rules, and the memory budget. All six fields are required when present. |
 
@@ -284,7 +284,7 @@ from changing it. The project owner edits the policy. See
 
 ## Task scoring: story_points
 
-All fields are required when the object is present. It is available without the
+All fields except `hours` are required when the object is present. It is available without the
 `backend-orchestration` capability.
 
 | Field | Contract |
@@ -293,6 +293,7 @@ All fields are required when the object is present. It is available without the
 | `story_points.fast_threshold` | Integer. Scores at or below this threshold suggest `pipeline::fast`; the template uses `3`. |
 | `story_points.full_threshold` | Integer. Scores at or above this threshold suggest `pipeline::full`; the template uses `5`. |
 | `story_points.gray_zone` | Integer for a second advisory scoring pass between the thresholds; the template uses `4`. |
+| `story_points.hours` | Optional object: keys are values from `scale` as strings, values are positive hours of a person's work. to-tickets shows the estimate in the ticket card and summary table; without it they show a dash. The template uses `{"1": 1, "2": 2, "3": 4, "5": 8, "8": 16, "13": 32, "21": 56}`; calibrate it for your team. |
 
 Keep the scale and threshold ordering consistent yourself: the current schema and validator
 check these numeric types but do not prove routing consistency.
@@ -345,7 +346,8 @@ branch, commands, and executor profile with your project's settings.
     "scale": [1, 2, 3, 5, 8, 13, 21],
     "fast_threshold": 3,
     "full_threshold": 5,
-    "gray_zone": 4
+    "gray_zone": 4,
+    "hours": {"1": 1, "2": 2, "3": 4, "5": 8, "8": 16, "13": 32, "21": 56}
   },
   "memory": {"enabled": false},
   "memory_policy": {

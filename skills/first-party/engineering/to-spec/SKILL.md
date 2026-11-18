@@ -1,131 +1,90 @@
 ---
 name: to-spec
-description: Turn the current conversation into a spec and publish it to the project issue tracker. No interview, just synthesis of what you've already discussed.
+description: Turns grilling results and approved Discovery Context into a verifiable technical specification. Use explicitly after /grilling, /grill-me, or /grill-with-docs, or to specify an agreed design. Leaves production code untouched.
 disable-model-invocation: true
 ---
 
-**Objective:** Synthesize the current conversation context and codebase understanding into a final specification.
-**Strict Rule:** Do NOT interview the user or start a new grilling round. If information feels missing, it means the previous grilling was incomplete; synthesize the spec using only the known facts and explicit assumptions.
+Invoke only on an explicit request (`/to-spec`, or `$to-spec` in Codex). Load this file by itself
+before any repository exploration. Use the project's language and keep the template headings intact.
+Read repository evidence within the approved scope. Write only the
+approved specification file. Never modify production code, tests, project configuration,
+`CONTEXT.md`, ADRs, or Discovery Context. Never create tasks, publish to a tracker, or change Git state.
 
-The issue tracker and triage label vocabulary should have been provided to you in `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md`. If either file is missing, tell the user to run `harness update`, which seeds both from the harness templates.
+## Load the handoff
 
-## Execution in Two Phases
+1. Identify the task folder under `docs/tasks/` by `docs/agents/artifacts.md`, including the epic
+   folder for a child task. Look for `artifacts/discovery-context.md` there before treating the
+   handoff as a cold start. Propose the spec file at the root of that folder.
+2. Check `docs/tasks/.../artifacts/discovery-context.md` for this task and the final grilling summary in chat.
+   Import the goal and scope, accepted decision IDs and selected option numbers, rejected
+   alternatives and their reasons, open questions, assumptions, and confirmed glossary and ADR updates.
+   Keep the original choices.
+   Ask about missing or contradictory decisions where they affect the design. Never assign a number retroactively.
+3. Use the task's nonempty, approved Discovery Context as the file allowlist.
+   Preserve the approved lines in order, including any supplied context. If chat and the artifact
+   disagree on the approved list, ask the user to reconcile them before relying on disputed paths.
+4. If the artifact is missing or empty or cannot be verified, ask the user to approve the minimum
+   path list. Use explicitly approved paths from the final summary as the proposed list when available.
 
-You must execute this skill in two distinct phases to ensure the user agrees with the testing strategy before you write the final document.
+## Approve evidence paths
 
-### Phase 1: Exploration & Seam Proposal
-1. **Explore the Codebase:** Use the project's domain glossary (`CONTEXT.md`) and respect any ADRs in the touched area.
-2. **Define Seams:** Sketch out the seams at which the feature will be tested.
-    - Prefer existing seams over new ones.
-    - Use the highest seam possible.
-    - Ideal state: exactly *one* seam for the whole feature.
-3. **STOP AND ASK:** Present your proposed seams and one integration branch name in the form
-   `integration/<service-or-team>`. Derive the slug from explicit project/domain language; never
-   guess it. Ask the user to approve both. **Do not proceed to Phase 2 until the user confirms.**
+- List candidate paths without reading file contents. Use user-provided names or scoped path listings.
+  Show each proposed repo-relative path and why it is needed. Ask which paths to add to Discovery Context.
+- Wait for explicit approval before reading or citing a candidate. Apply the same rule to any new
+  code, tests, configuration, glossary, or ADR path discovered while assembling the spec.
+- Keep declined paths out of repository reads and the change plan.
+  Get fresh approval before using a previously declined path. Preserve the rejected approach
+  and rationale without naming an unapproved file.
+- Keep newly approved paths in chat for this session. Preserve the approved artifact on disk as supplied.
+  Use the resulting allowlist for evidence, proposed changes, and verification paths.
+- Run key unresolved architectural choices through the protocol after the user approves the path list.
 
-### Phase 2: Drafting & Publishing (After User Approval)
-1. **Draft the File:** Write the spec using the `<spec-template>` below, at the root of its own folder under `docs/tasks/` — that folder also reserves `tickets/` (one file per child ticket, filled in later by `/to-tickets`) and `artifacts/` (the `/grilling` Live Artifact).
-    - *Naming convention:* If the issue ID is known, use it. If not, use a descriptive slug (e.g., `docs/tasks/add-user-auth/add-user-auth.md`) and rename both the folder and file later once the ID is generated — see `docs/agents/artifacts.md` for the full convention, including the epic-folder grouping and the `tickets/`/`artifacts/` subfolders.
-    - Take the final Discovery Context file list from that same folder's `artifacts/discovery-context.md` (written by `/grilling`'s Persisted List step); if that file doesn't exist because artifact tracking never ran, take the approved-paths list from the final Trunk summary instead. Append it in the template's final `## Relevant Files (Discovery Context)` section. Preserve every path and any supplied context; do not rediscover or replace that list while drafting.
-2. **Publish to Tracker:** Publish the issue with the configured tracker's CLI:
-    - **GitHub:** `gh issue create --body-file <path>`.
-    - **GitLab:** `glab issue create -R <project-url> --title '<title>' --description-file <path> --yes`. Keep `<title>` in single quotes and write each apostrophe in it as `'\''` in a POSIX shell or as `''` in PowerShell. `<project-url>` and the other GitLab placeholders (`<host>`, `<project-id>`) are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions. The epic's number is the last segment of the issue URL the command prints.
-    - Do not pass the body inline with `--body`/`--description` or a heredoc: spec bodies contain nested quotes and backticks that break shell quoting.
-3. **Apply Labels:** This published issue acts as the feature's **epic**. Apply the following labels (see `docs/agents/triage-labels.md` for the full taxonomy):
-    - `type::bug` OR `type::feature`
-    - `status::specs` (Do NOT use `status::ready` as it requires decomposition first).
-    - `task-report::required` (unless told to skip).
-    - **GitLab:** `glab issue update <epic> -R <project-url> --label 'type::feature,status::specs,task-report::required'` (`type::bug` for a bug; drop `task-report::required` when told to skip it). A label the project doesn't have yet is silently created with GitLab's default color instead of failing, so run `/setup-labels` before the first epic.
-    - *Note:* Do NOT create ad-hoc `epic::<slug>` labels. `/to-tickets` links the tickets to this epic later through the tracker's parent link — GitHub sub-issues, or on GitLab a `## Parent: #<epic>` section plus a `relates_to` issue link — see `docs/agents/issue-tracker.md#wayfinding-operations` for the mechanism.
-4. **Ensure the selected integration branch exists after the epic issue succeeds:**
-    - Read the required `base_branch` from `.harness/project.json`; if it is absent, stop and report
-      the invalid project config. This is the release/base branch from which the epic integration
-      branch starts.
-    - Record the grill docs that changed in the current worktree:
-      `git status --porcelain --untracked-files=all -- CONTEXT-MAP.md ':(glob)**/CONTEXT.md' ':(glob)**/docs/adr/**'`.
-      `/grill-with-docs` and `/domain-modeling` write these files. Record each path; for a
-      rename (`old -> new`), record both paths. The list can be empty.
-    - Fetch the base ref. Create `integration/<service-or-team>` with `git branch` from
-      `origin/<base_branch>` when a remote exists, otherwise from the local base branch. Do not
-      use `git switch -c` or `git checkout -b`: the branch-name hook allows them only for names
-      that match `branch_pattern`.
-    - If the integration branch already exists locally or remotely, reuse it without resetting,
-      force-updating, or deleting it. If publication succeeds but branch creation fails, report
-      the partial state and the exact recovery action; do not recreate the epic issue.
-    - If the branch already exists on the remote, do not commit to it and do not switch the
-      current worktree. If the grill docs list is not empty, report that these docs stay
-      uncommitted in the current worktree. Give the recovery action: commit them on an issue
-      branch from `integration/<service-or-team>`, for example the first child ticket's branch,
-      and merge them through its PR.
-    - If the branch is absent on the remote and the grill docs list is empty, do not switch the
-      current worktree; it may contain unrelated changes.
-    - If the branch is absent on the remote and the grill docs list is not empty, commit the docs
-      to the branch before you push it. Do not create a separate worktree:
-        1. Switch the current worktree with `git switch integration/<service-or-team>`.
-           Uncommitted changes move with the worktree. If `git switch` refuses because of a
-           conflict with uncommitted changes, stop. Do not use `--force`, `--discard-changes`,
-           `--merge`, or a reset: they can overwrite changes. Report the git error and the
-           recovery action: put the changes aside with `git stash push --include-untracked`, run
-           `git switch integration/<service-or-team>`, restore them with `git stash pop`, resolve
-           any conflict, and continue from sub-step 2.
-        2. Stage only the recorded grill docs, each path named explicitly:
-           `git add -- <path>...`. Do not use `git add -A`, `git add .`, or `git commit -a`. Other
-           changes stay uncommitted in the working tree.
-        3. Run the commit as a standalone command, without `&&`, `;`, a pipe, or a variable:
-           `git commit -m 'docs: <short epic summary>'`. Write the message by the commit rules in
-           `docs/agents/git-workflow.md`. The `block-direct-master` hook allows a commit on an
-           `integration/*` branch only in this form, only when the index contains only grill docs
-           paths, and only when the branch is absent on `origin`.
-        4. If the hook blocks the commit, stop and do not push. Report the hook message and that
-           the docs stay staged in the current worktree. Give the recovery action: remove the
-           cause, for example a staged path outside the grill docs or no access to `origin`, and
-           repeat sub-step 3.
-    - Push a branch that is absent on the remote with
-      `git push -u origin integration/<service-or-team>`. After a grill docs commit, the current
-      worktree stays on the integration branch, with unrelated changes uncommitted.
-    - For a local tracker, make the grill docs commit as above, but do not push; report that the
-      branch was not pushed. In a repository without a remote, create the local branch and do not
-      commit or push. Report that the branch was not pushed and that the grill docs stay
-      uncommitted.
+## Decision & Clarity Protocol
 
----
+Use this protocol for architecture or contract blockers from a partial handoff and new choices about
+contracts, schemas, integrations, failure handling, or edge cases. Keep accepted choices settled.
+For each unresolved fork, stop assembling the specification and do the following.
 
-<spec-template>
+1. Give 2–3 sentences explaining the choice and verified facts from approved files. Identify any missing evidence.
+2. Render a matrix in a fenced `text` block with box-drawing borders. Give each option a header and
+   separate rows for mechanism, benefit, and cost. Name concrete contract or component changes.
+   - **[1] Рекомендуемое (Recommended)** — mechanism, reason to prefer it, and trade-off.
+   - **[2] Компромиссное (Fast-Track)** — simplification, delivery gain, debt, and when to rule it out.
+   - **[3] Полное (Full / Clean Architecture)** — target design, long-term benefit, and adoption cost.
+   If there are fewer than three technically distinct options, explain why and omit unsupported options.
+3. Offer the displayed numbers as choices. Record only an explicit selection of a displayed number,
+   with its decision ID and profile. Keep the reasons for rejecting the other approaches.
+4. Offer `подробнее 1`, `подробнее 2`, `подробнее 3` for displayed options and `подробнее все`.
+   Read `references/drill-down-template.md` when the user requests `подробнее <N>` (or `details <N>`).
+   `все` / `all` expands every displayed option. Reply in chat without writing any files.
+   Then show the same choices again and wait. A detail request never approves an option or a write.
 
-## Problem Statement
-The problem that the user is facing, from the user's perspective.
+Wait for an explicit choice or an explicit instruction to save a Draft. Do not write or overwrite
+the specification while waiting. Keep unresolved choices and their dependencies open in a Draft.
 
-## Solution
-The solution to the problem, from the user's perspective.
+## Approve and write the specification
 
-## User Stories
-A numbered list of user stories that covers every behavior of the feature.
-Format: `1. As an <actor>, I want a <feature>, so that <benefit>`
-*(Example: As a bank customer, I want to see my balance, so that I can make informed spending decisions).*
+Read `references/spec-template.md` when assembling the specification.
+Use `Approved` when all blocking choices are settled and the user approves the scope and verification.
+Use `Draft — has open blockers` only at the user's explicit request. Record each blocker, its dependent
+work, and the decision needed to proceed. Leave unresolved implementation details unspecified.
 
-## Implementation Decisions
-A list of modules to build/modify, interface changes, technical clarifications, architectural decisions, schema changes, API contracts, and specific interactions.
-- **DO NOT** include specific file paths or generic code snippets (they outdate quickly).
-- **Exception:** If a prototype produced a snippet that encodes a decision perfectly (state machine, schema, type shape), inline it and note it came from a prototype. Trim it to the decision-rich parts only.
+Before asking for approval, verify that:
 
-## Testing Decisions
-- Description of what makes a good test here (test external behavior, not implementation details).
-- Which modules will be tested.
-- Prior art (similar existing tests in the codebase).
+- every repository file cited in the spec is approved and each proposed edit is tied to the goal
+- accepted decisions and rejection reasons agree with the handoff
+- every functional requirement has a verifiable acceptance criterion, a test seam, and a check
+- the status and blockers match the current decisions
 
-## Out of Scope
-A strict list of things that will NOT be done. This is your insurance policy against over-engineering. Be explicit about boundaries so future agents do not build more than requested.
+Present the scope, status, verification approach, and proposed path. Wait until the user
+explicitly approves writing to the proposed path, including an overwrite if the file exists.
+Honor approval already given for the same scope, verification, status, and write.
+A numbered design choice approves only that choice. Create only the parent directories needed for
+the approved file. If the user requests a revision, apply the same path and decision gates.
 
-## Integration Branch
+## Finish
 
-- Branch: `integration/<service-or-team>`
-- Created from: `base_branch` in `.harness/project.json`
-- Child issue branches start from this integration branch and open PRs back to it.
-
-## Further Notes
-Any remaining context or constraints.
-
-## Relevant Files (Discovery Context)
-The final Discovery Context file list captured in the session's `Live Artifact`, or in the final Trunk summary when artifact publishing is unavailable, including each path and any supplied context.
-
-</spec-template>
+Return the saved path and status. If the write fails, report the error and return the complete specification in chat.
+Offer revisions or, for an Approved spec, a manual next step: `/publish-epic` and then `/to-tickets`,
+or `/implement` when its prerequisites are met. For a Draft, offer to resolve the blockers first.
+Never invoke either skill automatically.

@@ -15,13 +15,13 @@
 
 ```yaml
 name: setup-labels
-description: Создайте или обновите GitHub- или GitLab-метки этого репозитория (status::*, hitl/afk, task-report::required, resolution::wontfix, wayfinder:*), чтобы они соответствовали docs/agents/triage-labels.md. Запускайте один раз в каждом репозитории перед первым использованием triage, to-spec, to-tickets, implement, to-guide или wayfinder.
+description: Создайте или обновите GitHub- или GitLab-метки этого репозитория (status::*, hitl/afk, task-report::required, resolution::wontfix, wayfinder:*), чтобы они соответствовали docs/agents/triage-labels.md. Запускайте один раз в каждом репозитории перед первым использованием triage, publish-epic, to-tickets, implement, to-guide или wayfinder.
 disable-model-invocation: true
 ```
 
 ### Настройка меток
 
-`gh issue edit --add-label` и `gh issue create --label` падают, если метки ещё нет: `gh` никогда не создаёт её сам. GitLab ведёт себя наоборот: `--label` с отсутствующей меткой молча создаёт её с цветом GitLab по умолчанию. Поэтому метка, которую поставили тикету до запуска скилла, остаётся с неправильным цветом. Скилл создаёт каждую метку, которая нужна таксономии triage репозитория, с её каноническим цветом. Запускайте его до первого `/to-spec` или `/to-tickets`.
+`gh issue edit --add-label` и `gh issue create --label` падают, если метки ещё нет: `gh` никогда не создаёт её сам. GitLab ведёт себя наоборот: `--label` с отсутствующей меткой молча создаёт её с цветом GitLab по умолчанию. Поэтому метка, которую поставили тикету до запуска скилла, остаётся с неправильным цветом. Скилл создаёт каждую метку, которая нужна таксономии triage репозитория, с её каноническим цветом. Запускайте его перед первым запуском `/publish-epic` или `/to-tickets`.
 
 #### Процесс
 

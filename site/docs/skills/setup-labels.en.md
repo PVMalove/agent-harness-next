@@ -15,13 +15,13 @@
 
 ```yaml
 name: setup-labels
-description: Create or update this repository's GitHub or GitLab labels (status::*, hitl/afk, task-report::required, resolution::wontfix, wayfinder:*), so that they match docs/agents/triage-labels.md. Run it once for each repository before the first use of triage, to-spec, to-tickets, implement, to-guide, or wayfinder.
+description: Create or update this repository's GitHub or GitLab labels (status::*, hitl/afk, task-report::required, resolution::wontfix, wayfinder:*), so that they match docs/agents/triage-labels.md. Run it once for each repository before the first use of triage, publish-epic, to-tickets, implement, to-guide, or wayfinder.
 disable-model-invocation: true
 ```
 
 ### Setup Labels
 
-`gh issue edit --add-label`/`gh issue create --label` fail on a label that does not exist yet: `gh` never creates it automatically. GitLab does the opposite: a `--label` with a missing label silently creates it with GitLab's default color, so a label applied to a ticket before this skill runs stays wrongly colored. This skill creates every label that the triage taxonomy of this repository needs, with its canonical color, so run it before the first `/to-spec` or `/to-tickets`.
+`gh issue edit --add-label`/`gh issue create --label` fail on a label that does not exist yet: `gh` never creates it automatically. GitLab does the opposite: a `--label` with a missing label silently creates it with GitLab's default color, so a label applied to a ticket before this skill runs stays wrongly colored. This skill creates every label that the triage taxonomy of this repository needs, with its canonical color, so run it before the first `/publish-epic` or `/to-tickets` run.
 
 #### Process
 

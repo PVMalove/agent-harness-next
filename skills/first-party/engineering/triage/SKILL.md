@@ -37,7 +37,7 @@ This project uses a namespace-based, enterprise-style label taxonomy. Every tria
 
 **Status** (`status::*`) — where it sits in the pipeline:
 
-- `status::specs` — design/spec-writing: an epic or large task still being turned into a spec and decomposed into tickets (normally applied by `/to-spec`, not by triage directly — see below). Too early to take into development; execution mode isn't decided yet.
+- `status::specs` — design/spec-writing: an epic or large task still being turned into a spec and decomposed into tickets (applied by `/publish-epic` to a new epic and when triage routes an existing epic-sized issue). Too early to take into development; execution mode isn't decided yet.
 - `status::ready` — fully specified, ready to be picked up (by an agent if `afk`, by the maintainer if `hitl`)
 - `status::in-progress` — currently being worked on in an active session
 - `status::blocked` — blocked, either by another ticket's dependency or because triage is waiting on more information from the reporter (post triage notes either way, see the triage notes template below)
@@ -51,7 +51,7 @@ This project uses a namespace-based, enterprise-style label taxonomy. Every tria
 
 - `resolution::wontfix` — the request was explicitly rejected. Applied at close time (see "Apply the outcome" below), not during normal triage.
 
-`task-report::required` is a context label too, but `triage` doesn't apply or read it — `/to-spec` and `/to-tickets` apply it, `/to-pull-requests` acts on it. See `docs/agents/triage-labels.md`.
+`task-report::required` is a context label outside the triage workflow. `/publish-epic` applies it to an epic and `/to-tickets` to child tickets. `/to-pull-requests` acts on it. See `docs/agents/triage-labels.md`.
 
 An unlabeled issue is implicitly "needs triage" — there is no dedicated label for that state, it's just the absence of the required axes.
 

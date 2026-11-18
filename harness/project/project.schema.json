@@ -26,7 +26,7 @@
     "base_branch": {
       "type": "string",
       "minLength": 1,
-      "description": "Project release/base branch. /to-spec creates each epic's integration/<service-or-team> branch from it; it is also the fallback base for work without an epic."
+      "description": "Project release/base branch. Epic integration/<service-or-team> branches start from it. It is also the fallback base for work without an epic."
     },
     "branch_pattern": {
       "type": "string",
@@ -330,6 +330,18 @@
         "gray_zone": {
           "type": "integer",
           "description": "The single score strictly between fast_threshold and full_threshold that triggers a second advisory scoring pass in to-tickets."
+        },
+        "hours": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "description": "Optional estimate of the hours a person needs for a ticket of each score: keys are values from scale, values are positive hours. to-tickets shows it in the ticket card and summary table; without it the estimate column shows a dash."
         }
       }
     },

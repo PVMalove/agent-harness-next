@@ -9,7 +9,7 @@ This directory is a short static memory of the harness. Each document records th
 - [architect](architect.md#architect_1) — manual comparison of architectural options
 - [developer](developer.md#developer_1) — implementation of an agreed change with a report on changes, checks and risks
 - [grill-me](grill-me.md), [grilling](grilling.md), [grill-with-docs](grill-with-docs.md)
-- [to-spec](to-spec.md), [to-tickets](to-tickets.md), [to-guide](to-guide.md)
+- [to-spec](to-spec.md), [publish-epic](publish-epic.md), [to-tickets](to-tickets.md), [to-guide](to-guide.md)
 - [implement](implement.md), [fast-implement](fast-implement.md), [code-review](code-review.md), [qa-gate](qa-gate.md), [to-pull-requests](to-pull-requests.md)
 - [start-project](start-project.md), [integrate-project](integrate-project.md), [setup-labels](setup-labels.md), [delivery-stats](delivery-stats.md)
 
