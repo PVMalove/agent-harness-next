@@ -1265,9 +1265,10 @@ Claude uses the brief's model, effort and native tool allowlist; its only additi
 the incoming reports directory. Codex uses an `app-server` connection and a native named
 permission profile. The checkout has the brief's source access; the main coordinator state and
 incoming report directory remain writable for lifecycle evidence. Both source-access modes
-can write shared `.harness/.sandboxes/runs/qa` and `.harness/.sandboxes/runs/tests` temporary
-data and `.sandboxes/logs` for the mandatory bounded check wrapper and full verification;
-this does not grant access to other issue worktrees.
+can write the shared `.harness/.sandboxes/` subdirectories `runs/qa`, `runs/tests`, and `logs`
+for verification, and `cache/npm` and `cache/ms-playwright` for browser checks. The adapter
+creates these directories before launching Codex, whose sandbox needs existing writable roots
+under read-only parents. Other cache directories and other issue worktrees receive no write grant.
 Write roles additionally receive their Git admin directory, shared objects, refs and ref logs so
 they can create commits in a linked worktree. The common Git directory permits creating
 `packed-refs.lock` and atomically replacing `packed-refs`; existing other shared metadata stays

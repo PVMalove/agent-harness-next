@@ -433,7 +433,7 @@ def test_codex_writer_keeps_runtime_metadata_read_only(
 
 
 @pytest.mark.parametrize("access", ["write", "read-only"])
-def test_codex_bounded_checks_can_write_shared_temporary_data_and_logs(
+def test_codex_dry_run_grants_only_the_shared_check_directories(
     dispatch: tuple[Path, Path, dict[str, object]], access: str
 ) -> None:
     repo, worker, _ = dispatch
@@ -454,9 +454,37 @@ def test_codex_bounded_checks_can_write_shared_temporary_data_and_logs(
     assert filesystem[str(repo / ".harness/.sandboxes/runs/tests")] == "write"
     assert str(repo / ".harness/.sandboxes/runs") not in filesystem
     assert filesystem[str(repo / ".harness/.sandboxes/logs")] == "write"
+    assert filesystem[str(repo / ".harness/.sandboxes/cache/npm")] == "write"
+    assert filesystem[str(repo / ".harness/.sandboxes/cache/ms-playwright")] == "write"
     assert filesystem[str(worker)] == ("write" if access == "write" else "read")
     assert str(repo / ".harness/.sandboxes") not in filesystem
     assert str(repo / ".harness/.sandboxes/worktrees") not in filesystem
+    assert str(repo / ".harness/.sandboxes/cache") not in filesystem
+    assert str(repo / ".harness/.sandboxes/scratch") not in filesystem
+    assert str(repo / ".harness/.sandboxes/pr_body") not in filesystem
+    for name in ("runs", "logs", "cache"):
+        assert not (repo / ".harness/.sandboxes" / name).exists()
+
+
+def test_codex_refuses_a_redirected_shared_cache(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    cache = repo / ".harness/.sandboxes/cache"
+    cache.mkdir()
+    outside = repo.parent / "outside"
+    outside.mkdir()
+    try:
+        (cache / "npm").symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+
+    result = invoke(dispatch, "--dry-run", runtime="codex")
+
+    assert result.returncode != 0
+    assert str(cache / "npm") in result.stderr
+    assert "symlink" in result.stderr
+    assert not list(outside.iterdir())
 
 
 @pytest.mark.parametrize("mode", ["enabled", "disabled"])
@@ -720,6 +748,29 @@ def harness_events(stdout: str) -> list[tuple[object, object]]:
     records = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     assert all(record["type"] == "harness-event" for record in records), records
     return [(record["kind"], record["text"]) for record in records]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_codex_prepares_check_directories_before_the_app_server_starts(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    sandboxes = repo / ".harness/.sandboxes"
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn=f"""\
+        for name in ('runs/qa', 'runs/tests', 'logs', 'cache/npm', 'cache/ms-playwright'):
+            (Path({str(sandboxes)!r}) / name / 'runner.txt').write_text('ready')
+        note('turn/completed', {{'turn': {{'status': 'completed'}}}})
+""",
+    )
+
+    result = invoke(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")

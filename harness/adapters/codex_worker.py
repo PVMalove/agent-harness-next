@@ -29,6 +29,13 @@ from typing import NotRequired, TypedDict, cast
 
 STARTUP_CHECK_SECONDS = 10
 PERMISSION_PROFILE = "harness-worker"
+SHARED_ARTIFACT_DIRS = (
+    "runs/qa",
+    "runs/tests",
+    "logs",
+    "cache/npm",
+    "cache/ms-playwright",
+)
 # Items whose start is not a tool step; their content never reaches the event stream.
 NON_TOOL_ITEMS = frozenset({"agentMessage", "userMessage", "reasoning"})
 
@@ -174,6 +181,7 @@ def worker_command(
     worktree: Path,
     binary: str = "codex",
     *,
+    shared_artifacts: tuple[Path, ...],
     network_access: bool = False,
 ) -> list[str]:
     access = brief.get("access")
@@ -188,9 +196,7 @@ def worker_command(
         str(worktree): "write" if access == "write" else "read",
         str(repo / ".harness/orchestration/state"): "write",
         str(Path(brief["report_staging_path"]).parent): "write",
-        str(repo / ".harness/.sandboxes/runs/qa"): "write",
-        str(repo / ".harness/.sandboxes/runs/tests"): "write",
-        str(repo / ".harness/.sandboxes/logs"): "write",
+        **{str(directory): "write" for directory in shared_artifacts},
     }
     if access == "write":
         filesystem.update({":tmpdir": "write", ":slash_tmp": "write"})
@@ -516,11 +522,20 @@ def start(args: argparse.Namespace) -> int:
     prompt = build_prompt(brief, brief_path, repo, worktree, sha)
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
+    shared_artifacts = tuple(
+        repo / ".harness/.sandboxes" / name for name in SHARED_ARTIFACT_DIRS
+    )
+    for directory in shared_artifacts:
+        if directory.resolve() != directory:
+            raise ValueError(
+                f"shared artifact directory must not use a symlink: {directory}"
+            )
     command = worker_command(
         brief,
         repo,
         worktree,
         args.codex_bin,
+        shared_artifacts=shared_artifacts,
         network_access=args.network_access == "enabled",
     )
     if args.dry_run:
@@ -535,6 +550,9 @@ def start(args: argparse.Namespace) -> int:
             )
         )
         return 0
+    # A writable mount cannot create itself under a read-only parent inside Codex.
+    for directory in shared_artifacts:
+        directory.mkdir(parents=True, exist_ok=True)
     if brief.get("execution"):
         # Supervised: the runtime launches only briefs with `execution`. The turn runs in
         # this process, so the app-server stays in its group and its exit is this exit.
