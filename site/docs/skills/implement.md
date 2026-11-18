@@ -11,11 +11,16 @@
 
 ## 2. Полный перевод текста скила
 
+Ядро навыка лежит в `SKILL.md`, а процедуры по условию — в `references/`: рантайм Claude Code
+(`claude-code-runtime.md`), тест-автор полного маршрута (`test-author.md`), план коммитов
+(`commit-plan.md`), автоматический путь (`auto-path.md`), остановки и восстановление (`recovery.md`),
+ожидание и наблюдение воркеров (`workers.md`). Ниже перевод всего текста в прежнем порядке.
+
 <div class="ah-skill-text" markdown="1">
 
 ```yaml
 name: implement
-description: Провести один backend-тикет через утверждённые handoff архитектора, разработчика, review, QA и publish.
+description: Проводит один afk-тикет с меткой pipeline::full через dispatch архитектора, разработчика, code-review, QA и publish и предлагает /to-pull-requests. Вызывается явно, когда установлена capability backend-orchestration; для pipeline::fast — /fast-implement, для hitl — /to-guide. Сам код фичи не пишет.
 disable-model-invocation: true
 ```
 
@@ -44,8 +49,10 @@ disable-model-invocation: true
 python .harness/orchestration/coordinator.py --repo . dispatch status
 ```
 
-Если команда недоступна или не читает своё состояние, остановитесь и предложите разработчику
-`/fast-implement`. Ответ `ledger_busy` не означает недоступность: блокировку ledger держит другая
+Если команда недоступна или не читает своё состояние, остановитесь. Для тикета `pipeline::fast`
+предложите `/fast-implement`. Для тикета `pipeline::full` объясните, что маршруту нужна capability
+`backend-orchestration`, или что разработчик может сменить метку на `pipeline::fast` в трекере и
+запустить `/fast-implement`. Ответ `ledger_busy` не означает недоступность: блокировку ledger держит другая
 операция coordinator, поэтому повторите команду через `retry_after_seconds`. Не выводите и не чините
 opt-in capability сами. Доведите один тикет до конечного состояния batch, прежде чем браться за
 следующий.
@@ -100,7 +107,8 @@ coordinator останавливается, сообщает о нём разр�
 Начинайте эти шаги только после pre-flight тикета из раздела «Контракт coordinator»
 (блокеры, `status::in-progress`).
 
-1. **Integration ref.** Возьмите значение секции `## Integration Branch` тикета. Если её нет,
+1. **Integration ref.** Возьмите значение секции `## Integration Branch` тикета (строку
+   `**Integration branch:**` в локальном трекере). Если её нет,
    возьмите `## Git base`. Если нет ни той, ни другой, возьмите ту же секцию родительского эпика.
    Если у тикета есть родительский эпик, а значения нет, это блокер: не выводите его из checkout или
    из памяти. Тикет без родительского эпика использует `base_branch`: не передавайте
@@ -114,6 +122,9 @@ coordinator останавливается, сообщает о нём разр�
 3. **Scope batch.** Запустите `batch preflight` с теми же флагами scope, что и у `batch create`.
    Сначала переведите тикет на английский: `batch create` отклоняет кириллицу в `--goal`,
    `--definition-of-done` и `--prohibited-change`. Команды, пути и ID оставьте дословными.
+   Сопоставьте разделы тикета: каждый пункт `## Acceptance criteria` → `--definition-of-done`,
+   каждый пункт `## Out of scope` → `--prohibited-change`, пути из `## Contract touchpoints` и
+   `## Relevant Files (Discovery Context)` → `--allowed-path` и `--expected-file`.
 4. **Создание batch.** Повторяйте флаги-списки по одному разу на каждое значение.
 
    ```bash
@@ -163,7 +174,7 @@ coordinator останавливается, сообщает о нём разр�
 тикета входит в этот pre-flight: после проверки записи из раздела «Маршрут», до `batch create` и до
 создания issue-ветки. Проверьте блокеры тикета при любой текущей метке. Если хоть один ещё открыт,
 остановитесь, назовите их и убедитесь, что на тикете стоит `status::blocked`. Иначе замените метку
-`status::*` на `status::in-progress` так же, как шаги 2–3 фазы 1 `/fast-implement`, и проверьте, что
+`status::*` на `status::in-progress` так же, как шаги 1–2 предполётной проверки `/fast-implement`, и проверьте, что
 она единственная `status::*`. Неудачная запись метки это блокер, а не предупреждение.
 
 До `batch create` запустите preflight на уровне batch с ограниченными ожидаемыми файлами, сервисами и

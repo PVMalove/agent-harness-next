@@ -1,12 +1,12 @@
 ---
 name: implement
-description: "Coordinate one backend ticket through the approved architect, developer, review, QA, and publish handoffs."
+description: "Coordinates one afk ticket labeled pipeline::full through architect, developer, code-review, QA and publish dispatches, then offers /to-pull-requests. Use explicitly when the backend-orchestration capability is installed; use /fast-implement for pipeline::fast and /to-guide for hitl. Never writes the feature code itself."
 disable-model-invocation: true
 ---
 
 # Implement
 
-**Objective:** Coordinate exactly one ticket through `architect → developer → code-review → qa → publish`, then offer `/to-pull-requests`. This session **is** the coordinator: it creates and observes dispatches but never implements the ticket itself.
+**Objective:** Coordinate exactly one ticket through `architect → developer → code-review → qa → publish`, then offer `/to-pull-requests`. This session **is** the coordinator: it creates and observes dispatches but never implements the ticket itself. Invoke it only on an explicit request (`/implement`, or `$implement` in Codex).
 
 Language contract: agents communicate with each other and write free-text protocol/state evidence in
 English. Every completion report addressed to this coordinator is in Russian and includes
@@ -52,18 +52,24 @@ tracker nor the ledger. `batch create`, and `dispatch preflight` and `dispatch s
 refuse an issue worktree or git metadata directory the session cannot write.
 
 If another batch holds the same unfinished ticket, branch or worktree, or the `concurrency_budget`
-is exhausted, inspect `batch list --open`, the conflicting dispatch,
-and its decision packet. Tell the developer which batch is blocking and how to finish it normally.
-If its worker can no longer produce a report, first run `batch auto-report`,
-`batch decision-packet`, `dispatch status` and `ledger validate`, and quote the dispatch's
-`startup` assessment: worker state, classification and unknowns. Explain which of waiting, launch
-repair, human-approved `batch resume-stop`, `batch rewind` and cancelling an unsent dispatch
-applies, and why the others do not. Offer `batch abandon` only after that, as a separate explicit
-human choice for the whole batch: show a copyable command with the actual batch ID, the verified
-operator name, `--approved-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"`, and a reason grounded in the
-observed failure. Never supply `--approved-by` as though they already approved, or execute the
-command for them without that approval. `ledger clean` only removes orphaned evidence, and
-`ledger reset` does not clear an active batch.
+is exhausted, read `references/recovery.md` → "A batch blocks the ticket" before proposing anything.
+
+## Coordinator contract
+
+Resolve the tracker ticket, issue branch and blockers without opening a second batch for the same
+work. Ticket status is part of that pre-flight, after the write-access probe in "Route", before
+`batch create` and before the issue branch exists: check the ticket's blockers whatever its current label (any still open → stop, name them,
+and make sure it carries `status::blocked`); otherwise replace its `status::*` label with
+`status::in-progress` exactly as `/fast-implement` Pre-flight steps 1–2 do, and confirm it is the
+only `status::*` label. A failed label write is a blocker, not a warning. Before `batch create`, run the batch-level preflight with bounded expected files, services and
+diff size. Pin the writer's explicit scope with `--allowed-path` (repeat it; a path or glob inside
+the developer's write ceiling): batches with overlapping files run in parallel in their own
+worktrees, and a change outside the scope is rejected. If it rejects the ticket, split it with `/to-tickets`; never ask an architect to discover
+whether an oversized ticket should have been split. When creating the batch with `batch create`,
+specify `--required-gate review --required-gate qa`: the full implement pipeline explicitly sets
+both independent Standards/Spec review and serialized clean-room QA gates. Before dispatching the
+write-role (`developer`) worker, verify that these mandatory gates are recorded in the batch's
+`required_gates`; halt early if missing rather than sending a worker into a risk-gate omission.
 
 ## Batch preparation
 
@@ -76,7 +82,7 @@ The coordinator must not copy conventions from another batch and must not read l
 `batch decision-packet`, `dispatch status`). If these sources do not give a step, that gap is a
 blocker: the coordinator must stop and report it to the developer, and must not reconstruct the step.
 
-Start these steps only after the ticket pre-flight in "Coordinator contract" (blockers, `status::in-progress`).
+Start these steps only after the ticket pre-flight above (blockers, `status::in-progress`).
 
 1. **Integration ref.** Use the ticket's `## Integration Branch` value (the `**Integration branch:**`
    line on the local tracker). If the ticket has no such section, use its `## Git base` value. If it has neither, use the same section of the parent epic.
@@ -113,42 +119,7 @@ Start these steps only after the ticket pre-flight in "Coordinator contract" (bl
    moves the batch from `planned` to `awaiting-approval`. This needs the operator's explicit
    approval: present the command, as for `batch abandon`, and do not run it for them.
 
-**Commit plan.** The architect puts its plan in the report field `commit_plan`; `report submit`
-refuses a plan that breaks the rules below or names a path outside the batch `allowed_paths`, and an
-accept pins the reported plan. Pass a plan file only when the report carries none: pin it with
-`batch decide --batch <id> --decision accept --approved-by <operator> --approved-at <UTC time> --commit-plan-file <path>`. The operator approves this decision; never supply `--approved-by` for them.
-A plan file passed beside a reported plan must hold the same plan. Write the file under
-`.harness/.sandboxes/scratch/inbox/` or the project session scratchpad
-`.harness/.sandboxes/scratch/sessions/<session_id>/scratchpad/`; a path outside the repository and
-its worktrees, such as an external `/tmp` scratchpad, is refused.
-The file is a JSON object with the single key `commit_plan`, a non-empty list in commit order:
-
-```json
-{"commit_plan": [{"id": "tests", "summary": "Add failing tests", "expected_paths": ["tests/**"], "covers": [1]}]}
-```
-
-Each entry has exactly these fields: `id` (unique; up to 64 characters of letters, digits, `.`, `_`, `-`; the first character is a letter or digit),
-`summary` (non-empty), `expected_paths` (non-empty list of relative paths or globs, with no leading `/`
-and no `..`), and `covers` (non-empty list of 1-based `--definition-of-done` item numbers, without
-repeats). Every definition-of-done item must appear in at least one entry. The CLI rejects a
-broken file and prints the expected format.
-
-## Coordinator contract
-
-Resolve the tracker ticket, issue branch and blockers without opening a second batch for the same
-work. Ticket status is part of that pre-flight, after the write-access probe in "Route", before
-`batch create` and before the issue branch exists: check the ticket's blockers whatever its current label (any still open → stop, name them,
-and make sure it carries `status::blocked`); otherwise replace its `status::*` label with
-`status::in-progress` exactly as `/fast-implement` Phase 1 steps 2–3 do, and confirm it is the
-only `status::*` label. A failed label write is a blocker, not a warning. Before `batch create`, run the batch-level preflight with bounded expected files, services and
-diff size. Pin the writer's explicit scope with `--allowed-path` (repeat it; a path or glob inside
-the developer's write ceiling): batches with overlapping files run in parallel in their own
-worktrees, and a change outside the scope is rejected. If it rejects the ticket, split it with `/to-tickets`; never ask an architect to discover
-whether an oversized ticket should have been split. When creating the batch with `batch create`,
-specify `--required-gate review --required-gate qa`: the full implement pipeline explicitly sets
-both independent Standards/Spec review and serialized clean-room QA gates. Before dispatching the
-write-role (`developer`) worker, verify that these mandatory gates are recorded in the batch's
-`required_gates`; halt early if missing rather than sending a worker into a risk-gate omission.
+## Dispatch handoffs
 
 For each handoff, choose the worker checkout and pass its absolute path as `--worktree` to
 `dispatch preflight`. Show `batch decision-packet`, then create an approved immutable brief. Pass
@@ -165,47 +136,11 @@ the main checkout before the next command. A selected path is intent; self-repor
 brief's `report_staging_path` to the worker verbatim; a role that has to guess where its report
 belongs writes it outside the project.
 
-**Claude Code runtime.** The Agent tool cannot select an existing checkout: a subagent starts in the
-main checkout, and `EnterWorktree` refuses it there. Two paths exist; state which one the batch uses.
-- `external` (strict): set the worker roles' `transport` to `external` in `.harness/orchestration.json`
-  and send with `--adapter <main-repo>/.harness/adapters/claude_worker.py` (absolute path).
-  `dispatch send` runs the adapter in `send.worker_worktree`, and it runs a headless `claude -p`
-  there on the brief's model, effort and `allowed_tools`, so the worker's CWD is the issue worktree.
-  Under the runtime (a brief with `execution`) the adapter waits for the worker in the foreground
-  and exits with its code; without `execution` it detaches the worker. The adapter builds the
-  prompt; for a retry, put the retry lines in a file inside the repository and pass
-  `--adapter-arg=--extra-prompt-file=<path>`. A permission layer may refuse launching an agent
-  from the coordinator session; that refusal is a stop, so show the developer the exact
-  `dispatch send` command to run in their own terminal, then continue with `dispatch wait`.
-- `in-process` (weaker evidence): the subagent's CWD is the main checkout, so the template's CWD check
-  would stop it. Replace that check in its prompt: probe `git -C <worker_worktree>` for the top-level,
-  branch and HEAD, run every command with `git -C` or `cd <worker_worktree> &&`, and use absolute
-  paths for every file. Its self-report then proves the checkout it works in, not its CWD; say so in
-  the final report.
+**Claude Code runtime.** The Agent tool cannot select an existing checkout. In Claude Code, read
+`references/claude-code-runtime.md` and state which worker path (`external` or `in-process`) the batch uses.
 
-**Test author in the full route.** The author inherits runtime/model/effort from the approved
-developer brief, without a separate role assignment or project-profile override. A selected runtime
-without a protected adapter returns `runtime_unsupported` and keeps ordinary TDD. The current
-protected adapter lets an `external` Claude Code developer call the author in
-`send.worker_worktree`, using `Agent(test-author)` without model/effort overrides. Before dispatch, install the harness in that exact checkout.
-A linked worktree of a repository whose main checkout the human trusted in Claude Code needs no trust
-dialog of its own and no `CLAUDE_PROJECT_DIR` export: preflight takes the project root from Git (ADR 0033).
-Never copy the main checkout's runtime state or trust.
-The developer checks its own `.claude/hooks/test-author-preflight.sh --worktree <send.worker_worktree> --brief <approved brief path>`
-and enables the author only after exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent`
-permission in the approved brief. The default developer role policy includes the named permission;
-a project override remains authoritative. Missing permission gives `agent_tool_unavailable` and
-ordinary TDD, never a launch-time tool expansion. Pass the shared runner log root from the adapter
-prompt to the author along with one test path within the brief's scope.
-
-For `in-process`, the main preflight with `--worktree <send.worker_worktree>` answers
-`checkout_mismatch`: the main checkout's guard and runner serve only the main checkout. The worker
-prompt therefore names the worktree's launcher for each handoff:
-`python3 -I -B <send.worker_worktree>/.harness/health/test_author.py run --repo <send.worker_worktree> --brief <approved brief path> --prompt-file <path>`.
-It checks that worktree's preflight and starts the author with its guard and runner, under the same
-brief permission rule. A refusal (exit 3 with a reason) keeps ordinary TDD with that reason.
-Keep the selected executor visible in refusals; never substitute Claude for an unsupported runtime. A preflight refusal or unavailable author
-never creates a blocker or changes the Rust ledger. State this in the worker prompt.
+**Test author.** When the project enables the test author, read `references/test-author.md` before
+the developer dispatch and state its outcome in the worker prompt.
 
 `dispatch send` checks the adapter's flags against its `dispatch --help` before the handoff and
 refuses an unsupported one: fix the `--adapter-arg` values and send the same approved dispatch
@@ -221,18 +156,9 @@ and unrun checks; the coordinator decision packet returns an explicit recovery r
 `block`, or a human-selected `abandon`) without registering a candidate or weakening `completed`
 report validation.
 
-Before every write-role dispatch, the immutable brief carries an ordered commit plan. Each entry
-names one independently reviewable logical change, its expected files and the DoD items it covers;
-use one entry only when the entire approved change is inseparable. The coordinator derives one entry
-per DoD item; to use the architect's plan instead, pin it on the architect accept with
-`batch decide --decision accept --commit-plan-file <path>`. A recovery preserves the accepted plan,
-or replaces it with a newly approved plan that explains the changed boundary. The developer's
-completion report maps every created commit to the entries it closes; a mapping that is not
-one-to-one needs `dod_coverage` and `divergence_justification`, and a report with a `not_covered`
-item can be accepted only by `override-warning` with a note other than `none`, or returned with
-`retry`. A report whose `changed_files` lie outside the brief's `write_paths` is recorded with a
-`scope_warnings` entry and is accepted only the same way. Do not collapse unrelated implementation, tests, documentation, or type-only repairs into a
-recovery commit merely because they are staged together.
+Before the architect accept and before every write-role dispatch, read `references/commit-plan.md`:
+the immutable brief carries an ordered commit plan, and the developer's report maps every commit to
+the entries it closes.
 
 Follow the configured approval policy. Under `manual_all`, every transition needs explicit approval:
 show the decision packet, ask, and wait. Under `low_risk`, a clean completed report of a batch whose
@@ -253,65 +179,7 @@ to QA, never to a new code-review. Report each startup failure under its own cla
 or refused self-report, capacity, rate-limit, service-unavailable) together with its recovery
 route.
 
-When the runtime store holds a batch (attention `operational-hold`, or a refusal whose `REMEDY`
-names recovery), run `recovery status --batch <id> --json`, fix the cause, resolve open attention,
-then run `recovery resume --batch <id>`. Recovery never reruns an accepted stage and never starts a
-worker: continue with the `next` command it prints. An `ambiguous-effect` refusal waits for a human
-decision. After a configuration edit, run `config validate --canonical --json` before the next
-transition. Details: "Operational hold and recovery commands" in
-`.harness/orchestration/playbook.md`.
-
-Under `approval_policy: auto`, the coordinator takes every path decision by policy and records it
-as `policy:auto`; follow "Automatic path" in `.harness/orchestration/playbook.md`. Do not write
-`--approved-by` or `--approved-at`: run `batch approve`, `dispatch create` and a planned
-`dispatch resume --trigger` without them. For every pending report that the `report submit` or
-`qa run` chain did not accept, including the publish report, run
-`batch auto-decide --batch <id>`. Pass `--commit-plan-file` with the architect's plan copied
-exactly only when the report carries no `commit_plan`, `--findings-file` for coordinator findings on a developer report, `--bug-ticket` after
-you file or reuse the tool's bug ticket through the tracker CLI, and `--block-bypass --note` when a
-role worked around a block. Pass nothing else, and never choose the decision yourself. After a refused command, run `batch auto-report --batch <id>` to observe evidence. This read-only
-command does not record a stop. If it shows `observed_stop`, run `batch auto-decide --batch <id>`
-to record the pause, even without a pending report, then show `batch auto-report` again.
-The automatic path ends permanently at that pause. Inspect `batch decision-packet`, `dispatch status`
-and `ledger validate` before you propose waiting, launch repair, human-approved `batch resume-stop`,
-or `batch rewind --to <gate>` to repeat an earlier gate. An exhausted infrastructure budget keeps
-the batch paused for that human choice.
-Use the playbook's "Operator recovery" procedure. The original stop stays historical; all later
-approvals, including recognized 429 continuations, follow `manual_all`. Honor an approval already
-explicitly given in this session for the concrete operation; never invent one.
-
-When a stage's report is `blocked` only by an infrastructure failure although its work looks
-complete (a developer's commits match the plan, for example), a human may decide
-`batch decide --decision accept-conditional --infrastructure-failure --note <cause>`. The pipeline
-advances as after `accept`, but the stage stays an open condition that a later code-review or qa
-accept must independently close; publish refuses while one is open. Never choose it yourself, and
-prefer `resume-stop` when the stage can simply be restarted.
-
-A worker that works around a hook or tool block (another command form, tool, script file, `eval`,
-interpreter or a split command) breaks the protocol: never accept or warning-override that report,
-and record the violation in `--note`. For an architect or developer (publish included), decide
-`retry` with a developer reason category (not `tooling`) or `block`. For a read-only code-review, qa
-or verification role, pass `--reason-category block-bypass` to `batch decision-packet` and, once its
-`route_preview.retry.route` is `bypass-rerun`, to `batch decide --decision retry`: the same stage
-re-runs on the same SHA with no new candidate and no developer retry spent, and its new dispatch
-needs explicit approval under every `approval_policy` except `auto`. A report that stops with
-`tooling_blocker` instead is confirmed
-before its retry: check that its `command` is legitimate under the brief (allowed paths and tool policy) and
-that its `message` refuses that command. For a false positive, file or reuse a bug ticket against
-the tool through the tracker CLI (tool, command, message, dispatch ID), name the ticket in `--note`,
-and run `batch decide --decision retry` once `route_preview.retry.route` is `tooling-retry`; it
-re-runs the same stage on the same SHA (a developer continues its last commit) and spends no
-`retry_policy.max_developer_retries`. A command that is not legitimate is no false positive: retry
-with the developer reason category its evidence supports. Resolve the `tooling-retry-repeated`
-attention, raised by the third consecutive tooling retry on one candidate, only once the tool is
-fixed.
-
-When you find a defect in a clean developer report whose DoD is met inside its allowed paths, do not retry
-it: accept it with `batch decide --findings-file <path>`, or after a policy auto-accept run
-`batch carry-over --batch <id> --findings-file <path>` before its code-review dispatch exists. The
-finding travels into the code-review brief as a carried item (route `carry-over`), and the one
-developer retry is spent after review. Retry a developer report without accept only for an unmet
-DoD item or an out-of-scope change.
+Under `approval_policy: auto`, read `references/auto-path.md` before the first decision.
 
 Each worker records a model self-report and is observed by the event-driven watchdog; those facts
 are evidence, never a reason to edit an immutable brief.
@@ -322,59 +190,21 @@ symbols before escalating. A changed candidate creates one new shared package fo
 role-specific duplicate. Continuations and retries stop at the project budget; a 429 is not an
 exception to that budget.
 
-Run `dispatch wait` between send and report. `stale`, model/worktree mismatch, changed harness
-snapshot, and a failed deterministic gate are blockers for the coordinator, not prompts for broad
-LLM recovery. Silence or a timeout does not prove that a worker stopped. `batch resume-stop`
-refuses a worker whose `startup` state is `live` or `unknown`: stop it through its runtime and
-repeat the command with `--runtime-stopped`. In-process and external transports preserve the same
-brief and evidence contract.
+Run `dispatch wait` between send and report. Silence or a timeout does not prove that a worker
+stopped. Read `references/workers.md` for waiting, a busy ledger or QA lease, the runtime service,
+and external launch and observation. Never remove the ledger lock or a state file by hand, and never
+start `harness-runtime serve` from your own shell.
 
-A busy ledger (`ledger is locked by another operation`, or `ledger_busy` from `dispatch status`) is
-transient: repeat `dispatch wait` or `dispatch status`. When a relayed `report submit` result
-carries `completion`, the report is already recorded: never ask the worker to submit it again. Run
-its `command` (`report complete --dispatch <dispatch-id>`) yourself and repeat it until no step
-fails; it is idempotent. When the failed step needs a human, follow its remedy instead. Never remove
-the ledger lock or any state file by hand; a lock that stays held goes to
-`coordinator.py --repo . ledger release-lock`, which refuses a lock whose owner process is alive.
-`ledger lock-status` shows the holder and the time left until a timeout release without taking the
-lock. For the lock of a stopped sandboxed worker, show the operator a copyable
-`ledger release-lock --force --approved-by <operator> --approved-at <time> --reason <why>`; it is
-their action, never yours, under every `approval_policy`.
+## Stops and recovery
 
-In the runtime-store epoch, coordinators of different batches write in parallel and read from
-snapshots; a `revision_conflict` on `generation` means another command decided over every batch
-first: repeat the command. The QA lane is a lease with a fencing token and a heartbeat
-(`lease_ttl_seconds`). An expired lease of a dead owner (`owner-dead`) needs no `--force`: the next
-`qa run` or a plain `ledger release-lock` reaps it. `[lease_held]` with `stale_heartbeat=true`
-means the owner may live (`owner-alive`, `owner-pid-reused`, `owner-in-other-environment`,
-`owner-unknown`): it is never released automatically, and only the operator's
-`ledger release-lock --force` or `qa clear-stale-lease` clears it. `harness-runtime serve` must run
-in a PID namespace that sees the coordinators.
-
-Never start `harness-runtime serve` from your own Bash: in Claude Code the `runtime-autostart` hook
-starts it before the first coordinator command and releases it at the end of the turn (ADR 0031);
-in Codex and on Windows the developer starts it. On a `[runtime-autostart-failed]` warning or a
-`[runtime_unavailable]` refusal, stop the route and relay the cause, the remedy and the journal path
-(`<repo-id>.serve.log`) to the developer.
-
-## External launch and observation
-
-Use the shipped example explicitly with `--adapter .harness/orchestration/adapters/claude_code.py`;
-`claude` and `codex` are runtime executables, not adapters. Read the playbook's "Observable external
-workers" for its visible-console requirement, explicit background choice, native access probe and
-per-invocation sandbox mode. A parent-side probe does not prove the worker tool's sandbox access.
-Run the native worker probe before feature work; a permanent EROFS/EPERM needs environment repair.
-
-Use `dispatch wait` for lifecycle signals. The console/`dispatch observe` reads existing events
-locally: no extra model calls, agent progress prompts or logs in model context for observation.
-For a supervised worker, `dispatch logs --dispatch <id> --follow` prints its run-log events as
-JSON lines until the execution ends, without holding the ledger lock.
-An in-process worker has no event stream (`stream_reason` says so); follow its self-report,
-heartbeat and the `checkpoints` that `observe` lists.
-A proven early exit uses auto-report → auto-decide → human `resume-stop --restart`; the one
-confirmation covers only an unchanged successor and never resets the infrastructure budget.
-A ready but unsent report uses the playbook's "Delivering a worker report after a tool refusal",
-not another developer run. Retain the original file/check results and relay provenance.
+When a worker cannot produce a report or a launch fails, run `batch auto-report`,
+`batch decision-packet`, `dispatch status` and `ledger validate`, and quote the dispatch's `startup`
+assessment before proposing waiting, launch repair, human-approved `batch resume-stop` (with
+`--runtime-stopped` once the worker is stopped through its runtime), `batch rewind`, or cancelling an
+unsent dispatch. `dispatch runtime-probe` diagnoses an app-server runtime without a worker. Read
+`references/recovery.md` for the matching case: a batch blocking the ticket, a runtime-store hold, an
+infrastructure-only failure, a block bypass or tooling blocker, and a defect in a clean developer
+report. Never accept or warning-override a report whose worker worked around a hook or tool block.
 
 ## Worker prompt
 
@@ -452,7 +282,8 @@ handoff" defines the handoff, the smart-zone threshold and the compact.
 
 ## Authoritative guidance
 
-This is a short coordinator contract, not a second orchestration manual. Full rules are module-owned guidance:
+This is the coordinator contract; conditional procedures live in `references/`, and it is not a
+second orchestration manual. Full rules are module-owned guidance:
 
 - `.harness/orchestration/playbook.md` owns lifecycle, authority, immutable brief, completion
   evidence, parallelism, and metric rules.

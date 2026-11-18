@@ -17,7 +17,15 @@ ROOT = Path(__file__).resolve().parents[2]
 DEVELOPER = ROOT / "harness" / "orchestration" / "roles" / "developer.md"
 COMMON = ROOT / "harness" / "orchestration" / "roles" / "_common.md"
 AGENT = ROOT / "harness" / "project" / "agents" / "test-author.md"
-IMPLEMENT = ROOT / "skills" / "first-party" / "engineering" / "implement" / "SKILL.md"
+IMPLEMENT = (
+    ROOT
+    / "skills"
+    / "first-party"
+    / "engineering"
+    / "implement"
+    / "references"
+    / "test-author.md"
+)
 CHANGELOG = ROOT / "CHANGELOG.md"
 FAST_IMPLEMENT = (
     ROOT / "skills" / "first-party" / "engineering" / "fast-implement" / "SKILL.md"
