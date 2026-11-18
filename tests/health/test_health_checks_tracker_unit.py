@@ -91,6 +91,29 @@ def test_missing_tracker_tool_warns_instead_of_failing(
     assert result.status == "warn"
 
 
+@pytest.mark.parametrize(
+    ("body", "problem"),
+    [
+        ("## Integration Branch\n`integration/x`\n", None),
+        (
+            "## Integration Branch\n`integration/x`\n\n## Git base\n`integration/x`\n",
+            None,
+        ),
+        (
+            "## Integration Branch\n`integration/x`\n\n## Git base\n`main`\n",
+            "Git base не называет integration/x",
+        ),
+        ("## What to build\nnothing\n", "нет секции Git base (ожидалась main)"),
+        ("## Git base\n`origin/main`\n", None),
+    ],
+)
+def test_git_base_is_optional_when_the_integration_branch_is_recorded(
+    body: str, problem: str | None
+) -> None:
+    """`## Integration Branch` from /to-tickets is enough; a present `## Git base` must agree."""
+    assert tracker._git_base_problem(body, "main") == problem
+
+
 def test_missing_git_warns_reachability_instead_of_failing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
