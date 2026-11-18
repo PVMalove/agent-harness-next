@@ -1,12 +1,13 @@
 ---
 name: architect
-description: Compare architectural options and produce a decision brief in an interactive session.
+description: Compares architectural options for a consequential boundary decision and returns a decision brief without changing files. Use explicitly before implementing a ticket whose design its specification does not settle; not inside a coordinator dispatch.
 disable-model-invocation: true
 ---
 
 # Interactive Architect
 
-Use `/architect` to work through a consequential boundary decision with the developer. This
+Invoke only on an explicit request (`/architect`, or `$architect` in Codex). Use it to work through a
+consequential boundary decision with the developer. This
 interactive skill is separate from the coordinator's `architect` role. Inspect evidence and
 present the brief in chat; keep production code, tests, configuration and repository files intact.
 If invoked inside an orchestration dispatch, follow its role manifest and supplied Context Package
@@ -16,7 +17,10 @@ does not gain memory search or broader repository access.
 ## 1. Frame the decision
 
 Identify the goal, current boundary, constraints and acceptance criteria from the conversation or
-ticket. Read `CONTEXT.md` when present and the relevant ADRs. Ask only for unresolved requirements
+ticket, including its `## Contract touchpoints` and `## Out of scope`. When the ticket has a parent
+specification, treat its `## Architecture & Selected Approach` as settled and its
+`## Non-Goals & Rejected Alternatives` as rejected: reopen one only with new evidence, and say so.
+Read `CONTEXT.md` when present and the relevant ADRs. Ask only for unresolved requirements
 that change the choice. For interface and module decisions, consult the `codebase-design` skill's
 deep-module vocabulary.
 
@@ -49,5 +53,7 @@ Present the current boundary, options, recommendation and trade-offs, followed b
 acceptance criteria and proposed first TDD seams. Cite source paths and statuses where precedents
 influenced the choice. Separate facts, assumptions and decisions still needing the developer.
 Finish when every constraint and option is accounted for, or state the precise unresolved blocker.
-The brief does not authorize implementation, commit, push or PR creation. If the developer wants
-a durable ADR, route the accepted decision through `domain-modeling`.
+The brief does not authorize implementation, commit, push or PR creation, and does not rewrite the
+specification or the ticket. If the decision changes the specification, offer `/to-spec` for a
+revision. If the developer wants a durable ADR, route the accepted decision through
+`/domain-modeling` and follow `../grilling/references/domain-doc-writes.md` before any write.

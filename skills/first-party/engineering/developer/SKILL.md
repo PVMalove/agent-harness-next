@@ -1,6 +1,6 @@
 ---
 name: developer
-description: Implement an agreed change in the current issue branch and report changes, checks, unverified items, risks and blockers. Use for standalone implementation outside a coordinator dispatch, or when a calling skill such as fast-implement hands over its implementation step.
+description: Implements an agreed change in the current issue branch within the ticket's scope and reports changes, checks, unverified items, risks and blockers. Use for standalone implementation outside a coordinator dispatch, or when a calling skill such as fast-implement hands over its implementation step; never commits, pushes, or opens a pull request.
 ---
 
 # Developer
@@ -28,20 +28,21 @@ Uncommitted changes that belong to someone else are not a stop: note them and pr
 
 ## Scope
 
-Change only the files the task needs. Do not refactor, reformat or "improve" adjacent code. When the
-task needs a change outside its scope, ask the human; when no human can answer, report it as a
-blocker.
+Change only the files the task needs. When the ticket has `## Relevant Files (Discovery Context)`,
+`## Contract touchpoints` or `## Out of scope`, they set that scope; a path outside them needs the
+human's approval first. Do not refactor, reformat or "improve" adjacent code. When the task needs a
+change outside its scope, ask the human; when no human can answer, report it as a blocker.
 
 ## Implementation
 
 Agree the requirement and the public seam with the human before the first test, then use `/tdd` at
-that seam. When the calling skill selected a test-author cycle, follow the calling skill's cycle.
+that seam. When the calling skill selected a test-author cycle, follow `../tdd/references/test-author.md`.
 
 ## Completion
 
-The work is complete when every acceptance criterion is implemented and the targeted tests and the
-lint and typecheck commands from `qa_gate_commands` in `.harness/project.json` have run, or are
-listed as unverified with the reason.
+The work is complete when every acceptance criterion is implemented and its `Verify` command, the
+targeted tests, and the lint and typecheck commands from `qa_gate_commands` in
+`.harness/project.json` have run, or are listed as unverified with the reason.
 
 This skill never commits, never pushes, never opens a pull request, never runs code review and never
 changes tracker labels. The calling skill or the human decides those steps.
