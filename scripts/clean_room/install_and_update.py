@@ -324,7 +324,7 @@ def run(ctx: SimpleNamespace) -> None:
         )
 
     # engineering-suite inherits 25 upstream skills, overrides some of them in place, and adds 8 names;
-    # the clean-room check below expects 33 distinct installed skills (ADR 0001).
+    # the clean-room check below expects 34 distinct installed skills (ADR 0001).
     pv_project = test_root / "pv_project"
     pv_project.mkdir(parents=True)
     run_step(["git", "init", "-q"], cwd=pv_project, check=True)
@@ -542,9 +542,9 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("installed Repo Map did not read the pinned commit")
 
     pv_skill_count = count_skill_files(pv_project / ".harness" / "skills")
-    if pv_skill_count != 33:
+    if pv_skill_count != 34:
         sys.exit(
-            f"expected 33 skills in a engineering-suite project (25 inherited, overrides replaced in place, + 8 additions), found {pv_skill_count}"
+            f"expected 34 skills in a engineering-suite project (25 inherited, overrides replaced in place, + 9 additions), found {pv_skill_count}"
         )
 
     # A failed older update could remove a retired managed skill's SKILL.md but leave
