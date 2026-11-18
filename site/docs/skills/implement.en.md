@@ -15,9 +15,15 @@
 
 ```yaml
 name: implement
-description: Coordinate one backend ticket through the approved architect, developer, review, QA, and publish handoffs.
+description: Coordinates one afk ticket labeled pipeline::full through architect, developer, code-review, QA and publish dispatches, then offers /to-pull-requests. Use explicitly when the backend-orchestration capability is installed; use /fast-implement for pipeline::fast and /to-guide for hitl. Never writes the feature code itself.
 disable-model-invocation: true
 ```
+
+The core lives in `SKILL.md`, and conditional procedures live in `references/`: the Claude Code
+runtime (`claude-code-runtime.md`), the full-route test author (`test-author.md`), the commit plan
+(`commit-plan.md`), the automatic path (`auto-path.md`), stops and recovery (`recovery.md`), and
+waiting for and observing workers (`workers.md`). The translation below covers the whole text in
+its former order.
 
 ### Implementation
 
@@ -44,8 +50,10 @@ This is the opt-in `backend-orchestration` route. Confirm that the installed coo
 python .harness/orchestration/coordinator.py --repo . dispatch status
 ```
 
-If the command is unavailable or does not read its state, stop and offer the developer
-`/fast-implement`. A `ledger_busy` answer is not unavailability: another coordinator operation holds
+If the command is unavailable or does not read its state, stop. For a `pipeline::fast` ticket,
+offer `/fast-implement`. For a `pipeline::full` ticket, explain that the route needs the
+`backend-orchestration` capability, or that the developer may relabel the ticket `pipeline::fast`
+on the tracker and run `/fast-implement`. A `ledger_busy` answer is not unavailability: another coordinator operation holds
 the ledger lock, so repeat the command after its `retry_after_seconds`. Do not repair and do not
 infer the opt-in capability. Take one ticket to a terminal batch state before starting the next.
 
@@ -98,7 +106,8 @@ step.
 Start these steps only after the ticket pre-flight in "The coordinator contract" (blockers,
 `status::in-progress`).
 
-1. **Integration ref.** Use the ticket's `## Integration Branch` value. If the ticket has no such
+1. **Integration ref.** Use the ticket's `## Integration Branch` value (the `**Integration branch:**`
+   line on the local tracker). If the ticket has no such
    section, use its `## Git base` value. If it has neither, use the same section of the parent epic.
    A missing value for a ticket that has a parent epic is a blocker; do not infer it from the
    checkout or from memory. A ticket without a parent epic uses `base_branch`: omit
@@ -111,7 +120,10 @@ Start these steps only after the ticket pre-flight in "The coordinator contract"
    main checkout.
 3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`,
-   and `--prohibited-change`. Keep commands, paths, and IDs verbatim.
+   and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:
+   each `## Acceptance criteria` item → `--definition-of-done`, each `## Out of scope` item →
+   `--prohibited-change`, and the paths of `## Contract touchpoints` and
+   `## Relevant Files (Discovery Context)` → `--allowed-path` and `--expected-file`.
 4. **Create the batch.** Repeat the list flags once for each value.
 
    ```bash
@@ -162,7 +174,7 @@ Resolve the tracker ticket, the issue branch, and the blockers without opening a
 same work. The ticket status is part of this pre-flight: after the write-access probe in "Route",
 before `batch create`, and before the issue branch is created. Check the ticket's blockers under any
 current label. If any is still open, stop, name them, and make sure that `status::blocked` is set.
-Otherwise replace the `status::*` label with `status::in-progress` exactly as steps 2–3 of phase 1 of
+Otherwise replace the `status::*` label with `status::in-progress` exactly as pre-flight steps 1–2 of
 `/fast-implement` do, and verify that it is the only `status::*` label. A failed label write is a
 blocker, not a warning.
 

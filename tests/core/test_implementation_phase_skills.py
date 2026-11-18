@@ -109,3 +109,54 @@ def test_engineering_suite_ships_the_new_references() -> None:
             files[f".harness/skills/{relative}"]
             == (ENGINEERING / relative).read_bytes()
         )
+
+
+IMPLEMENT_REFERENCES = (
+    "auto-path",
+    "claude-code-runtime",
+    "commit-plan",
+    "recovery",
+    "test-author",
+    "workers",
+)
+
+
+def test_implement_core_names_each_reference_with_its_condition() -> None:
+    """#1211: conditional procedures live in references/, each named once in the core."""
+    core = _text(_skill("implement"))
+    for name in IMPLEMENT_REFERENCES:
+        assert f"`references/{name}.md`" in core
+    assert "## Phase 1:" not in core
+    headings = [
+        line
+        for line in _skill("implement").read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ")
+    ]
+    assert headings.index("## Coordinator contract") < headings.index(
+        "## Batch preparation"
+    )
+    metadata = (ENGINEERING / "implement/agents/openai.yaml").read_text(
+        encoding="utf-8"
+    )
+    assert 'default_prompt: "Use $implement ' in metadata
+
+
+def test_moved_procedures_keep_their_rules() -> None:
+    references = ENGINEERING / "implement/references"
+    recovery = _text(references / "recovery.md")
+    assert "batch abandon" in recovery and "tooling-retry" in recovery
+    assert "accept-conditional --infrastructure-failure" in recovery
+    assert "batch auto-decide" in _text(references / "auto-path.md")
+    assert "ledger release-lock" in _text(references / "workers.md")
+    assert "`commit_plan`" in _text(references / "commit-plan.md")
+    assert "in-process" in _text(references / "claude-code-runtime.md")
+
+
+def test_engineering_suite_ships_the_implement_references() -> None:
+    files = package_files(["engineering-suite"])
+    for name in IMPLEMENT_REFERENCES:
+        relative = f"implement/references/{name}.md"
+        assert (
+            files[f".harness/skills/{relative}"]
+            == (ENGINEERING / relative).read_bytes()
+        )
