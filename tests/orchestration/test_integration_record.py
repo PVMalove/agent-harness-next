@@ -1136,17 +1136,21 @@ class IntegrationGuidanceTests(unittest.TestCase):
         ),
         "skills/first-party/engineering/implement/SKILL.md": ("integration prepare",),
         "skills/first-party/engineering/to-pull-requests/SKILL.md": (
+            "integration next",
+            "candidate_sha",
+            "target_sha",
+            "qa_source",
+            "--merge-commit",
+            "candidate_tree_sha",
+            "merge-tree-mismatch",
+        ),
+        # #1214: the opt-in route of the PR skill lives in its reference.
+        "skills/first-party/engineering/to-pull-requests/references/integration-route.md": (
             "integration status",
             "integration next",
             "integration collect-ci",
             "integration local-qa",
-            "candidate_sha",
-            "target_sha",
-            "qa_source",
             "release-gate-refused",
-            "--merge-commit",
-            "candidate_tree_sha",
-            "merge-tree-mismatch",
         ),
         "CONTEXT.md": ("**Integration record**", "**Stale integration record**"),
     }
@@ -1160,7 +1164,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
 
     def test_the_skills_never_dispatch_or_rewrite_on_stale(self) -> None:
         text = (
-            REPO / "skills/first-party/engineering/to-pull-requests/SKILL.md"
+            REPO / "skills/first-party/engineering/to-pull-requests/references/integration-route.md"
         ).read_text(encoding="utf-8")
         self.assertIn("do not create a dispatch", text)
 
@@ -1168,7 +1172,7 @@ class IntegrationGuidanceTests(unittest.TestCase):
         """After the developer route of a failed original pair one ticket and branch have two
         records and '<ticket-branch>' is refused; '--record <new record>' replaces it."""
         notes = {
-            "skills/first-party/engineering/to-pull-requests/SKILL.md": (
+            "skills/first-party/engineering/to-pull-requests/references/integration-route.md": (
                 "several integration records match",
                 "`--record <new record>` replaces `<ticket-branch>`",
             ),

@@ -277,7 +277,11 @@ def run(ctx: SimpleNamespace) -> None:
     # Issue #537: the installed PR step carries the whole continuation (next step, separate
     # confirmation bound to the SHA pair, CI wait, local-QA fallback, merge handoff, the Release Gate
     # tree check after the merge) and still keeps the plain /qa-gate branch for a project without the
-    # optional orchestration.
+    # optional orchestration. Since #1214 the opt-in route lives in the skill's reference.
+    installed_pr_route = installed_pr_step.parent / "references" / "integration-route.md"
+    if not installed_pr_route.is_file():
+        sys.exit("installed to-pull-requests step is missing its integration route reference")
+    installed_pr_text += "\n" + installed_pr_route.read_text(encoding="utf-8")
     for required_pr_phrase in (
         "integration next",
         "integration collect-ci",
