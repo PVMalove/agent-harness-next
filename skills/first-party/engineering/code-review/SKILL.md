@@ -11,10 +11,10 @@ report findings only.
 
 Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
-This workflow is runtime-neutral: use the existing manually configured review mechanism, and never
-launch a runtime-specific adapter, choose a provider or model, or change the reviewed branch. Write
-both sub-agent briefs and the aggregated report in the `language` from `.harness/project.json`
-(default `ru`), whatever the prompt's language.
+This workflow is runtime-neutral: use the existing manually configured review mechanism. It
+must not launch a runtime-specific adapter, choose a provider or model, or change the reviewed
+branch. Write both sub-agent briefs and the aggregated report in the
+`language` from `.harness/project.json` (default `ru`), whatever the prompt's language.
 
 The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to run `harness update`, which seeds it from the harness templates. On GitLab, every `glab` command takes `-R <project-url>`; `<project-url>` and the other GitLab placeholders (`<host>`, `<project-id>`) are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions.
 
