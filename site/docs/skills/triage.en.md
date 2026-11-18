@@ -116,7 +116,7 @@ Show the count and a one-line summary for each item. Let the maintainer choose.
 
 3. **Verify the claim.** Before you start grilling, make sure the claim is real. For a bug, reproduce it by the reporter's steps. For a PR, confirm that the diff does what it claims: check it out and run the relevant tests or commands. Report what happened: confirmed (with the code path), failed, or insufficiently detailed (a strong signal to route to `status::blocked` while waiting for more information). A confirmed verification makes the agent brief much more reliable.
 
-4. **Grill (if needed).** If the request needs to be specified in more detail, call the Skill tool twice, for "grilling" and "domain-modeling". Grill it into shape a few questions at a time, sharpen the domain terms, and update `CONTEXT.md`/ADRs as decisions are made.
+4. **Grill (if needed).** If the request needs to be specified in more detail, call the Skill tool twice, for "grilling" and "domain-modeling". Grill it into shape a few questions at a time, sharpen the domain terms, and apply the `/grill-with-docs` write rules.
 
 5. **Apply the outcome:**
    - `status::ready` + `afk` — post an agent brief comment ([AGENT-BRIEF.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/triage/AGENT-BRIEF.md)).

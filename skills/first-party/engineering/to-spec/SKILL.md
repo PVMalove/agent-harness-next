@@ -26,7 +26,11 @@ You must execute this skill in two distinct phases to ensure the user agrees wit
 ### Phase 2: Drafting & Publishing (After User Approval)
 1. **Draft the File:** Write the spec using the `<spec-template>` below, at the root of its own folder under `docs/tasks/` — that folder also reserves `tickets/` (one file per child ticket, filled in later by `/to-tickets`) and `artifacts/` (the `/grilling` Live Artifact).
     - *Naming convention:* If the issue ID is known, use it. If not, use a descriptive slug (e.g., `docs/tasks/add-user-auth/add-user-auth.md`) and rename both the folder and file later once the ID is generated — see `docs/agents/artifacts.md` for the full convention, including the epic-folder grouping and the `tickets/`/`artifacts/` subfolders.
-    - Take the final Discovery Context file list from that same folder's `artifacts/discovery-context.md` (written by `/grilling`'s Persisted List step); if that file doesn't exist because artifact tracking never ran, take the approved-paths list from the final Trunk summary instead. Append it in the template's final `## Relevant Files (Discovery Context)` section. Preserve every path and any supplied context; do not rediscover or replace that list while drafting.
+    - Take the Discovery Context list from that same folder's `artifacts/discovery-context.md`.
+      If it is missing or the session reported it could not be written or verified, take the approved
+      list from the final summary in chat. If the summary reports no approved paths, leave the list empty.
+      Preserve the approved lines verbatim, in order, under `## Relevant Files (Discovery Context)`.
+      Never rediscover paths or substitute candidate paths. Keep blockers from a partial summary open.
 2. **Publish to Tracker:** Publish the issue with the configured tracker's CLI:
     - **GitHub:** `gh issue create --body-file <path>`.
     - **GitLab:** `glab issue create -R <project-url> --title '<title>' --description-file <path> --yes`. Keep `<title>` in single quotes and write each apostrophe in it as `'\''` in a POSIX shell or as `''` in PowerShell. `<project-url>` and the other GitLab placeholders (`<host>`, `<project-id>`) are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions. The epic's number is the last segment of the issue URL the command prints.
@@ -41,10 +45,11 @@ You must execute this skill in two distinct phases to ensure the user agrees wit
     - Read the required `base_branch` from `.harness/project.json`; if it is absent, stop and report
       the invalid project config. This is the release/base branch from which the epic integration
       branch starts.
-    - Record the grill docs that changed in the current worktree:
+    - Identify eligible grill docs with
       `git status --porcelain --untracked-files=all -- CONTEXT-MAP.md ':(glob)**/CONTEXT.md' ':(glob)**/docs/adr/**'`.
-      `/grill-with-docs` and `/domain-modeling` write these files. Record each path; for a
-      rename (`old -> new`), record both paths. The list can be empty.
+      Include only changes made and reported by the session or expressly approved for this epic.
+      Inspect the diff for each path and exclude any with unrelated changes. For an eligible rename
+      (`old -> new`), record both paths. The list can be empty.
     - Fetch the base ref. Create `integration/<service-or-team>` with `git branch` from
       `origin/<base_branch>` when a remote exists, otherwise from the local base branch. Do not
       use `git switch -c` or `git checkout -b`: the branch-name hook allows them only for names
@@ -68,7 +73,8 @@ You must execute this skill in two distinct phases to ensure the user agrees wit
            recovery action: put the changes aside with `git stash push --include-untracked`, run
            `git switch integration/<service-or-team>`, restore them with `git stash pop`, resolve
            any conflict, and continue from sub-step 2.
-        2. Stage only the recorded grill docs, each path named explicitly:
+        2. Check the index first. If it already contains changes outside the approved set, leave it
+           intact and report the blocker. Stage only the recorded grill docs, each path named explicitly:
            `git add -- <path>...`. Do not use `git add -A`, `git add .`, or `git commit -a`. Other
            changes stay uncommitted in the working tree.
         3. Run the commit as a standalone command, without `&&`, `;`, a pipe, or a variable:
@@ -126,6 +132,6 @@ A strict list of things that will NOT be done. This is your insurance policy aga
 Any remaining context or constraints.
 
 ## Relevant Files (Discovery Context)
-The final Discovery Context file list captured in the session's `Live Artifact`, or in the final Trunk summary when artifact publishing is unavailable, including each path and any supplied context.
+The approved Discovery Context lines from the verified file or the final chat summary, in the original order.
 
 </spec-template>
