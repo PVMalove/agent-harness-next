@@ -18,7 +18,7 @@
 
 ### 2. Последовательность работы { #2-workflow-sequence }
 
-Эпик использует одну ветку `integration/<service-or-team>`. `/to-spec` сохраняет спецификацию локально. `/publish-epic` публикует эпик, указывает ветку в разделе `## Integration Branch` и создаёт её от `origin/<base_branch>`, если её нет. `/to-tickets` копирует точное значение в каждую дочернюю задачу. Integration-ветка служит целью PR для дочерней работы, а `base_branch` служит целью релиза в отдельном PR.
+Эпик использует одну ветку `integration/<service-or-team>`. `/to-spec` сохраняет спецификацию локально. `/publish-epic` публикует эпик, указывает ветку в разделе `## Integration Branch` и создаёт её от `origin/<base_branch>`, если её нет. `/to-tickets` копирует точное значение в каждую дочернюю задачу. Integration-ветка служит целью PR для дочерней работы, а `base_branch` служит целью релиза в отдельном PR (шаг 8).
 
 1. **Инициализация (ветвление).**
    Для каждой задачи создаётся изолированная ветка от точной integration-ветки эпика, а не от той ветки, которая случайно уже выбрана. Если у задачи нет эпика, используйте `base_branch`.
@@ -34,8 +34,8 @@
 5. **Непрерывный push.**
    * Отправляйте коммиты в удалённый репозиторий (`origin`) и во время реализации, и после исправления замечаний code-review: `git push origin feature/issue-<ID>-<slug>`. Не оставляйте готовые коммиты только в локальном репозитории.
 6. **Интеграция (Pull Request).** *(Локальный markdown-трекер: пропустите этот шаг и шаг 7, см. «Сначала задача» выше; `/to-pull-requests` переводит `**Workflow:**` задачи в `done` после подтверждения merge разработчиком.)*
-   * **Подтвердите перед открытием.** До создания PR явно спросите разработчика, готова ли ветка стать pull request. Не запускайте `gh pr create`/`glab mr create` только потому, что реализация, тесты и code-review завершены. Дождитесь явного согласия. Молчание или сам факт, что задача в остальном завершена, согласием не считаются.
-   * После подтверждения запустите скилл `qa-gate` (как ссылаться на задачи, см. соглашения «When a skill says…» в [issue-tracker.md](issue-tracker.md)) и продолжайте, только если он прошёл.
+   * Сначала запустите скилл `qa-gate` (как ссылаться на задачи, см. соглашения «When a skill says…» в [issue-tracker.md](issue-tracker.md)) и продолжайте, только если он прошёл. Проект с opt-in backend-оркестрации вместо этого проверяет принятые доказательства QA точного SHA, как описывает шаг 3 `/to-pull-requests`.
+   * **Подтвердите перед открытием.** Затем, до создания PR, явно спросите разработчика, готова ли ветка стать pull request, и назовите в вопросе результат QA. Не запускайте `gh pr create`/`glab mr create` только потому, что реализация, тесты и code-review завершены. Дождитесь явного согласия. Молчание или сам факт, что задача в остальном завершена, согласием не считаются.
    * Если шаблон тела PR в [§3](#3-pr-body-template) сложнее короткой сводки, следуйте ему напрямую. Разработчик может вместо этого настроить и запустить `pr-composer` вручную в приложении для кодинга: передайте ему `.harness/.sandboxes/pr_body/pr-body-<issue>-<slug>.md`, этот же путь укажите в `--body-file` (`--description-file` на GitLab) ниже и удалите файл только после успешного создания PR/MR.
    * PR/MR создаётся через CLI из checkout ветки задачи с явной целевой веткой: без неё оба CLI берут default-ветку. `<target-branch>` равен integration-ветке эпика или `base_branch` для задачи без эпика:
      * **GitHub:** `gh pr create --base <target-branch> --title '<title>' --body-file <path>`.
@@ -53,6 +53,7 @@
      * **`Closes #<ID>`:** проверьте, что трекер закрыл задачу. На GitHub: `gh issue view <ID> --json state` (`state` равен `CLOSED`); на GitLab: `glab issue view <ID> -R <project-url> -F json` (`state` равен `closed`). GitLab закрывает её асинхронно после merge, поэтому если там всё ещё `opened`, прочитайте состояние ещё раз; если задача по-прежнему открыта, закройте её явной командой выше и объясните разработчику, почему трекер этого не сделал.
 
      Не закрывайте задачу, когда её PR/MR только открылся или закрылся без merge.
+8. **Релиз (integration → base_branch).** Когда все дочерние задачи эпика слиты и закрыты, разработчик просит релизный PR. Запустите `/to-pull-requests --release <epic>`: он проверяет, что все дочерние задачи закрыты, запускает полный `qa-gate` на integration-ветке, пишет тело по §3 со строкой на каждый дочерний PR и после такого же отдельного подтверждения открывает PR/MR из integration-ветки в `base_branch`. Релиз никогда не коммитит в integration-ветку: упавшая проверка становится новой дочерней задачей. После того как разработчик подтвердит merge, эпик закрывается (для `Closes #<epic>` в ветку по умолчанию это проверяется, иначе эпик закрывается явно), и предлагается `/delivery-stats <epic>`. Merge по-прежнему делает разработчик, как в шаге 7.
 
 ### 3. Шаблон тела PR { #3-pr-body-template }
 
@@ -75,7 +76,7 @@ Which business rules were added, changed, or removed. How the system should now 
 A technical description of the implementation — patterns used, classes/interfaces added, signature changes.
 
 5. Verification
-How the functionality was tested (unit, integration, e2e, manual) — use the `qa-gate` result if one ran this session.
+How the functionality was tested (unit, integration, e2e, manual) — use the `qa-gate` result or the accepted QA evidence named by `/to-pull-requests`, with each `Action -> Verify` criterion of the ticket and its result.
 
 6. Not verified & risks
 Edge cases not covered by tests, potential performance issues, remaining workarounds.

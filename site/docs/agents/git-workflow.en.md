@@ -20,7 +20,7 @@ This guide defines only the rules for Git, tickets, and PRs. The opt-in backend 
 An epic selects one integration branch named `integration/<service-or-team>`. `/to-spec` writes the
 specification locally. `/publish-epic` publishes the epic, records the branch under
 `## Integration Branch`, and creates it from `origin/<base_branch>` when it is absent. `/to-tickets` copies the exact value to every child ticket. The
-integration branch is the PR target for child work. A separate release PR targets `base_branch`.
+integration branch is the PR target for child work. A separate release PR targets `base_branch` (step 8).
 
 1. **Initialization (Branching):**
    An isolated issue branch is created for each task from the epic's exact integration branch — never from whatever branch happens to already be checked out. If the task has no epic, use `base_branch`.
@@ -36,8 +36,8 @@ integration branch is the PR target for child work. A separate release PR target
 5. **Continuous Push:**
    * Push commits to the remote (`origin`) both while implementing the task and after addressing code-review feedback: `git push origin feature/issue-<ID>-<slug>`. Never leave finished commits sitting only in the local repo.
 6. **Integration (Pull Request):** *(local markdown tracker: skip this step and step 7 — see "Issue First" above; `/to-pull-requests` sets the ticket's `**Workflow:**` to `done` after the developer confirms the merge.)*
-   * **Confirm before opening:** before creating the PR, explicitly ask the developer whether the branch is ready to be opened as a pull request. Do not run `gh pr create`/`glab mr create` just because implementation, tests, and code-review are done — wait for an explicit go-ahead. Silence, or the mere fact that the task is otherwise complete, does not count as consent.
-   * Once the developer confirms, run the `qa-gate` skill (see [issue-tracker.md](issue-tracker.md)'s "When a skill says…" conventions for how tickets are referenced) and only proceed once it passes.
+   * First run the `qa-gate` skill (see [issue-tracker.md](issue-tracker.md)'s "When a skill says…" conventions for how tickets are referenced) and only proceed once it passes. A project with the backend-orchestration opt-in validates the accepted QA evidence of the exact SHA instead, as `/to-pull-requests` step 3 describes.
+   * **Confirm before opening:** then, before creating the PR, explicitly ask the developer whether the branch is ready to be opened as a pull request, and state the QA result in that question. Do not run `gh pr create`/`glab mr create` just because implementation, tests, and code-review are done — wait for an explicit go-ahead. Silence, or the mere fact that the task is otherwise complete, does not count as consent.
    * If the PR body template in [§3](#3-pr-body-template) has more structure than a short summary, follow it directly. A developer may instead configure and run `pr-composer` manually in the coding application; give it `.harness/.sandboxes/pr_body/pr-body-<issue>-<slug>.md`, pass that path to `--body-file` (`--description-file` on GitLab) below, and delete it only after the PR/MR is created successfully.
    * PR/MR creation is performed via CLI from the issue branch checkout, with an explicit target branch — without one, both CLIs target the default branch. `<target-branch>` is the epic's integration branch, or `base_branch` for an epic-less ticket:
      * **GitHub:** `gh pr create --base <target-branch> --title '<title>' --body-file <path>`.
@@ -55,6 +55,7 @@ integration branch is the PR target for child work. A separate release PR target
      * **`Closes #<ID>`:** verify that the tracker closed the ticket — GitHub: `gh issue view <ID> --json state` (`state` is `CLOSED`); GitLab: `glab issue view <ID> -R <project-url> -F json` (`state` is `closed`). GitLab closes it asynchronously after the merge, so if it still reads `opened`, read it once more; if it is still open, close it with the explicit command above and tell the developer why the tracker did not.
 
      Do not close an issue when its PR/MR merely opens or closes without merging.
+8. **Release (integration → base_branch):** after every child ticket of the epic is merged and closed, the developer asks for the release PR. Run `/to-pull-requests --release <epic>`: it checks that every child ticket is closed, runs the full `qa-gate` on the integration branch, writes the §3 body with one line per child PR, and opens the PR/MR from the integration branch into `base_branch` after the same separate confirmation. The release never commits to the integration branch; a failed check becomes a new child ticket. After the developer confirms the merge, the epic is closed (`Closes #<epic>` on the default branch is verified, otherwise the epic is closed explicitly), and `/delivery-stats <epic>` is offered. Merging stays manual, as in step 7.
 
 ### 3. PR Body Template { #3-pr-body-template }
 
@@ -77,7 +78,7 @@ Which business rules were added, changed, or removed. How the system should now 
 A technical description of the implementation — patterns used, classes/interfaces added, signature changes.
 
 5. Verification
-How the functionality was tested (unit, integration, e2e, manual) — use the `qa-gate` result if one ran this session.
+How the functionality was tested (unit, integration, e2e, manual) — use the `qa-gate` result or the accepted QA evidence named by `/to-pull-requests`, with each `Action -> Verify` criterion of the ticket and its result.
 
 6. Not verified & risks
 Edge cases not covered by tests, potential performance issues, remaining workarounds.

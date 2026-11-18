@@ -15,7 +15,7 @@
 
 ```yaml
 name: delivery-stats
-description: "Collect delivery statistics for a finished epic and every ticket under it: tokens by model, cache efficiency, estimated cost, subscription window and code volume."
+description: "Reports what a finished epic and every ticket under it cost: tokens by model, cache efficiency, estimated cost, subscription window and code volume, as a local HTML dashboard. Use explicitly after the epic's release PR is merged and the epic is closed, as /to-pull-requests --release offers; not to estimate future work."
 disable-model-invocation: true
 ```
 

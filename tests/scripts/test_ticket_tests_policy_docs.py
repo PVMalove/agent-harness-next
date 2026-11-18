@@ -2,7 +2,8 @@
 """The ticket-tests policy docs name what the code names (issue #938).
 
 ADR 0023 and ADR 0026 carry a dated amendment for the policy; ADR 0026 records decisions D2 and D4
-of #812. The ADRs, the playbook and the ``to-pull-requests`` skill with its Russian description use
+of #812. The ADRs, the playbook and the ``to-pull-requests`` integration route (its reference since
+#1214) with the skill's Russian description use
 the flag, the ``selection`` value, the CI job and the ``collect-ci`` reason that the code of #935,
 #936 and #937 defines. The names are read from the code and the workflow, and only names are pinned, not
 wording; one test pins the four values the lookup is expected to find.
@@ -23,7 +24,7 @@ WORKFLOW = ROOT / ".github" / "workflows" / "verify.yml"
 ADR_0023 = "docs/adr/0023-incremental-verification.md"
 ADR_0026 = "docs/adr/0026-harness-next-consolidation.md"
 PLAYBOOK = "harness/orchestration/playbook.md"
-SKILL = "skills/first-party/engineering/to-pull-requests/SKILL.md"
+SKILL = "skills/first-party/engineering/to-pull-requests/references/integration-route.md"
 SKILL_RU = "site/docs/skills/to-pull-requests.md"
 AMENDMENT_DATE = "2026-11-07"
 AMENDMENT = re.compile(rf"^#{{2,4}} .*Поправка.*{AMENDMENT_DATE}", re.MULTILINE)
