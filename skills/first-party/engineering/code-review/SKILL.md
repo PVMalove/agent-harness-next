@@ -24,7 +24,7 @@ The issue tracker should have been provided to you. If `docs/agents/issue-tracke
 
 Whatever the user said is the fixed point — a commit SHA, branch name, tag, `main`, `HEAD~5`, etc. If they didn't specify one, ask for it.
 
-If the user names a PR or MR, its target branch is the fixed point. Read the target and source branches — GitHub: `gh pr view <n> --json baseRefName,headRefName`; GitLab: `glab mr view <iid> -R <project-url> -F json` (`target_branch`, `source_branch`). Then run `git fetch origin <target>` and use `origin/<target>` as the fixed point. The current checkout must be the source branch; if it is not, tell the user instead of switching branches (see _Runtime boundary_).
+If the user names a PR or MR, its target branch is the fixed point. Read the target and source branches — GitHub: `gh pr view <n> --json baseRefName,headRefName`; GitLab: `glab mr view <iid> -R <project-url> -F json` (`target_branch`, `source_branch`). Then run `git fetch origin <target>` and use `origin/<target>` as the fixed point. The current checkout must be the source branch; if it is not, tell the user instead of switching branches.
 
 Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
 
@@ -51,12 +51,7 @@ what counts as scope creep; pass them to the Spec axis.
 
 Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
 
-On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
-
-- **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
-- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation — and, like any standard here, skip anything tooling already enforces.
-
-Read `references/smell-baseline.md` before launching the Standards axis.
+On top of whatever the repo documents, the Standards axis always carries the **smell baseline** — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Read `references/smell-baseline.md` before launching the Standards axis: it states how the baseline yields to the repo's standards. Like any standard here, skip anything tooling already enforces.
 
 ### 4. Review both axes
 

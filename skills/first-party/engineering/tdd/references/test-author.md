@@ -1,7 +1,7 @@
 # Optional test-author cycle
 
-One protocol for the full `/implement` route and the `/fast-implement` short route. The full rules of the coordinator role are in
-`harness/orchestration/roles/developer.md`; activation is described in `docs/agents/test-author.md`.
+One protocol for the full `/implement` route and the `/fast-implement` short route. The coordinator role's own rules are in
+`harness/orchestration/roles/references/developer-test-author.md`; activation is described in `docs/agents/test-author.md`.
 
 ## Select the executor
 

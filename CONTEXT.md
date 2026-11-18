@@ -405,7 +405,7 @@ _Avoid_: обязательный образ харнесса, образ, ко�
 pytest по умолчанию их отбрасывают; запускает их только CI job `docker-smoke` с `-m docker_smoke`.
 _Avoid_: smoke в `make verify`, проверка Podman или rootless Docker.
 
-**Role common contract** (`harness/orchestration/roles/_common.md`):
+**Role common contract** (`harness/orchestration/roles/common.md`):
 Общий Markdown-контракт для всех ролей: handoff, completion report, branch/worktree, commit proof и
 escalation. Индивидуальный role manifest содержит только уникальные границы, trigger и доказательства.
 _Avoid_: копирование общих правил в шесть role files, глобальный AGENTS.md.

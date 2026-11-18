@@ -215,7 +215,9 @@ class ExactCliValueHandlerTests(unittest.TestCase):
         self.roles = self.repo / ".harness" / "orchestration" / "roles"
         shutil.copytree(Path(contract.__file__).parent / "roles", self.roles)
         self.installed = sorted(
-            path.stem for path in self.roles.glob("*.md") if path.stem != "_common"
+            path.stem
+            for path in self.roles.glob("*.md")
+            if path.stem != contract.ROLE_CONTRACT_STEM
         )
 
     def test_an_installed_role_name_loads_only_when_exact(self) -> None:
@@ -228,6 +230,7 @@ class ExactCliValueHandlerTests(unittest.TestCase):
             ("code_review", "write exactly 'code-review'"),
             ("developer.md", "write one listed value exactly"),
             ("../roles/developer", "write one listed value exactly"),
+            ("common", "write one listed value exactly"),
             ("_common", "write one listed value exactly"),
             ("разработчик", "write one listed value exactly"),
         ):

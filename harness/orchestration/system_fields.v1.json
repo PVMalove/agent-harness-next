@@ -84,7 +84,7 @@
       }
     },
     "pipeline.role": {
-      "description": "Name of a shipped role manifest (harness/orchestration/roles/*.md without _common); a dispatch, an access policy and a retry role name one.",
+      "description": "Name of a shipped role manifest (harness/orchestration/roles/*.md without common); a dispatch, an access policy and a retry role name one.",
       "automatic_decisions": true,
       "unrecognized": "reject",
       "values": {

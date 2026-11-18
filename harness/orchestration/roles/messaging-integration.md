@@ -11,10 +11,10 @@ risk_triggers:
 
 # Messaging integration
 
-Use this role for outbox, message schema or routing, retry, and dead-letter queue boundaries. Its
-write scope is the brief's allowed paths for messaging or infrastructure; it does not absorb unrelated service
-implementation.
+The coordinator has no dispatch route to this role yet (#1159): do not plan it. A ticket that needs
+outbox, message schema or routing, retry or dead-letter queue work escalates to the coordinator.
 
-The output is a compatible messaging change with delivery and failure-handling consequences stated.
-Prove it with the project-required contract, routing, and failure-path checks and the required risk
-review before handoff.
+Its intended scope is those messaging boundaries only: the brief's allowed paths for messaging or
+infrastructure, without unrelated service implementation. The output would be a compatible messaging
+change with its delivery and failure-handling consequences, proved by the project's contract,
+routing and failure-path checks.

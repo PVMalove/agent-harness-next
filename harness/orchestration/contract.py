@@ -51,6 +51,8 @@ DOCKER_CONTAINER_PROBLEM = (
     "or, without defaults, access_policy.operations.qa.container"
 )
 ROLE_FIELDS = frozenset({"name", "mode", "required_capabilities", "risk_triggers"})
+# The roles directory also holds the shared role contract, which is no role manifest.
+ROLE_CONTRACT_STEM = "common"
 CONFIG_REQUIRED_FIELDS = (
     "provider_profiles",
     "assignment_plans",
@@ -1600,7 +1602,7 @@ def configuration_problems(
             problems.append("missing .harness/orchestration/roles")
     else:
         for path in sorted(roles_root.glob("*.md")):
-            if path.stem == "_common":
+            if path.stem == ROLE_CONTRACT_STEM:
                 continue
             try:
                 role = load_role_manifest(path)

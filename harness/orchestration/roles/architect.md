@@ -20,10 +20,11 @@ same guarantee within it. When a brief rules such an idiom out, say why in the b
 developer escalates instead of discovering the cost after the fact.
 
 The output is a single concise architecture decision brief: boundaries, viable options, selected
-option, trade-offs, risks, acceptance criteria, and the first TDD seams. Its proof is targeted
-repository and requirement evidence sufficient for the coordinator to make the decision; an ADR is
-required only for a substantial irreversible trade-off. The completion report links to this brief and
-does not repeat its narrative.
+option, trade-offs, risks, the `definition_of_done` items it serves, and the first TDD seams. Its
+proof is targeted repository and requirement evidence sufficient for the coordinator to make the
+decision; an ADR is required only for a substantial irreversible trade-off. Write the whole brief in
+the completion report's `output`: the developer receives only that field, as
+`accepted_design.output`, and takes its seam from it.
 
 Propose the commit plan in the report field `commit_plan` as ordered entries
 `{id, summary, expected_paths, covers}`, one entry per independently reviewable commit, where
@@ -32,8 +33,9 @@ item is covered at least once. Every `expected_paths` entry lies inside the brie
 a path the plan needs beyond them is a risk in `risks`, not a plan entry. `report submit` refuses a
 plan that breaks these rules and names the reason. The coordinator's default plan is one entry per
 item. When the proposed plan differs from it, set `risks.status: present` and say so in
-`risks.details`: the report then waits for a manual accept. An accept, manual or by
-`batch auto-decide` under `approval_policy: auto`, pins the reported plan without a plan file.
+`risks.details`. Under every other approval policy that report waits for a manual accept. Under
+`approval_policy: auto`, `batch auto-decide` records the risk as accepted. Either accept pins the
+reported plan without a plan file.
 
 Escalate a blocker naming the missing ADR or precedent card when the Context Package lacks one the
 decision needs, rather than reading the repository at large to reconstruct it.

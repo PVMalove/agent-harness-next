@@ -4,7 +4,7 @@ For the gated `/implement` route, review also consumes the coordinator's pinned 
 candidate SHA. Review verifies that pinned candidate even if the integration base moved ahead: there
 is no mandatory base-freshness gate. PR preparation on a moved base goes through
 `integration refresh`, which rebases only the batch's issue branch onto the exact target SHA. A
-delta-review is either test-only (after a Warning: a new candidate with a test-only diff, brief
+delta-review is either test-only (after a Spec Warning or Blocker with a Clean Standards axis: a new candidate with a test-only diff, brief
 field `delta_review_of`) or after a fix-forward (brief section `delta_review_scope`, chosen by the
 coordinator). A fix-forward delta-review reviews both axes on the delta alone and relies on the
 prior review's report for the rest of the candidate. The coordinator escalates it to a full review
