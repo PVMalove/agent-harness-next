@@ -11,6 +11,9 @@
   `story_points.fast_threshold` (default `3`), `pipeline::full` when it is at least
   `story_points.full_threshold` (default `5`). Only `afk` tickets get a `pipeline::*` label.
 - Flag a score of 13 or more with `⚠️ score ≥13 — split further`.
+- Take the estimated hours for a person from `story_points.hours` in `.harness/project.json`:
+  the value for the ticket's final score. Show `—` for a `hitl` ticket or when the mapping has no
+  value for that score.
 - Do not name a model for any sub-agent call: it runs on the model the runtime assigns to sub-agents.
 
 ## Discovery Context per ticket
@@ -46,7 +49,8 @@
 ## Ticket card (plan)
 
 - **ID & Title:** `<NN>` — short descriptive name
-- **Labels / Type:** `type::*`, `hitl` or `afk`, and for `afk` the score and `pipeline::*` label
+- **Labels / Type:** `type::*`, `hitl` or `afk`, and for `afk` the score, the estimated hours, and
+  the `pipeline::*` label
 - **Blocked by / Wave:** each blocking ticket with its reason, or `None — can start immediately`; the wave
 - **What to build:** what the ticket delivers, in one to three sentences
 - **Contract touchpoints:** the allowlisted files to change or create and the signatures, schemas,

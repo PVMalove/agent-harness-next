@@ -117,6 +117,17 @@ def test_ticket_template_keeps_the_board_and_frontier_contracts() -> None:
         assert field in local.split("```", 1)[0]
 
 
+def test_summary_table_shows_title_and_hours_from_the_project_scale() -> None:
+    publish = (TICKETS / PUBLISH).read_text(encoding="utf-8")
+    assert (
+        "| Ticket | Title | Wave | What to build | Story Points | Estimate, h | Labels |"
+        in publish
+    )
+    estimation = _text(TICKETS / TEMPLATE)
+    assert "estimated hours for a person from `story_points.hours`" in estimation
+    assert "Show `—` for a `hitl` ticket" in estimation
+
+
 def test_publish_epic_owns_labels_branch_and_grill_docs() -> None:
     skill = EPIC / "SKILL.md"
     assert "exactly `**Status** — Approved`" in _section(skill, "Check the input")

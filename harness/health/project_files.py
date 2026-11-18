@@ -72,7 +72,7 @@ STORY_POINTS_REQUIRED_FIELDS = (
     "full_threshold",
     "gray_zone",
 )
-STORY_POINTS_ALLOWED_FIELDS = frozenset(STORY_POINTS_REQUIRED_FIELDS)
+STORY_POINTS_ALLOWED_FIELDS = frozenset((*STORY_POINTS_REQUIRED_FIELDS, "hours"))
 
 # The optional `tracker` field (docs/adr/0011): the single definition of its rules. The project
 # tracker resolver (project_tracker.py) imports them from here, and `project.schema.json` repeats
@@ -955,6 +955,26 @@ def validate_project_data(data: object, problems: list[str]) -> None:
                     problems.append(
                         f".harness/project.json story_points.{field} must be an integer"
                     )
+            if "hours" in story_points and not _story_point_hours_valid(
+                story_points["hours"], scale
+            ):
+                problems.append(
+                    ".harness/project.json story_points.hours must map values from scale to positive hours"
+                )
+
+
+def _story_point_hours_valid(hours: object, scale: object) -> bool:
+    """`story_points.hours`: непустой объект, ключи — значения из `scale`, значения — часы больше нуля."""
+    if not isinstance(hours, dict) or not hours or not isinstance(scale, list):
+        return False
+    allowed = {str(value) for value in scale}
+    return all(
+        key in allowed
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value > 0
+        for key, value in hours.items()
+    )
 
 
 def validate_orchestration_config(repo: Path, problems: list[str]) -> None:

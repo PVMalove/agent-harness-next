@@ -330,6 +330,18 @@
         "gray_zone": {
           "type": "integer",
           "description": "The single score strictly between fast_threshold and full_threshold that triggers a second advisory scoring pass in to-tickets."
+        },
+        "hours": {
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {
+            "pattern": "^[1-9][0-9]*$"
+          },
+          "additionalProperties": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "description": "Optional estimate of the hours a person needs for a ticket of each score: keys are values from scale, values are positive hours. to-tickets shows it in the ticket card and summary table; without it the estimate column shows a dash."
         }
       }
     },

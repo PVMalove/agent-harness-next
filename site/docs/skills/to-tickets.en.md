@@ -34,7 +34,8 @@ cards, waves, traceability matrix, new paths, and drafted epic sections, and wai
 approval.
 
 After approval, the skill publishes the tickets to GitHub, GitLab, or
-`.scratch/<feature-slug>/issues/`, links them to the epic, and shows a summary table. If a write
+`.scratch/<feature-slug>/issues/`, links them to the epic, and shows a summary table: link, title, wave, short summary, story
+points, estimated hours from `story_points.hours` in `.harness/project.json`, and labels. If a write
 fails, the complete cards stay in chat. Finally, the skill offers to start a Wave 1 ticket
 manually with `/implement` or `/fast-implement`, matching its `pipeline::*` label.
 

@@ -61,8 +61,10 @@ GitLab → Conventions.
 Read `language` from `.harness/project.json` (default `ru`); it sets only the "What to build"
 column. If the runtime can dispatch a sub-agent, send one call for the whole batch with every
 ticket's title, body, and the target language, and ask for one concise sentence per ticket.
-Otherwise write the sentences yourself. List every applied label.
+Otherwise write the sentences yourself. Title is the published ticket title. Estimate, h comes
+from `story_points.hours` for the ticket's score, or `—` (see `references/ticket-template.md`).
+List every applied label.
 
-| Ticket | Wave | What to build | Story Points | Labels |
-| --- | --- | --- | --- | --- |
-| <number, link, or path> | <N> | <one-line summary> | <score, or "—" for hitl> | <comma-separated labels> |
+| Ticket | Title | Wave | What to build | Story Points | Estimate, h | Labels |
+| --- | --- | --- | --- | --- | --- | --- |
+| <number with link, or path> | <ticket title> | <N> | <one-line summary> | <score, or "—" for hitl> | <hours, or "—"> | <comma-separated labels> |
