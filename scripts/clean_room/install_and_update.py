@@ -560,12 +560,21 @@ def run(ctx: SimpleNamespace) -> None:
     check_hook_settings_merge(pv_project)
     check_tracker_from_origin(test_root)
     check_package_root_without_init(test_root)
-    if not filecmp.cmp(
-        ROOT / "skills" / "first-party" / "engineering" / "to-spec" / "SKILL.md",
-        pv_project / ".harness" / "skills" / "to-spec" / "SKILL.md",
-        shallow=False,
-    ):
-        sys.exit("engineering-suite override did not install the first-party to-spec")
+    to_spec_source = ROOT / "skills" / "first-party" / "engineering" / "to-spec"
+    for discovery in (".harness", ".claude", ".agents"):
+        for relative in (
+            "SKILL.md",
+            "agents/openai.yaml",
+            "references/spec-template.md",
+            "references/drill-down-template.md",
+        ):
+            installed = pv_project / discovery / "skills" / "to-spec" / relative
+            if not installed.is_file() or not filecmp.cmp(
+                to_spec_source / relative, installed, shallow=False
+            ):
+                sys.exit(
+                    f"engineering-suite did not expose {installed.relative_to(pv_project)}"
+                )
     to_tickets_source = (
         ROOT / "skills" / "first-party" / "engineering" / "to-tickets" / "SKILL.md"
     )

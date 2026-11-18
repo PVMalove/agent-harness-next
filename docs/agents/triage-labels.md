@@ -44,7 +44,7 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 
 | Label | Color | Applied by | Meaning |
 | --- | --- | --- | --- |
-| `task-report::required` | gray `#6a737d` | `/to-spec`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Applied by default to every ticket unless you say to skip it. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
+| `task-report::required` | gray `#6a737d` | Epic publisher, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Applied by default to every ticket unless you say to skip it. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
 | `resolution::wontfix` | gray `#c2c2c2` | `/triage` | The request was explicitly rejected. Applied at close time; see `.out-of-scope/` handling in `triage/OUT-OF-SCOPE.md`. |
 
 ### 4. Priority (`priority::*`) — optional, purely informational
@@ -105,7 +105,7 @@ A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets`
 An unlabeled issue is implicitly "needs triage" — there's no dedicated label for that state.
 
 1. Triage analyzes the issue: determine `type::*`, and either `hitl`/`afk` or — if the issue is epic-sized and needs decomposition before anything is actionable — route it to `status::specs` instead and point the maintainer at `/to-spec`.
-2. `/to-spec` applies `status::specs` when it publishes a fresh epic issue directly (skipping step 1's routing when the maintainer starts from `/to-spec` rather than from an inbound issue).
+2. Apply `status::specs` when publishing a new epic. This is a separate step after `/to-spec`.
 3. Once specified, place the ticket in `status::ready` (nothing blocking it) or `status::blocked` (a dependency, or missing info from you — either way, post triage notes).
 4. `status::blocked` → `status::ready` once the blocker clears or you reply. A blocker clears only when its predecessor is closed, and the predecessor is closed only after its merge is confirmed; a push, publish, accepted QA or an open PR does not clear it.
 5. `status::ready` → `status::in-progress` when a session (agent or you) picks it up — `/implement` and `/fast-implement` set this in pre-flight, before the issue branch or any file edit. The label is replaced, never added: a ticket carries exactly one `status::*` label. On GitLab Free a `key::value` label is an ordinary label — mutually exclusive scoped labels are a Premium feature — so every replacement removes the previous label with the same `key::` prefix explicitly (`--unlabel`), exactly as `--remove-label` does on GitHub.
@@ -113,7 +113,7 @@ An unlabeled issue is implicitly "needs triage" — there's no dedicated label f
 7. Rejected at any point → apply `resolution::wontfix`, drop the `status::*` label, close.
 8. The web console's task board moves a ticket through `harness ticket-status <repo> --spec <spec> --ticket <ref> --to <column>`, which checks the move itself and replaces the label as in step 5: Backlog → Ready only when every blocker is closed (step 4), Ready → Backlog and Ready → In progress, In progress → Ready only without an active batch. A move to Backlog writes `status::blocked`, the one Backlog label that keeps exactly one `status::*` label. Every other move, and any move into Review / QA or Done, is refused without a write: those columns follow the batch, the PR and the closed state.
 
-Apply `task-report::required` by default when `/to-spec` or `/to-tickets` create a ticket, unless told to skip it.
+Apply `task-report::required` by default when publishing an epic or when `/to-tickets` creates a ticket, unless told to skip it.
 
 ## Local markdown tracker
 

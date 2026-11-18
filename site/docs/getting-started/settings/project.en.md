@@ -173,7 +173,7 @@ described separately.
 | --- | --- |
 | `$schema` | Optional editor reference string, usually `./project.schema.json`. Harness code does not read this field. |
 | `language` | Required string: `ru` or `en`. Language of code-review reports and the PR body template. |
-| `base_branch` | Required non-empty string. Project release/base branch: `/to-spec` creates an epic's integration branch from it; without an epic, it is the fallback base. Example: `main`. |
+| `base_branch` | Required non-empty string. Project release/base branch: epic setup uses it as the base for the integration branch; without an epic, it is the fallback base. Example: `main`. |
 | `branch_pattern` | Required non-empty string containing a valid regular expression for issue branch names. Enforced by branch hooks. Example: `^feature/issue-[0-9]+-.+`. |
 | `qa_gate_commands` | Required array of strings; the schema requires each string to be non-empty. QA gate runs commands in order. An empty array is valid configuration, but qa-gate stops and asks you to supply checks. |
 | `shell` | Optional string: `bash` or `powershell`. If absent, qa-gate uses `bash`. |

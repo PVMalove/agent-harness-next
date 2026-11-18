@@ -43,7 +43,7 @@
   <a class="ah-diagram" href="previews/repo-map-build.sequence.png"><img src="previews/repo-map-build.sequence.png" alt="repo-map-build · sequence" loading="lazy"><span>repo-map-build · sequence</span></a>
   <a class="ah-diagram" href="previews/repo-map-components.architecture.png"><img src="previews/repo-map-components.architecture.png" alt="repo-map-components · architecture" loading="lazy"><span>repo-map-components · architecture</span></a>
   <a class="ah-diagram" href="previews/tdd-loop.lifecycle.png"><img src="previews/tdd-loop.lifecycle.png" alt="tdd-loop · lifecycle" loading="lazy"><span>tdd-loop · lifecycle</span></a>
-  <a class="ah-diagram" href="previews/to-spec-flow.workflow.png"><img src="previews/to-spec-flow.workflow.png" alt="to-spec-flow · workflow" loading="lazy"><span>to-spec-flow · workflow</span></a>
+  <a class="ah-diagram" href="previews/to-spec-flow.workflow.png"><img src="previews/to-spec-flow.workflow.png" alt="Прежний процесс · публикация эпика в /to-spec" loading="lazy"><span>Прежний процесс · публикация эпика в /to-spec</span></a>
   <a class="ah-diagram" href="previews/triage-labels.lifecycle.png"><img src="previews/triage-labels.lifecycle.png" alt="triage-labels · lifecycle" loading="lazy"><span>triage-labels · lifecycle</span></a>
   <a class="ah-diagram" href="previews/vertical-slices.workflow.png"><img src="previews/vertical-slices.workflow.png" alt="vertical-slices · workflow" loading="lazy"><span>vertical-slices · workflow</span></a>
   <a class="ah-diagram" href="previews/wayfinder-map.workflow.png"><img src="previews/wayfinder-map.workflow.png" alt="wayfinder-map · workflow" loading="lazy"><span>wayfinder-map · workflow</span></a>
