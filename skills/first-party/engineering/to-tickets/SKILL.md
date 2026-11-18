@@ -6,21 +6,23 @@ disable-model-invocation: true
 
 Invoke only on an explicit request (`/to-tickets`, or `$to-tickets` in Codex). Read
 `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md` first; if either is missing, tell
-the user to run `harness update`. Read the specification, its approved paths, and the tracker.
+the user to run `harness update`. For decomposition, read the specification, its approved paths,
+and the tracker.
 Write nothing until the user approves the plan. Then write only ticket files, tracker issues, and
 the epic appends in `references/publish.md`. Never edit production code, tests, `CONTEXT.md`, ADRs,
 or the specification's decisions. Never create branches or worktrees and never start `/implement`.
 
 ## Check the input
 
-1. Take the epic from the user: an issue number or URL, `.scratch/<feature-slug>/spec.md`, or a spec
+1. For `--review <epic>`, follow `references/acceptance-review.md` and return before decomposition.
+2. Take the epic from the user: an issue number or URL, `.scratch/<feature-slug>/spec.md`, or a spec
    path under `docs/tasks/`. Read the full body and comments.
-2. Decompose a specification only when its status line is exactly `**Status** — Approved`. For any
+3. Decompose a specification only when its status line is exactly `**Status** — Approved`. For any
    other status or an unresolved blocker in `## Open Questions & Risks`, list the blockers and ask
    the user to resolve them or return to `/to-spec`. Never settle a blocker yourself.
-3. Child tickets need a published epic with `## Integration Branch`. If either is missing, stop
+4. Child tickets need a published epic with `## Integration Branch`. If either is missing, stop
    and offer `/publish-epic`; never infer the branch.
-4. Without a specification (an agreed plan or conversation only), first agree with the user on the
+5. Without a specification (an agreed plan or conversation only), first agree with the user on the
    missing requirements and on the Discovery Context path list. Such tickets have no parent epic,
    and their branches start from `base_branch`.
 
@@ -46,6 +48,9 @@ or the specification's decisions. Never create branches or worktrees and never s
   or a known requirement incompatibility, and give its reason. File overlap alone is not a blocker.
   A blocker holds until its predecessor is merged into the integration branch and closed. Group the
   tickets into execution waves; Wave 1 has no blockers.
+- When `## Goal & Scope` names a **First demonstrable scenario**, identify its tickets and put
+  the independently verifiable result in the earliest feasible wave. Mark the scenario's tickets
+  in the wave plan and show the check that demonstrates the result.
 - Estimate, assign Discovery Context, and run the advisory sub-agent passes as described in
   `references/ticket-template.md`. If the runtime cannot dispatch a sub-agent, stop and report it.
 - Draft the epic's `## Architecture invariants` and `## Implementation discipline` sections when the
@@ -59,14 +64,15 @@ Before showing the plan, check that:
 
 - every requirement `R<n>` and every acceptance criterion of the spec maps to at least one ticket
 - the IDs in each ticket criterion agree with the traceability matrix
+- the ticket criteria preserve the epic's obligations as checked in `references/acceptance-review.md`
 - the blocking graph has no cycles
 - no ticket names an unapproved path or implements a non-goal
 
 Show the ticket cards, the waves, the traceability matrix, the paths awaiting approval, and the
 drafted epic sections. Ask whether the granularity, blocking edges, scores, pipeline labels, and
 epic sections are right; the user may override a pipeline label without changing the score. Wait
-for explicit approval. When the user asks for changes, revise only the named tickets and show the
-plan again.
+for explicit approval. When the user asks for changes, revise only the named tickets, rerun the
+acceptance review, and show the plan again.
 
 ## Publish and finish
 

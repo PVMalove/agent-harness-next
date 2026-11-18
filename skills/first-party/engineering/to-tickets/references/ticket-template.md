@@ -35,7 +35,7 @@
 ## Plan layout
 
 1. **Waves** — one line per wave with its tickets, for example `Wave 1: 01, 02 · Wave 2: 03 (after 01)`.
-2. **Traceability matrix** — one row per requirement:
+2. **Traceability matrix** — one row per acceptance criterion, repeating the requirement ID as needed:
 
    | Requirement | Acceptance criterion | Tickets |
    | --- | --- | --- |

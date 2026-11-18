@@ -6,9 +6,7 @@ disable-model-invocation: true
 
 Invoke only on an explicit request (`/to-spec`, or `$to-spec` in Codex). Load this file by itself
 before any repository exploration. Use the project's language and keep the template headings intact.
-Read repository evidence within the approved scope. Write only the
-approved specification file. Never modify production code, tests, project configuration,
-`CONTEXT.md`, ADRs, or Discovery Context. Never create tasks, publish to a tracker, or change Git state.
+Write only the approved specification file. Never create tasks, publish, or change Git state.
 
 ## Load the handoff
 
@@ -18,8 +16,7 @@ approved specification file. Never modify production code, tests, project config
 2. Check `docs/tasks/.../artifacts/discovery-context.md` for this task and the final grilling summary in chat.
    Import the goal and scope, accepted decision IDs and selected option numbers, rejected
    alternatives and their reasons, open questions, assumptions, and confirmed glossary and ADR updates.
-   Keep the original choices.
-   Ask about missing or contradictory decisions where they affect the design. Never assign a number retroactively.
+   Clarify decision gaps that affect the design. Copy option numbers only where supplied.
 3. Use the task's nonempty, approved Discovery Context as the file allowlist.
    Preserve the approved lines in order, including any supplied context. If chat and the artifact
    disagree on the approved list, ask the user to reconcile them before relying on disputed paths.
@@ -69,18 +66,21 @@ Use `Approved` when all blocking choices are settled and the user approves the s
 Use `Draft — has open blockers` only at the user's explicit request. Record each blocker, its dependent
 work, and the decision needed to proceed. Leave unresolved implementation details unspecified.
 
-Before asking for approval, verify that:
+Review the requirements before approval. Pick the highest-impact risks from the agreed scope,
+handoff, and approved evidence. For each, identify the covering requirement and observable
+criterion, or ask how missing or ambiguous in-scope behavior should work. Use the
+Decision & Clarity Protocol for unresolved contracts. Repeat affected checks after revisions. Verify that:
 
 - every repository file cited in the spec is approved and each proposed edit is tied to the goal
 - accepted decisions and rejection reasons agree with the handoff
 - every functional requirement has a verifiable acceptance criterion, a test seam, and a check
 - the status and blockers match the current decisions
 
-Present the scope, status, verification approach, and proposed path. Wait until the user
-explicitly approves writing to the proposed path, including an overwrite if the file exists.
-Honor approval already given for the same scope, verification, status, and write.
-A numbered design choice approves only that choice. Create only the parent directories needed for
-the approved file. If the user requests a revision, apply the same path and decision gates.
+Present the review findings with the scope, first demonstrable scenario if applicable, status,
+verification approach, and proposed path. Wait until the user explicitly approves writing to the
+proposed path, including an overwrite if the file exists. Honor approval already given for the
+same scope, verification, status, and write. A numbered design choice approves only that choice.
+Create only directories needed for the approved file. Apply the same gates to revisions.
 
 ## Finish
 

@@ -14,6 +14,7 @@ TICKETS = ENGINEERING / "to-tickets"
 EPIC = ENGINEERING / "publish-epic"
 TEMPLATE = "references/ticket-template.md"
 PUBLISH = "references/publish.md"
+REVIEW = "references/acceptance-review.md"
 
 
 def _text(path: Path) -> str:
@@ -78,6 +79,31 @@ def test_plan_is_traced_acyclic_and_approved_before_any_write() -> None:
     assert "vertical slice" in decompose
     assert "File overlap alone is not a blocker" in decompose
     assert "Wave 1 has no blockers" in decompose
+
+
+def test_acceptance_review_preserves_meaning_before_plan_approval() -> None:
+    skill = TICKETS / "SKILL.md"
+    approve = _section(skill, "Approve the plan")
+    assert f"`{REVIEW}`" in approve
+    assert "rerun the acceptance review" in approve
+    decompose = _section(skill, "Decompose")
+    assert "**First demonstrable scenario**" in decompose
+    assert "earliest feasible wave" in decompose
+    review = _section(TICKETS / REVIEW, "Compare acceptance criteria")
+    assert "conditions, actions, and observable results" in review
+    assert "assert the absence of duplicates" in review
+    assert "one row per acceptance criterion" in _text(TICKETS / TEMPLATE)
+
+
+def test_repeat_acceptance_review_reads_current_tickets_and_exits() -> None:
+    skill = TICKETS / "SKILL.md"
+    check = _section(skill, "Check the input")
+    assert "`--review <epic>`" in check
+    assert f"`{REVIEW}`" in check
+    assert "return before decomposition" in check
+    review = _section(TICKETS / REVIEW, "Review published tickets")
+    for marker in ("current tracker", "open and closed", "report incomplete coverage", "read-only"):
+        assert marker in review
 
 
 @pytest.mark.parametrize("heading", ["Local ticket file", "Tracker issue body"])
@@ -194,7 +220,7 @@ def test_instructions_name_publish_epic_as_the_epic_owner() -> None:
 def test_engineering_suite_packages_both_complete_skills() -> None:
     files = package_files(["engineering-suite"])
     expected = {
-        "to-tickets": ("SKILL.md", "agents/openai.yaml", TEMPLATE, PUBLISH),
+        "to-tickets": ("SKILL.md", "agents/openai.yaml", TEMPLATE, PUBLISH, REVIEW),
         "publish-epic": ("SKILL.md", "agents/openai.yaml"),
     }
     registry = (ROOT / "skills/REGISTRY.md").read_text(encoding="utf-8")
