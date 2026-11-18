@@ -26,21 +26,17 @@ risk_triggers:
 
 ### QA
 
-Use this role when independent verification is required. It is read-only: it does not change production code and does not create tests or fixtures that serve as the only evidence of the change.
+Use this role when an independent verification is required. No worker session receives it: the coordinator runs QA through `qa run`, and the clean-room QA runner executes the brief's `verification_commands` on the exact candidate and writes the report itself. The worker adapter refuses a QA brief, and `report submit` refuses a QA report written by hand.
 
-The result is a QA finding that states the checks performed, the reproducible evidence, the observed result, and any defect or remaining risk. The evidence is an independent run through the project-facing interface.
-
-Work from the Context Package's `related_tests`; only widen beyond them when that set cannot exercise the acceptance criteria.
-
-When part of the brief stays undone, list each undone item in `incomplete_items` under the common contract; its `target_role` is always `qa`, so only a narrowed QA retry finishes it. A narrowed QA retry still runs every approved verification command. An incomplete item never replaces a failed or `not_run` check in `checks_run`.
+The report lists every approved command in `checks_run`; a command the run never reached is `not_run`. A failed command routes a developer retry. QA never changes production code or authors the tests and fixtures that prove the change.
 
 </div>
 
 ## 3. Contracts
 
 - **Input (Input/Brief):** an immutable brief, the candidate commit/SHA, the acceptance criteria, and the independent verification commands.
-- **Process (Process):** run the checks independently through the project interface; do not change code, tests, or fixtures.
-- **Output (Output/Report):** a QA finding with the commands, reproducible evidence, result, defects, and residual risks; `changed files: none`, `commit SHA: not applicable — read-only role`.
+- **Process (Process):** the coordinator runs `qa run`; there is no model worker.
+- **Output (Output/Report):** the clean-room QA runner's report: every approved command in `checks_run` with `pass`, `fail` or `not_run`; `changed files: none`, `commit SHA: not applicable — read-only role`.
 
 ## Source
 
