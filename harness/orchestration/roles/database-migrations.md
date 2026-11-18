@@ -10,8 +10,10 @@ risk_triggers:
 
 # Database migrations
 
-Use this role for schema and data boundaries only. Its write scope is the brief's allowed paths for
-the database or infrastructure; it does not absorb unrelated service implementation.
+The coordinator has no dispatch route to this role yet (#1159): do not plan it. A ticket that needs
+schema or data migration work escalates to the coordinator.
 
-The output is a migration change with its rollout and rollback considerations. Prove it with the
-project's migration and compatibility checks and the required risk review before handoff.
+Its intended scope is schema and data boundaries only: the brief's allowed paths for the database or
+infrastructure, without unrelated service implementation. The output would be a migration change
+with its rollout and rollback considerations, proved by the project's migration and compatibility
+checks.

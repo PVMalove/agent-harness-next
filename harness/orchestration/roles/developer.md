@@ -12,136 +12,45 @@ risk_triggers:
 
 # Developer
 
-Use this role for ordinary backend service changes that remain inside the brief's allowed paths. Do not perform schema/data migration work or outbox, message-schema, routing, retry, or
-DLQ work; those specialist triggers belong to their respective roles.
+Use this role for ordinary backend service changes that remain inside the brief's allowed paths.
+Schema or data migration, outbox, message-schema, routing, retry and DLQ work has no dispatch route
+yet (#1159): when the brief needs it, escalate through the ordinary blocker path instead of doing it.
 
-The output is an implementation satisfying the handoff acceptance criteria. Prove it with focused and
-required project checks, plus a risk review when a listed trigger applies. Pass every check through
-the installed bounded summary wrapper; report the command, status, failed test and short sanitised
-error only. Keep full output in its local artifact path, never in the handoff or a later worker's chat.
+The output is an implementation satisfying the brief's `definition_of_done`. Prove it with focused
+and required project checks. When the change touches a risk trigger, name it in the optional report
+field `risk_triggers`, using the trigger names of the `code-review` role manifest; `report submit`
+refuses an unknown name. Pass every check through the installed bounded summary wrapper; report the
+command, status, failed test and short sanitised error only. Keep full output in its local artifact
+path, never in the handoff or a later worker's chat.
 
 Locate the seam through the Context Package's `starting_files` and `symbol_graph` before searching
 the repository; a failing test is re-run by its node id through the bounded wrapper, not the full suite.
 
-## Red-Green-Refactor with the optional test author
+## Conditional references
 
-When `python3 -I -B .harness/health/test_author.py preflight --repo <worker_worktree>
---brief <approved brief path>` returns `{"status":"ok"}`, the developer runs each
-implementation step as one test-first cycle with the in-session `test-author`; any other preflight
-answer keeps the ordinary route. An `in-process` developer uses the worker's launcher instead (see
-"Full `/implement` route" below). The cycle is prose for the developer, not a new dispatch, role, state or
-ledger record. Per step, in order:
+Read a file from `references/` next to this manifest only when its condition holds:
 
-1. **Handoff.** Before implementing a step, call the author with the requirement and the seam taken
-   from the accepted architect design in the brief's `accepted_design.output`, the public signatures, the existing fixtures and one scenario. Never
-   pass a proposed algorithm or implementation snippet as the basis of an expectation. A seam the
-   brief did not agree is not invented: escalate it through the ordinary blocker path.
-2. **Reply.** The author answers in compact English with `status` (`red`, `needs_skeleton` or
-   `contract_gap`), the requirement, the inputs, the source of the expectation, the test id and, for
-   `red`, the Red evidence. The runner JSON has fixed keys only (`test_id`, `result`, `reason`,
-   `detail`, `exit_code`, `run_id`), so the evidence is that sanitized JSON plus the failed
-   assertion, the expectation and the actual result, which the author reads from the run's
-   `log.txt` (the run directory named by `run_id`) and quotes in a few lines.
-3. **Verify the expectation.** Before any implementation, check the expectation against the
-   requirement and its stated source. An expectation derived from the implementation, or one the
-   requirement does not support, is returned to the author (a failed call, see below). An accepted
-   expectation is never weakened to reach Green. Only a justified contract change (the requirement
-   or seam changed in the brief's scope) allows correcting it, and it needs a new author call and a
-   new verification.
-4. **Statuses.** `red`: continue. `needs_skeleton`: write only types and signatures, with no logic
-   (a stub that raises or returns a neutral value is not behavior), then rerun the author on the
-   same scenario. `contract_gap`: the requirement or seam is ambiguous or missing; clarify it from
-   the brief or escalate through the blocker path, never guess it.
-5. **Not a behavioral Red.** A compile or import error, a fixture error and an environment or runner
-   refusal are not Red whatever status the author reports; a status never masks them. A test that
-   is green immediately is returned explicitly to the author and does not count as a successful
-   cycle. Each of these is a failed author call.
-6. **Green.** After a confirmed behavioral Red, write the minimal implementation that passes the
-   unchanged test, and run it by its test id through the bounded wrapper.
-7. **Refactor.** Refactor only on Green, re-running the test, then request the next test.
+- `references/developer-test-author.md`: before the first test. It runs the test-author preflight
+  and, only on exactly `{"status":"ok"}`, the test-first cycle with the in-session author.
+- `references/developer-retry.md`: the brief is a `developer-retry` or carries a non-null
+  `rebase_target_commit`. Fix-forward, rebase and the retry handoff.
+- `references/developer-carried-items.md`: a developer-retry brief whose `carried_items` is not
+  empty. Closing each item in `carried_item_closure`.
+- `references/developer-rerun-failed-tests.md`: a check failed and the project has
+  `scripts/verify.py`. Rerunning only the failed tests.
 
-After three consecutive failed author calls on one test, stop the local retries and report through
-the ordinary blocker path. A guard denial counts as one failed call, and the denied call is never
-rephrased (see "Never work around a hook" in `common.md`). A local author retry and a separate
-guard denial create no new dispatch, add no ledger state and do not bypass the recovery rules of
-ADR 0012.
-
-**Full `/implement` route.** Inherit runtime/model/effort from the approved developer brief;
-project settings never override it. A selected runtime without a protected adapter returns
-`runtime_unsupported`, preserving ordinary TDD without a provider substitution. The current
-protected adapter supports an `external` Claude Code developer: its
-process, preflight, guard and runner must all serve the brief's canonical `worker_worktree`.
-Install the project harness in that worker checkout before dispatch. Preflight takes the project
-root from Git; `CLAUDE_PROJECT_DIR` is optional, and a different value gives `project_dir_mismatch`.
-A linked worktree of a repository whose main checkout is trusted in Claude Code needs no trust
-entry of its own. Do not copy state or trust from the main checkout.
-Run `<brief worker_worktree>/.claude/hooks/test-author-preflight.sh --worktree <brief worker_worktree> --brief <approved brief path>`.
-Only exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent` permission in the approved
-brief allow calling the named author without model/effort overrides (no `model` or `effort` line in its frontmatter). Otherwise use ordinary TDD and name the preflight reason or
-`agent_tool_unavailable`; do not widen the approved tools at launch.
-
-Give the author one test path within the brief's allowed scope, the requirement and the runner log
-root from the adapter prompt. Linked worktrees share `<main>/.harness/.sandboxes/runs/`; the author
-reads `isolated-test-<run_id>/log.txt` there. The adapter exposes that evidence directory without
-changing the brief's tool list. Test writes and runner execution remain in the worker checkout.
-An `in-process` developer does not call the native author: the main checkout's preflight with
-`--worktree <worker_worktree>` answers `checkout_mismatch`, because its guard and runner serve the
-main checkout. For each handoff it runs `python3 -I -B <worker_worktree>/.harness/health/test_author.py
-run --repo <worker_worktree> --brief <approved brief path> --prompt-file <path>`, which checks the
-worker's preflight and starts the author bound to the worker's guard and runner; the same brief
-permission rule applies, and a refusal keeps ordinary TDD with its reason. Other runtimes are
-unsupported. A refusal never creates a blocker, another dispatch or ledger state. The optional
-author does not change independent QA or the Rust runtime authority.
-
-The `/fast-implement` short route runs this same cycle in its single session, with the seam agreed
-by the human before the first test instead of taken from the architect brief. There, select the
-explicit project `test_author` runtime/model/effort and use `.harness/health/test_author.py run
---repo . --prompt-file <path>` for each handoff, as described in the project test-author guide.
-It adds no coordinator,
-architect or QA step, and an unavailable author keeps the ordinary route with the reason stated.
-
-A developer retry receives, besides its brief, the retry handoff (the playbook's "Developer-retry
-handoff") and its starting files. Start from the handoff's findings and starting files: they replace
-re-reading the earlier work, and the existing candidate history is the code to extend.
-
-A developer-retry is a fix-forward: it continues from the brief's `snapshot_commit` and adds new
-commits on top of it. Never amend, squash, reset, rebase or force-push `snapshot_commit` or a commit
-below it. `report submit` refuses a report whose `commit_sha` does not descend from
-`snapshot_commit`; its remedy is to recover the rewritten commits from `git reflog`, re-apply the fix
-as new commits without amend or squash, and report the new HEAD. Only a retry under a rebase
-target is measured from that target instead. Two sources share the name `rebase_target_commit`: the
-brief's field, non-null only on a `rebase-fix-forward` brief or on a superseding batch's
-developer-retry brief (below), and, on a legacy stale-base record (`base_rebase_required`, written
-before ADR 0014 removed the base freshness check), the batch's target that the prompt names; the
-brief field is `null` on that legacy rebase brief.
-
-A developer-retry brief with a non-null `rebase_target_commit` (route `rebase-fix-forward`: the
-integration base moved ahead and a human approved the new tip; or a superseding batch whose
-snapshot does not contain its integration base yet) rebases and fixes in the same dispatch. First
-rebase the commits above the old base onto exactly that target, never onto a newer
-tip: `git rebase --onto <rebase_target_commit> $(git merge-base <snapshot_commit>
-<rebase_target_commit>)`. Resolve a conflict inside the zone; a resolution that changes a commit is
-allowed. Then add the fix commits on top. Its `commit_map` accounts for every previous-candidate
-commit (after that merge-base, up to `snapshot_commit`) exactly once: its rebased copy as
-`{"commit_sha": <copy>, "rebased_from": <original>}`, which inherits the original's plan entry and
-names none, or a commit the rebase did not carry (for example, one already upstream) as
-`{"rebased_from": <original>, "dropped": "<reason>"}`. Every commit after the target appears
-exactly once: a rebased copy as above, a new commit as `{commit_sha, plan_entry_id}` under the
-strict retry rule below. `changed_files` and `carried_item_closure` are measured from the target,
-and so are those of a later retry of this report until it is accepted.
-The coordinator compares each `rebased_from` pair by `git patch-id`; a mismatch does not refuse the
-report but is shown for delta-review. A missing, repeated or unknown previous-candidate commit, a
-copy that is its own original (a merge of the target instead of a rebase) and an empty `dropped`
-reason are refused, and a brief without a target refuses `rebased_from` and `dropped` entries.
+## Blocked commit
 
 When a hook or another tool blocks your `git commit`, revert nothing: do not reset, stash, checkout
-or delete the uncommitted work. Stop with the `tooling_blocker` the common contract describes and
-add `uncommitted_files`: every path `git status --porcelain --no-renames --untracked-files=all`
+or delete the uncommitted work. Stop with the `tooling_blocker` the common contract describes, and
+inside that `tooling_blocker` object add `uncommitted_files`: every path `git status --porcelain --no-renames --untracked-files=all`
 lists in the worktree, each once, as Git prints it and inside the zone. Report `commit_sha` as the
 current HEAD (your last commit) and `changed_files` and `commit_map` up to it, as usual. The
 `tooling` restart continues from that commit with exactly those files uncommitted. The restart's
 preflight refuses an extra, missing or out-of-zone file. A restarted developer commits the
 inherited files under the plan entries they belong to.
+
+## Commit plan
 
 Follow the immutable brief's ordered commit plan. Each commit implements one independently
 reviewable logical change and is reported against the plan entries it closes. In an initial or
@@ -173,48 +82,3 @@ commits after the batch base too, and a developer-retry brief with a non-null
 carries a confirmed architect report (`--carry-architect`) has no `start_commit`, so its first
 developer starts at the batch base.
 Do not report the candidate SHA alone when it hides multiple commits.
-
-A developer-retry brief whose `carried_items` is not empty hands on the closed list of items its
-retry decision recorded as `retry_item_ids`, keyed by source: each `coordinator-finding` is a defect
-the coordinator found when it accepted a developer report, each `review-finding` is a Standards or
-Spec finding of the retried code-review, and each `incomplete-item` is an item a read-only report
-handed to the developer; a retried developer brief hands on its own items again. Every item has an
-`item_id`, `summary`, `files` and `expected_evidence`. Close every carried item in this retry with
-new commits: its files belong to the working set, and its fix goes into the commit of the plan entry
-whose scope it belongs to. The completion report maps every item once in `carried_item_closure`,
-which replaces naming the items in `output`: `{"item_id": <id>, "commits": [<sha>, ...]}` with the
-commits that close it, as its `expected_evidence` asks, or
-`{"item_id": <id>, "not_closed": "<reason>"}`. The commits are this dispatch's own, or, for an item
-an earlier attempt that handed you the same list already closed (a retried developer report or a
-tooling-retry), that attempt's commit; after a `rebase-fix-forward` attempt of the chain, its
-rebased copy, never the pre-rebase original. A completed report without the field, or with an item
-left out, repeated or unknown, an empty reason or a commit neither this dispatch nor such an earlier
-attempt created, is refused.
-An item that cannot be closed inside the allowed paths and the prohibited changes is `not_closed` with its
-reason, never a silent omission: the report is then not clean, a plain accept is refused, and the
-next code-review carries every open coordinator finding again and accounts for it.
-
-## Rerunning only the failed tests
-
-After a failure, rerun what failed, with your own worktree cache, instead of the whole suite (ADR
-0023, sections 3 to 5). Run it from the checkout you work in, through the bounded wrapper:
-
-- `scripts/verify.py --worktree-cache --only tests` keeps the mypy and pytest caches and the previous
-  JUnit report in `.harness/.sandboxes/cache/<worktree-id>/<environment_fingerprint>/`. The cache of
-  another worktree or of another `environment_fingerprint` is never read, and the clean-room QA run
-  starts cold: only a clean-room run sets `HARNESS_VERIFY_COLD`, which refuses `--worktree-cache`; the
-  bounded wrapper runs locally, is not cold and accepts the flag.
-- `scripts/verify.py --worktree-cache --failed-only` reruns the pytest stage alone, with the exact
-  failed nodeids of that previous JUnit report. A renamed or vanished nodeid switches the run to
-  `focused`: the surviving test files of the failed tests run whole. An empty selection (no previous
-  report, no failed test or no surviving file) and a pytest run that collects nothing are `not_run`
-  with exit code 5, never a pass. `--failed-first` only reorders a full run: it is never failed-only
-  and is recorded as the `full` selection.
-- `--evidence-dir <dir>` writes `stage-evidence.v1` for the mypy, pytest and clean-room stages:
-  separate stdout and stderr files with their sha256, exit code, duration, failed nodeids and
-  `not_run` for every stage the run did not reach.
-
-A failed-only, focused or cached result is a diagnostic of your session. It proves only the selected
-tests, never replaces the brief's `verification_commands` in `checks_run`, which you run verbatim
-before reporting, and never authorizes a publish: only the full clean-room QA run on the final SHA
-does.

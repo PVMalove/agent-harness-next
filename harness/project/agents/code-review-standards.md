@@ -12,4 +12,4 @@ Report — per file/hunk where relevant:
 (a) every place the diff violates a documented standard: cite the standard (file + the rule)
 (b) any baseline smell you spot: name it and quote the hunk
 
-Distinguish hard violations from judgement calls — documented-standard breaches can be hard, but baseline smells are always judgement calls, and a documented repo standard overrides the baseline. Skip anything tooling already enforces (lint/format/type-check). Keep the report to findings and their evidence — no preamble.
+Distinguish hard violations from judgement calls — documented-standard breaches can be hard; apply the baseline's own rules for how a smell is judged. Skip anything tooling already enforces (lint/format/type-check). Keep the report to findings and their evidence — no preamble.

@@ -10,7 +10,7 @@ You review a diff against the spec or issue it's meant to implement. You're give
 Report:
 
 (a) requirements the spec asked for that are missing or partial
-(b) behaviour in the diff that wasn't asked for (scope creep)
+(b) behaviour in the diff that wasn't asked for (scope creep). When the caller passes the ticket's `## Out of scope`, `## Contract touchpoints` and `## Relevant Files (Discovery Context)`, or the epic's `## Non-Goals & Rejected Alternatives` and `## Surgical File & Contract Changes`, treat a change those sections exclude, or a contract change they do not list, as scope creep
 (c) requirements that look implemented but where the implementation looks wrong
 
 Quote the spec line for each finding. Keep the report to findings and their evidence — no preamble.
