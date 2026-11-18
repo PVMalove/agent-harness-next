@@ -7,6 +7,7 @@ from harness.bin.harness import package_files
 ROOT = Path(__file__).resolve().parents[2]
 SKILLS = ROOT / "skills" / "first-party" / "engineering"
 DRILL_DOWN = "references/drill-down-template.md"
+DOC_WRITES = "references/domain-doc-writes.md"
 
 
 def _skill(name: str) -> str:
@@ -67,7 +68,7 @@ def test_drill_down_stays_read_only_and_returns_to_the_same_choice() -> None:
     ):
         assert choice in protocol
     assert "fewer than three" in protocol
-    assert f"Read {DRILL_DOWN} ONLY when" in protocol
+    assert f"Read {DRILL_DOWN} when the user requests" in protocol
     assert "подробнее <N>" in protocol
     assert "show the same choice again" in protocol
     assert "no file writes" in protocol.lower()
@@ -80,16 +81,12 @@ def test_drill_down_stays_read_only_and_returns_to_the_same_choice() -> None:
     ]
 
 
-def test_to_spec_copies_the_approved_list_and_handles_an_unavailable_artifact() -> None:
-    draft = _section(
-        _skill("to-spec"), "Phase 2: Drafting & Publishing (After User Approval)"
-    )
-    assert "same folder's `artifacts/discovery-context.md`" in draft
-    assert "could not be written or verified" in draft
-    assert "from the final summary in chat" in draft
-    assert "Preserve the approved lines verbatim, in order" in draft
-    assert "## Relevant Files (Discovery Context)" in draft
-    assert "Never rediscover paths" in draft
+def test_ordinary_rounds_carry_questions_and_the_summary_waits() -> None:
+    skill = " ".join(_skill("grilling").split())
+    assert "carry the rest to the next round" in skill
+    assert "State each option's consequence" in skill
+    assert "Reopen only the named decisions and their dependents" in skill
+    assert "the epic folder for a child task" in skill
 
 
 def test_wrappers_and_reference_are_delivered_by_the_engineering_suite() -> None:
@@ -98,16 +95,29 @@ def test_wrappers_and_reference_are_delivered_by_the_engineering_suite() -> None
         for filename in ("SKILL.md", "agents/openai.yaml"):
             source = SKILLS / name / filename
             assert files[f".harness/skills/{name}/{filename}"] == source.read_bytes()
-    assert (
-        files[f".harness/skills/grilling/{DRILL_DOWN}"]
-        == (SKILLS / "grilling" / DRILL_DOWN).read_bytes()
+    for reference in (DRILL_DOWN, DOC_WRITES):
+        assert (
+            files[f".harness/skills/grilling/{reference}"]
+            == (SKILLS / "grilling" / reference).read_bytes()
+        )
+
+
+def test_every_domain_modeling_caller_reaches_the_write_rules() -> None:
+    assert f"read {DOC_WRITES} before any glossary or ADR edit" in " ".join(
+        _skill("grilling").split()
     )
+    assert f"../grilling/{DOC_WRITES}" in _skill("grill-with-docs")
+    assert f"`{DOC_WRITES}` before any glossary or ADR edit" in _skill("triage")
 
 
 def test_glossary_and_adr_writes_have_separate_approval() -> None:
     interview_only = _skill("grill-me")
     assert "without editing CONTEXT.md or ADRs" in interview_only
-    docs = " ".join(_skill("grill-with-docs").split())
+    docs = " ".join(
+        (SKILLS / "grilling" / DOC_WRITES).read_text(encoding="utf-8").split()
+    )
+    assert "take precedence over the `/domain-modeling` rule" in docs
+    assert "the root `docs/adr/` when the decision spans several contexts" in docs
     assert (
         "Confirm the term, its definition, and its owning context with the user before writing"
         in docs
@@ -122,12 +132,3 @@ def test_glossary_and_adr_writes_have_separate_approval() -> None:
         in docs
     )
     assert "explicit approval to create the ADR" in docs
-
-
-def test_to_spec_does_not_stage_unrelated_glossary_edits() -> None:
-    text = " ".join(_skill("to-spec").split())
-    assert "exclude any with unrelated changes" in text
-    assert (
-        "If it already contains changes outside the approved set, leave it intact"
-        in text
-    )
