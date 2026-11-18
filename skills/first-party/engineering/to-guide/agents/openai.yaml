@@ -1,0 +1,6 @@
+interface:
+  display_name: "To Guide"
+  short_description: "Prepare a manual guide for a hitl ticket"
+  default_prompt: "Use $to-guide to turn the hitl ticket into a step-by-step manual implementation guide."
+policy:
+  allow_implicit_invocation: false

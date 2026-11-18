@@ -10,7 +10,10 @@ readable `.harness/project.json` with `branch_pattern` and `base_branch`, and a 
 `branch_pattern` and is neither `base_branch` nor `integration/*`. When a prerequisite is missing, the
 skill changes nothing and returns a report with a blocker that names it.
 
-The seam is agreed with the human before the first test, then the work goes through `/tdd`. The skill
+The ticket's `## Relevant Files (Discovery Context)`, `## Contract touchpoints` and
+`## Out of scope` bound the change; a path outside them needs the human's approval. The work is
+complete when the `Verify` commands of the acceptance criteria, the targeted tests, and lint and
+typecheck from `qa_gate_commands` have run. The seam is agreed with the human before the first test, then the work goes through `/tdd`. The skill
 finishes with a human-readable report in the chat with five sections: changes, checks (pass, fail or
 not run), unverified items, risks and blockers. The skill does not commit, push, open a PR, run code
 review or change tracker labels. In `/fast-implement` it runs the implementation steps, and

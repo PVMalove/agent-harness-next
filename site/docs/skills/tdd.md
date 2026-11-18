@@ -24,6 +24,9 @@ Vendor-версия держала примеры и правила подмен
 
 ## Необязательный тест-автор
 
+У протокола один источник, общий для `/tdd`, `/fast-implement` и `developer`:
+`tdd/references/test-author.md`. Его главное:
+
 В полном `/implement` исполнитель наследует runtime, model и effort из утверждённого brief developer.
 Короткий маршрут берёт явный профиль `test_author` из `.harness/project.json`. Общая проверка:
 `python3 -I -B .harness/health/test_author.py preflight --repo <checkout>`. Полный маршрут

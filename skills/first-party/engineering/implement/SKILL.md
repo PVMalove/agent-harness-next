@@ -27,7 +27,10 @@ This is the opt-in `backend-orchestration` route. Confirm that its installed coo
 python .harness/orchestration/coordinator.py --repo . dispatch status
 ```
 
-If the command is unavailable or cannot read its state, stop and tell the developer to run `/fast-implement` instead.
+If the command is unavailable or cannot read its state, stop. For a `pipeline::fast` ticket, tell the
+developer to run `/fast-implement` instead. For a `pipeline::full` ticket, say that this route needs
+the `backend-orchestration` capability, or that the developer may relabel the ticket
+`pipeline::fast` on the tracker and then run `/fast-implement`.
 A `ledger_busy` answer is not unavailability: another coordinator operation holds the ledger lock,
 so repeat the command after its `retry_after_seconds`.
 Do not infer or repair an opt-in capability. Process one ticket to a terminal batch state before
@@ -75,8 +78,8 @@ blocker: the coordinator must stop and report it to the developer, and must not 
 
 Start these steps only after the ticket pre-flight in "Coordinator contract" (blockers, `status::in-progress`).
 
-1. **Integration ref.** Use the ticket's `## Integration Branch` value. If the ticket has no such
-   section, use its `## Git base` value. If it has neither, use the same section of the parent epic.
+1. **Integration ref.** Use the ticket's `## Integration Branch` value (the `**Integration branch:**`
+   line on the local tracker). If the ticket has no such section, use its `## Git base` value. If it has neither, use the same section of the parent epic.
    A missing value for a ticket that has a parent epic is a blocker; do not infer it from the
    checkout or from memory. A ticket without a parent epic uses `base_branch`: omit `--integration-ref`.
 2. **Issue worktree.** Create it before `batch create`. `batch create` refuses a worktree that
@@ -87,7 +90,10 @@ Start these steps only after the ticket pre-flight in "Coordinator contract" (bl
    main checkout.
 3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`
-   and `--prohibited-change`. Keep commands, paths, and IDs verbatim.
+   and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:
+   each `## Acceptance criteria` item → `--definition-of-done`, each `## Out of scope` item →
+   `--prohibited-change`, and the paths of `## Contract touchpoints` and
+   `## Relevant Files (Discovery Context)` → `--allowed-path` and `--expected-file`.
 4. **Create the batch.** Repeat the list flags once for each value.
 
    ```bash

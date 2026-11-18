@@ -7,8 +7,12 @@ It ships in `engineering-suite`, runs manually as `/architect`, and returns a de
 the current boundary, the options, the recommendation, the trade-offs, the risks, the acceptance criteria,
 and the first TDD seams.
 The skill studies the evidence and does not change production code, tests, configuration, or repository files.
-The brief does not authorize implementation, commit, push, or PR creation. If the developer wants a
-durable ADR, the accepted decision goes through `domain-modeling`.
+The brief does not authorize implementation, commit, push, or PR creation, and does not rewrite the
+specification or the ticket. The skill treats the parent specification's
+`## Architecture & Selected Approach` as settled and its `## Non-Goals & Rejected Alternatives` as
+rejected, reopening one only with new evidence and saying so. If the decision changes the
+specification, it offers `/to-spec`. A durable ADR goes through `domain-modeling` under the write
+rules in `grilling/references/domain-doc-writes.md`.
 
 Before it compares the options, with memory enabled, it runs
 `harness memory search . "<decision, boundary, and module>"` once. It interprets the search status and the source status

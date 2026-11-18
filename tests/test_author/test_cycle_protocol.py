@@ -23,6 +23,7 @@ FAST_IMPLEMENT = (
     ROOT / "skills" / "first-party" / "engineering" / "fast-implement" / "SKILL.md"
 )
 TDD = ROOT / "skills" / "first-party" / "engineering" / "tdd" / "SKILL.md"
+TDD_AUTHOR = TDD.parent / "references" / "test-author.md"
 GUIDE = ROOT / "harness" / "project" / "instructions" / "test-author.md"
 ROOT_GUIDE = ROOT / "docs" / "agents" / "test-author.md"
 
@@ -64,9 +65,13 @@ FULL_ROUTE_DESCRIPTION_MARKERS = (
 )
 FAST_MARKERS = (
     "Agree the seams before the first test",
+    "Neither route adds a coordinator, architect or QA step",
+    "../tdd/references/test-author.md",
+)
+# One protocol shared by /tdd, /fast-implement and /developer (issue #1210).
+AUTHOR_PROTOCOL_MARKERS = (
     "test-author-preflight.sh",
     '{"status":"ok"}',
-    "Neither route adds a coordinator, architect or QA step",
     "algorithm or implementation snippet",
     "needs_skeleton",
     "contract_gap",
@@ -112,6 +117,8 @@ def _text(path: Path) -> str:
         (GUIDE, FULL_ROUTE_GUIDE_MARKERS),
         (TDD, SHORT_ROUTE_MARKERS),
         (FAST_IMPLEMENT, FAST_MARKERS),
+        (TDD_AUTHOR, AUTHOR_PROTOCOL_MARKERS),
+        (TDD_AUTHOR, SHORT_ROUTE_MARKERS),
         (AGENT, AGENT_MARKERS),
         (GUIDE, GUIDE_MARKERS),
     ],
