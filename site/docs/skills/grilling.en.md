@@ -61,8 +61,10 @@ chooses a variant. Approval applies only to that decision. Each artifact still n
 approval. A detail request, deferral, or stop authorizes no write for the unresolved fork.
 
 1. Give 2–3 sentences covering the decision and verified repository facts. Name missing evidence.
-2. Show a matrix with columns Option, Mechanism, Benefit, and Cost. Use one row per viable option.
-   Describe a concrete mechanism and its cost in every row.
+2. Render the matrix in a fenced `text` block with box-drawing borders (`┌─┐`, `│`, `├─┤`, `└─┘`).
+   Give each viable option a full-width header and separate rows for Mechanism, Benefit, and Cost.
+   Explain which components or contracts change, how they work, and the concrete benefits and costs.
+   Wrap paragraphs across lines and keep technical detail and identifiers intact.
    - **[1] Рекомендуемое (Recommended)** — mechanism, reason to prefer it, and trade-off.
    - **[2] Компромиссное (Fast-Track)** — simplification, time saved, and debt or risk.
    - **[3] Полное (Full / Clean Architecture)** — target design, long-term benefit, and migration cost.

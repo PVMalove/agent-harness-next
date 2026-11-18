@@ -42,11 +42,24 @@ def test_stopping_preserves_unresolved_dependencies() -> None:
     assert "Never invoke `/to-spec`" in closing
 
 
+def test_decision_matrix_has_borders_and_room_for_technical_detail() -> None:
+    protocol = _section(_skill("grilling"), "Decision & Clarity Protocol")
+    assert "fenced `text` block with box-drawing borders" in protocol
+    assert (
+        "a full-width header and separate rows for Mechanism, Benefit, and Cost"
+        in protocol
+    )
+    assert "which components or contracts change" in protocol
+    assert (
+        "Wrap paragraphs across lines and keep technical detail and identifiers intact"
+        in protocol
+    )
+
+
 def test_drill_down_stays_read_only_and_returns_to_the_same_choice() -> None:
     skill = _skill("grilling")
     assert 60 <= len(skill.splitlines()) <= 90
     protocol = _section(skill, "Decision & Clarity Protocol")
-    assert "columns Option, Mechanism, Benefit, and Cost" in protocol
     for choice in (
         "[1] Рекомендуемое (Recommended)",
         "[2] Компромиссное (Fast-Track)",
