@@ -57,7 +57,12 @@ def test_schema_and_validator_agree_on_pr_checklist_items(tmp_path: Path) -> Non
 
     git(tmp_path, "init", "-b", "main")
     installed = harness(
-        "init", str(tmp_path), "--capability", "engineering-suite", "--qa-gate-command", "gate"
+        "init",
+        str(tmp_path),
+        "--capability",
+        "engineering-suite",
+        "--qa-gate-command",
+        "gate",
     )
     assert installed.returncode == 0, installed.stderr
     project = json.loads((tmp_path / ".harness/project.json").read_bytes())
