@@ -18,7 +18,7 @@
 Для всех поверхностей действует одно правило. Хук запрещает:
 
 - подписи известных ассистентов в `Co-Authored-By`;
-- фразы "generated/written/created/authored/produced by/with/using/via <ассистент>";
+- фразы "generated/written/created/authored/produced by/with/using/via <ассистент>" и такие же фразы с отдельным словом `AI` вместо имени ассистента;
 - пометку `AI-generated`;
 - ссылки на сессии ассистентов (`claude.ai/`, `chatgpt.com/`, `chat.openai.com/`).
 

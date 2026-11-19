@@ -16,7 +16,7 @@ FORBIDDEN = re.compile(
     r"(?:claude(?:\s+code)?|openai|chatgpt|copilot|gemini|codex|gpt(?:[-_ ]?[0-9][a-z0-9._-]*)?)"
     r"(?=\s*(?:<|_?(?:\r?\n|$)))|"
     r"(?<![a-z0-9])(generated|written|created|authored|produced)\s+(with|by|using|via)\s+"
-    r"\[?(claude|chatgpt|openai|copilot|gemini|codex|gpt[-_ ]?[0-9])|"
+    r"\[?(claude|chatgpt|openai|copilot|gemini|codex|gpt[-_ ]?[0-9]|ai(?![a-z0-9]))|"
     r"(?<![a-z0-9])ai[-_ ]?generated(?![a-z0-9])|"
     r"(?<![a-z0-9.-])(claude\.ai|chatgpt\.com|chat\.openai\.com)/",
     re.IGNORECASE,
