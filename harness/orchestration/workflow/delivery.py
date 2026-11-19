@@ -465,7 +465,7 @@ def _reserve_handoff(
     if dispatch.get("access") == "write":
         _require_writable_worktree(dispatch["worktree"])
     if transport == "in-process":
-        require_in_process_artifacts(repo, root, prepare=True)
+        require_in_process_artifacts(repo, root, role=dispatch["role"], prepare=True)
     brief_path = _worker_brief_path(repo, root, dispatch)
     command, adapter_preflight = _adapter_command(
         args, repo, adapter, brief_path, launch, container=container

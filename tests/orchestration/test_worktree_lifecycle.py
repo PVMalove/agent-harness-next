@@ -214,7 +214,9 @@ def test_worktree_check_detects_a_read_only_artifact_directory(
     tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
     _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
     mkstemp = tempfile.mkstemp
-    denied = repo / ".harness/.sandboxes/cache/npm"
+    runs = repo / ".harness/.sandboxes/runs/tests"
+    cache = repo / ".harness/.sandboxes/cache/npm"
+    denied = {runs, cache}
     arguments = ("--repo", str(repo), "--worktree", str(tree))
 
     assert (
@@ -222,17 +224,86 @@ def test_worktree_check_detects_a_read_only_artifact_directory(
         == 0
     )
 
-    def refuse_cache(*, prefix: str, dir: Path) -> tuple[int, str]:
-        if dir == denied:
+    def refuse(*, prefix: str, dir: Path) -> tuple[int, str]:
+        if dir in denied:
             raise OSError(30, "Read-only file system")
         return mkstemp(prefix=prefix, dir=dir)
 
-    with mock.patch("tempfile.mkstemp", side_effect=refuse_cache):
+    with mock.patch("tempfile.mkstemp", side_effect=refuse):
         code, _, err = _run(monkeypatch, capsys, None, "check", *arguments)
 
     assert code == 2
-    assert str(denied) in err
+    assert str(runs) in err
     assert "Read-only file system" in err
+
+    # A cache only helps, so an unwritable one is reported and the check passes.
+    denied.remove(runs)
+    with mock.patch("tempfile.mkstemp", side_effect=refuse):
+        code, out, err = _run(monkeypatch, capsys, None, "check", *arguments)
+
+    assert code == 0, err
+    assert json.loads(out)["writable"] is True
+    assert f"warning: unwritable path not granted: {cache}" in err
+
+
+@pytest.mark.parametrize("agent", ["codex", "claude"])
+def test_prepare_skips_an_optional_symlink_and_refuses_a_required_one(
+    repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+    shared = repo / ".harness/.sandboxes"
+    (shared / "cache").mkdir(parents=True)
+    (shared / "runs").mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    playwright, qa = shared / "cache/ms-playwright", shared / "runs/qa"
+    try:
+        playwright.symlink_to(outside, target_is_directory=True)
+        qa.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+    arguments = ("--repo", str(repo), "--worktree", str(tree), "--runtime", agent)
+
+    code, _, err = _run(monkeypatch, capsys, None, "prepare", *arguments)
+
+    assert code == 2
+    assert f"required path is a symlink: {qa}" in err
+
+    qa.unlink()
+    code, out, err = _run(monkeypatch, capsys, None, "prepare", *arguments)
+
+    assert code == 0, err
+    assert f"warning: symlink not granted: {playwright}" in err
+    argv = json.loads(out)["argv"]
+    assert str(qa) in " ".join(argv)
+    assert str(playwright) not in " ".join(argv)
+    assert list(outside.iterdir()) == []
+
+
+def test_prepare_refuses_network_access_for_a_claude_session(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        None,
+        "prepare",
+        *("--repo", str(repo), "--worktree", str(tree), "--runtime", "claude"),
+        *("--network-access", "enabled"),
+    )
+
+    assert code == 2
+    assert out == ""
+    assert "--network-access applies to Codex sessions" in err
+    assert not (repo / ".harness/.sandboxes/cache").exists()
 
 
 def test_create_asks_the_runtime_for_a_worktree_in_the_managed_directory(
