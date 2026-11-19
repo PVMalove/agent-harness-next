@@ -253,6 +253,35 @@ def test_codex_stop_reminds_about_all_files_touched_by_a_native_patch(
 
 
 @needs_bash
+def test_codex_verdict_keeps_the_evidence_of_every_warned_path(tmp_path: Path) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    patch = _codex_patch(
+        project,
+        "*** Add File: notes/readme.md",
+        "+plain",
+        "*** Add File: pyproject.toml",
+        "+[project]",
+        "*** Add File: uv.lock",
+        "+lock",
+    )
+
+    verdict = _decision(_script(project, SENSITIVE, patch))
+
+    assert (verdict["decision"], verdict["reason_code"]) == (
+        "warn",
+        "sensitive-path-touched",
+    )
+    references = str(verdict["evidence_ref"]).split("\n")
+    paths = [
+        json.loads((project / ref).read_text(encoding="utf-8"))["path"]
+        for ref in references
+    ]
+    assert sorted(paths) == ["pyproject.toml", "uv.lock"]
+    assert "pyproject.toml" in str(verdict["remedy"])
+    assert "uv.lock" in str(verdict["remedy"])
+
+
+@needs_bash
 def test_codex_advisory_reports_an_unparseable_patch_without_blocking(
     tmp_path: Path,
 ) -> None:
