@@ -30,6 +30,14 @@ COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 CONTEXT_SECTIONS = ("summary", "diff", "symbol_graph", "file_hashes", "full")
 QA = "accepted_qa"
 QA_KEYS = ("ticket", "branch", "candidate_commit")
+KINDS = ("discovery", "skills", "hooks", "templates")
+# How a caller narrows each tool whose answer can outgrow one frame.
+NARROWING = {
+    INVENTORY: "Filter the inventory by skill name.",
+    ARTIFACTS: "Filter the inventory by kind.",
+    REPO_MAP: "Pass a seed path to narrow the map.",
+    CONTEXT: "Request one section instead of full.",
+}
 TOOLS = [
     {
         "name": name,
@@ -76,6 +84,8 @@ def _qa(repo: Path, arguments: JsonObject) -> JsonObject:
     )
 
     candidate = arguments["candidate_commit"]
+    if not (repo / STATE_REL.parent).is_dir():
+        return {"error": {"code": "orchestration_not_installed", "retryable": False}}
     root = (repo / STATE_REL).resolve()
     with command_state(argparse.Namespace(repo=str(repo))):
         batch = _batch_for_ticket_branch(
@@ -185,7 +195,9 @@ def _request(
         return _error(-32602, "Expected non-empty string arguments")
     if name == INVENTORY and set(arguments) <= {"name"}:
         all_artifacts = inventory(repo)
-        result = {key: all_artifacts[key] for key in ("schema_version", "skills")}
+        result = {
+            key: all_artifacts[key] for key in ("schema_version", "discovery", "skills")
+        }
         if "name" in arguments:
             result["skills"] = [
                 skill
@@ -195,8 +207,8 @@ def _request(
         return _tool_result(result)
     if name == ARTIFACTS and set(arguments) <= {"kind"}:
         kind = arguments.get("kind")
-        if kind not in (None, "skills", "hooks", "templates"):
-            return _error(-32602, "kind must be skills, hooks or templates")
+        if kind is not None and kind not in KINDS:
+            return _error(-32602, "kind must be discovery, skills, hooks or templates")
         artifact_result = inventory(repo)
         if kind:
             artifact_result = {
@@ -226,37 +238,40 @@ def _request(
                 -32602, "candidate_commit must be a full lowercase Git object ID"
             )
         try:
-            return _tool_result(_qa(repo, arguments))
+            answer = _qa(repo, arguments)
         except HarnessError:
             return _tool_result(
                 {"error": {"code": "qa_evidence_unavailable", "retryable": True}},
                 error=True,
             )
+        return _tool_result(answer, error="error" in answer)
     return _error(-32602, "Unknown tool or invalid arguments")
 
 
 def _response(
     line: bytes, repo: Path, inventory: Callable[[Path], JsonObject]
-) -> tuple[object, JsonObject] | None:
+) -> tuple[object, JsonObject, object] | None:
+    """The request ID, the answer and the called tool name, or None for a notification."""
     try:
         request = json.loads(line.decode("utf-8"))
     except (ValueError, RecursionError):
-        return None, _error(-32700, "Parse error")
+        return None, _error(-32700, "Parse error"), None
     if not isinstance(request, dict) or request.get("jsonrpc") != "2.0":
-        return None, _error(-32600, "Invalid request")
+        return None, _error(-32600, "Invalid request"), None
     method = request.get("method")
     request_id = request.get("id")
     if not isinstance(method, str) or type(request_id) not in (str, int, type(None)):
-        return None, _error(-32600, "Invalid request")
+        return None, _error(-32600, "Invalid request"), None
     if "id" not in request:
         return None
     params = request.get("params", {})
     if not isinstance(params, dict):
-        return request_id, _error(-32602, "Expected named parameters")
+        return request_id, _error(-32602, "Expected named parameters"), None
+    tool = params.get("name") if method == "tools/call" else None
     try:
-        return request_id, _request(method, params, repo, inventory)
+        return request_id, _request(method, params, repo, inventory), tool
     except (HarnessError, OSError, ValueError, SystemExit):
-        return request_id, _error(-32603, "Project data unavailable")
+        return request_id, _error(-32603, "Project data unavailable"), tool
 
 
 def serve(
@@ -269,26 +284,27 @@ def serve(
         if len(line) > MAX_FRAME:
             while line and not line.endswith(b"\n"):
                 line = source.readline(MAX_FRAME + 1)
-            result: tuple[object, JsonObject] | None = (
+            result: tuple[object, JsonObject, object] | None = (
                 None,
                 _error(-32700, "Request too large"),
+                None,
             )
         else:
             result = _response(line, repo, inventory)
         if result is None:
             continue
-        request_id, response = result
+        request_id, response, tool = result
         frame = json.dumps({"jsonrpc": "2.0", "id": request_id, **response}).encode(
             "utf-8"
         )
         if len(frame) > MAX_FRAME:
+            hint = NARROWING.get(tool) if isinstance(tool, str) else None
+            message = f"Response too large. {hint}" if hint else "Response too large."
             frame = json.dumps(
                 {
                     "jsonrpc": "2.0",
                     "id": request_id if len(str(request_id)) <= 256 else None,
-                    **_error(
-                        -32000, "Response too large. Filter inventory by skill name."
-                    ),
+                    **_error(-32000, message),
                 }
             ).encode("utf-8")
         sink.write(frame + b"\n")

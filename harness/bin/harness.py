@@ -1638,6 +1638,27 @@ def skill_provenance(repo: Path) -> JsonObject:
                 name = relative[len(prefix) :].split("/", 1)[0]
                 drift.setdefault(name, {}).setdefault(status, []).append(relative)
 
+    from harness.health.runtime_contract import NATIVE_ADAPTERS
+
+    discovery: list[JsonObject] = []
+    for relative, target in DISCOVERY_LINKS.items():
+        path = repo / relative
+        if path.is_symlink() and os.readlink(path) == native_link_target(target):
+            state = "linked" if path.is_dir() else "unresolved"
+        else:
+            state = "foreign" if path.exists() or path.is_symlink() else "missing"
+        discovery.append(
+            {
+                "path": relative,
+                "target": target,
+                "runtimes": [
+                    adapter.runtime
+                    for adapter in NATIVE_ADAPTERS
+                    if adapter.skill_root == relative
+                ],
+                "status": state,
+            }
+        )
     skills_dir = repo / prefix
     local = (
         {
@@ -1650,6 +1671,7 @@ def skill_provenance(repo: Path) -> JsonObject:
     )
     return {
         "schema_version": 1,
+        "discovery": discovery,
         "skills": [
             {
                 "name": name,
@@ -1825,9 +1847,14 @@ def cmd_inventory(args: argparse.Namespace) -> int:
     if args.json:
         print(json.dumps(inventory, indent=2, ensure_ascii=False))
     else:
+        for link in inventory["discovery"]:
+            runtimes = ", ".join(link["runtimes"])
+            print(f"{link['path']} -> {link['target']}  {runtimes}  [{link['status']}]")
         for skill in inventory["skills"]:
             origin = skill["package_source"] or "project"
-            state = ", ".join(skill["drift"]) or "current"
+            state = ", ".join(skill["drift"]) or (
+                "current" if skill["package_source"] else "project"
+            )
             print(f"{skill['path']}  {origin}  [{state}]")
         for kind in ("hooks", "templates"):
             for item in inventory[kind]:

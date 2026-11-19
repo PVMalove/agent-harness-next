@@ -1,7 +1,12 @@
 """Installed skill provenance through the public harness CLI."""
 
 import json
+from collections.abc import Callable
 from pathlib import Path
+
+import pytest
+
+from harness.json_types import JsonObject
 
 from tests.core.test_uninstall import git, harness
 
@@ -163,3 +168,84 @@ def test_mcp_reads_commit_map_without_creating_project_cache(tmp_path: Path) -> 
     assert payload["commit"] == sha
     assert [item["path"] for item in payload["files"]] == ["design.md"]
     assert not (tmp_path / ".harness").exists()
+
+
+def test_inventory_reports_runtime_discovery_and_project_skills(tmp_path: Path) -> None:
+    git(tmp_path, "init", "-b", "main")
+    installed = harness("init", str(tmp_path), "--capability", "engineering-suite")
+    assert installed.returncode == 0, installed.stderr
+    (tmp_path / ".claude/skills").unlink()
+    local = tmp_path / ".harness/skills/local-policy/SKILL.md"
+    local.parent.mkdir()
+    local.write_text("# Local policy\n")
+
+    result = harness("inventory", str(tmp_path), "--json")
+    text = harness("inventory", str(tmp_path))
+
+    assert result.returncode == 0, result.stderr
+    discovery = {item["path"]: item for item in json.loads(result.stdout)["discovery"]}
+    assert discovery[".claude/skills"] == {
+        "path": ".claude/skills",
+        "target": "../.harness/skills",
+        "runtimes": ["claude"],
+        "status": "missing",
+    }
+    assert discovery[".agents/skills"]["status"] == "linked"
+    assert ".claude/skills -> ../.harness/skills  claude  [missing]" in text.stdout
+    assert ".harness/skills/local-policy/SKILL.md  project  [project]" in text.stdout
+
+
+def _mcp_call(
+    repo: Path,
+    name: str,
+    arguments: dict[str, str],
+    inventory: Callable[[Path], JsonObject],
+) -> JsonObject:
+    import io
+
+    from harness.mcp_server import serve
+
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": name, "arguments": arguments},
+    }
+    sink = io.BytesIO()
+    serve(repo, inventory, io.BytesIO(json.dumps(request).encode() + b"\n"), sink)
+    answer: JsonObject = json.loads(sink.getvalue())
+    return answer
+
+
+def test_mcp_qa_without_orchestration_is_not_retryable(tmp_path: Path) -> None:
+    git(tmp_path, "init", "-b", "main")
+    arguments = {"ticket": "#1", "branch": "feature/x", "candidate_commit": "a" * 40}
+
+    answer = _mcp_call(tmp_path, "accepted_qa", arguments, lambda _: {})
+
+    assert answer["result"]["isError"] is True
+    assert answer["result"]["structuredContent"]["error"] == {
+        "code": "orchestration_not_installed",
+        "retryable": False,
+    }
+
+
+def test_mcp_oversized_answer_names_the_narrowing_of_its_tool(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness import mcp_server
+
+    monkeypatch.setattr(mcp_server, "MAX_FRAME", 400)
+    inventory = {
+        "schema_version": 1,
+        "discovery": [],
+        "skills": [{"name": "x" * 500}],
+        "hooks": [],
+        "templates": [],
+    }
+
+    skills = _mcp_call(tmp_path, "skill_inventory", {}, lambda _: inventory)
+    artifacts = _mcp_call(tmp_path, "artifact_inventory", {}, lambda _: inventory)
+
+    assert skills["error"]["message"].endswith("Filter the inventory by skill name.")
+    assert artifacts["error"]["message"].endswith("Filter the inventory by kind.")
