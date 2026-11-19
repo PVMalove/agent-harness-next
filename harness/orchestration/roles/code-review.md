@@ -79,7 +79,7 @@ is an ordinary finding on its axis. An `incomplete-item` whose `source.target_ro
 reaches only a delta-review brief and follows `references/code-review-delta.md` instead.
 When part of this review's own brief stays undone, list each undone item in `incomplete_items`
 under the common contract; its `target_role` is `code-review` (a narrowed review on the same
-candidate) or `qa`.
+candidate).
 
 When the approved verification cannot run at all (unavailable Bash/WSL wrapper, transport failure,
 rate limit, context limit), report `outcome: blocked` with empty `findings` and severity `none` on

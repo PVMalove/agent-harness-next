@@ -639,11 +639,13 @@ def test_a_narrowed_retry_without_a_tooling_blocker_proves_no_cause() -> None:
     report = {
         "outcome": "completed",
         "checks_run": [],
-        "incomplete_items": [{"brief_item": "x", "reason": "y", "target_role": "qa"}],
+        "incomplete_items": [
+            {"brief_item": "x", "reason": "y", "target_role": "code-review"}
+        ],
     }
 
     routing = decisions._retry_routing(
-        "qa",
+        "code-review",
         report,
         dispatch_candidate="a" * 40,
         current_candidate="a" * 40,

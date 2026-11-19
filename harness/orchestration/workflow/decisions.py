@@ -1019,9 +1019,7 @@ def _narrowed_routing(
     unchanged = (
         dispatch_candidate is not None and dispatch_candidate == current_candidate
     )
-    structured = _retry_evidence(
-        report, stage in {"code-review", "qa"} and not unchanged
-    )
+    structured = _retry_evidence(report, stage == "code-review" and not unchanged)
     if structured is not None:
         raise CoordinatorError(
             f"a narrowed retry cannot set aside structured evidence: {structured[1]}",
