@@ -71,13 +71,15 @@ probe() {{
     printf '{{"exit": %d, "http": "%s", "connect": "%s"}}' "$status" "${{1:-000}}" "${{2:-000}}"
 }}
 evidence="$(dirname "$0")/{EVIDENCE}"
+# Wait for the sidecar listener using a request it must reject locally.
+denied_http=$(probe --retry 4 --retry-connrefused --retry-delay 1 --retry-max-time 5 http://{DENIED_HOST}/)
 {{
     printf '{{"uid": "%s", "gid": "%s", ' "$(id -u)" "$(id -g)"
     printf '"executor": "%s", "proxy": "%s", ' "${{HARNESS_EXECUTOR:-}}" "${{HTTPS_PROXY:-}}"
     printf '"allowed_https": %s, ' "$(probe https://{ALLOWED_HOST}/)"
     printf '"allowed_http": %s, ' "$(probe http://{ALLOWED_HOST}/)"
     printf '"denied_https": %s, ' "$(probe https://{DENIED_HOST}/)"
-    printf '"denied_http": %s, ' "$(probe http://{DENIED_HOST}/)"
+    printf '"denied_http": %s, ' "$denied_http"
     printf '"direct": %s}}\\n' "$(probe --noproxy '*' https://{ALLOWED_HOST}/)"
 }} > "$evidence.partial"
 mv "$evidence.partial" "$evidence"
