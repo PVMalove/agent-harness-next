@@ -161,8 +161,7 @@ def build_parser(
 
     worktree = commands.add_parser(
         "worktree",
-        help="create or remove a managed issue worktree through harness-runtime, which "
-        "works outside the agent sandbox",
+        help="manage an issue worktree and prepare or check in-process session access",
     )
     worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
     worktree_create = worktree_commands.add_parser(
@@ -192,6 +191,31 @@ def build_parser(
             type=float,
             default=120.0,
             help="seconds to wait for the runtime to finish the git command",
+        )
+    prepare = worktree_commands.add_parser(
+        "prepare",
+        help="prepare shared directories and build a native coordinator launch command",
+    )
+    prepare.add_argument("--runtime", choices=("codex", "claude"), required=True)
+    prepare.add_argument(
+        "--network-access",
+        choices=("disabled", "enabled"),
+        help="Codex command networking (default disabled). Enabled permits direct access without a proxy.",
+    )
+    prepare.add_argument(
+        "--launch", action="store_true", help="start the coordinator session"
+    )
+    prepare.set_defaults(handler=handlers.prepare_session)
+    check = worktree_commands.add_parser(
+        "check", help="probe write access from the running coordinator session"
+    )
+    check.set_defaults(handler=handlers.check_session)
+    for session_command in (prepare, check):
+        session_command.add_argument(
+            "--repo", default=argparse.SUPPRESS, help="main checkout"
+        )
+        session_command.add_argument(
+            "--worktree", required=True, help="registered issue worktree"
         )
 
     batch = commands.add_parser("batch")

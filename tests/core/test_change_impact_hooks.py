@@ -192,6 +192,231 @@ def _decision(done: subprocess.CompletedProcess[str]) -> dict[str, object]:
     return parse_hook_response(done.stderr)
 
 
+def _codex_patch(project: Path, *lines: str) -> dict[str, object]:
+    return {
+        **_identity("coordinator"),
+        "hook_event_name": "PreToolUse",
+        "tool_name": "apply_patch",
+        "tool_input": {
+            "command": "\n".join(("*** Begin Patch", *lines, "*** End Patch"))
+        },
+        "cwd": str(project),
+    }
+
+
+@needs_bash
+@pytest.mark.parametrize("hook_id", (FIRST_TOUCH, SENSITIVE))
+def test_codex_hooks_warn_about_every_risky_path_in_one_native_response(
+    tmp_path: Path, hook_id: str
+) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    patch = _codex_patch(
+        project,
+        "*** Add File: pyproject.toml",
+        "+[project]",
+        "*** Update File: .github/workflows/old.yml",
+        "*** Move to: .github/workflows/new.yml",
+        "@@",
+        "-name: old",
+        "+name: new",
+    )
+
+    result = _script(project, hook_id, patch)
+
+    assert _decision(result)["decision"] == "warn"
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+    for path in (
+        "pyproject.toml",
+        ".github/workflows/old.yml",
+        ".github/workflows/new.yml",
+    ):
+        assert path in context
+    assert not _script(project, hook_id, patch).stdout
+
+
+@needs_bash
+def test_codex_stop_reminds_about_all_files_touched_by_a_native_patch(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    patch = _codex_patch(
+        project, "*** Add File: app/a.py", "+a = 1", "*** Add File: app/b.py", "+b = 2"
+    )
+
+    assert _decision(_script(project, REMINDER, patch))["decision"] == "allow"
+    _write(project / "app/a.py", "a = 1\n")
+    _write(project / "app/b.py", "b = 2\n")
+    result = _script(project, REMINDER, _stop("coordinator"))
+
+    assert _decision(result)["decision"] == "warn"
+    assert "изменено файлов: 2" in json.loads(result.stdout)["systemMessage"]
+
+
+@needs_bash
+def test_codex_verdict_keeps_the_evidence_of_every_warned_path(tmp_path: Path) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    patch = _codex_patch(
+        project,
+        "*** Add File: notes/readme.md",
+        "+plain",
+        "*** Add File: pyproject.toml",
+        "+[project]",
+        "*** Add File: uv.lock",
+        "+lock",
+    )
+
+    verdict = _decision(_script(project, SENSITIVE, patch))
+
+    assert (verdict["decision"], verdict["reason_code"]) == (
+        "warn",
+        "sensitive-path-touched",
+    )
+    references = str(verdict["evidence_ref"]).split("\n")
+    paths = [
+        json.loads((project / ref).read_text(encoding="utf-8"))["path"]
+        for ref in references
+    ]
+    assert sorted(paths) == ["pyproject.toml", "uv.lock"]
+    assert "pyproject.toml" in str(verdict["remedy"])
+    assert "uv.lock" in str(verdict["remedy"])
+
+
+@needs_bash
+def test_codex_hooks_warn_about_a_deleted_risky_path(tmp_path: Path) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    _write(project / "pyproject.toml", "[project]\n")
+    patch = _codex_patch(project, "*** Delete File: pyproject.toml")
+
+    for hook_id in (FIRST_TOUCH, SENSITIVE):
+        result = _script(project, hook_id, patch)
+
+        assert _decision(result)["decision"] == "warn", hook_id
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "pyproject.toml" in context
+
+
+@needs_bash
+def test_codex_hooks_skip_a_move_target_outside_the_repository(tmp_path: Path) -> None:
+    project = _project(tmp_path / "project", {"profile": "strict"})
+    _write(project / ".github" / "workflows" / "old.yml", "name: old\n")
+    # Risky only by its path from the project root: never risky from another checkout's root.
+    outside = tmp_path / "elsewhere" / ".github" / "workflows" / "new.yml"
+    patch = _codex_patch(
+        project,
+        "*** Update File: .github/workflows/old.yml",
+        f"*** Move to: {outside}",
+        "@@",
+        "-name: old",
+        "+name: new",
+    )
+
+    result = _script(project, FIRST_TOUCH, patch)
+
+    verdict = _decision(result)
+    assert (verdict["decision"], verdict["reason_code"]) == (
+        "warn",
+        "risky-path-first-touch",
+    )
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert ".github/workflows/old.yml" in context
+    assert "new.yml" not in context
+    assert "\n" not in str(verdict["evidence_ref"])
+
+
+@needs_bash
+def test_codex_hooks_name_a_file_patched_twice_once(tmp_path: Path) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    patch = _codex_patch(
+        project,
+        "*** Add File: pyproject.toml",
+        "+[project]",
+        "*** Update File: pyproject.toml",
+        "@@",
+        "-[project]",
+        "+[tool]",
+    )
+
+    for hook_id in (FIRST_TOUCH, SENSITIVE):
+        result = _script(project, hook_id, patch)
+
+        verdict = _decision(result)
+        assert verdict["decision"] == "warn", hook_id
+        assert "\n" not in str(verdict["evidence_ref"]), hook_id
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert context.count("pyproject.toml") == 1, hook_id
+    _script(project, REMINDER, patch)
+    touches = list(
+        (project / ".harness" / ".sandboxes" / "hook-events").glob("*/t-*.json")
+    )
+    assert len(touches) == 1
+
+
+def _claude_edit(project: Path, tool: str, path: Path) -> dict[str, object]:
+    """A Claude Code MultiEdit (`file_path` + `edits`) or NotebookEdit (`notebook_path`)."""
+    tool_input: dict[str, object] = (
+        {"notebook_path": str(path), "new_source": "x = 1", "cell_id": "c1"}
+        if tool == "NotebookEdit"
+        else {
+            "file_path": str(path),
+            "edits": [
+                {"old_string": "a", "new_string": "b"},
+                {"old_string": "c", "new_string": "d"},
+            ],
+        }
+    )
+    return {
+        **_identity("developer"),
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool,
+        "tool_input": tool_input,
+        "cwd": str(project),
+    }
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("tool", "risky"),
+    (
+        ("MultiEdit", "pyproject.toml"),
+        ("NotebookEdit", "skills/demo/auth.ipynb"),
+    ),
+)
+def test_multi_and_notebook_edits_reach_every_change_impact_hook(
+    tmp_path: Path, tool: str, risky: str
+) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    target = _write(project / risky, "{}\n")
+    code = _write(project / "app" / f"code{Path(risky).suffix}", "{}\n")
+
+    for hook_id in (FIRST_TOUCH, SENSITIVE):
+        result = _script(project, hook_id, _claude_edit(project, tool, target))
+
+        verdict = _decision(result)
+        assert verdict["decision"] == "warn", (hook_id, result.stderr)
+        assert verdict["reason_code"] != "internal-error", hook_id
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert risky in context
+    touched = _script(project, REMINDER, _claude_edit(project, tool, code))
+    assert _decision(touched)["reason_code"] == "ok", touched.stderr
+    _write(code, "{}  \n")
+    assert _decision(_script(project, REMINDER, _stop()))["decision"] == "warn"
+
+
+@needs_bash
+def test_codex_advisory_reports_an_unparseable_patch_without_blocking(
+    tmp_path: Path,
+) -> None:
+    project = _project(tmp_path)
+    invalid_patch = _codex_patch(project, "not a patch operation")
+
+    result = _script(project, FIRST_TOUCH, invalid_patch)
+
+    verdict = _decision(result)
+    assert verdict["decision"] == "warn"
+    assert verdict["reason_code"] == "internal-error"
+    assert not result.stdout
+
+
 @needs_bash
 @pytest.mark.parametrize("role", ROLES)
 @pytest.mark.parametrize("profile", PROFILES)

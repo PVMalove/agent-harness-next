@@ -29,6 +29,10 @@ def test_unwritable_ledger_state_is_reported_as_sandbox_denied(
     assert caught.value.message.startswith("sandbox_denied:")
     assert ".coordinator.lock" in caught.value.message
     assert "allowWrite" in caught.value.remedy
+    # A Claude Code worker also writes the inbox and the shared check directories.
+    assert "inbox" in caught.value.remedy
+    for name in ("runs/qa", "runs/tests", "logs", "cache/npm", "cache/ms-playwright"):
+        assert name in caught.value.remedy
 
 
 def test_other_os_errors_are_not_called_sandbox_denied(

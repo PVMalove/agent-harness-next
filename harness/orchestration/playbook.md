@@ -1120,8 +1120,10 @@ no environment failure, so `resume-stop` does not treat it as one.
 A worker must write the coordinator state: at least `.harness/orchestration/state` with its
 `.coordinator.lock` directory and ledger records, and the report inbox. `report submit` takes that
 lock, `dispatch heartbeat` does not, so heartbeats can succeed while a submit fails. Grant the
-write through the runtime's own sandbox settings (Claude Code: `sandbox.filesystem.allowWrite`
-with the state and inbox directories) before launch. A refused lock returns
+write through the runtime's own sandbox settings before launch. Claude Code:
+`sandbox.filesystem.allowWrite` with the state and inbox directories and the main checkout's
+`.harness/.sandboxes/runs/qa`, `runs/tests`, `logs`, `cache/npm` and `cache/ms-playwright` for
+verification and browser checks, or the whole `.harness/.sandboxes`. A refused lock returns
 `sandbox_denied: ...` with the exact path, not a traceback. Classify it as infrastructure, not as
 a task error; deliver the staged file with the relay below only after the cause is named. The
 adapter probe takes and releases the real lock (a lock held by another operation counts as
@@ -1264,10 +1266,17 @@ empty `allowed_tools`.
 Claude uses the brief's model, effort and native tool allowlist; its only additional directory is
 the incoming reports directory. Codex uses an `app-server` connection and a native named
 permission profile. The checkout has the brief's source access; the main coordinator state and
-incoming report directory remain writable for lifecycle evidence. Both source-access modes
-can write shared `.harness/.sandboxes/runs/qa` and `.harness/.sandboxes/runs/tests` temporary
-data and `.sandboxes/logs` for the mandatory bounded check wrapper and full verification;
-this does not grant access to other issue worktrees.
+incoming report directory remain writable for lifecycle evidence. A Codex worker, with either
+source access, can write the shared `.harness/.sandboxes/` subdirectories `runs/qa`,
+`runs/tests`, and `logs` for verification, and `cache/npm` and `cache/ms-playwright` for browser
+checks. The adapter creates these directories before launching Codex, whose sandbox needs
+existing writable roots under read-only parents. A path reached through a symlink or blocked by
+a non-directory is neither created nor granted. For a path the role requires (the report inbox
+and `runs/qa` for every role, `runs/tests` for a developer, and so `.harness/.sandboxes`
+itself) the adapter refuses the launch at startup with `required path is a symlink` or
+`required path is not a directory` and the path. For `logs` and the caches it prints a
+`symlink not granted` or `non-directory not granted` warning with the path and launches with
+the remaining grants. Other cache directories and other issue worktrees receive no write grant.
 Write roles additionally receive their Git admin directory, shared objects, refs and ref logs so
 they can create commits in a linked worktree. The common Git directory permits creating
 `packed-refs.lock` and atomically replacing `packed-refs`; existing other shared metadata stays

@@ -8,8 +8,8 @@
 
 ## 2. Полное описание
 
-Advisory-hook `PreToolUse(Write|Edit)` из матрицы ADR 0024, раздел 2a. Hook читает
-`tool_input.file_path` и предупреждает, когда агент в операции впервые правит путь, влияние которого
+Advisory-hook `PreToolUse(Write|Edit|MultiEdit|NotebookEdit)` из матрицы ADR 0024, раздел 2a. Hook читает
+`tool_input.file_path` (у `NotebookEdit` — `tool_input.notebook_path`) и предупреждает, когда агент в операции впервые правит путь, влияние которого
 ChangeImpact не вычисляет по графу импортов. Это конфиг сборки и проверок (`pyproject.toml`,
 `uv.lock`, `Makefile`, `conftest.py`, `.github/*`, `scripts/verify.py`, `scripts/verification/*`) или
 каталог capabilities и skills (`harness/CAPABILITIES.json`, `skills/*`). Набор совпадает с правилами
@@ -36,17 +36,16 @@ Hook сравнивает путь после `realpath` относительн�
   hook создаёт через `O_EXCL`, поэтому из параллельных вызовов предупреждает ровно один. Маркер
   служит и evidence-записью: его путь стоит в `evidence_ref` вердикта. Хранилище и его границы описаны
   в [targeted-check-reminder.md](targeted-check-reminder.md).
-- **Внутренняя ошибка.** Нечитаемый JSON, нет `session_id` или `tool_input.file_path`, сбой
+- **Внутренняя ошибка.** Нечитаемый JSON, нет `session_id` или пути правки, сбой
   хранилища, любое исключение, ненулевой код и тайм-аут 10 с (`ADVISORY_TIMEOUT_SECONDS`) дают `warn`
   `internal-error` с кодом `0` и пустым stdout ([hook-response.md](hook-response.md)).
-- **Второй runtime.** Там правка файла приходит как `apply_patch` без `file_path`, поэтому hook не
-  подключён, пока нет адаптера payload. `harness health` перечисляет его в строке `нет события или
-  payload` с проверкой вне hook: ChangeImpact-gate по ADR 0023.
+- **Codex.** Хук получает нативный `apply_patch` и сверяет пути из тела патча.
+- **Ограничение Codex.** Shell-вызов `apply_patch <<'EOF'` через инструмент `Bash` хук не видит: hooks ChangeImpact к `Bash` не подключены, такой патч разбирает только критический `protect-hook-policy`. Рискованный путь из такого патча проверяют review и QA.
 
 ## 3. Контракт
 
 - **Вход:** JSON события `PreToolUse` в stdin: `session_id`, `agent_id` (у субагента),
-  `hook_event_name`, `tool_name`, `tool_input.file_path`, `cwd`. Профиль hook берёт только из
+  `hook_event_name`, `tool_name`, `tool_input.file_path` (у `NotebookEdit` — `tool_input.notebook_path`), `cwd`. Профиль hook берёт только из
   `hook_policy` в `.harness/project.json`.
 - **Выход:** всегда код `0`. При первом касании рискованного пути hook пишет `additionalContext` в
   stdout, первой строкой stderr `[risky-path-first-touch] <текст>` и строку `evidence_ref=<путь>`;

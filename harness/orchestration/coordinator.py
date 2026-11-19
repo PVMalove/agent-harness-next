@@ -112,6 +112,8 @@ from harness.orchestration.ledger.ledger_admin import reset_ledger as reset_ledg
 from harness.orchestration.runtime_client import runtime_status as runtime_status
 from harness.orchestration.worktree_lifecycle import create_worktree as create_worktree
 from harness.orchestration.worktree_lifecycle import remove_worktree as remove_worktree
+from harness.orchestration.worktree_session import check_session as check_session
+from harness.orchestration.worktree_session import prepare_session as prepare_session
 from harness.orchestration.workflow.attention import attention_check as attention_check
 from harness.orchestration.workflow.attention import (
     attention_resolve as attention_resolve,
@@ -266,6 +268,10 @@ def main() -> int:
     except HarnessError as exc:
         return print_and_exit(exc)
     print(json.dumps(output, ensure_ascii=False, sort_keys=True))
+    if args.command == "worktree" and subcommand == "prepare" and args.launch:
+        exit_code = output["exit_code"]
+        assert isinstance(exit_code, int)
+        return 128 - exit_code if exit_code < 0 else exit_code
     if args.command == "config" and output.get("valid") is False:
         return 2
     # A recovery refusal prints its structured diagnostics and exits 2, never waiting for input.

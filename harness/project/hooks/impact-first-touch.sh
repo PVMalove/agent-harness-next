@@ -1,7 +1,8 @@
 #!/bin/bash
-# PreToolUse(Write|Edit), advisory: warns on the first touch of a risky path whose impact ChangeImpact
-# cannot compute from the import graph (build and verification config, capabilities, skills). The
-# warning goes to the model as additionalContext; the hook never blocks (ADR 0024, section 2a).
+# PreToolUse(Write|Edit|MultiEdit|NotebookEdit, apply_patch of the second runtime), advisory: warns
+# on the first touch of a risky path whose impact ChangeImpact cannot compute from the import graph
+# (build and verification config, capabilities, skills). The warning goes to the model as
+# additionalContext; the hook never blocks (ADR 0024, section 2a).
 # Verdict envelope (hook_response.py): applies the hook profile and answers with the JSON verdict.
 # Without the helper the body decides alone; without Python the hook allows.
 HOOK_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -154,6 +154,75 @@ def test_update_replaces_outdated_managed_entry_recorded_in_baseline(
     )
 
 
+CHANGE_IMPACT_SCRIPTS = (
+    "impact-first-touch.sh",
+    "sensitive-path-recheck.sh",
+    "targeted-check-reminder.sh",
+)
+
+
+def test_change_impact_hooks_cover_every_file_edit_tool(repo: Path) -> None:
+    install(repo)
+
+    for script in CHANGE_IMPACT_SCRIPTS:
+        edits = [
+            matcher
+            for event, matcher, _ in handlers(load(repo), script)
+            if event == "PreToolUse"
+        ]
+        assert edits == ["Write|Edit|MultiEdit|NotebookEdit"], script
+
+
+def test_update_moves_change_impact_hooks_from_the_old_write_edit_group(
+    repo: Path,
+) -> None:
+    install(repo)
+    document = load(repo)
+    old_group = next(
+        group
+        for group in document["hooks"]["PreToolUse"]
+        if group["matcher"] == "Write|Edit"
+    )
+    outdated = []
+    for script in CHANGE_IMPACT_SCRIPTS:
+        ((event, _, handler),) = [
+            item for item in handlers(document, script) if item[0] == "PreToolUse"
+        ]
+        outdated.append(entry_digest(event, "Write|Edit", handler))
+    # The layout before MultiEdit and NotebookEdit: the hooks sat in the `Write|Edit` group.
+    for group in document["hooks"]["PreToolUse"]:
+        group["hooks"] = [
+            h for h in group["hooks"] if script_of(h) not in CHANGE_IMPACT_SCRIPTS
+        ]
+    old_group["hooks"].extend(
+        {
+            "type": "command",
+            "command": f'bash "${{CLAUDE_PROJECT_DIR}}/.claude/hooks/{script}"',
+        }
+        for script in CHANGE_IMPACT_SCRIPTS
+    )
+    save(repo, document)
+    inventory = json.loads((repo / INTEGRATIONS).read_text(encoding="utf-8"))
+    entry = next(
+        item
+        for item in inventory["integrations"]
+        if item["id"] == "engineering-suite-hooks"
+    )
+    entry["managed_entries"] = sorted([*entry.get("managed_entries", []), *outdated])
+    (repo / INTEGRATIONS).write_text(json.dumps(inventory, indent=2), encoding="utf-8")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    for script in CHANGE_IMPACT_SCRIPTS:
+        edits = [
+            matcher
+            for event, matcher, _ in handlers(load(repo), script)
+            if event == "PreToolUse"
+        ]
+        assert edits == ["Write|Edit|MultiEdit|NotebookEdit"], script
+
+
 def test_update_adds_the_auto_gc_env_and_keeps_a_users_git_config_env(
     repo: Path,
 ) -> None:
@@ -380,7 +449,7 @@ def test_init_installs_the_second_runtime_adapter_from_the_same_scripts(
     install(repo)
 
     # The second runtime delivers PreToolUse for Bash and apply_patch and the end of a turn (Stop,
-    # SubagentStop); apply_patch reaches only the critical guards with the patch adapter.
+    # SubagentStop); apply_patch reaches the guards and advisories with the patch adapter.
     expected = sorted(
         [
             *(
@@ -402,6 +471,9 @@ def test_init_installs_the_second_runtime_adapter_from_the_same_scripts(
                 "apply_patch|Write|Edit",
                 "block-scratch-outside-docs-tasks.sh",
             ),
+            ("PreToolUse", "apply_patch|Write|Edit", "impact-first-touch.sh"),
+            ("PreToolUse", "apply_patch|Write|Edit", "sensitive-path-recheck.sh"),
+            ("PreToolUse", "apply_patch|Write|Edit", "targeted-check-reminder.sh"),
         ]
     )
     assert ("Stop", "", "targeted-check-reminder.sh") in expected
@@ -430,13 +502,11 @@ def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
         {
             "check-worktree-branch-name.sh",
             "count-skill-usage.sh",
-            "impact-first-touch.sh",
-            "sensitive-path-recheck.sh",
             "runtime-autostart.sh",
         }
     )
     assert "protect-hook-policy.sh" in scripts
-    # Write and Edit arrive as apply_patch: only the critical guards with the patch adapter take it.
+    # Write and Edit arrive as apply_patch: the handlers in this group can parse it.
     assert {
         (matcher, script)
         for event, matcher, script in codex_triples(load_codex(repo))
@@ -444,13 +514,17 @@ def test_second_runtime_adapter_skips_hooks_whose_payload_it_cannot_deliver(
     } == {
         ("apply_patch|Write|Edit", "protect-hook-policy.sh"),
         ("apply_patch|Write|Edit", "block-scratch-outside-docs-tasks.sh"),
+        ("apply_patch|Write|Edit", "impact-first-touch.sh"),
+        ("apply_patch|Write|Edit", "sensitive-path-recheck.sh"),
+        ("apply_patch|Write|Edit", "targeted-check-reminder.sh"),
     }
-    # The advisory Write/Edit rows stay unwired: only the end-of-turn rows of the reminder are.
+    # The reminder records touches before applying a patch and reads them at turn end.
     assert {
         (event, script)
         for event, _, script in codex_triples(load_codex(repo))
         if script == "targeted-check-reminder.sh"
     } == {
+        ("PreToolUse", "targeted-check-reminder.sh"),
         ("Stop", "targeted-check-reminder.sh"),
         ("SubagentStop", "targeted-check-reminder.sh"),
     }

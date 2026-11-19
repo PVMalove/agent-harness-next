@@ -433,7 +433,7 @@ def test_codex_writer_keeps_runtime_metadata_read_only(
 
 
 @pytest.mark.parametrize("access", ["write", "read-only"])
-def test_codex_bounded_checks_can_write_shared_temporary_data_and_logs(
+def test_codex_dry_run_grants_only_the_shared_check_directories(
     dispatch: tuple[Path, Path, dict[str, object]], access: str
 ) -> None:
     repo, worker, _ = dispatch
@@ -454,9 +454,217 @@ def test_codex_bounded_checks_can_write_shared_temporary_data_and_logs(
     assert filesystem[str(repo / ".harness/.sandboxes/runs/tests")] == "write"
     assert str(repo / ".harness/.sandboxes/runs") not in filesystem
     assert filesystem[str(repo / ".harness/.sandboxes/logs")] == "write"
+    assert filesystem[str(repo / ".harness/.sandboxes/cache/npm")] == "write"
+    assert filesystem[str(repo / ".harness/.sandboxes/cache/ms-playwright")] == "write"
     assert filesystem[str(worker)] == ("write" if access == "write" else "read")
     assert str(repo / ".harness/.sandboxes") not in filesystem
     assert str(repo / ".harness/.sandboxes/worktrees") not in filesystem
+    assert str(repo / ".harness/.sandboxes/cache") not in filesystem
+    assert str(repo / ".harness/.sandboxes/scratch") not in filesystem
+    assert str(repo / ".harness/.sandboxes/pr_body") not in filesystem
+    for name in ("runs", "logs", "cache"):
+        assert not (repo / ".harness/.sandboxes" / name).exists()
+
+
+def codex_write_grants(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    command = json.loads(result.stdout)["command"]
+    configs = [
+        tomllib.loads(command[i + 1])
+        for i, value in enumerate(command)
+        if value == "--config"
+    ]
+    return next(
+        c["permissions"]["harness-worker"]["filesystem"]
+        for c in configs
+        if "permissions" in c
+    )
+
+
+def redirect(path: Path, target: Path) -> None:
+    try:
+        path.symlink_to(target, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+
+
+def test_codex_skips_a_redirected_shared_cache_with_a_warning(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    sandboxes = repo / ".harness/.sandboxes"
+    (sandboxes / "cache").mkdir()
+    outside = repo.parent / "outside"
+    outside.mkdir()
+    redirect(sandboxes / "cache/ms-playwright", outside)
+
+    result = invoke(dispatch, "--dry-run", runtime="codex")
+
+    assert result.returncode == 0, result.stderr
+    filesystem = codex_write_grants(result)
+    assert str(sandboxes / "cache/ms-playwright") not in filesystem
+    for name in ("runs/qa", "runs/tests", "logs", "cache/npm"):
+        assert filesystem[str(sandboxes / name)] == "write"
+    assert "warning: symlink not granted" in result.stderr
+    assert str(sandboxes / "cache/ms-playwright") in result.stderr
+    assert not list(outside.iterdir())
+
+
+@pytest.mark.parametrize("mode", ["--dry-run", "launch"])
+def test_codex_refuses_a_redirected_sandboxes_root(
+    dispatch: tuple[Path, Path, dict[str, object]], mode: str
+) -> None:
+    repo, _, _ = dispatch
+    sandboxes = repo / ".harness/.sandboxes"
+    outside = repo.parent / "outside-sandboxes"
+    sandboxes.rename(outside)
+    redirect(sandboxes, outside)
+    args = ["--dry-run"] if mode == "--dry-run" else ["--codex-bin", "/nonexistent"]
+
+    result = invoke(dispatch, *args, runtime="codex", changes=SUPERVISED)
+
+    assert result.returncode != 0
+    assert "required path is a symlink" in result.stderr
+    assert str(sandboxes) in result.stderr
+    assert "Errno" not in result.stderr
+    assert sorted(path.name for path in outside.iterdir()) == ["scratch"]
+
+
+@pytest.mark.parametrize(
+    "role,access,required",
+    [("developer", "write", True), ("code-review", "read-only", False)],
+)
+def test_codex_runs_tests_is_required_only_for_a_developer(
+    dispatch: tuple[Path, Path, dict[str, object]],
+    role: str,
+    access: str,
+    required: bool,
+) -> None:
+    repo, _, _ = dispatch
+    runs = repo / ".harness/.sandboxes/runs"
+    runs.mkdir()
+    outside = repo.parent / "outside"
+    outside.mkdir()
+    redirect(runs / "tests", outside)
+
+    result = invoke(
+        dispatch,
+        "--dry-run",
+        runtime="codex",
+        changes={"role": role, "access": access},
+    )
+
+    assert str(runs / "tests") in result.stderr
+    if required:
+        assert result.returncode != 0
+        assert "required path is a symlink" in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        assert "symlink not granted" in result.stderr
+        filesystem = codex_write_grants(result)
+        assert str(runs / "tests") not in filesystem
+        assert filesystem[str(runs / "qa")] == "write"
+    assert not list(outside.iterdir())
+
+
+@pytest.mark.parametrize("mode", ["--dry-run", "launch"])
+def test_codex_refuses_a_required_path_that_is_a_regular_file(
+    dispatch: tuple[Path, Path, dict[str, object]], mode: str
+) -> None:
+    repo, _, _ = dispatch
+    runs = repo / ".harness/.sandboxes/runs"
+    runs.mkdir()
+    (runs / "qa").write_text("not a directory", encoding="utf-8")
+    args = ["--dry-run"] if mode == "--dry-run" else ["--codex-bin", "/nonexistent"]
+
+    result = invoke(
+        dispatch,
+        *args,
+        runtime="codex",
+        changes={"role": "code-review", "access": "read-only", **SUPERVISED},
+    )
+
+    assert result.returncode != 0
+    assert "required path is not a directory" in result.stderr
+    assert str(runs / "qa") in result.stderr
+    assert "Errno" not in result.stderr
+    assert (runs / "qa").read_text(encoding="utf-8") == "not a directory"
+
+
+def test_codex_refuses_a_redirected_report_inbox(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    inbox = repo / ".harness/.sandboxes/scratch/inbox"
+    outside = repo.parent / "outside-inbox"
+    inbox.rename(outside)
+    redirect(inbox, outside)
+
+    result = invoke(dispatch, "--dry-run", runtime="codex")
+
+    assert result.returncode != 0
+    assert "required path is a symlink" in result.stderr
+    assert str(inbox) in result.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_codex_skips_a_shared_leaf_that_is_a_regular_file(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    logs = repo / ".harness/.sandboxes/logs"
+    logs.write_text("not a directory", encoding="utf-8")
+
+    dry = invoke(dispatch, "--dry-run", runtime="codex")
+
+    assert dry.returncode == 0, dry.stderr
+    filesystem = codex_write_grants(dry)
+    assert str(logs) not in filesystem
+    assert filesystem[str(repo / ".harness/.sandboxes/runs/qa")] == "write"
+    assert str(logs) in dry.stderr
+    assert "warning: non-directory not granted" in dry.stderr
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn="""\
+        note('turn/completed', {'turn': {'status': 'completed'}})
+""",
+    )
+
+    result = invoke(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Errno" not in result.stderr
+    assert str(logs) in result.stderr
+    assert logs.read_text(encoding="utf-8") == "not a directory"
+
+
+def test_codex_skips_a_shared_directory_redirected_while_it_is_created(
+    dispatch: tuple[Path, Path, dict[str, object]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, _, _ = dispatch
+    sandboxes = repo / ".harness/.sandboxes"
+    outside = repo.parent / "outside"
+    outside.mkdir()
+    redirect(repo.parent / "probe-link", outside)
+    real_mkdir = Path.mkdir
+
+    def racing_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        # Another process plants a symlink after the check and before this mkdir.
+        if self == sandboxes / "cache" and not os.path.lexists(self):
+            self.symlink_to(outside, target_is_directory=True)
+        real_mkdir(self, *args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(Path, "mkdir", racing_mkdir)
+
+    granted = codex_worker.shared_artifact_dirs(repo, "developer", create=True)
+
+    assert sandboxes / "cache/npm" not in granted
+    assert sandboxes / "cache/ms-playwright" not in granted
+    assert sandboxes / "runs/qa" in granted
+    assert sandboxes / "logs" in granted
+    assert not list(outside.iterdir())
 
 
 @pytest.mark.parametrize("mode", ["enabled", "disabled"])
@@ -720,6 +928,29 @@ def harness_events(stdout: str) -> list[tuple[object, object]]:
     records = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     assert all(record["type"] == "harness-event" for record in records), records
     return [(record["kind"], record["text"]) for record in records]
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable")
+def test_codex_prepares_check_directories_before_the_app_server_starts(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    sandboxes = repo / ".harness/.sandboxes"
+    binary = fake_app_server(
+        repo,
+        worker,
+        after_turn=f"""\
+        for name in ('runs/qa', 'runs/tests', 'logs', 'cache/npm', 'cache/ms-playwright'):
+            (Path({str(sandboxes)!r}) / name / 'runner.txt').write_text('ready')
+        note('turn/completed', {{'turn': {{'status': 'completed'}}}})
+""",
+    )
+
+    result = invoke(
+        dispatch, "--codex-bin", str(binary), runtime="codex", changes=SUPERVISED
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
