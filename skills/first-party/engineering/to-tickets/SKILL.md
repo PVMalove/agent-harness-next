@@ -59,23 +59,21 @@ Before showing the plan, check that:
 - the blocking graph has no cycles
 - no ticket names an unapproved path or implements a non-goal
 
-Save the complete plan in a new `docs/tasks/<task-folder>/artifacts/ticket-plan-v<N>.md`.
-Use the existing epic folder or a descriptive slug for a standalone plan. Keep prior revisions.
-Include the cards, waves, traceability matrix, paths awaiting approval, and drafted epic sections.
-Record the file's SHA-256 and link the exact revision using its absolute path.
-
-Show the full plan on the first pass. On revision, update the requested cards and affected
-dependencies or coverage, repeat the checks above, and show only the changed cards, changed
-dependencies, criteria, and other affected decisions. Link the complete new revision. Ask for
-approval of that revision, including its paths, granularity, scores, labels, and epic sections.
-The user may override a pipeline label without changing the score. Wait for explicit approval.
+Save the complete plan as a new `docs/tasks/<task-folder>/artifacts/ticket-plan-v<N>.md` (the epic
+folder, or a descriptive slug for a standalone plan); keep prior revisions. It holds the cards,
+waves, traceability matrix, paths awaiting approval, and drafted epic sections. Record its SHA-256
+and link it by absolute path. Show the full plan first. On revision, update the requested cards and
+affected dependencies or coverage, repeat the checks, and show only the changed cards, dependencies,
+criteria, and decisions, linking the new revision. Ask to approve that revision, including its
+paths, granularity, scores, labels, and epic sections; the user may override a pipeline label
+without changing the score. Wait for explicit approval.
 
 ## Publish and finish
 
-Verify the approved draft's SHA-256 before publishing. If the file is missing or changed, show a
-new revision and request approval. Otherwise read `references/publish.md` and follow it using
-the approved file as the source for the configured tracker. If a write
-fails or the tracker is unavailable, report the error and leave the complete ticket cards in chat.
+Verify the approved draft's SHA-256 before publishing; if it is missing or changed, show a new
+revision for approval. Otherwise read `references/publish.md` and follow it with that file as the
+source for the configured tracker. If a write fails or the tracker is unavailable, report the error
+and leave the complete ticket cards in chat.
 
 Finish with the summary table from `references/publish.md`. Offer to adjust the tickets, or to start
 a Wave 1 ticket manually with `/implement` or `/fast-implement`, matching its pipeline label.
