@@ -960,6 +960,8 @@ def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str,
         ).items()
     }
     scratch = storage_path(repo, "scratch", ".gitignore")
+    # A linked checkout shares scratch with its main checkout. Seeding this worker must not
+    # turn a shared path into a ../ write or fail while relativizing that outside path.
     if scratch.is_relative_to(repo):
         files[scratch.relative_to(repo).as_posix()] = (
             PROJECT_TEMPLATE_DIR / "scratch/.gitignore"
