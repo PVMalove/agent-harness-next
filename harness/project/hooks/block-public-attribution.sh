@@ -33,7 +33,7 @@ fi
 
 # Runtime/model names and human coauthors are allowed on every publication surface.
 # Block assistant signatures, generated-by marks and assistant session URLs.
-TRACKER_ATTRIBUTION='(?<![a-z0-9])co-authored[- ]by\s*:\s*(?:claude(?:\s+code)?|openai|chatgpt|copilot|gemini|codex|gpt(?:[-_ ]?[0-9][a-z0-9._-]*)?)(?=\s*(?:<|_?(?:\r?\n|$)))|(?<![a-z0-9])(generated|written|created|authored|produced)\s+(with|by|using|via)\s+\[?(claude|chatgpt|openai|copilot|gemini|codex|gpt[-_ ]?[0-9])|(?<![a-z0-9])ai[-_ ]?generated(?![a-z0-9])|(?<![a-z0-9.-])(claude\.ai|chatgpt\.com|chat\.openai\.com)/'
+TRACKER_ATTRIBUTION='(?<![a-z0-9])co-authored[- ]by\s*:\s*(?:claude(?:\s+code)?|openai|chatgpt|copilot|gemini|codex|gpt(?:[-_ ]?[0-9][a-z0-9._-]*)?)(?=\s*(?:<|_?(?:\r?\n|$)))|(?<![a-z0-9])(generated|written|created|authored|produced)\s+(with|by|using|via)\s+\[?(claude|chatgpt|openai|copilot|gemini|codex|gpt[-_ ]?[0-9]|ai(?![a-z0-9]))|(?<![a-z0-9])ai[-_ ]?generated(?![a-z0-9])|(?<![a-z0-9.-])(claude\.ai|chatgpt\.com|chat\.openai\.com)/'
 FORBIDDEN="$TRACKER_ATTRIBUTION"
 
 printf '%s\n' "$COMMAND" | grep -qiE 'git[[:space:]]+(commit|push)|(gh|glab)[[:space:]]+(pr|mr|issue)[[:space:]]+(create|new|edit|update|comment|note)|glab[[:space:]]+api' || exit 0

@@ -15,7 +15,7 @@ The script runs at the `PreToolUse` stage for `Bash`. It checks commit messages,
 
 Assistant and model names — Claude, Codex, OpenAI, ChatGPT, GPT, Copilot, Gemini — are allowed as project vocabulary, including paths such as `.claude/` and `CLAUDE.md`. Human developer `Co-Authored-By` trailers are also allowed. When forming a commit, the agent must never add itself as an author or coauthor.
 
-Every publication surface uses the same rule: reject known assistant signatures in `Co-Authored-By`, claims such as "generated/written/created/authored/produced by/with/using/via <assistant>", an `AI-generated` mark, and assistant session URLs (`claude.ai/`, `chatgpt.com/`, `chat.openai.com/`). The check recognizes known signatures by assistant name; it does not establish a person's identity. Ordinary names and human developer coauthor trailers pass. `FORBIDDEN` and `TRACKER_ATTRIBUTION` use the same pattern.
+Every publication surface uses the same rule: reject known assistant signatures in `Co-Authored-By`, claims such as "generated/written/created/authored/produced by/with/using/via <assistant>" (the standalone word `AI` counts as an assistant here), an `AI-generated` mark, and assistant session URLs (`claude.ai/`, `chatgpt.com/`, `chat.openai.com/`). The check recognizes known signatures by assistant name; it does not establish a person's identity. Ordinary names and human developer coauthor trailers pass. `FORBIDDEN` and `TRACKER_ATTRIBUTION` use the same pattern.
 
 The execution logic includes:
 1. Safe JSON parsing (through Python) to extract the command being run from `tool_input.command`.
