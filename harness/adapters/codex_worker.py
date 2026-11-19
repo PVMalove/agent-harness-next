@@ -19,6 +19,7 @@ import os
 import queue
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -29,6 +30,13 @@ from typing import NotRequired, TypedDict, cast
 
 STARTUP_CHECK_SECONDS = 10
 PERMISSION_PROFILE = "harness-worker"
+SHARED_ARTIFACT_DIRS = (
+    "runs/qa",
+    "runs/tests",
+    "logs",
+    "cache/npm",
+    "cache/ms-playwright",
+)
 # Items whose start is not a tool step; their content never reaches the event stream.
 NON_TOOL_ITEMS = frozenset({"agentMessage", "userMessage", "reasoning"})
 
@@ -174,6 +182,7 @@ def worker_command(
     worktree: Path,
     binary: str = "codex",
     *,
+    shared_artifacts: tuple[Path, ...],
     network_access: bool = False,
 ) -> list[str]:
     access = brief.get("access")
@@ -188,9 +197,7 @@ def worker_command(
         str(worktree): "write" if access == "write" else "read",
         str(repo / ".harness/orchestration/state"): "write",
         str(Path(brief["report_staging_path"]).parent): "write",
-        str(repo / ".harness/.sandboxes/runs/qa"): "write",
-        str(repo / ".harness/.sandboxes/runs/tests"): "write",
-        str(repo / ".harness/.sandboxes/logs"): "write",
+        **{str(directory): "write" for directory in shared_artifacts},
     }
     if access == "write":
         filesystem.update({":tmpdir": "write", ":slash_tmp": "write"})
@@ -481,6 +488,87 @@ def log_path(brief: Brief) -> Path:
     )
 
 
+def required_sandbox_dirs(role: str) -> frozenset[str]:
+    """The ``.harness/.sandboxes`` directories without which ``role`` cannot do its work.
+
+    Every role stages its self-report in the inbox and runs its checks through the bounded
+    wrapper, whose temporary data lives in ``runs/qa``; a developer also runs the full
+    verification and the test-author, which write ``runs/tests``. The other shared
+    directories (``logs`` and the caches) only help a check, so the launch goes on without them.
+    """
+    required = {"scratch/inbox", "runs/qa"}
+    if role == "developer":
+        required.add("runs/tests")
+    return frozenset(required)
+
+
+def shared_artifact_dirs(repo: Path, role: str, *, create: bool) -> tuple[Path, ...]:
+    """The shared check directories to grant ``role``, with its required ones verified.
+
+    A directory reached through a symlink, or blocked by a non-directory, is neither created
+    nor granted. A required one refuses the launch; any other is skipped with a warning and the
+    launch continues with the remaining grants. Creation never follows a symlink, so one planted
+    between a check and a ``mkdir`` is detected instead of written through.
+    """
+    required = required_sandbox_dirs(role)
+    granted = []
+    for name in ("scratch/inbox", *SHARED_ARTIFACT_DIRS):
+        directory = repo / ".harness/.sandboxes" / name
+        problem = _real_directory_problem(repo, directory, create=create)
+        if problem is None and create:
+            # A parent swapped for a symlink after its own check redirects the path.
+            problem = _real_directory_problem(repo, directory, create=False)
+        if problem is None:
+            if name in SHARED_ARTIFACT_DIRS:
+                granted.append(directory)
+            continue
+        component, symlink = problem
+        reason = "is a symlink" if symlink else "exists and is not a directory"
+        if name in required:
+            kind = "a symlink" if symlink else "not a directory"
+            raise ValueError(
+                f"required path is {kind}: {directory} ({component} {reason}); "
+                f"the {role} worker cannot run without writing it"
+            )
+        label = "symlink not granted" if symlink else "non-directory not granted"
+        print(
+            f"warning: {label}: {directory} ({component} {reason}); "
+            "the launch continues without this write grant",
+            file=sys.stderr,
+            flush=True,
+        )
+    return tuple(granted)
+
+
+def _real_directory_problem(
+    base: Path, directory: Path, *, create: bool
+) -> tuple[Path, bool] | None:
+    """The first component of ``directory`` below ``base`` that is not a real directory, and
+    whether it is a symlink; None for a real directory chain.
+
+    With ``create`` each missing component is made by a single ``mkdir`` and then verified
+    without following symlinks. Without it, a missing component ends the walk: the real
+    launch creates it.
+    """
+    current = base
+    for part in directory.relative_to(base).parts:
+        current = current / part
+        if create:
+            try:
+                current.mkdir()
+            except FileExistsError:
+                pass
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            return None
+        if stat.S_ISLNK(mode):
+            return current, True
+        if not stat.S_ISDIR(mode):
+            return current, False
+    return None
+
+
 def start(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     brief_path = Path(args.brief).resolve()
@@ -516,11 +604,17 @@ def start(args: argparse.Namespace) -> int:
     prompt = build_prompt(brief, brief_path, repo, worktree, sha)
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
+    # A writable mount cannot create itself under a read-only parent inside Codex,
+    # so a real launch creates the directories first; a dry run only inspects them.
+    shared_artifacts = shared_artifact_dirs(
+        repo, brief["role"], create=not args.dry_run
+    )
     command = worker_command(
         brief,
         repo,
         worktree,
         args.codex_bin,
+        shared_artifacts=shared_artifacts,
         network_access=args.network_access == "enabled",
     )
     if args.dry_run:
