@@ -142,8 +142,18 @@ def _render(
     return native_config, owned
 
 
-def _sync(repo: Path) -> list[str]:
-    runtimes, events = _manifest(repo)
+def owned_configs(repo: Path) -> dict[str, str]:
+    """Native config of every runtime that holds Harness-written lifecycle entries."""
+    ownership = _read(_path(repo, OWNERSHIP), {})
+    return {
+        adapter.runtime: adapter.config
+        for adapter in NATIVE_ADAPTERS
+        if ownership.get(adapter.runtime)
+    }
+
+
+def _sync(repo: Path, *, release: bool) -> list[str]:
+    runtimes, events = ([], {}) if release else _manifest(repo)
     ownership_path = _path(repo, OWNERSHIP)
     baseline = _read(ownership_path, {})
     changes = []
@@ -163,7 +173,7 @@ def _sync(repo: Path) -> list[str]:
         before = _read(path, default)
         document, owned = _render(adapter, before, desired, set(previous))
         if before != document and (path.exists() or owned):
-            changes.append((path, document))
+            changes.append((path, document, {**default, "hooks": {}}))
         if owned:
             next_ownership[adapter.runtime] = sorted(owned)
             journal[adapter.runtime] = sorted(set(previous) | owned)
@@ -171,19 +181,27 @@ def _sync(repo: Path) -> list[str]:
     # partially applied installation or removal without claiming an existing user entry.
     if journal != baseline:
         _write(ownership_path, journal)
-    for path, document in changes:
-        _write(path, document)
+    for path, document, empty in changes:
+        # A config left with only an empty hooks object holds no setting, so it is removed.
+        if document == empty:
+            path.unlink(missing_ok=True)
+        else:
+            _write(path, document)
     if next_ownership != journal:
         _write(ownership_path, next_ownership)
-    return [path.relative_to(repo).as_posix() for path, _ in changes]
+    return [path.relative_to(repo).as_posix() for path, _, _ in changes]
 
 
-def sync(repo: Path) -> list[str]:
+def sync(repo: Path, *, release: bool = False) -> list[str]:
+    """Render the manifest into native configs; `release` removes every owned entry instead.
+
+    Either way an entry Harness did not write, or that the user changed, stays in place.
+    """
     lock_path = _path(repo, SYNC_LOCK)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     with lock_path.open("ab+") as stream:
         _lock(stream)
         try:
-            return _sync(repo)
+            return _sync(repo, release=release)
         finally:
             _unlock(stream)

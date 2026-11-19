@@ -618,23 +618,9 @@ def record_integration(
 
     `managed_entries` — отсортированные отпечатки managed hook-записей, которые harness записал
     в `config`: по ним слияние отличает устаревшую запись от правки пользователя."""
-    path = repo / INTEGRATIONS_REL
-    data: object = {}
-    if path.is_file():
-        # Never rewrite an inventory that cannot be read: it holds the project's own entries.
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except JSON_READ_ERRORS as exc:
-            fail(f"cannot read {path}: {exc} (fix or remove it, then retry)")
-    existing = (data.get("integrations") if isinstance(data, dict) else None) or []
-    if not isinstance(data, dict) or not isinstance(existing, list):
-        fail(
-            f"cannot read {path}: expected an object with an integrations list "
-            "(fix or remove it, then retry)"
-        )
     entries = [
         entry
-        for entry in existing
+        for entry in read_integrations(repo)
         if not (
             isinstance(entry, dict)
             and canonical_integration_id(entry.get("id")) == identifier
@@ -652,6 +638,31 @@ def record_integration(
     if managed_entries is not None:
         entry["managed_entries"] = sorted(managed_entries)
     entries.append(entry)
+    write_integrations(repo, entries)
+
+
+def read_integrations(repo: Path) -> list[object]:
+    """Записи .harness/integrations.json; нечитаемый каталог останавливает CLI, а не теряется."""
+    path = repo / INTEGRATIONS_REL
+    data: object = {}
+    if path.is_file():
+        # Never rewrite an inventory that cannot be read: it holds the project's own entries.
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except JSON_READ_ERRORS as exc:
+            fail(f"cannot read {path}: {exc} (fix or remove it, then retry)")
+    existing = (data.get("integrations") if isinstance(data, dict) else None) or []
+    if not isinstance(data, dict) or not isinstance(existing, list):
+        fail(
+            f"cannot read {path}: expected an object with an integrations list "
+            "(fix or remove it, then retry)"
+        )
+    return list(existing)
+
+
+def write_integrations(repo: Path, entries: list[object]) -> None:
+    """Записать .harness/integrations.json со схемой 1."""
+    path = repo / INTEGRATIONS_REL
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps({"schema": 1, "integrations": entries}, indent=2, ensure_ascii=False)
@@ -659,6 +670,54 @@ def record_integration(
         encoding="utf-8",
         newline="\n",
     )
+
+
+RUNTIME_EVENTS_VERIFY = (
+    "Open a fresh session of the runtime and confirm that the commands of "
+    ".harness/runtime-events.json run at their lifecycle events."
+)
+
+
+def record_runtime_events(repo: Path, changed: list[str]) -> None:
+    """Inventory every native config that holds Harness-written lifecycle hooks.
+
+    Each such runtime gets a `runtime-events-<runtime>` entry at the current file hash; other
+    entries of a config this write changed get the new hash too. Entries of runtimes that no
+    longer own a hook are dropped."""
+    from harness.health.runtime_contract import NATIVE_ADAPTERS
+    from harness.runtime_events import owned_configs
+
+    try:
+        owned = owned_configs(repo)
+    except (OSError, ValueError) as exc:
+        fail(f"runtime events: {exc}")
+    if not owned and not (repo / INTEGRATIONS_REL).is_file():
+        return
+    ids = {f"runtime-events-{adapter.runtime}" for adapter in NATIVE_ADAPTERS}
+    entries: list[object] = []
+    for entry in read_integrations(repo):
+        if isinstance(entry, dict):
+            if canonical_integration_id(entry.get("id")) in ids:
+                continue
+            config = entry.get("config")
+            if config in changed and (repo / str(config)).is_file():
+                entry["sha256"] = digest((repo / str(config)).read_bytes())
+        entries.append(entry)
+    for runtime, config in owned.items():
+        if not (repo / config).is_file():
+            continue
+        entries.append(
+            {
+                "id": f"runtime-events-{runtime}",
+                "kind": "hook",
+                "runtimes": [runtime],
+                "config": config,
+                "sha256": digest((repo / config).read_bytes()),
+                "secret_refs": [],
+                "verify": RUNTIME_EVENTS_VERIFY,
+            }
+        )
+    write_integrations(repo, entries)
 
 
 def snapshot_diff(repo: Path, override: list[str] | None = None) -> JsonObject:
@@ -1743,6 +1802,7 @@ def cmd_runtime_events(args: argparse.Namespace) -> int:
         changed = sync(repo)
     except (OSError, ValueError) as exc:
         fail(f"runtime events: {exc}")
+    record_runtime_events(repo, changed)
     for path in changed:
         print(f"updated {path}")
     return 0
@@ -1918,6 +1978,7 @@ def cmd_update(args: argparse.Namespace) -> int:
         fix_hint="re-run with --force or --force-managed-files",
     )
     written.extend(seed_capability_extras(repo, args, selected))
+    record_runtime_events(repo, [])
     print(f"updated agent-harness to {version()} in {repo}")
     print(f"managed files: {len(written)}")
     print_contract_proposals(propose_contract_links(repo, PROJECT_TEMPLATE_DIR))

@@ -43,9 +43,7 @@ def test_events_sync_to_three_runtimes_and_remove_only_owned_entries(
     assert harness("runtime-events", str(tmp_path)).returncode == 0
     assert json.loads(cursor.read_text()) == own
     for filename in (".claude/settings.json", ".codex/hooks.json"):
-        assert (
-            "SessionStart" not in json.loads((tmp_path / filename).read_text())["hooks"]
-        )
+        assert not (tmp_path / filename).exists()
 
 
 def test_explicit_skill_invocation_survives_update(tmp_path: Path) -> None:
@@ -141,3 +139,70 @@ def test_clearing_invocation_does_not_remove_linked_metadata(tmp_path: Path) -> 
     assert "explicit invocation refuses linked path" in result.stderr
     assert (local / "openai.yaml").is_file()
     assert agents.is_symlink()
+
+
+def _integration_problems(repo: Path) -> list[str]:
+    from harness.health.project_files import validate_integrations
+
+    problems: list[str] = []
+    validate_integrations(repo, problems)
+    return problems
+
+
+def test_runtime_event_configs_stay_inventoried_through_update(tmp_path: Path) -> None:
+    git(tmp_path, "init", "-b", "main")
+    installed = harness("init", str(tmp_path), "--capability", "engineering-suite")
+    assert installed.returncode == 0, installed.stderr
+    manifest = tmp_path / ".harness/runtime-events.json"
+    manifest.write_text(
+        json.dumps(
+            {
+                "runtimes": ["claude", "codex"],
+                "events": {"session_start": ["python scripts/session.py"]},
+            }
+        )
+    )
+
+    assert harness("runtime-events", str(tmp_path)).returncode == 0
+    assert _integration_problems(tmp_path) == []
+    updated = harness("update", str(tmp_path))
+    assert updated.returncode == 0, updated.stderr
+    assert _integration_problems(tmp_path) == []
+
+    manifest.unlink()
+    assert harness("runtime-events", str(tmp_path)).returncode == 0
+    assert _integration_problems(tmp_path) == []
+    inventory = json.loads((tmp_path / ".harness/integrations.json").read_text())
+    assert not [
+        entry
+        for entry in inventory["integrations"]
+        if entry["id"].startswith("runtime-events-")
+    ]
+
+
+def test_uninstall_removes_only_harness_runtime_event_entries(tmp_path: Path) -> None:
+    from harness.uninstall import CONFIRM_WORD, apply_uninstall, plan_uninstall
+
+    git(tmp_path, "init", "-b", "main")
+    installed = harness("init", str(tmp_path), "--capability", "engineering-suite")
+    assert installed.returncode == 0, installed.stderr
+    settings = tmp_path / ".claude/settings.json"
+    own = {
+        "permissions": {"allow": ["Bash(ls)"]},
+        "hooks": {
+            "SessionStart": [{"hooks": [{"type": "command", "command": "echo own"}]}]
+        },
+    }
+    settings.write_text(json.dumps(own))
+    (tmp_path / ".harness/runtime-events.json").write_text(
+        json.dumps({"runtimes": ["claude"], "events": {"stop": ["python stop.py"]}})
+    )
+    assert harness("runtime-events", str(tmp_path)).returncode == 0
+    assert json.loads(settings.read_text()) != own
+
+    plan = plan_uninstall(tmp_path)
+    result = apply_uninstall(tmp_path, plan, confirm=CONFIRM_WORD)
+
+    assert result["failed"] == []
+    assert json.loads(settings.read_text()) == own
+    assert not (tmp_path / ".harness").exists()
