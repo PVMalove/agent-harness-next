@@ -7,10 +7,10 @@ parameter, a subagent starts in the main checkout, and `EnterWorktree` refuses i
 `send.worker_worktree` as
 `claude_worker.py dispatch [--extra-prompt-file F] [--dry-run] --repo <main repo> --brief <brief>`.
 Under runtime supervision (a brief with an `execution` section) the adapter lives exactly as long as
-its worker: it runs `claude -p <prompt>` in the foreground in its own process group, never reads its
-own stdin, streams `--output-format stream-json --verbose` to the inherited stdout (the runtime's run
-log) and returns the worker's exit status. Without `execution` it starts a detached `claude -p` that
-reads the prompt from stdin and returns. The worker's self-report, heartbeat and `report submit`
+its worker, in the same process group. Without `execution` a detached adapter manages the stream.
+The adapter verifies the result of a probe-only turn before sending the task to the same session.
+It forwards the task's native events and returns the worker's exit status. The worker's self-report,
+heartbeat and `report submit`
 prove its actual checkout. In a container (`HARNESS_EXECUTOR=docker`, ADR 0025) no coordinator
 command can run: the prompt asks only for the staged report, and the host records the self-report
 and heartbeat from the stream and submits the report. It runs on the brief's model and effort, with
@@ -28,19 +28,24 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue
 import shlex
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path, PurePath
 from typing import NotRequired, TypedDict, cast
 
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
+    import worker_write_probe  # type: ignore[import-not-found]
+else:
+    from harness.adapters import worker_write_probe
+
 STARTUP_CHECK_SECONDS = 3
-# One argv string is bounded by MAX_ARG_STRLEN (131072 bytes) on Linux; a Windows command line by
-# 32767 characters in all. Keep a margin for the other arguments.
-POSIX_PROMPT_BYTES = 120000
-WINDOWS_PROMPT_CHARS = 30000
+WRITE_PROBE_TIMEOUT_SECONDS = 45
 # Tools that already let a role write files; a role with none of them is read-only.
 WRITE_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
@@ -62,7 +67,15 @@ class Brief(TypedDict):
     liveness: Liveness
     resolved_transport: str
     purpose: str
+    access: NotRequired[str]
+    runtime_access: NotRequired[dict[str, object]]
     execution: NotRequired[dict[str, object]]
+
+
+class WorkerJob(TypedDict):
+    command: list[str]
+    probe: str
+    prompt: str
 
 
 HOST_START = """\
@@ -171,6 +184,34 @@ def build_prompt(
     return prompt
 
 
+def native_write_probe(brief: Brief, repo: Path, worktree: Path) -> str:
+    """Put the check in the session's actual Bash tool instead of the adapter process."""
+    tools = brief["allowed_tools"]
+    writer = brief.get("access", "write" if brief["role"] == "developer" else "read-only") == "write"
+    check_dirs: list[Path] = []
+    if brief["role"] == "developer" and any(
+        tool in tools for tool in ("Agent", "Agent(test-author)")
+    ):
+        check_dirs.append(repo / ".harness/.sandboxes/runs")
+    plan = brief.get("runtime_access") or {}
+    requirements = plan.get("filesystem")
+    if isinstance(requirements, list):
+        for entry in requirements:
+            if (
+                isinstance(entry, dict)
+                and entry.get("resource") == "cache"
+                and entry.get("access") == "write"
+                and isinstance(path := entry.get("path"), str)
+            ):
+                check_dirs.append(Path(path))
+    directories = worker_write_probe.write_targets(
+        worktree, Path(brief["report_staging_path"]).parent, check_dirs, writer=writer
+    )
+    return shlex.join(
+        [sys.executable, str(Path(__file__).with_name("worker_write_probe.py").resolve()), *directories]
+    )
+
+
 def in_container() -> bool:
     """The container executor sets ``HARNESS_EXECUTOR=docker`` (ADR 0025)."""
     return os.environ.get("HARNESS_EXECUTOR") == "docker"
@@ -179,20 +220,6 @@ def in_container() -> bool:
 def supervised(brief: Brief) -> bool:
     """The runtime launches only briefs with an `execution` section."""
     return bool(brief.get("execution"))
-
-
-def check_prompt_bound(prompt: str) -> None:
-    if os.name == "nt":
-        too_long = len(prompt) > WINDOWS_PROMPT_CHARS
-        bound = f"{WINDOWS_PROMPT_CHARS} characters"
-    else:
-        too_long = len(prompt.encode("utf-8")) > POSIX_PROMPT_BYTES
-        bound = f"{POSIX_PROMPT_BYTES} UTF-8 bytes"
-    if too_long:
-        raise ValueError(
-            f"the worker prompt exceeds the argument bound of {bound}; "
-            "shorten --extra-prompt-file"
-        )
 
 
 def report_write_rule(staging: PurePath) -> str:
@@ -224,17 +251,11 @@ def resolve_claude(binary: str) -> str:
     )
 
 
-def worker_command(
-    brief: Brief, binary: str = "claude", *, prompt: str | None = None
-) -> list[str]:
-    """The `claude -p` command; a given `prompt` (supervised) is the positional after `-p`.
-
-    `--allowedTools` and `--add-dir` take variadic values, so the prompt must precede them.
-    """
-    command = [binary, "-p"]
-    if prompt is not None:
-        command.append(prompt)
-    command += [
+def worker_command(brief: Brief, binary: str = "claude") -> list[str]:
+    """Run both turns over one native connection without session persistence."""
+    command = [
+        binary,
+        "-p",
         "--model",
         brief["resolved_model"],
         "--permission-mode",
@@ -244,9 +265,12 @@ def worker_command(
         "--add-dir",
         str(Path(brief["report_staging_path"]).parent),
         "--no-session-persistence",
+        "--input-format",
+        "stream-json",
         "--output-format",
+        "stream-json",
+        "--verbose",
     ]
-    command += ["stream-json", "--verbose"] if prompt is not None else ["text"]
     effort = brief.get("resolved_effort")
     if brief["role"] == "developer" and any(
         tool in brief["allowed_tools"] for tool in ("Agent", "Agent(test-author)")
@@ -268,6 +292,145 @@ def log_path(brief: Brief) -> Path:
         / "worker-logs"
         / f"{brief['dispatch_id']}.log"
     )
+
+
+def send_user_turn(process: subprocess.Popen[str], content: str) -> None:
+    assert process.stdin is not None
+    data = {
+        "type": "user",
+        "message": {"role": "user", "content": content},
+        "parent_tool_use_id": None,
+        "session_id": "",
+    }
+    process.stdin.write(json.dumps(data) + "\n")
+    process.stdin.flush()
+
+
+def message_blocks(event: dict[str, object]) -> list[dict[str, object]]:
+    message = event.get("message")
+    if not isinstance(message, dict):
+        return []
+    content = message.get("content")
+    if not isinstance(content, list):
+        return []
+    return [item for item in content if isinstance(item, dict)]
+
+
+def probe_output(content: object) -> list[str]:
+    if isinstance(content, str):
+        return content.splitlines()
+    if isinstance(content, list):
+        return [
+            line
+            for block in content
+            if isinstance(block, dict) and isinstance(text := block.get("text"), str)
+            for line in text.splitlines()
+        ]
+    return []
+
+
+def forward_native_output(
+    process: subprocess.Popen[str], output: queue.Queue[str | None]
+) -> None:
+    assert process.stdout is not None
+    try:
+        for line in process.stdout:
+            output.put(line)
+    finally:
+        output.put(None)
+
+
+def await_probe(output: queue.Queue[str | None], command: str) -> str | None:
+    """Return the initialization event only after a successful native Bash result."""
+    deadline = time.monotonic() + WRITE_PROBE_TIMEOUT_SECONDS
+    tool_use_id: str | None = None
+    initialized = ""
+    verified = False
+    while True:
+        try:
+            line = output.get(timeout=max(0, deadline - time.monotonic()))
+        except queue.Empty:
+            raise ValueError(f"native Bash write probe timed out: {command}") from None
+        if line is None:
+            return None
+        event = json.loads(line)
+        if not isinstance(event, dict):
+            continue
+        event_type = event.get("type")
+        if event_type == "system" and event.get("subtype") == "init":
+            initialized = line
+        if event_type == "assistant" and event.get("parent_tool_use_id") is None:
+            for block in message_blocks(event):
+                if block.get("type") != "tool_use":
+                    continue
+                tool = block.get("input")
+                if (
+                    block.get("name") != "Bash"
+                    or not isinstance(identifier := block.get("id"), str)
+                    or not isinstance(tool, dict)
+                    or tool.get("command") != command
+                    or tool.get("dangerouslyDisableSandbox") is True
+                    or tool.get("run_in_background") is True
+                ):
+                    raise ValueError(f"expected the native Bash write probe: {command}")
+                tool_use_id = identifier
+        if event_type == "user" and tool_use_id is not None:
+            for block in message_blocks(event):
+                if block.get("type") != "tool_result" or block.get("tool_use_id") != tool_use_id:
+                    continue
+                result = probe_output(block.get("content"))
+                if block.get("is_error") is True or worker_write_probe.SUCCESS not in result:
+                    detail = next(
+                        (line for line in result if line.startswith("write probe refused: ")),
+                        command,
+                    )
+                    raise ValueError(f"native Bash write probe failed: {detail[:1200]}")
+                verified = True
+        if event_type == "result":
+            if not verified or event.get("is_error") is True:
+                raise ValueError(f"Claude Code did not prove native Bash write access: {command}")
+            if not initialized:
+                raise ValueError("Claude Code did not emit a native initialization event")
+            return initialized
+
+
+def run_worker(job: WorkerJob) -> int:
+    """Send task input only after the same CLI process completes the native probe."""
+    with subprocess.Popen(
+        job["command"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        text=True, encoding="utf-8",
+    ) as process:
+        assert process.stdin is not None
+        output: queue.Queue[str | None] = queue.Queue(maxsize=64)
+        threading.Thread(target=forward_native_output, args=(process, output), daemon=True).start()
+        try:
+            try:
+                send_user_turn(
+                    process,
+                    "Run exactly this command once using your native Bash tool. "
+                    "Keep sandbox permissions enabled. Then end this turn.\n" + job["probe"],
+                )
+            except BrokenPipeError:
+                return exit_status(process.wait(timeout=2)) or 1
+            initialized = await_probe(output, job["probe"])
+            if initialized is None:
+                return exit_status(process.wait(timeout=2)) or 1
+            sys.stdout.write(initialized)
+            sys.stdout.flush()
+            send_user_turn(process, job["prompt"])
+            process.stdin.close()
+            while (line := output.get()) is not None:
+                sys.stdout.write(line)
+                sys.stdout.flush()
+            return exit_status(process.wait())
+        finally:
+            if process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=2)
 
 
 def start(args: argparse.Namespace) -> int:
@@ -306,26 +469,21 @@ def start(args: argparse.Namespace) -> int:
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
     binary = resolve_claude(args.claude_bin)
-    if supervised(brief):
-        check_prompt_bound(prompt)
-        command = worker_command(brief, binary, prompt=prompt)
-    else:
-        command = worker_command(brief, binary)
+    job: WorkerJob = {
+        "command": worker_command(brief, binary),
+        "probe": native_write_probe(brief, repo, worktree),
+        "prompt": prompt,
+    }
     if args.dry_run:
-        print(json.dumps({"cwd": str(worktree), "command": command, "prompt": prompt}))
+        print(json.dumps({"cwd": str(worktree), **job}))
         return 0
     if supervised(brief):
-        # Foreground in the adapter's process group: the runtime's group stop reaches the
-        # worker, and the worker's exit is the supervised process's exit.
-        completed = subprocess.run(
-            command, cwd=worktree, stdin=subprocess.DEVNULL, check=False
-        )
-        return exit_status(completed.returncode)
+        return run_worker(job)
     log = log_path(brief)
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("ab") as sink:
         process = subprocess.Popen(
-            command,
+            [sys.executable, str(Path(__file__).resolve()), "_run"],
             cwd=worktree,
             stdin=subprocess.PIPE,
             stdout=sink,
@@ -334,7 +492,7 @@ def start(args: argparse.Namespace) -> int:
         )
     assert process.stdin is not None
     try:
-        process.stdin.write(prompt.encode("utf-8"))
+        process.stdin.write(json.dumps(job).encode("utf-8"))
         process.stdin.close()
     except BrokenPipeError:
         process.wait(timeout=STARTUP_CHECK_SECONDS)
@@ -353,6 +511,12 @@ def exit_status(returncode: int) -> int:
 
 
 def main(argv: list[str]) -> int:
+    if argv == ["_run"]:
+        try:
+            return run_worker(cast(WorkerJob, json.load(sys.stdin)))
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            print(f"claude worker could not start: {exc}", file=sys.stderr)
+            return 1
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
     dispatch = sub.add_parser(

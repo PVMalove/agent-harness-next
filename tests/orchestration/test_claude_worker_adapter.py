@@ -15,6 +15,8 @@ import unittest
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
 
+from tests.orchestration.test_runtime_adapters import CLAUDE_PROBE
+
 ADAPTER = Path(__file__).resolve().parents[2] / "harness/adapters/claude_worker.py"
 SPEC = importlib.util.spec_from_file_location("claude_worker", ADAPTER)
 assert SPEC and SPEC.loader
@@ -84,10 +86,11 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
     def fake_claude(self, exit_code: int) -> None:
         script = self.bin / "claude"
         script.write_text(
-            "#!/bin/sh\n"
-            f'pwd > "{self.cwd_dump}"\n'
-            f'cat > "{self.prompt_dump}"\n'
-            f"exit {exit_code}\n"
+            f"#!{sys.executable}\n"
+            + CLAUDE_PROBE
+            + f"Path({str(self.cwd_dump)!r}).write_text(os.getcwd())\n"
+            + f"Path({str(self.prompt_dump)!r}).write_text(prompt, encoding='utf-8')\n"
+            + f"sys.exit({exit_code})\n"
         )
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
@@ -252,6 +255,17 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertEqual(command[command.index("--effort") + 1], "medium")
         self.assertEqual(command[command.index("--permission-mode") + 1], "dontAsk")
         self.assertEqual(command[command.index("--allowedTools") + 1], "Read,Bash,Edit")
+        self.assertIn(str(self.worktree), plan["probe"])
+        self.assertIn(git(self.worktree, "rev-parse", "--absolute-git-dir"), plan["probe"])
+
+    def test_read_only_probe_checks_report_directory_without_source_writes(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief.update(role="code-review", access="read-only")
+
+        command = claude_worker.native_write_probe(brief, self.repo, self.worktree)
+        arguments = shlex.split(command)
+
+        self.assertEqual(arguments[2:], [str(Path(brief["report_staging_path"]).parent)])
 
     def test_container_worker_is_asked_only_for_the_staged_report(self) -> None:
         brief = json.loads(self.brief.read_text())
@@ -285,7 +299,8 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertNotIn("coordinator.py", prompt)
         self.assertNotIn("report submit --file", prompt)
         command = plan["command"]
-        self.assertEqual(command[2], prompt)
+        self.assertNotIn(prompt, command)
+        self.assertIn("worker_write_probe.py", plan["probe"])
         self.assertEqual(
             command[command.index("--output-format") + 1 :][:2],
             ["stream-json", "--verbose"],
@@ -309,20 +324,13 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         )
 
     @POSIX_ONLY
-    def test_supervised_worker_gets_the_prompt_as_an_argument_and_its_code_is_returned(
+    def test_supervised_worker_gets_the_prompt_after_probe_and_returns_its_code(
         self,
     ) -> None:
         brief = json.loads(self.brief.read_text())
         brief["execution"] = {"kind": "process"}
         self.brief.write_text(json.dumps(brief))
-        script = self.bin / "claude"
-        script.write_text(
-            "#!/bin/sh\n"
-            f'pwd > "{self.cwd_dump}"\n'
-            f'printf "%s" "$2" > "{self.prompt_dump}"\n'
-            "exit 5\n"
-        )
-        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        self.fake_claude(5)
         extra = self.repo / "retry.txt"
         extra.write_text("Retry handoff: {}")
 

@@ -1247,16 +1247,15 @@ worker:
 An adapter that exits before its worker leaves an empty group: the runtime records the execution
 as exited, and the dispatch is blocked with `worker-exited-without-report` while the worker still
 runs. An exit without a report carries the worker's code in `runtime_failure.exit_code`. Claude
-runs `claude -p <prompt>` in the foreground with `--output-format stream-json --verbose`; it
-refuses a prompt above 120000 UTF-8 bytes (30000 characters on Windows) and asks to shorten
-`--extra-prompt-file`. Codex serves the turn in the adapter's own process and writes allowlisted
+runs `claude -p` in the foreground with streaming JSON on stdin and stdout. Codex serves the
+turn in the adapter's own process and writes allowlisted
 `harness-event` JSON lines (session connected, tool item type, agent output, error, turn result),
 never raw app-server JSON, tool input or reasoning. Follow the run log with
 `dispatch logs --dispatch <id> [--follow]` (see "Observable external workers").
 
 Without `execution` (a file ledger, or a runtime without `execution.launch`) the adapter keeps the
 detached launch: `dispatch send` waits for the adapter without a timeout, so the adapter passes the
-lifecycle prompt to a detached worker through stdin and returns after startup. An early exit,
+job to a detached process and returns after startup. An early exit,
 including exit zero, is then a launch failure with a bounded log tail.
 
 Both adapters reject `qa`, `purpose: publish`, a transport other than `external`, and absent or
@@ -1277,6 +1276,12 @@ read-only; branch restrictions remain a workflow contract, since Git ref locks n
 The adapter verifies the actual worker's `thread/start` model, effort, CWD and permission profile
 before sending its task. It gives
 that session's native identity to the worker, which still performs its own model/Git self-report.
+Both adapters probe writes before sending task input. Codex calls `command/exec` with the same
+named permission profile as the worker. Claude sends a probe-only turn and waits for the matching
+native Bash result in that session. The probe creates and removes one temporary file per directory.
+It checks the report directory and the shared check directories allowed by the runtime plan. Write
+roles also check the selected checkout and its Git admin directory. On failure the adapter reports
+the resource and withholds task input. `--dry-run` does not run the probe.
 Codex versions without named permission-profile support refuse startup; there is no broader-access
 fallback. Its prompt carries the tool allowlist; this is not a native Codex tool filter.
 Neither adapter grants `danger-full-access`.

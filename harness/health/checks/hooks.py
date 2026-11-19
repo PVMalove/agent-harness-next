@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -19,7 +20,9 @@ from ..hook_settings import (
     canonical_integration_id,
     critical_wiring,
     envelope_hook_ids,
+    installed_bindings,
     is_wired,
+    matcher_covers,
     merge_hooks,
     script_envelope_id,
     script_name,
@@ -1012,6 +1015,120 @@ def _envelope_part(
             "update", str(repo), "--force-seed-file", ENVELOPE_REL
         ),
     )
+
+
+def last_hook_observation(repo: Path, hook_id: str) -> JsonObject | None:
+    """Return the latest local envelope verdict, if available."""
+    path = repo / f".harness/.sandboxes/logs/hook-observations/{hook_id}.json"
+    try:
+        if path.resolve() != path:
+            return None
+        with path.open("rb") as stream:
+            data = json.loads(stream.read(2048))
+    except (*JSON_READ_ERRORS, RuntimeError):
+        return None
+    if not isinstance(data, dict) or data.get("hook_id") != hook_id:
+        return None
+    decision = data.get("decision")
+    profile = data.get("profile")
+    reason = data.get("reason_code")
+    when = data.get("observed_at")
+    executed = data.get("body_executed")
+    event = data.get("event")
+    tool = data.get("tool")
+    if (
+        decision not in ("allow", "warn", "ask", "block")
+        or profile not in HOOK_PROFILES
+        or not isinstance(reason, str)
+        or not re.fullmatch(r"[a-z0-9-]{1,80}", reason)
+        or not isinstance(when, str)
+        or not re.fullmatch(r"[0-9T:.+\-]{20,40}", when)
+        or not isinstance(executed, bool)
+    ):
+        return None
+    return {
+        "observed_at": when,
+        "profile": profile,
+        "decision": decision,
+        "reason_code": reason,
+        "body_executed": executed,
+        "event": event if isinstance(event, str) and re.fullmatch(r"[A-Za-z]+", event) else None,
+        "tool": tool if isinstance(tool, str) and re.fullmatch(r"[A-Za-z_]+", tool) else None,
+    }
+
+
+def describe_hook(repo: Path, hook_id: str) -> JsonObject:
+    """Show a single managed hook's source, configured bindings and observed verdict."""
+    specs = tuple(spec for spec in HOOK_CATALOG if spec.hook_id == hook_id)
+    if not specs:
+        raise ValueError(f"неизвестный hook_id: {hook_id}")
+    spec = specs[0]
+    runtimes: JsonObject = {}
+    for adapter in ADAPTERS:
+        declared = {
+            item.event: supported_tools(item, adapter.support, adapter.runtime)
+            for item in specs
+        }
+        bindings: list[JsonObject] = []
+        config = repo / adapter.config
+        config_state = "missing"
+        if spec.wiring == "agent":
+            config_state = "unsupported"
+            if adapter.runtime == "claude":
+                config = repo / TEST_AUTHOR_AGENT
+                config_state = "available" if config.is_file() else "missing"
+                if config_state == "available" and not _agent_wiring_problem(repo, spec):
+                    bindings = [
+                        {"event": event, "matcher": tool, "tools": [tool]}
+                        for event, tools in declared.items()
+                        for tool in tools
+                    ]
+        elif config.is_file():
+            try:
+                document = json.loads(config.read_text(encoding="utf-8"))
+                if not isinstance(document, dict):
+                    raise ValueError("hook settings must be an object")
+                configured = installed_bindings(document, spec.script)
+            except JSON_READ_ERRORS:
+                config_state = "invalid"
+                configured = []
+            else:
+                config_state = "available"
+            managed = set(recorded_managed_entries(repo, adapter.integration_id) or ())
+            for event, matcher, digest in configured:
+                tools = [tool for tool in declared.get(event, ()) if matcher_covers(matcher, tool)]
+                if (
+                    adapter.runtime == "codex"
+                    and (event, "apply_patch") in (adapter.support or ())
+                    and any(item.event == event and item.apply_patch for item in specs)
+                    and (
+                        any(tool in ("Write", "Edit") for tool in tools)
+                        or matcher_covers(matcher, "apply_patch")
+                    )
+                ):
+                    tools.append("apply_patch")
+                bindings.append(
+                    {"event": event, "matcher": matcher, "tools": tools, "managed": digest in managed}
+                )
+        runtimes[adapter.runtime] = {
+            "config": config.relative_to(repo).as_posix(),
+            "config_state": config_state,
+            "integration": adapter.integration_id,
+            "supported": {event: list(tools) for event, tools in declared.items()},
+            "bindings": bindings,
+        }
+    profile, problem = _profile_part(repo)
+    script = f"{HOOKS_DIR}/{spec.script}"
+    return {
+        "hook_id": hook_id,
+        "source": f"harness/project/hooks/{spec.script}",
+        "script": script,
+        "installed": (repo / script).is_file(),
+        "profile": profile,
+        "profile_problem": problem,
+        "runtimes": runtimes,
+        "last_observation": last_hook_observation(repo, hook_id),
+    }
 
 
 def check_policy(context: HealthContext) -> CheckResult:

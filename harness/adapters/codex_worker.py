@@ -27,6 +27,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
+    import worker_write_probe  # type: ignore[import-not-found]
+else:
+    from harness.adapters import worker_write_probe
+
 STARTUP_CHECK_SECONDS = 10
 PERMISSION_PROFILE = "harness-worker"
 # Items whose start is not a tool step; their content never reaches the event stream.
@@ -59,6 +65,7 @@ class Job(TypedDict):
     prompt: str
     brief: Brief
     worktree: str
+    write_probe: list[str]
 
 
 class WorkerExited(ValueError):
@@ -165,6 +172,13 @@ def git_commit_permissions(worktree: Path) -> dict[str, str]:
         permissions[str(gitdir)] = "write"
         permissions[str(common / "logs/refs")] = "write"
     permissions.update({str(common / name): "read" for name in ("config", "hooks")})
+    # The native profile permits temporary writes. Another checkout under a temporary
+    # root must still be read-only, including the main checkout of a linked worker.
+    for field in git("worktree", "list", "--porcelain", "-z").split("\0"):
+        if field.startswith("worktree "):
+            checkout = Path(field.removeprefix("worktree ")).resolve()
+            if checkout != worktree:
+                permissions[str(checkout)] = "read"
     return permissions
 
 
@@ -188,9 +202,7 @@ def worker_command(
         str(worktree): "write" if access == "write" else "read",
         str(repo / ".harness/orchestration/state"): "write",
         str(Path(brief["report_staging_path"]).parent): "write",
-        str(repo / ".harness/.sandboxes/runs/qa"): "write",
-        str(repo / ".harness/.sandboxes/runs/tests"): "write",
-        str(repo / ".harness/.sandboxes/logs"): "write",
+        **{str(directory): "write" for directory in check_directories(repo)},
     }
     if access == "write":
         filesystem.update({":tmpdir": "write", ":slash_tmp": "write"})
@@ -218,6 +230,11 @@ def worker_command(
     if effort:
         command += ["--config", "model_reasoning_effort=" + json.dumps(effort)]
     return command
+
+
+def check_directories(repo: Path) -> tuple[Path, ...]:
+    sandbox = repo / ".harness/.sandboxes"
+    return sandbox / "runs/qa", sandbox / "runs/tests", sandbox / "logs"
 
 
 class AppServer:
@@ -378,6 +395,22 @@ def serve_turn(
         thread = started.get("thread")
         if not isinstance(thread, dict) or not isinstance(thread.get("id"), str):
             raise ValueError("native thread/start returned no thread identity")
+        probe = server.request(
+            "command/exec",
+            {
+                "command": [
+                    sys.executable,
+                    str(Path(__file__).with_name("worker_write_probe.py").resolve()),
+                    *job["write_probe"],
+                ],
+                "cwd": str(worktree),
+                "permissionProfile": PERMISSION_PROFILE,
+                "timeoutMs": 5000,
+                "outputBytesCap": 2048,
+            },
+        )
+        if probe.get("exitCode") != 0:
+            raise ValueError(f"native worker write probe failed: {probe.get('stderr', '')}")
         evidence = {
             "source": "thread/start",
             "thread_id": thread["id"],
@@ -535,6 +568,14 @@ def start(args: argparse.Namespace) -> int:
             )
         )
         return 0
+    directories = check_directories(repo)
+    for directory in directories:
+        if directory.resolve() != directory:
+            raise ValueError(f"shared check directory must not use a symlink: {directory}")
+        directory.mkdir(parents=True, exist_ok=True)
+    write_probe = worker_write_probe.write_targets(
+        worktree, staging.parent, directories, writer=brief["access"] == "write"
+    )
     if brief.get("execution"):
         # Supervised: the runtime launches only briefs with `execution`. The turn runs in
         # this process, so the app-server stays in its group and its exit is this exit.
@@ -543,6 +584,7 @@ def start(args: argparse.Namespace) -> int:
             "prompt": prompt,
             "brief": brief,
             "worktree": str(worktree),
+            "write_probe": write_probe,
         }
         return serve_turn(job, emit=emit_event, receipt=None)
     log = log_path(brief)
@@ -567,6 +609,7 @@ def start(args: argparse.Namespace) -> int:
                     "prompt": prompt,
                     "brief": brief,
                     "worktree": str(worktree),
+                    "write_probe": write_probe,
                     "receipt": str(receipt),
                 }
             ).encode("utf-8")

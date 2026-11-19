@@ -78,6 +78,13 @@ hooks check: .claude/settings.local.json: critical wired 9/9
 - **Доверие проекту.** Проектные hooks этого runtime запускаются только после того, как пользователь доверил слою `.codex/` проекта и подтвердил каждый hook по хэшу. До этого hooks не работают, и защищают только проверки Rust runtime и coordinator. После `harness init` и после каждого `harness update`, который меняет `.codex/hooks.json`, hook нужно подтвердить заново, потому что хэш изменился.
 
 ### Проверка hooks.policy в harness health
+`harness health . --hook block-scratch-outside-docs-tasks --json` показывает источник и
+установленный скрипт, события, фильтры и привязки по runtime. Поле `last_observation`
+содержит последний локальный вердикт обработчика. В записи есть время, событие, инструмент,
+код причины и признак запуска скрипта. Обработчик сохраняет её в `.harness/.sandboxes/logs/`
+без аргументов инструмента и путей затронутых файлов. Значение `null` означает, что записи
+о выполнении нет. Подключение в конфигурации само по себе не подтверждает запуск.
+
 `harness health` содержит проверку `hooks.policy` для проектов с `engineering-suite` или `backend-orchestration`. Она показывает:
 
 - **Профиль и источник.** `профиль standard (.harness/project.json)` или, если ключа `hook_policy` нет, `профиль standard (по умолчанию)`, плюс перечень эскалаций. Некорректный `hook_policy` даёт `fail`, потому что hooks тогда применяют `strict`.

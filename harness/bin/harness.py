@@ -80,6 +80,7 @@ from harness.health import render as health_render
 from harness.health import report_json as health_report_json
 from harness.health.checks.hooks import (
     ENVELOPE_REL,
+    describe_hook,
     recorded_managed_entries,
     unregistered_envelope_scripts,
 )
@@ -1701,6 +1702,17 @@ def cmd_lock_project_skills(args: argparse.Namespace) -> int:
 def cmd_health(args: argparse.Namespace) -> int:
     """Выполнить все зарегистрированные проверки harness health и вывести отчёт."""
     repo = Path(args.repo).expanduser().resolve()
+    if hook_id := getattr(args, "hook", None):
+        if args.fix or args.online:
+            print("--hook нельзя сочетать с --fix или --online", file=sys.stderr)
+            return 2
+        try:
+            detail = describe_hook(repo, hook_id)
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 2
+        print(json.dumps(detail, ensure_ascii=False, indent=None if args.json else 2))
+        return 0
     report = health_registry.run(
         repo,
         snapshot_diff=snapshot_diff,
@@ -2174,6 +2186,7 @@ def parser() -> argparse.ArgumentParser:
 
     health = commands.add_parser("health")
     health.add_argument("repo")
+    health.add_argument("--hook", metavar="HOOK_ID", help="explain a single managed hook")
     health.add_argument(
         "--json", action="store_true", help="print the schema_version-1 --json report"
     )

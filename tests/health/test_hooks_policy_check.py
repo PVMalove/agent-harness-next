@@ -6,6 +6,8 @@ import importlib.util
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -73,6 +75,46 @@ def test_installed_project_reports_profile_source_and_wiring(repo: Path) -> None
     assert ".harness/project.json" in message
     assert "claude: критических hooks подключено 9/9" in message
     assert "codex: критических hooks подключено 8/8" in message
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="the managed hook is a Bash script")
+def test_health_explains_one_hook_and_reports_an_observed_denial(repo: Path) -> None:
+    hook = "block-scratch-outside-docs-tasks"
+    before = harness("health", str(repo), "--hook", hook, "--json")
+    assert before.returncode == 0, before.stderr
+    configured = json.loads(before.stdout)
+    assert configured["last_observation"] is None
+    assert configured["script"] == f".claude/hooks/{hook}.sh"
+    assert configured["runtimes"]["codex"]["config"] == ".codex/hooks.json"
+    assert configured["runtimes"]["codex"]["bindings"][0]["event"] == "PreToolUse"
+    assert "apply_patch" in configured["runtimes"]["codex"]["bindings"][0]["matcher"]
+
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "cwd": str(repo),
+        "tool_input": {
+            "file_path": str(repo / ".harness/.sandboxes/pr_body/private-notes.md"),
+            "content": "private data",
+        },
+    }
+    denied = subprocess.run(
+        ["bash", str(repo / HOOKS_DIR / f"{hook}.sh")],
+        input=json.dumps(payload), capture_output=True, text=True, check=False, cwd=repo,
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)},
+    )
+    assert denied.returncode == 2, denied.stderr
+
+    after = harness("health", str(repo), "--hook", hook, "--json")
+    assert after.returncode == 0, after.stderr
+    observed = json.loads(after.stdout)["last_observation"]
+    assert observed["decision"] == "block"
+    assert observed["reason_code"] == "scratch-location"
+    assert observed["body_executed"] is True
+    assert observed["event"] == "PreToolUse"
+    assert observed["tool"] == "Write"
+    assert "private data" not in after.stdout
+    assert "private-notes.md" not in after.stdout
 
 
 def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_not(
