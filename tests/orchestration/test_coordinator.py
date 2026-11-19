@@ -2468,6 +2468,121 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(status["dispatches"][0]["state"], "approved")
         self._start(brief["dispatch_id"])
 
+    def test_in_process_send_refuses_a_read_only_artifact_directory(self) -> None:
+        batch = self._create_batch()
+        brief = self._dispatch(batch["batch_id"], "architect")["brief"]
+        inbox = self.repo / ".harness/.sandboxes/scratch/inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        args = self._args(
+            dispatch=brief["dispatch_id"], adapter=None, adapter_arg=None, checkout=None
+        )
+
+        with self._read_only(inbox.resolve()):
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                coordinator.send_dispatch(args)
+
+        self.assertIn(str(inbox), refused.exception.message)
+        status = coordinator.dispatch_status(
+            self._args(dispatch=brief["dispatch_id"], batch=None, stale_after=None)
+        )
+        self.assertEqual(status["dispatches"][0]["state"], "approved")
+        self._start(brief["dispatch_id"])
+
+    def _send(self, dispatch_id: str) -> JsonObject:
+        return coordinator.send_dispatch(
+            self._args(
+                dispatch=dispatch_id, adapter=None, adapter_arg=None, checkout=None
+            )
+        )
+
+    def _accept_architect_report(
+        self, batch_id: str, brief: JsonObject, launched: JsonObject
+    ) -> None:
+        coordinator.self_report_dispatch(
+            self._args(
+                dispatch=brief["dispatch_id"],
+                model="sonnet",
+                worktree=launched["worker_worktree"],
+            )
+        )
+        self._submit(brief["dispatch_id"], self._base_report(brief, "architect"))
+        self._decide(batch_id, "accept")
+
+    def test_in_process_send_probes_the_directories_of_the_dispatched_role(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        shared = self.repo / ".harness/.sandboxes"
+        runs, logs, npm = (shared / "runs/tests", shared / "logs", shared / "cache/npm")
+        for directory in (runs, logs, npm):
+            directory.mkdir(parents=True, exist_ok=True)
+
+        def unwritable(directory: Path) -> contextlib.AbstractContextManager[None]:
+            return self._read_only(directory.resolve())
+
+        architect = self._dispatch(batch["batch_id"], "architect")["brief"]
+        # Only a developer needs runs/tests; logs and caches help but never block.
+        with unwritable(runs), unwritable(logs), unwritable(npm):
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                launched = self._send(architect["dispatch_id"])
+        for directory in (runs, logs, npm):
+            self.assertIn(
+                f"warning: unwritable path not granted: {directory}", err.getvalue()
+            )
+        self._accept_architect_report(batch["batch_id"], architect, launched)
+
+        developer = self._dispatch(batch["batch_id"], "developer")["brief"]
+        with unwritable(runs):
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                self._send(developer["dispatch_id"])
+        self.assertIn(str(runs), refused.exception.message)
+        self.assertIn("cannot write", refused.exception.message)
+        with unwritable(logs), unwritable(npm):
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self._start(developer["dispatch_id"])
+        self.assertIn(f"unwritable path not granted: {logs}", err.getvalue())
+        self.assertIn(f"unwritable path not granted: {npm}", err.getvalue())
+
+    def test_in_process_send_skips_an_optional_symlink_and_refuses_a_required_one(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        shared = self.repo / ".harness/.sandboxes"
+        (shared / "cache").mkdir(parents=True, exist_ok=True)
+        (shared / "runs").mkdir(parents=True, exist_ok=True)
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        playwright, tests = shared / "cache/ms-playwright", shared / "runs/tests"
+        try:
+            playwright.symlink_to(outside, target_is_directory=True)
+            tests.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks unavailable: {exc}")
+
+        architect = self._dispatch(batch["batch_id"], "architect")["brief"]
+        # A read-only role does not need runs/tests: both symlinks are only skipped.
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            launched = self._send(architect["dispatch_id"])
+        for directory in (tests, playwright):
+            self.assertIn(f"warning: symlink not granted: {directory}", err.getvalue())
+        self._accept_architect_report(batch["batch_id"], architect, launched)
+
+        developer = self._dispatch(batch["batch_id"], "developer")["brief"]
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            self._send(developer["dispatch_id"])
+        self.assertIn(f"required path is a symlink: {tests}", refused.exception.message)
+        tests.unlink()
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self._start(developer["dispatch_id"])
+        self.assertIn(f"warning: symlink not granted: {playwright}", err.getvalue())
+        self.assertEqual(list(outside.iterdir()), [])
+
     def _start(self, dispatch_id: str, *, checkout: Path | None = None) -> None:
         launched = coordinator.send_dispatch(
             self._args(
