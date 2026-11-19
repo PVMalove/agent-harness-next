@@ -9,7 +9,6 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Any, cast
 from unittest import mock
 
 from harness.branch_delete import BranchDeleteRefused, delete_merged_branch
@@ -96,16 +95,13 @@ class BranchDeleteTests(unittest.TestCase):
         """The remote branch is gone; only the tracker knows the merged head commit."""
         tracker = ProjectTracker("github", "github.com", "owner/repo", "config")
         resolution = resolve_project_tracker(self.repo)
-        run = subprocess.run
-
-        def tracker_reply(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-            if command[0] == "gh":
-                self.assertIn(BRANCH, command)
-                return subprocess.CompletedProcess(command, 0, json.dumps([{"number": 42, "headRefOid": self.tip}]), "")
-            return cast(subprocess.CompletedProcess[str], run(command, **kwargs))
+        reply = json.dumps([{"number": 42, "headRefOid": self.tip}])
 
         with (
-            mock.patch("harness.branch_delete.subprocess.run", side_effect=tracker_reply),
+            mock.patch(
+                "harness.branch_delete.run_tracker",
+                return_value=subprocess.CompletedProcess("gh", 0, reply, ""),
+            ) as tracker_run,
             mock.patch(
                 "harness.health.project_tracker.resolve_project_tracker",
                 return_value=dataclasses.replace(resolution, effective=tracker),
@@ -113,27 +109,31 @@ class BranchDeleteTests(unittest.TestCase):
         ):
             result = delete_merged_branch(self.repo, BRANCH)
 
+        tracker_run.assert_called_once()
+        command = tracker_run.call_args.args[0]
+        self.assertEqual(command[:3], ["gh", "pr", "list"])
+        self.assertEqual(command[command.index("--head") + 1], BRANCH)
         self.assertEqual(result["status"], "deleted")
         self.assertIn("merged PR/MR 42", result["evidence"])
 
     def test_refuses_when_the_merged_pull_request_has_another_head(self) -> None:
         tracker = ProjectTracker("github", "github.com", "owner/repo", "config")
         resolution = resolve_project_tracker(self.repo)
-        run = subprocess.run
-
-        def tracker_reply(command: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
-            if command[0] == "gh":
-                return subprocess.CompletedProcess(command, 0, '[{"number": 42, "headRefOid": "0000"}]', "")
-            return cast(subprocess.CompletedProcess[str], run(command, **kwargs))
+        reply = json.dumps([{"number": 42, "headRefOid": "0000"}])
 
         with (
-            mock.patch("harness.branch_delete.subprocess.run", side_effect=tracker_reply),
+            mock.patch(
+                "harness.branch_delete.run_tracker",
+                return_value=subprocess.CompletedProcess("gh", 0, reply, ""),
+            ) as tracker_run,
             mock.patch(
                 "harness.health.project_tracker.resolve_project_tracker",
                 return_value=dataclasses.replace(resolution, effective=tracker),
             ),
         ):
             self.assertIn("not preserved", self.refused())
+
+        tracker_run.assert_called_once()
 
     def test_cli_prints_the_refusal_and_exits_one(self) -> None:
         result = subprocess.run(

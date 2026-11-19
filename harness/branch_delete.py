@@ -12,8 +12,9 @@ from __future__ import annotations
 import json
 import os
 import re
-import subprocess
 from pathlib import Path
+from subprocess import TimeoutExpired
+from subprocess import run as run_tracker
 
 from harness.cleanup import _git, _registered_worktrees
 
@@ -112,7 +113,7 @@ def _merged_request(checkout: Path, branch: str, head: str) -> str | None:
     else:
         return None
     try:
-        result = subprocess.run(
+        result = run_tracker(
             command,
             cwd=checkout,
             capture_output=True,
@@ -124,7 +125,7 @@ def _merged_request(checkout: Path, branch: str, head: str) -> str | None:
             check=False,
         )
         requests = json.loads(result.stdout) if result.returncode == 0 else []
-    except (OSError, subprocess.TimeoutExpired, ValueError):
+    except (OSError, TimeoutExpired, ValueError):
         return None
     for request in requests if isinstance(requests, list) else []:
         if isinstance(request, dict) and request.get(head_key) == head:

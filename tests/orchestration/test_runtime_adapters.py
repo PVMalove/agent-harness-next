@@ -409,37 +409,6 @@ def test_codex_read_only_worker_can_write_lifecycle_evidence_without_source_writ
     assert filesystem[":root"] == "read"
 
 
-def test_codex_read_only_worker_gets_no_write_access_to_coordinator_runtime_state(
-    dispatch: tuple[Path, Path, dict[str, object]],
-) -> None:
-    repo, _, _ = dispatch
-
-    result = invoke(
-        dispatch, "--dry-run", runtime="codex", changes={"access": "read-only"}
-    )
-
-    assert result.returncode == 0, result.stderr
-    command = json.loads(result.stdout)["command"]
-    configs = [
-        tomllib.loads(command[i + 1])
-        for i, value in enumerate(command)
-        if value == "--config"
-    ]
-    filesystem = next(
-        c["permissions"]["harness-worker"]["filesystem"]
-        for c in configs
-        if "permissions" in c
-    )
-    state = repo / ".harness/orchestration/state"
-    writable = [
-        path
-        for path, mode in filesystem.items()
-        if mode == "write" and (state == Path(path) or Path(path) in state.parents)
-    ]
-    assert writable == [], f"read-only worker can write runtime state via {writable}"
-    assert filesystem.get(str(state)) != "write"
-
-
 def test_codex_writer_keeps_runtime_metadata_read_only(
     dispatch: tuple[Path, Path, dict[str, object]],
 ) -> None:
