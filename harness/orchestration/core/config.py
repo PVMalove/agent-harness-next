@@ -182,7 +182,32 @@ def _config(repo: Path) -> JsonObject:
         if "developer_verification_commands" not in value:
             del defaults["developer_verification_commands"]
         value = {**defaults, **value}
-    if prefix := _qa_preparation_commands(value, "pre_qa_commands"):
+    from harness.orchestration.workflow_overlays import resolve_slots
+
+    slots = resolve_slots(value.get("workflow_overlays", []))
+    if extra := slots["post-developer"]:
+        value["developer_verification_commands"] = (
+            _developer_verification_commands(value) + extra
+        )
+    if extra := slots["pre-review"]:
+        value["review_verification_commands"] = extra + _review_verification_commands(
+            value
+        )
+    if slots["post-developer"] or slots["pre-review"]:
+        value["verification_profiles"] = [
+            {
+                **profile,
+                "developer": profile["developer"] + slots["post-developer"],
+                "review": slots["pre-review"] + profile["review"],
+            }
+            for profile in cast(
+                list[JsonObject], value.get("verification_profiles", [])
+            )
+        ]
+    if extra := slots["qa-preparation"]:
+        value["qa_preparation"] = _qa_preparation_commands(value) + extra
+    prefix = slots["pre-qa"] + _qa_preparation_commands(value, "pre_qa_commands")
+    if prefix:
         gate = _verification_commands(value)
         value.setdefault("developer_verification_commands", gate)
         value.setdefault("review_verification_commands", gate)

@@ -403,3 +403,31 @@ exactly-once: исполнение с неизвестным эффектом о
 новым control runtime; plan и прежние brief/report не переписываются. Ранний 429 writer-а сохраняет
 известный чистый startup SHA отдельным evidence без фиктивного checkpoint. После recovery даже
 429 требует человеческого approval. Подробный контракт: [Operator recovery](playbook.md#operator-recovery).
+
+### Оверлеи workflow
+
+`harness workflow-overlays <repo> --manifest checks.yaml` показывает результат композиции.
+Добавьте `--apply`, чтобы записать его в проектную `.harness/orchestration.json` с резервной
+копией. JSON-манифесты работают со стандартной библиотекой. Для импорта YAML используйте
+интерпретатор с PyYAML, например
+`uv run --no-project --with PyYAML==6.0.3 -- python harness/bin/harness.py workflow-overlays <repo> --manifest checks.yaml --apply`.
+
+```yaml
+overlays:
+  - id: compatibility
+    priority: 5
+    edits:
+      - slot: pre-qa
+        operation: append
+        commands:
+          - python scripts/check_compatibility.py
+```
+
+Слоты `post-developer` и `pre-review` добавляют проверки к соответствующим спискам команд,
+в том числе к профилям верификации. `qa-preparation` расширяет подготовку окружения.
+`pre-qa` добавляет проверки в начало QA-гейта кандидата. Пустые слоты пропускаются.
+
+Операции `append`, `prepend`, `replace` и `remove` меняют вклад в слот.
+Меньшее число `priority` побеждает при замене. При равном приоритете оверлеи применяются
+в алфавитном порядке ID. `enabled: false` отключает оверлей. Базовые команды и
+согласования Harness остаются в силе. Манифест с `overlays: []` очищает все вклады.

@@ -1665,6 +1665,21 @@ def artifact_provenance(repo: Path) -> JsonObject:
     return result
 
 
+def cmd_workflow_overlays(args: argparse.Namespace) -> int:
+    from harness.overlay_install import workflow_overlays
+
+    repo = Path(args.repo).expanduser().resolve()
+    manifest = Path(args.manifest).expanduser() if args.manifest else None
+    if args.apply and manifest is None:
+        fail("--apply requires --manifest")
+    try:
+        result = workflow_overlays(repo, manifest, apply=args.apply)
+    except (OSError, ValueError) as exc:
+        fail(f"workflow overlays: {exc}")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
 def cmd_runtime_events(args: argparse.Namespace) -> int:
     from harness.runtime_events import adapter_inventory, sync
 
@@ -2339,6 +2354,12 @@ def parser() -> argparse.ArgumentParser:
     inventory.add_argument("repo")
     inventory.add_argument("--json", action="store_true")
     inventory.set_defaults(func=cmd_inventory)
+
+    overlays = commands.add_parser("workflow-overlays", help="resolve named workflow slots")
+    overlays.add_argument("repo")
+    overlays.add_argument("--manifest")
+    overlays.add_argument("--apply", action="store_true")
+    overlays.set_defaults(func=cmd_workflow_overlays)
 
     events = commands.add_parser(
         "runtime-events", help="synchronise native project lifecycle hooks"
