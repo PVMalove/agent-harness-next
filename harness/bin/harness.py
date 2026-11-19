@@ -459,7 +459,10 @@ def write_lock(repo: Path, lock: JsonObject) -> None:
     try:
         mode = stat.S_IMODE(lock_path.stat().st_mode)
     except FileNotFoundError:
-        mode = None
+        # NamedTemporaryFile creates 0600; a new lock gets the umask default of open().
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
     data = (json.dumps(lock, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
     temporary = None
     try:
@@ -470,8 +473,7 @@ def write_lock(repo: Path, lock: JsonObject) -> None:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-        if mode is not None:
-            temporary.chmod(mode)
+        temporary.chmod(mode)
         os.replace(temporary, lock_path)
     finally:
         if temporary is not None:

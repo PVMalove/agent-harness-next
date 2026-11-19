@@ -115,6 +115,25 @@ def test_lock_keeps_previous_bytes_if_atomic_publish_fails(
     assert set(lock_path.parent.iterdir()) == files_before
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
+def test_lock_keeps_its_mode_and_a_new_lock_gets_the_umask_default(repo: Path) -> None:
+    lock_path = repo / LOCK
+    lock = load_lock(repo)
+    previous = os.umask(0o022)
+    try:
+        lock_path.chmod(0o604)
+        write_lock(repo, lock)
+        assert stat.S_IMODE(lock_path.stat().st_mode) == 0o604
+
+        lock_path.unlink()
+        write_lock(repo, lock)
+    finally:
+        os.umask(previous)
+
+    assert stat.S_IMODE(lock_path.stat().st_mode) == 0o644
+    assert load_lock(repo) == lock
+
+
 @pytest.mark.parametrize(
     "value",
     [["not", "an", "object"], {"../x.md": None}, {RULE: "NOT-HEX"}],
