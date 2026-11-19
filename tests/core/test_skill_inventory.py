@@ -90,3 +90,39 @@ def test_mcp_serves_inventory_and_refuses_unknown_tools(tmp_path: Path) -> None:
     assert inventory["result"]["structuredContent"]["skills"][0]["name"] == "grilling"
     assert refused["error"]["code"] == -32602
     assert not (tmp_path / "modified").exists()
+
+
+def test_inventory_includes_hook_and_template_provenance(tmp_path: Path) -> None:
+    git(tmp_path, "init", "-b", "main")
+    assert (
+        harness("init", str(tmp_path), "--capability", "engineering-suite").returncode
+        == 0
+    )
+    hook = tmp_path / ".claude/hooks/check-branch-name.sh"
+    hook.write_bytes(hook.read_bytes() + b"\n# local\n")
+    user_hook = hook.with_name("local.sh")
+    user_hook.write_text("#!/bin/sh\n")
+    template = tmp_path / "docs/agents/git-workflow.md"
+    template.unlink()
+
+    result = harness("inventory", str(tmp_path), "--json")
+
+    assert result.returncode == 0, result.stderr
+    inventory = json.loads(result.stdout)
+    hooks = {item["path"]: item for item in inventory["hooks"]}
+    templates = {item["path"]: item for item in inventory["templates"]}
+    assert hooks[".claude/hooks/check-branch-name.sh"] == {
+        "path": ".claude/hooks/check-branch-name.sh",
+        "package_source": "harness/project/hooks/check-branch-name.sh",
+        "status": "modified",
+    }
+    assert hooks[".claude/hooks/local.sh"]["status"] == "project"
+    assert (
+        hooks[".codex/hooks.json"]["package_source"]
+        == "harness/project/codex-hooks.json.tmpl"
+    )
+    assert templates["docs/agents/git-workflow.md"] == {
+        "path": "docs/agents/git-workflow.md",
+        "package_source": "harness/project/instructions/git-workflow.md",
+        "status": "missing",
+    }

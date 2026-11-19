@@ -931,43 +931,53 @@ def _matching_arg(pattern: str, rule: str) -> Callable[[str], str]:
     return parse
 
 
+def seed_template_sources(*, orchestration_enabled: bool) -> dict[str, Path]:
+    sources = {
+        f"{target}/{source.name}": source
+        for folder, target, suffixes in SEED_FOLDERS
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes)
+    }
+    sources.update(
+        {
+            adapter.config: PROJECT_TEMPLATE_DIR / adapter.template
+            for adapter in ADAPTERS
+        }
+    )
+    sources[".harness/project.schema.json"] = (
+        PROJECT_TEMPLATE_DIR / "project.schema.json"
+    )
+    if orchestration_enabled:
+        sources[".harness/orchestration.json"] = PACKAGE / "orchestration.example.json"
+    return sources
+
+
 def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str, bytes]:
     """Seed-файлы, которые `update` может перезаписать: путь от корня проекта -> эталон из шаблона."""
-    files: dict[str, bytes] = {}
-    for folder, target, suffixes in SEED_FOLDERS:
-        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
-            files[f"{target}/{source.name}"] = source.read_bytes()
+    files = {
+        relative: source.read_bytes()
+        for relative, source in seed_template_sources(
+            orchestration_enabled=orchestration_enabled
+        ).items()
+    }
     scratch = storage_path(repo, "scratch", ".gitignore")
-    # A linked checkout shares scratch with its main checkout. Seeding this worker must not
-    # turn a shared path into a ../ write or fail while relativizing that outside path.
     if scratch.is_relative_to(repo):
         files[scratch.relative_to(repo).as_posix()] = (
             PROJECT_TEMPLATE_DIR / "scratch/.gitignore"
         ).read_bytes()
     files[".harness/.gitignore"] = HARNESS_RUNTIME_GITIGNORE.encode("utf-8")
-    for adapter in ADAPTERS:
-        files[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
-    files[".harness/project.schema.json"] = (
-        PROJECT_TEMPLATE_DIR / "project.schema.json"
-    ).read_bytes()
-    if orchestration_enabled:
-        files[".harness/orchestration.json"] = (
-            PACKAGE / "orchestration.example.json"
-        ).read_bytes()
     return files
 
 
 def hook_template_files() -> dict[str, bytes]:
-    """Эталоны hooks проекта для проверки дрейфа: скрипты `.claude/hooks/` и файлы hooks runtime."""
-    files: dict[str, bytes] = {}
-    for folder, target, suffixes in SEED_FOLDERS:
-        if folder != "hooks":
-            continue
-        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes):
-            files[f"{target}/{source.name}"] = source.read_bytes()
-    for adapter in ADAPTERS:
-        files[adapter.config] = (PROJECT_TEMPLATE_DIR / adapter.template).read_bytes()
-    return files
+    """Эталоны hooks проекта для проверки дрейфа: скрипты и настройки runtime."""
+    configs = {adapter.config for adapter in ADAPTERS}
+    return {
+        relative: source.read_bytes()
+        for relative, source in seed_template_sources(
+            orchestration_enabled=False
+        ).items()
+        if relative in configs or relative.startswith(".claude/hooks/")
+    }
 
 
 def seed_differing(repo: Path) -> list[str]:
@@ -1212,9 +1222,9 @@ def _install_hook_config(
     template_bytes = (
         full_bytes
         if template_document == full_document
-        else (json.dumps(template_document, indent=2, ensure_ascii=False) + "\n").encode(
-            "utf-8"
-        )
+        else (
+            json.dumps(template_document, indent=2, ensure_ascii=False) + "\n"
+        ).encode("utf-8")
     )
     target = repo / config
     written: list[str] = []
@@ -1591,6 +1601,70 @@ def skill_provenance(repo: Path) -> JsonObject:
     }
 
 
+def artifact_provenance(repo: Path) -> JsonObject:
+    """Extend skill provenance with seeded and project-owned hooks and templates."""
+    from harness.health.runtime_contract import NATIVE_ADAPTERS
+
+    result = skill_provenance(repo)
+    lock = load_lock(repo) or {}
+    selected = set(lock.get("capabilities") or [])
+    expected = seed_template_sources(
+        orchestration_enabled=(
+            BACKEND_ORCHESTRATION_CAPABILITY in selected
+            or (repo / ".harness/orchestration.json").is_file()
+        )
+    )
+    installations_with_seeds = selected & {
+        ENGINEERING_CAPABILITY,
+        BACKEND_ORCHESTRATION_CAPABILITY,
+        "pvmalove-suite",
+    }
+    grouped = {
+        path: status for status, paths in seed_groups(repo).items() for path in paths
+    }
+    hooks = {adapter.config for adapter in ADAPTERS}
+    hooks.update(adapter.config for adapter in NATIVE_ADAPTERS)
+    local: set[str] = set()
+    for _, target, suffixes in SEED_FOLDERS:
+        directory = repo / target
+        if (
+            directory.is_dir()
+            and not directory.is_symlink()
+            and not directory.is_junction()
+        ):
+            local.update(
+                f"{target}/{path.name}"
+                for path in directory.iterdir()
+                if path.suffix in suffixes and path.is_file() and not path.is_symlink()
+            )
+    local.update(path for path in hooks if (repo / path).is_file())
+    result.update({"hooks": [], "templates": []})
+    paths = set(expected) | local if installations_with_seeds else local
+    for relative in sorted(paths):
+        source = expected.get(relative)
+        if source is None:
+            status = "project"
+        elif not (repo / relative).is_file():
+            status = "missing"
+        else:
+            status = grouped.get(relative, "current")
+        kind = (
+            "hooks"
+            if relative in hooks or relative.startswith(".claude/hooks/")
+            else "templates"
+        )
+        result[kind].append(
+            {
+                "path": relative,
+                "package_source": source.relative_to(ROOT).as_posix()
+                if source is not None
+                else None,
+                "status": status,
+            }
+        )
+    return result
+
+
 def cmd_runtime_events(args: argparse.Namespace) -> int:
     from harness.runtime_events import adapter_inventory, sync
 
@@ -1623,7 +1697,7 @@ def cmd_mcp(args: argparse.Namespace) -> int:
 
 
 def cmd_inventory(args: argparse.Namespace) -> int:
-    inventory = skill_provenance(Path(args.repo).expanduser().resolve())
+    inventory = artifact_provenance(Path(args.repo).expanduser().resolve())
     if args.json:
         print(json.dumps(inventory, indent=2, ensure_ascii=False))
     else:
@@ -1631,6 +1705,10 @@ def cmd_inventory(args: argparse.Namespace) -> int:
             origin = skill["package_source"] or "project"
             state = ", ".join(skill["drift"]) or "current"
             print(f"{skill['path']}  {origin}  [{state}]")
+        for kind in ("hooks", "templates"):
+            for item in inventory[kind]:
+                origin = item["package_source"] or "project"
+                print(f"{item['path']}  {origin}  [{item['status']}]")
     return 0
 
 
@@ -2388,10 +2466,16 @@ def parser() -> argparse.ArgumentParser:
         help="move a spec's ticket to a task-board column (replaces its status::* label)",
     )
     ticket_status.add_argument("repo")
-    ticket_status.add_argument("--spec", required=True, help="the spec (epic) of the ticket")
-    ticket_status.add_argument("--ticket", required=True, help="the ticket as the board shows it")
     ticket_status.add_argument(
-        "--to", required=True, choices=("backlog", "ready", "progress", "review", "done")
+        "--spec", required=True, help="the spec (epic) of the ticket"
+    )
+    ticket_status.add_argument(
+        "--ticket", required=True, help="the ticket as the board shows it"
+    )
+    ticket_status.add_argument(
+        "--to",
+        required=True,
+        choices=("backlog", "ready", "progress", "review", "done"),
     )
     ticket_status.set_defaults(func=cmd_ticket_status)
 
