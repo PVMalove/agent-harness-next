@@ -423,3 +423,16 @@ def test_lease_ttl_seconds_is_an_optional_integer_from_one_second_to_a_day(
         assert any("lease_ttl_seconds" in problem for problem in problems), invalid
     write_config(project, {**authored, "lease_ttl_seconds": 0})
     assert run_cli(project, "--json").returncode == 2
+
+
+def test_pre_qa_commands_are_project_configuration(project: Path) -> None:
+    authored = read_config(project)
+    authored["pre_qa_commands"] = ["python check_compatibility.py"]
+    write_config(project, authored)
+
+    result = run_cli(project, "--json")
+
+    assert result.returncode == 0, result.stdout
+    assert json.loads(result.stdout)["document"]["pre_qa_commands"] == [
+        "python check_compatibility.py"
+    ]

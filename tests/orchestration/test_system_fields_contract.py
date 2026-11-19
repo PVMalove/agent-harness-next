@@ -100,6 +100,7 @@ V1_FIELDS = frozenset(
         "report.check_result",
         "report.evidence_status",
         "review.severity",
+        "review.spec.criteria.status",
         "review.recommendation",
         "finding.severity",
         "risk.trigger",
@@ -307,6 +308,7 @@ def test_the_fields_that_drive_no_automatic_decision() -> None:
         "worktree.session_runtime",
         "worktree.session_network_access",
         "pipeline.rewind_stage",
+        "review.spec.criteria.status",
         "diagnostic.code",
         "diagnostic.severity",
         "attention.event_kind",
@@ -715,6 +717,9 @@ BINDINGS: dict[str, dict[str, Iterable[str]]] = {
     },
     "report.evidence_status": {"EvidenceStatus": constants.EvidenceStatus},
     "review.severity": {"REVIEW_SEVERITIES": constants.REVIEW_SEVERITIES},
+    "review.spec.criteria.status": {
+        "SPEC_CRITERION_STATUSES": constants.SPEC_CRITERION_STATUSES
+    },
     "review.recommendation": {"ReviewRecommendation": constants.ReviewRecommendation},
     "finding.severity": {"FINDING_SEVERITIES": constants.FINDING_SEVERITIES},
     "risk.trigger": {

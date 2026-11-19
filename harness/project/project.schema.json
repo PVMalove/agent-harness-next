@@ -42,6 +42,12 @@
       },
       "description": "Lint/typecheck/test commands qa-gate runs in order before a PR opens. An empty list is valid here but qa-gate refuses to silently skip on one - it stops and asks you to fill this in rather than treating an empty list as 'no checks configured, proceed'."
     },
+    "pr_checklist": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {"type": "string", "minLength": 1, "maxLength": 300, "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$(?![\\s\\S])"},
+      "description": "Additional project questions to address when preparing a pull request: up to 32 single-line items, each with a non-whitespace character."
+    },
     "shell": {
       "type": "string",
       "enum": [

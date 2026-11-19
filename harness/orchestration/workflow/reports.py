@@ -61,6 +61,7 @@ from harness.orchestration.core.constants import (
     REPORT_FIELDS,
     REPORT_OPTIONAL_FIELDS,
     REPORT_OUTCOMES,
+    SPEC_CRITERION_STATUSES,
     REVIEW_SEVERITIES,
     TELEMETRY_FIELDS,
     TELEMETRY_SESSION_KINDS,
@@ -1207,7 +1208,43 @@ def _persist_report(
     return report_json
 
 
-def _validate_review(review: object, dispatch: JsonObject) -> None:
+def _validate_spec_criteria(evidence: JsonObject, dispatch: JsonObject) -> None:
+    rows = evidence["criteria"]
+    if (
+        not isinstance(rows, list)
+        or not all(
+            isinstance(row, dict)
+            and set(row) == {"criterion", "status", "evidence"}
+            and _non_empty(row["criterion"])
+            and _non_empty(row["evidence"])
+            and row["status"] in SPEC_CRITERION_STATUSES
+            for row in rows
+        )
+        or [row["criterion"] for row in rows] != dispatch["definition_of_done"]
+    ):
+        raise CoordinatorError(
+            "Spec review criteria must account for every criterion in the approved brief",
+            remedy="list the original criteria in brief order with status and evidence",
+        )
+    findings = evidence["findings"]
+    if any(
+        row["status"] != "met"
+        and not any(
+            finding["severity"] in ("warning", "blocker")
+            and row["criterion"] in finding["summary"]
+            for finding in findings
+        )
+        for row in rows
+    ):
+        raise CoordinatorError(
+            "Spec review has unresolved criteria without actionable findings",
+            remedy="cite each unresolved criterion verbatim in a warning or blocker finding",
+        )
+
+
+def _validate_review(
+    review: object, dispatch: JsonObject, *, completed: bool = True
+) -> None:
     # ``carried_items`` (issue #499) is optional: the review's account of the brief's carried items.
     if not isinstance(review, dict) or set(review) - {
         "carried_items",
@@ -1241,6 +1278,19 @@ def _validate_review(review: object, dispatch: JsonObject) -> None:
             if inherited
             else {"severity", "findings", "risks", "blockers"}
         )
+        # A completed full Spec review accounts for every acceptance criterion of the reviewed
+        # candidate; a delta review keeps the scope of the prior review it narrows.
+        has_criteria = (
+            axis == "spec"
+            and delta_review_of is None
+            and isinstance(evidence, dict)
+            and (
+                "criteria" in evidence
+                or (completed and bool(dispatch.get("definition_of_done")))
+            )
+        )
+        if has_criteria:
+            expected_keys.add("criteria")
         if not isinstance(evidence, dict) or set(evidence) != expected_keys:
             raise CoordinatorError(
                 f"composite review {axis} evidence has an invalid schema",
@@ -1304,6 +1354,8 @@ def _validate_review(review: object, dispatch: JsonObject) -> None:
             )
         for field in ("risks", "blockers"):
             validate_evidence(evidence[field], f"composite review {axis} {field}")
+        if has_criteria:
+            _validate_spec_criteria(evidence, dispatch)
     carried_items.validate_review_accounting(review, dispatch)
 
 
@@ -1822,7 +1874,11 @@ def _validate_report(
             report["risk_triggers"], "completion report risk_triggers", allow_empty=True
         )
     if role.get("name") == "code-review":
-        _validate_review(report.get("review"), dispatch)
+        _validate_review(
+            report.get("review"),
+            dispatch,
+            completed=report.get("outcome") == "completed",
+        )
     elif "review" in report:
         raise CoordinatorError(
             "only the code-review role may submit composite review evidence",

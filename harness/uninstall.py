@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
 
+from harness import runtime_events
 from harness.cleanup import _active_worktrees, _clear_read_only, _git
 from harness.runtime_adapters import ADAPTER_ROOT, adapter_problem
 from harness.health.hook_settings import ADAPTERS
@@ -99,6 +100,7 @@ class UninstallPlan(TypedDict):
     root: str
     remove: list[UninstallItem]
     backup: list[str]
+    runtime_events: list[str]
     gitignore_lines: list[str]
     skipped: list[dict[str, str]]
     blocked: str | None
@@ -215,6 +217,17 @@ def plan_uninstall(repo: Path) -> UninstallPlan:
     backup: list[str] = []
     skipped: list[dict[str, str]] = []
     blocked: str | None = None
+    # Native configs keep their user entries; only the hooks Harness owns leave them.
+    try:
+        events = sorted(set(runtime_events.owned_configs(checkout).values()))
+    except (OSError, ValueError):
+        events = []
+        skipped.append(
+            {
+                "path": runtime_events.OWNERSHIP.as_posix(),
+                "reason": "владение runtime events не читается: нативные записи оставлены",
+            }
+        )
 
     harness_dir = checkout / HARNESS_DIR
     if harness_dir.is_dir():
@@ -279,6 +292,7 @@ def plan_uninstall(repo: Path) -> UninstallPlan:
         "root": str(checkout),
         "remove": remove,
         "backup": sorted(backup),
+        "runtime_events": events,
         "gitignore_lines": lines,
         "skipped": skipped,
         "blocked": blocked,
@@ -331,6 +345,14 @@ def apply_uninstall(
 
     removed: list[str] = []
     failed: list[dict[str, str]] = []
+    if fresh["runtime_events"]:
+        try:
+            released = runtime_events.sync(checkout, release=True)
+            removed.extend(f"{path}: runtime events" for path in released)
+        except (OSError, ValueError) as exc:
+            failed.append(
+                {"path": runtime_events.OWNERSHIP.as_posix(), "reason": str(exc)}
+            )
     for item in fresh["remove"]:
         path = checkout / item["path"]
         try:

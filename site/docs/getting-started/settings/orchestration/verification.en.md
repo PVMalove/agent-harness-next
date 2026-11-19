@@ -35,6 +35,8 @@ A role's report must list exactly the commands from its brief, rather than subst
 | Field | Contract |
 | --- | --- |
 | `qa_preparation` | Array of shell commands, default `[]`. Runs in the candidate checkout before the gate; stops at the first failure. An empty list starts checks immediately. |
+| `workflow_overlays` | List of overlays for `post-developer`, `pre-review`, `qa-preparation` and `pre-qa`. The `qa-preparation` and `pre-qa` slots edit the `qa_preparation` and `pre_qa_commands` lists instead of adding parallel ones. Apply a manifest with `harness workflow-overlays`. |
+| `pre_qa_commands` | Array of shell commands, default `[]`. Project checks at the start of the QA gate, after environment preparation. Developer and review do not run them. New batches pin the commands and QA links their results to the candidate SHA. |
 | `qa_environment_probes` | Array of shell commands, default `[]`. Independent environment probes in the same checkout, only after preparation fails. For example, checking access to a required registry. |
 | `qa_project_file_checks` | Array of shell commands, default `[]`. Independent offline project-file checks in the same checkout, only after preparation fails. For example, manifest/lock-file consistency. |
 

@@ -177,12 +177,37 @@ def _config(repo: Path) -> JsonObject:
     project = _configuration_data(bundle["project.json"], "project config")
     _reject_sensitive(project, "project config")
     defaults = _default_config(repo, project=project)
-    if value.get("assignment_plans"):
-        return LoadedConfiguration(value, result.source_sha256, project)
-    # Policy-only configuration and QA defaults must belong to the same generation.
-    if "developer_verification_commands" not in value:
-        del defaults["developer_verification_commands"]
-    return LoadedConfiguration({**defaults, **value}, result.source_sha256, project)
+    if not value.get("assignment_plans"):
+        # Policy-only configuration and QA defaults must belong to the same generation.
+        if "developer_verification_commands" not in value:
+            del defaults["developer_verification_commands"]
+        value = {**defaults, **value}
+    from harness.orchestration.workflow_overlays import CONFIG_KEYS, resolve_config
+
+    slots = resolve_config(value)
+    if extra := slots["post-developer"]:
+        value["developer_verification_commands"] = (
+            _developer_verification_commands(value) + extra
+        )
+    if extra := slots["pre-review"]:
+        value["review_verification_commands"] = extra + _review_verification_commands(
+            value
+        )
+    if slots["post-developer"] or slots["pre-review"]:
+        value["verification_profiles"] = [
+            {
+                **profile,
+                "developer": profile["developer"] + slots["post-developer"],
+                "review": slots["pre-review"] + profile["review"],
+            }
+            for profile in cast(
+                list[JsonObject], value.get("verification_profiles", [])
+            )
+        ]
+    for slot, key in CONFIG_KEYS.items():
+        if slots[slot] or key in value:
+            value[key] = slots[slot]
+    return LoadedConfiguration(value, result.source_sha256, project)
 
 
 class LoadedConfiguration(dict[str, object]):
@@ -412,6 +437,16 @@ def _role(repo: Path, name: str) -> JsonObject:
 def _verification_commands(config: JsonObject) -> list[str]:
     commands = config.get("verification_commands")
     return _strings(commands, "verification_commands", allow_empty=True)
+
+
+def _qa_gate_commands(config: JsonObject) -> list[str]:
+    """Candidate QA gate: the project's pre-QA checks run first, then the full verification list.
+
+    Only the QA gate takes the pre-QA checks; developer and review fall back to the bare list.
+    """
+    return _qa_preparation_commands(config, "pre_qa_commands") + _verification_commands(
+        config
+    )
 
 
 def _developer_verification_commands(config: JsonObject) -> list[str]:

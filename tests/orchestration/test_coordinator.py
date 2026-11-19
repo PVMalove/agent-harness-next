@@ -87,6 +87,29 @@ TOOLING_BLOCKER = {
     "command": "python -m pytest -q tests/orchestration/test_coordinator.py",
     "message": "Blocked: writes outside docs/tasks are not allowed",
 }
+
+
+def with_spec_criteria(brief: JsonObject, review: object) -> object:
+    """A full review whose Spec axis states no criteria meets each brief criterion.
+
+    Tests that are not about the criteria get the required rows; a test that states its own
+    criteria, or a delta review, keeps its review as written."""
+    spec = review.get("spec") if isinstance(review, dict) else None
+    if (
+        not isinstance(review, dict)
+        or not isinstance(spec, dict)
+        or "criteria" in spec
+        or brief.get("delta_review_of") is not None
+        or not brief.get("definition_of_done")
+    ):
+        return review
+    rows = [
+        {"criterion": criterion, "status": "met", "evidence": "verified by the test"}
+        for criterion in cast(list[str], brief["definition_of_done"])
+    ]
+    return {**review, "spec": {**spec, "criteria": rows}}
+
+
 # One brief item a read-only role left undone (issue #501).
 INCOMPLETE_ITEM = {
     "brief_item": "Map the rollback path into the commit plan",
@@ -2676,6 +2699,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             "report_language": "ru",
         }
         report.update(overrides)
+        if role == "code-review" and "review" in report:
+            report["review"] = with_spec_criteria(brief, report["review"])
         return report
 
     def _decide(self, batch_id: str, decision: str, **extra: object) -> JsonObject:

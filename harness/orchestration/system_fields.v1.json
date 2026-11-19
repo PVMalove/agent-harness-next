@@ -453,6 +453,16 @@
         "blocker": "The axis has a blocking finding."
       }
     },
+    "review.spec.criteria.status": {
+      "description": "Spec Review verdict on one acceptance criterion of the reviewed candidate.",
+      "automatic_decisions": false,
+      "unrecognized": "reject",
+      "values": {
+        "met": "The evidence shows that this candidate meets the criterion.",
+        "missing": "The evidence shows that this candidate does not meet the criterion.",
+        "unverified": "The available evidence cannot establish the result."
+      }
+    },
     "review.recommendation": {
       "description": "A code-review report's optional overall recommendation in review.recommendation; an absent recommendation is not accept, so it blocks auto-accept whenever auto_retry_min_severity is above info.",
       "automatic_decisions": true,
