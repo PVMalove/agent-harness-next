@@ -58,8 +58,10 @@ the ledger lock, so repeat the command after its `retry_after_seconds`. Do not r
 infer the opt-in capability. Take one ticket to a terminal batch state before starting the next.
 
 Before any tracker write, confirm this session is rooted in the main checkout. For an existing
-issue worktree, follow `docs/agents/worktrees.md` → Session write access for this runtime and run
-`worktree check --worktree <issue-worktree>` inside the session sandbox. Continue on
+issue worktree, follow `docs/agents/worktrees.md` → Session write access for this runtime (Claude
+Code: `EnterWorktree` with `path=<issue-worktree>`, then `ExitWorktree` with `action: keep`, no
+coordinator command between them) and run `worktree check --worktree <issue-worktree>` inside the
+session sandbox. Continue on
 `"writable": true`. On refusal, report the affected path and the setup command for this runtime.
 For a new issue worktree, verify `runtime status` lists `worktree.create` or that the session can
 write `.git/worktrees`. Probe the report inbox before changing ticket status and check the new

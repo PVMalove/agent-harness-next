@@ -58,8 +58,10 @@ opt-in capability сами. Доведите один тикет до конеч
 следующий.
 
 До записи в трекер убедитесь, что сессия открыта в основном checkout. Для существующего
-worktree задачи примените процедуру своего runtime и выполните `worktree check --worktree
-<issue-worktree>` внутри песочницы сессии. Продолжайте после `"writable": true`. Если команда
+worktree задачи примените процедуру своего runtime (в Claude Code — `EnterWorktree` с
+`path=<issue-worktree>`, затем `ExitWorktree` с `action: keep`, без команд координатора между
+ними) и выполните `worktree check --worktree <issue-worktree>` внутри песочницы сессии.
+Продолжайте после `"writable": true`. Если команда
 отказала, укажите путь из ошибки и способ подготовить сессию. Для нового worktree проверьте,
 что `runtime status` перечисляет `worktree.create` или сессия может писать в `.git/worktrees`.
 До смены статуса тикета проверьте запись в каталог отчётов. Проверьте запись в новый checkout перед

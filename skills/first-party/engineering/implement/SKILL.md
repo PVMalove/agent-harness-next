@@ -37,8 +37,10 @@ Do not infer or repair an opt-in capability. Process one ticket to a terminal ba
 beginning another.
 
 Before any tracker write, confirm this session is rooted in the main checkout. For an existing
-issue worktree, follow `docs/agents/worktrees.md` → Session write access for this runtime and run
-`worktree check --worktree <issue-worktree>` inside the session sandbox. Continue on
+issue worktree, follow `docs/agents/worktrees.md` → Session write access for this runtime (Claude
+Code: `EnterWorktree` with `path=<issue-worktree>`, then `ExitWorktree` with `action: keep`, no
+coordinator command between them) and run `worktree check --worktree <issue-worktree>` inside the
+session sandbox. Continue on
 `"writable": true`. On refusal, report the affected path and the setup command for this runtime.
 For a new issue worktree, verify `runtime status` lists `worktree.create` or that the session can
 write `.git/worktrees`. Probe the report inbox before changing ticket status and check the new
@@ -84,8 +86,9 @@ Start these steps only after the ticket pre-flight above (blockers, `status::in-
 2. **Issue worktree.** Create it before `batch create`. `batch create` refuses a worktree that
    `git worktree list` does not show. Use `worktree create` and the exact commands in
    `docs/agents/worktrees.md` → Coordinator issue worktree. Confirm `"writable": true` from
-   `worktree check` before `batch create`. If access is missing, follow Session write access for
-   this runtime and repeat the check. Stay in the main checkout.
+   `worktree check` before `batch create`. If access is missing, open it for this runtime (Claude
+   Code: the `EnterWorktree`/`ExitWorktree` pair above) and repeat the check. Stay in the main
+   checkout.
 3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`
    and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:

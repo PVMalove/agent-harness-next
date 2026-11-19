@@ -66,10 +66,13 @@ test runs, logs, and the npm and Playwright caches before startup.
   directories. On Linux, the default Codex network sandbox also blocks the Unix socket used by
   `harness-runtime`. To use the runtime from this session, add `--network-access enabled` if your
   policy permits it. This enables direct command networking when Codex has no active network proxy.
-- **Claude Code** receives the writable artifact paths at launch. The session calls `EnterWorktree`
+- **Claude Code** receives the shared directories as explicit write paths at launch: they stay
+  writable while `EnterWorktree` moves the session into the worktree. The session calls `EnterWorktree`
   with the existing checkout's `path`, then immediately `ExitWorktree` with `action: keep`. The pair returns to the main checkout and keeps the worktree
-  and its Git admin directory writable for this session. In an existing Claude Code session,
-  prepare the directories and call the same pair before working.
+  and its Git admin directory writable for this session. Run no coordinator command between the
+  two calls. A new session repeats the pair. A subagent started with `isolation: worktree` cannot
+  enter an existing worktree. In an existing Claude Code session, prepare the directories and call
+  the same pair before working.
 
 Run the write check through the coordinator session's shell tool inside its sandbox before dispatch.
 
@@ -79,9 +82,14 @@ python .harness/orchestration/coordinator.py --repo . worktree check \
 ```
 
 Wait for `"writable": true`. The command probes the checkout, its Git admin directory, and shared
-directories. Before reserving an in-process handoff, `dispatch send` repeats the shared-directory
-checks and also probes worktree write access for write roles. On refusal, use the reported path to
-repair the session and repeat the check.
+directories. Before reserving an in-process handoff, `dispatch send` repeats the checks for the
+directories of the dispatched role and also probes worktree write access for write roles. Every
+role requires the coordinator state, brief and report staging, and `runs/qa`; a developer also
+requires `runs/tests`. A required path that is a symlink or not a directory refuses the start
+(`required path is a symlink`). The logs, the caches, and runs a role does not require are optional:
+a symlinked, non-directory, or unwritable one gets no write grant, a `warning: ... not granted`
+line names it, and the work continues. On refusal, use the reported path to repair the session and
+repeat the check.
 
 **Empty directory after `worktree remove`.** A session that opened write access to a worktree with the `EnterWorktree` `path` and `ExitWorktree` `keep` pair keeps its path in the sandbox configuration until the session ends. Before every command, the sandbox recreates an empty directory at that path as a mount point, so the directory comes back after `worktree remove`, even when git no longer lists the worktree. The sandbox also creates mask entries relative to the session's working directory: after a `cd` into `.harness/.sandboxes/worktrees/` or `.claude/worktrees/`, a `.claude/` directory with `.cc-writes` and empty `settings.json`-like files appears there. Neither is a worktree, and `git worktree prune` does not remove it. `harness health` names such directories apart and does not warn. `harness cleanup --mode hard` removes a directory that holds only directories and empty files; a directory that a live session still mounts stays, with the reason in `skipped`. Run the cleanup after that session ends. A repeated `worktree create` with the same path works over the empty directory.
 
