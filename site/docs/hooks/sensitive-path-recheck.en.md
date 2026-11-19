@@ -51,6 +51,7 @@ still blocked by the critical `protect-hook-policy`; this hook does not change t
   `realpath` does not resolve a hardlink. The critical `protect-hook-policy` and the diff check of
   the strict boundary, which sees the path from git, are authoritative.
 - **Codex.** The hook receives native `apply_patch` events and checks the paths in the patch body.
+- **Codex limitation.** The hook does not see a shell `apply_patch <<'EOF'` call through the `Bash` tool: the ChangeImpact hooks are not wired to `Bash`, and only the critical `protect-hook-policy` parses such a patch. The strict boundary checks a sensitive path from such a patch.
 
 ## 3. Contract
 

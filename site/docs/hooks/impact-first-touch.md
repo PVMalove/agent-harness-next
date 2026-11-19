@@ -40,6 +40,7 @@ Hook сравнивает путь после `realpath` относительн�
   хранилища, любое исключение, ненулевой код и тайм-аут 10 с (`ADVISORY_TIMEOUT_SECONDS`) дают `warn`
   `internal-error` с кодом `0` и пустым stdout ([hook-response.md](hook-response.md)).
 - **Codex.** Хук получает нативный `apply_patch` и сверяет пути из тела патча.
+- **Ограничение Codex.** Shell-вызов `apply_patch <<'EOF'` через инструмент `Bash` хук не видит: hooks ChangeImpact к `Bash` не подключены, такой патч разбирает только критический `protect-hook-policy`. Рискованный путь из такого патча проверяют review и QA.
 
 ## 3. Контракт
 

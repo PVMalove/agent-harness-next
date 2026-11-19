@@ -28,7 +28,8 @@ the critical guards and `require-bounded-check` are connected on `PreToolUse` fo
 `targeted-check-reminder` is connected on `Stop` and `SubagentStop`. Codex sends file edits as `apply_patch`:
 the critical guards `protect-hook-policy` and `block-scratch-outside-docs-tasks` are connected by the group
 `apply_patch|Write|Edit` and check the patch paths through the `apply_patch_payload.py` adapter. The three
-ChangeImpact hooks also handle native `apply_patch`. The reminder reads the touch log on
+ChangeImpact hooks also handle native `apply_patch`; they do not see a shell `apply_patch <<'EOF'` call
+through `Bash`. The reminder reads the touch log on
 `Stop` and `SubagentStop`. Project hooks work after the user trusts the `.codex/` layer and
 each hook by hash. The `hooks.policy` check in `harness health` shows wiring for each runtime.
 For details, see [install-and-update](hooks/install-and-update.md).

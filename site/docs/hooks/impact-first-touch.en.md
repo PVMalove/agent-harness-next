@@ -40,6 +40,7 @@ The model receives the warning: stdout contains
   any exception, a non-zero code, and the 10 s timeout (`ADVISORY_TIMEOUT_SECONDS`) give `warn`
   `internal-error` with code `0` and empty stdout ([hook-response.md](hook-response.md)).
 - **Codex.** The hook receives native `apply_patch` events and checks the paths in the patch body.
+- **Codex limitation.** The hook does not see a shell `apply_patch <<'EOF'` call through the `Bash` tool: the ChangeImpact hooks are not wired to `Bash`, and only the critical `protect-hook-policy` parses such a patch. Review and QA check a risky path from such a patch.
 
 ## 3. Contract
 
