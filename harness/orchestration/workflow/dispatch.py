@@ -1401,19 +1401,6 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         runtime_images = runtime_access.pin_images(
             access_plan, transport, role_name, purpose
         )
-        context_summary = None
-        if context_package is not None:
-            if (
-                is_review_work
-                and delta_review_of is None
-                and delta_scope is None
-                and runtime_images is None
-            ):
-                context_summary = _review_context_summary(
-                    context_package, review_scope, carried
-                )
-            else:
-                context_summary = _context_package_summary(context_package)
         qa_execution = _qa_execution_section(
             repo, root, config, {"role": role_name, "runtime_access": access_plan}
         )
@@ -1591,6 +1578,19 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                 stale_after // 3,
             ),
         )
+        context_summary = None
+        if context_package is not None:
+            if (
+                is_review_work
+                and delta_review_of is None
+                and delta_scope is None
+                and runtime_images is None
+            ):
+                context_summary = _review_context_summary(
+                    context_package, review_scope, carried
+                )
+            else:
+                context_summary = _context_package_summary(context_package)
         brief: JsonObject = {
             "dispatch_id": dispatch_id,
             "batch_id": batch["batch_id"],

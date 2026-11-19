@@ -80,7 +80,12 @@ def show_context_package(args: argparse.Namespace) -> JsonObject:
             )
         section = args.section
         if section:
-            return {"context_package_id": package_id, section: package.get(section)}
+            if section not in package:
+                raise CoordinatorError(
+                    f"pinned Context Package has no section named {section!r}",
+                    remedy="use a field present in the pinned package",
+                )
+            return {"context_package_id": package_id, section: package[section]}
         return package
 
 

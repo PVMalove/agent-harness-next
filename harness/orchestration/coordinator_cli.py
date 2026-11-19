@@ -648,8 +648,7 @@ def build_parser(
     _common(context_package_show)
     context_package_show.add_argument("--dispatch", required=True)
     context_package_show.add_argument(
-        "--section",
-        choices=("starting_files", "symbol_graph", "related_tests", "precedent_cards", "memory", "diff"),
+        "--section", help="return one field, for example starting_files, related_tests or symbol_graph"
     )
     context_package_show.set_defaults(
         handler=handlers.show_context_package, installed_runtime_only=True

@@ -1570,21 +1570,22 @@ def _validate_dispatch(
                 + INTERNAL_INVARIANT_REMEDY,
             )
         summary = dispatch.get("context_package_summary")
-        expected_summary = (
-            _review_context_summary(
-                package, dispatch["review_scope"], dispatch.get("carried_items") or {}
+        if summary is not None:
+            expected_summary = (
+                _review_context_summary(
+                    package, dispatch["review_scope"], dispatch.get("carried_items") or {}
+                )
+                if dispatch["role"] == "code-review"
+                and isinstance(summary, dict)
+                and summary.get("review_focus") is True
+                else _context_package_summary(package)
             )
-            if dispatch["role"] == "code-review"
-            and isinstance(summary, dict)
-            and summary.get("review_focus") is True
-            else _context_package_summary(package)
-        )
-        if summary is not None and summary != expected_summary:
-            raise CoordinatorError(
-                "dispatch Context Package summary does not match its immutable package",
-                remedy="the dispatch's Context Package summary does not match its immutable package -- "
-                + INTERNAL_INVARIANT_REMEDY,
-            )
+            if summary != expected_summary:
+                raise CoordinatorError(
+                    "dispatch Context Package summary does not match its immutable package",
+                    remedy="the dispatch's Context Package summary does not match its immutable package -- "
+                    + INTERNAL_INVARIANT_REMEDY,
+                )
     elif (
         package_id is not None
         or package_sha is not None

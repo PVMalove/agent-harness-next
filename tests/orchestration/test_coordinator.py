@@ -2585,6 +2585,10 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
                 "related_tests": full["related_tests"],
             },
         )
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "no section named"):
+            coordinator.show_context_package(
+                self._args(dispatch=brief["dispatch_id"], section="missing")
+            )
 
     def test_invalid_check_result_is_rejected_before_recording_and_can_be_corrected(
         self,
