@@ -404,7 +404,7 @@ exactly-once: исполнение с неизвестным эффектом о
 известный чистый startup SHA отдельным evidence без фиктивного checkpoint. После recovery даже
 429 требует человеческого approval. Подробный контракт: [Operator recovery](playbook.md#operator-recovery).
 
-### Оверлеи workflow
+## Оверлеи workflow
 
 `harness workflow-overlays <repo> --manifest checks.yaml` показывает результат композиции.
 Добавьте `--apply`, чтобы записать его в проектную `.harness/orchestration.json` с резервной
