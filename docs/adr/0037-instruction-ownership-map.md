@@ -351,10 +351,10 @@ Codex исполняет проектные hooks только после дов
 | `harness/project/hooks/require-bounded-check.sh` | полный прогон QA только через ограниченный вывод | PreToolUse Bash | да | да |
 | `harness/project/hooks/block-dangerous-git.sh` | спрашивать перед необратимыми действиями | PreToolUse Bash | да | да |
 | `harness/project/hooks/block-scratch-outside-docs-tasks.sh` | `artifacts.md`: каталоги и имена файлов | PreToolUse Write/Edit | да | да (apply_patch) |
-| `harness/project/hooks/targeted-check-reminder.sh` | напоминание о целевых проверках (advisory) | PreToolUse Write/Edit, Stop, SubagentStop | да | только Stop, SubagentStop |
+| `harness/project/hooks/targeted-check-reminder.sh` | напоминание о целевых проверках (advisory) | PreToolUse Write/Edit/MultiEdit/NotebookEdit, Stop, SubagentStop | да | да (apply_patch, Stop, SubagentStop) |
 | `harness/project/hooks/runtime-autostart.sh` | ADR 0031: автозапуск runtime | PreToolUse Bash, Stop, SubagentStop | да | нет |
-| `harness/project/hooks/impact-first-touch.sh` | ADR 0024: первое касание пути | PreToolUse Write/Edit | да | нет |
-| `harness/project/hooks/sensitive-path-recheck.sh` | ADR 0024: чувствительные пути | PreToolUse Write/Edit | да | нет |
+| `harness/project/hooks/impact-first-touch.sh` | ADR 0024: первое касание пути | PreToolUse Write/Edit/MultiEdit/NotebookEdit | да | да (apply_patch) |
+| `harness/project/hooks/sensitive-path-recheck.sh` | ADR 0024: чувствительные пути | PreToolUse Write/Edit/MultiEdit/NotebookEdit | да | да (apply_patch) |
 | `harness/project/hooks/check-worktree-branch-name.sh` | `worktrees.md`: имя ветки worktree | PreToolUse EnterWorktree | да | нет (события нет) |
 | `harness/project/hooks/mark-qa-gate-passed.sh` | отметка пройденного qa-gate | PostToolUse Bash | да | нет; skill qa-gate вызывает `record-qa-gate-pass.sh` явно |
 | `harness/project/hooks/count-skill-usage.sh` | статистика, правила нет | PreToolUse Skill | да | нет |
