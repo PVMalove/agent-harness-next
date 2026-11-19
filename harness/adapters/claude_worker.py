@@ -7,8 +7,10 @@ parameter, a subagent starts in the main checkout, and `EnterWorktree` refuses i
 `send.worker_worktree` as
 `claude_worker.py dispatch [--extra-prompt-file F] [--dry-run] --repo <main repo> --brief <brief>`.
 Under runtime supervision (a brief with an `execution` section) the adapter lives exactly as long as
-its worker, in the same process group. Without `execution` a detached adapter manages the stream.
-The adapter verifies the result of a probe-only turn before sending the task to the same session.
+its worker, in the same process group. Without `execution` a detached adapter manages the stream,
+and the launcher returns only after the probe verdict, reporting a refused path itself.
+The adapter verifies the result of a probe-only turn before sending the task to the same session;
+the brief's `allowed_tools` must include plain `Bash` for that turn.
 It forwards the task's native events and returns the worker's exit status. The worker's self-report,
 heartbeat and `report submit`
 prove its actual checkout. In a container (`HARNESS_EXECUTOR=docker`, ADR 0025) no coordinator
@@ -26,11 +28,13 @@ installing it never changes the pinned runtime of an open batch.
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
 import queue
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import threading
@@ -46,6 +50,7 @@ else:
 
 STARTUP_CHECK_SECONDS = 3
 WRITE_PROBE_TIMEOUT_SECONDS = 45
+STDERR_TAIL_LINES = 40
 # Tools that already let a role write files; a role with none of them is read-only.
 WRITE_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
 
@@ -184,15 +189,16 @@ def build_prompt(
     return prompt
 
 
-def native_write_probe(brief: Brief, repo: Path, worktree: Path) -> str:
-    """Put the check in the session's actual Bash tool instead of the adapter process."""
-    tools = brief["allowed_tools"]
-    writer = brief.get("access", "write" if brief["role"] == "developer" else "read-only") == "write"
-    check_dirs: list[Path] = []
-    if brief["role"] == "developer" and any(
-        tool in tools for tool in ("Agent", "Agent(test-author)")
-    ):
-        check_dirs.append(repo / ".harness/.sandboxes/runs")
+def check_directories(brief: Brief) -> list[Path]:
+    """Directories this adapter grants beside the checkout and report: probed and created.
+
+    The runner root is the `--add-dir` of a developer with the test author; a cache is a write
+    requirement of the brief's runtime-access plan. Codex grants and probes its own set
+    (`codex_worker.check_directories`); both create theirs through `prepare_directories`.
+    """
+    directories: list[Path] = []
+    if uses_test_author(brief):
+        directories.append(runner_root(brief))
     plan = brief.get("runtime_access") or {}
     requirements = plan.get("filesystem")
     if isinstance(requirements, list):
@@ -203,13 +209,32 @@ def native_write_probe(brief: Brief, repo: Path, worktree: Path) -> str:
                 and entry.get("access") == "write"
                 and isinstance(path := entry.get("path"), str)
             ):
-                check_dirs.append(Path(path))
-    directories = worker_write_probe.write_targets(
-        worktree, Path(brief["report_staging_path"]).parent, check_dirs, writer=writer
+                directories.append(Path(path))
+    return directories
+
+
+def native_write_probe(
+    brief: Brief, worktree: Path, directories: list[Path]
+) -> str:
+    """Put the check in the session's actual Bash tool instead of the adapter process."""
+    writer = brief.get("access", "write" if brief["role"] == "developer" else "read-only") == "write"
+    targets = worker_write_probe.write_targets(
+        worktree, Path(brief["report_staging_path"]).parent, directories, writer=writer
     )
     return shlex.join(
-        [sys.executable, str(Path(__file__).with_name("worker_write_probe.py").resolve()), *directories]
+        [sys.executable, str(Path(__file__).with_name("worker_write_probe.py").resolve()), *targets]
     )
+
+
+def uses_test_author(brief: Brief) -> bool:
+    return brief["role"] == "developer" and any(
+        tool in brief["allowed_tools"] for tool in ("Agent", "Agent(test-author)")
+    )
+
+
+def runner_root(brief: Brief) -> Path:
+    """Linked workers keep runner evidence in the main checkout's shared sandbox."""
+    return Path(brief["report_staging_path"]).parents[2] / "runs"
 
 
 def in_container() -> bool:
@@ -272,14 +297,8 @@ def worker_command(brief: Brief, binary: str = "claude") -> list[str]:
         "--verbose",
     ]
     effort = brief.get("resolved_effort")
-    if brief["role"] == "developer" and any(
-        tool in brief["allowed_tools"] for tool in ("Agent", "Agent(test-author)")
-    ):
-        # Linked workers keep runner evidence in the main checkout's shared sandbox.
-        command += [
-            "--add-dir",
-            str(Path(brief["report_staging_path"]).parents[2] / "runs"),
-        ]
+    if uses_test_author(brief):
+        command += ["--add-dir", str(runner_root(brief))]
     if effort:
         command += ["--effort", effort]
     return command
@@ -340,6 +359,24 @@ def forward_native_output(
         output.put(None)
 
 
+def forward_native_errors(
+    process: subprocess.Popen[str], tail: collections.deque[str]
+) -> None:
+    """Pass the CLI's stderr through unchanged and keep its tail for a startup refusal."""
+    assert process.stderr is not None
+    for line in process.stderr:
+        tail.append(line)
+        sys.stderr.write(line)
+        sys.stderr.flush()
+
+
+def denied_bash(event: dict[str, object]) -> bool:
+    denials = event.get("permission_denials")
+    return isinstance(denials, list) and any(
+        isinstance(item, dict) and item.get("tool_name") == "Bash" for item in denials
+    )
+
+
 def await_probe(output: queue.Queue[str | None], command: str) -> str | None:
     """Return the initialization event only after a successful native Bash result."""
     deadline = time.monotonic() + WRITE_PROBE_TIMEOUT_SECONDS
@@ -372,7 +409,11 @@ def await_probe(output: queue.Queue[str | None], command: str) -> str | None:
                     or tool.get("dangerouslyDisableSandbox") is True
                     or tool.get("run_in_background") is True
                 ):
-                    raise ValueError(f"expected the native Bash write probe: {command}")
+                    name = block.get("name")
+                    raise ValueError(
+                        f"expected the native Bash write probe, the session called "
+                        f"{name if isinstance(name, str) else 'an unnamed tool'}: {command}"
+                    )
                 tool_use_id = identifier
         if event_type == "user" and tool_use_id is not None:
             for block in message_blocks(event):
@@ -380,29 +421,61 @@ def await_probe(output: queue.Queue[str | None], command: str) -> str | None:
                     continue
                 result = probe_output(block.get("content"))
                 if block.get("is_error") is True or worker_write_probe.SUCCESS not in result:
-                    detail = next(
+                    refused = next(
                         (line for line in result if line.startswith("write probe refused: ")),
-                        command,
+                        None,
+                    )
+                    # A sandbox, hook or permission refusal never reaches the probe script:
+                    # its own text is the cause.
+                    detail = refused or (
+                        f"{worker_write_probe.safe_detail(chr(10).join(result)) or 'no output'}"
+                        f" ({command})"
                     )
                     raise ValueError(f"native Bash write probe failed: {detail[:1200]}")
                 verified = True
         if event_type == "result":
             if not verified or event.get("is_error") is True:
-                raise ValueError(f"Claude Code did not prove native Bash write access: {command}")
+                text = event.get("result")
+                cause = worker_write_probe.safe_detail(text) if isinstance(text, str) else ""
+                if denied_bash(event):
+                    cause = (
+                        "Claude Code denied the Bash tool; the role's tool_policy must allow "
+                        f"plain Bash under --permission-mode dontAsk. {cause}"
+                    ).strip()
+                subtype = event.get("subtype")
+                raise ValueError(
+                    "Claude Code did not prove native Bash write access"
+                    f" ({subtype if isinstance(subtype, str) else 'no subtype'}):"
+                    f" {cause or 'no result text'} ({command})"
+                )
             if not initialized:
                 raise ValueError("Claude Code did not emit a native initialization event")
             return initialized
 
 
-def run_worker(job: WorkerJob) -> int:
+def write_receipt(receipt: Path | None, result: dict[str, object]) -> None:
+    """Tell a detached launcher the probe verdict; replace, so a reader sees whole JSON."""
+    if receipt is None:
+        return
+    partial = receipt.with_name(receipt.name + ".partial")
+    partial.write_text(json.dumps(result), encoding="utf-8")
+    partial.replace(receipt)
+
+
+def run_worker(job: WorkerJob, receipt: Path | None = None) -> int:
     """Send task input only after the same CLI process completes the native probe."""
     with subprocess.Popen(
-        job["command"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+        job["command"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
         text=True, encoding="utf-8",
     ) as process:
         assert process.stdin is not None
         output: queue.Queue[str | None] = queue.Queue(maxsize=64)
+        errors: collections.deque[str] = collections.deque(maxlen=STDERR_TAIL_LINES)
         threading.Thread(target=forward_native_output, args=(process, output), daemon=True).start()
+        stderr_reader = threading.Thread(
+            target=forward_native_errors, args=(process, errors), daemon=True
+        )
+        stderr_reader.start()
         try:
             try:
                 send_user_turn(
@@ -410,15 +483,28 @@ def run_worker(job: WorkerJob) -> int:
                     "Run exactly this command once using your native Bash tool. "
                     "Keep sandbox permissions enabled. Then end this turn.\n" + job["probe"],
                 )
+                initialized = await_probe(output, job["probe"])
             except BrokenPipeError:
-                return exit_status(process.wait(timeout=2)) or 1
-            initialized = await_probe(output, job["probe"])
+                initialized = None
+            except ValueError as exc:
+                write_receipt(receipt, {"ready": False, "error": str(exc)})
+                raise
             if initialized is None:
-                return exit_status(process.wait(timeout=2)) or 1
+                code = exit_status(process.wait(timeout=2)) or 1
+                stderr_reader.join(timeout=2)
+                detail = worker_write_probe.safe_detail("".join(errors)) or "no stderr"
+                error = (
+                    f"Claude Code exited with {code} before the native write probe finished: "
+                    f"{detail}"
+                )
+                print(f"claude worker could not start: {error}", file=sys.stderr)
+                write_receipt(receipt, {"ready": False, "error": error})
+                return code
             sys.stdout.write(initialized)
             sys.stdout.flush()
             send_user_turn(process, job["prompt"])
             process.stdin.close()
+            write_receipt(receipt, {"ready": True})
             while (line := output.get()) is not None:
                 sys.stdout.write(line)
                 sys.stdout.flush()
@@ -450,6 +536,12 @@ def start(args: argparse.Namespace) -> int:
         or any(not isinstance(tool, str) or not tool.strip() for tool in allowed)
     ):
         raise ValueError("allowed_tools must be a non-empty list of tool names")
+    if "Bash" not in allowed:
+        # Under dontAsk a scoped rule such as Bash(git diff:*) denies the probe command.
+        raise ValueError(
+            "allowed_tools must include plain Bash: the native write probe runs through the "
+            "Bash tool under --permission-mode dontAsk; add Bash to the role's tool_policy"
+        )
     if (
         not isinstance(brief.get("resolved_model"), str)
         or not brief["resolved_model"].strip()
@@ -469,18 +561,23 @@ def start(args: argparse.Namespace) -> int:
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
     binary = resolve_claude(args.claude_bin)
+    directories = check_directories(brief)
     job: WorkerJob = {
         "command": worker_command(brief, binary),
-        "probe": native_write_probe(brief, repo, worktree),
+        "probe": native_write_probe(brief, worktree, directories),
         "prompt": prompt,
     }
     if args.dry_run:
         print(json.dumps({"cwd": str(worktree), **job}))
         return 0
+    # A fresh install has no runner or cache directory yet; the probe must find them.
+    worker_write_probe.prepare_directories(directories)
     if supervised(brief):
         return run_worker(job)
     log = log_path(brief)
     log.parent.mkdir(parents=True, exist_ok=True)
+    receipt = log.with_name(f"{brief['dispatch_id']}.ready.json")
+    receipt.unlink(missing_ok=True)
     with log.open("ab") as sink:
         process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "_run"],
@@ -492,17 +589,47 @@ def start(args: argparse.Namespace) -> int:
         )
     assert process.stdin is not None
     try:
-        process.stdin.write(json.dumps(job).encode("utf-8"))
+        process.stdin.write(json.dumps({**job, "receipt": str(receipt)}).encode("utf-8"))
         process.stdin.close()
     except BrokenPipeError:
         process.wait(timeout=STARTUP_CHECK_SECONDS)
-    time.sleep(STARTUP_CHECK_SECONDS)
+    # Detach only on the probe verdict: a refusal after an early return would surface later
+    # as a worker that exited without a report, and its path only in the log.
+    started = time.monotonic()
+    deadline = started + WRITE_PROBE_TIMEOUT_SECONDS + STARTUP_CHECK_SECONDS
+    while time.monotonic() < deadline:
+        if receipt.exists():
+            try:
+                result = json.loads(receipt.read_text(encoding="utf-8"))
+            except ValueError:
+                time.sleep(0.02)
+                continue
+            if isinstance(result, dict) and result.get("ready") is True:
+                # A worker that dies right after the task is still a startup failure.
+                time.sleep(max(0.0, started + STARTUP_CHECK_SECONDS - time.monotonic()))
+                if process.poll() is None:
+                    return 0
+                break
+            process.wait(timeout=STARTUP_CHECK_SECONDS)
+            error = result.get("error") if isinstance(result, dict) else None
+            print(
+                f"claude worker could not start: {error or 'worker startup failed'}",
+                file=sys.stderr,
+            )
+            return 1
+        if process.poll() is not None:
+            break
+        time.sleep(0.02)
     code = process.poll()
-    if code is not None:
-        tail = log.read_text(encoding="utf-8", errors="replace")[-500:]
-        print(f"claude worker exited with {code} at startup: {tail}", file=sys.stderr)
-        return 1
-    return 0
+    if code is None:
+        if sys.platform != "win32":
+            os.killpg(process.pid, signal.SIGTERM)
+        else:
+            process.terminate()
+        code = process.wait(timeout=STARTUP_CHECK_SECONDS)
+    tail = log.read_text(encoding="utf-8", errors="replace")[-500:]
+    print(f"claude worker exited with {code} at startup: {tail}", file=sys.stderr)
+    return 1
 
 
 def exit_status(returncode: int) -> int:
@@ -513,7 +640,8 @@ def exit_status(returncode: int) -> int:
 def main(argv: list[str]) -> int:
     if argv == ["_run"]:
         try:
-            return run_worker(cast(WorkerJob, json.load(sys.stdin)))
+            job = json.load(sys.stdin)
+            return run_worker(cast(WorkerJob, job), Path(job["receipt"]))
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             print(f"claude worker could not start: {exc}", file=sys.stderr)
             return 1

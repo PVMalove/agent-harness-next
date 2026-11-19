@@ -262,7 +262,7 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         brief = json.loads(self.brief.read_text())
         brief.update(role="code-review", access="read-only")
 
-        command = claude_worker.native_write_probe(brief, self.repo, self.worktree)
+        command = claude_worker.native_write_probe(brief, self.worktree, [])
         arguments = shlex.split(command)
 
         self.assertEqual(arguments[2:], [str(Path(brief["report_staging_path"]).parent)])

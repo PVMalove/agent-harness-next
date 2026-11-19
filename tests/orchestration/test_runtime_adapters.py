@@ -1144,3 +1144,195 @@ def test_writer_probe_refuses_read_only_common_git_storage_of_a_linked_worktree(
         (common / shared).chmod(0o755)
     assert result.returncode == 1
     assert f"write probe refused: {common / shared}" in result.stderr
+
+
+CLAUDE_RUNS_PROBE = """\
+import json, os, subprocess, sys, time
+from pathlib import Path
+def emit(event):
+    print(json.dumps(event), flush=True)
+command = json.loads(sys.stdin.readline())['message']['content'].splitlines()[-1]
+emit({'type': 'system', 'subtype': 'init'})
+emit({'type': 'assistant', 'message': {'content': [
+    {'type': 'tool_use', 'id': 'probe', 'name': 'Bash', 'input': {'command': command}},
+]}})
+time.sleep(DELAY)
+done = subprocess.run(command, shell=True, capture_output=True, text=True)
+emit({'type': 'user', 'message': {'content': [
+    {'type': 'tool_result', 'tool_use_id': 'probe', 'is_error': done.returncode != 0,
+     'content': done.stdout + done.stderr},
+]}})
+emit({'type': 'result', 'subtype': 'success', 'is_error': False})
+prompt = json.loads(sys.stdin.readline())['message']['content']
+"""
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process session")
+def test_claude_detached_waits_for_a_slow_probe_refusal_and_reports_its_path(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    git_dir = worker / ".git"
+    git_dir.chmod(0o555)
+    binary = fake_runtime(
+        repo,
+        CLAUDE_RUNS_PROBE.replace("DELAY", "4")
+        + f"Path({str(repo / 'unexpected-task')!r}).touch()\n",
+    )
+    try:
+        result = invoke(dispatch, "--claude-bin", str(binary))
+    finally:
+        git_dir.chmod(0o755)
+    if os.geteuid() == 0:
+        pytest.skip("root ignores directory permissions")
+    assert result.returncode == 1
+    assert f"write probe refused: {git_dir}" in result.stderr
+    assert not (repo / "unexpected-task").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process session")
+def test_claude_detached_returns_after_a_slow_successful_probe(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    evidence = repo / "task.txt"
+    binary = fake_runtime(
+        repo,
+        CLAUDE_RUNS_PROBE.replace("DELAY", "4")
+        + f"Path({str(evidence)!r}).write_text(str(os.getpid()))\ntime.sleep(30)\n",
+    )
+    try:
+        result = invoke(dispatch, "--claude-bin", str(binary))
+        assert result.returncode == 0, result.stderr
+        assert evidence.exists()
+    finally:
+        if evidence.exists():
+            os.kill(int(evidence.read_text()), 15)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_claude_creates_runner_and_cache_directories_on_a_fresh_install(
+    dispatch: tuple[Path, Path, dict[str, object]], tmp_path: Path,
+) -> None:
+    repo, _, _ = dispatch
+    cache = tmp_path / "fresh-cache/uv"
+    binary = fake_runtime(repo, CLAUDE_RUNS_PROBE.replace("DELAY", "0") + "sys.exit(0)\n")
+    runs = repo / ".harness/.sandboxes/runs"
+    assert not runs.exists()
+
+    result, _ = run_in_own_group(
+        dispatch, "--claude-bin", str(binary),
+        changes={
+            **SUPERVISED,
+            "allowed_tools": ["Read", "Bash", "Edit", "Agent(test-author)"],
+            "runtime_access": {"filesystem": [
+                {"resource": "cache", "access": "write", "path": str(cache)},
+            ]},
+        },
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert runs.is_dir() and cache.is_dir()
+    assert not list(runs.glob(".harness-write-probe-*"))
+
+
+def test_claude_refuses_a_symlinked_check_directory(
+    dispatch: tuple[Path, Path, dict[str, object]], tmp_path: Path,
+) -> None:
+    repo, _, _ = dispatch
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (repo / ".harness/.sandboxes/runs").symlink_to(elsewhere)
+    result, _ = run_in_own_group(
+        dispatch, "--claude-bin", "/fake/claude",
+        changes={**SUPERVISED, "allowed_tools": ["Read", "Bash", "Agent(test-author)"]},
+    )
+    assert result.returncode == 1
+    assert "symlink" in result.stderr
+
+
+def test_claude_dry_run_creates_no_check_directory(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    result = invoke(
+        dispatch, "--dry-run", "--claude-bin", "/fake/claude",
+        changes={"allowed_tools": ["Read", "Bash", "Agent(test-author)"]},
+    )
+    assert result.returncode == 0, result.stderr
+    assert not (repo / ".harness/.sandboxes/runs").exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_claude_probe_failure_names_its_cause_without_secrets(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    binary = fake_runtime(
+        repo,
+        CLAUDE_PROBE.replace(
+            "'content': 'Harness write probe passed'",
+            "'is_error': True, 'content': 'bwrap: setting up uid map: Permission denied "
+            "API_TOKEN=' + os.environ['FAKE_API_TOKEN']",
+        ),
+    )
+    os.environ["FAKE_API_TOKEN"] = "s3cr3t-value-123"
+    try:
+        result, _ = run_in_own_group(dispatch, "--claude-bin", str(binary), changes=SUPERVISED)
+    finally:
+        del os.environ["FAKE_API_TOKEN"]
+
+    assert result.returncode == 1
+    assert "bwrap: setting up uid map: Permission denied" in result.stderr
+    assert "s3cr3t-value-123" not in result.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_claude_reports_a_denied_bash_probe_from_the_result_event(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    binary = fake_runtime(
+        repo,
+        "import json, sys\n"
+        "sys.stdin.readline()\n"
+        "print(json.dumps({'type': 'system', 'subtype': 'init'}), flush=True)\n"
+        "print(json.dumps({'type': 'result', 'subtype': 'success', 'is_error': False,\n"
+        "    'result': 'PreToolUse hook blocked the command',\n"
+        "    'permission_denials': [{'tool_name': 'Bash', 'tool_use_id': 'x',\n"
+        "                            'tool_input': {'command': 'echo private'}}]}), flush=True)\n",
+    )
+    result, _ = run_in_own_group(dispatch, "--claude-bin", str(binary), changes=SUPERVISED)
+    assert result.returncode == 1
+    assert "PreToolUse hook blocked the command" in result.stderr
+    assert "denied the Bash tool" in result.stderr
+    assert "echo private" not in result.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process group")
+def test_claude_reports_the_runtime_stderr_when_it_exits_before_the_probe(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, _, _ = dispatch
+    binary = fake_runtime(
+        repo,
+        "import sys\nsys.stdin.readline()\n"
+        "print('Error: invalid settings in .claude/settings.json', file=sys.stderr, flush=True)\n"
+        "sys.exit(3)\n",
+    )
+    result, _ = run_in_own_group(dispatch, "--claude-bin", str(binary), changes=SUPERVISED)
+    assert result.returncode == 3
+    assert "exited with 3 before the native write probe finished" in result.stderr
+    assert "invalid settings in .claude/settings.json" in result.stderr
+
+
+def test_claude_refuses_a_tool_policy_without_plain_bash_up_front(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    result = invoke(
+        dispatch, "--dry-run", "--claude-bin", "/fake/claude",
+        changes={"role": "code-review", "access": "read-only",
+                 "allowed_tools": ["Read", "Grep", "Bash(git diff:*)"]},
+    )
+    assert result.returncode == 1
+    assert "plain Bash" in result.stderr

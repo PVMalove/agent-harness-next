@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -10,6 +11,33 @@ from collections.abc import Iterable
 from pathlib import Path
 
 SUCCESS = "Harness write probe passed"
+DETAIL_CHARACTERS = 600
+_SECRET_KEY = re.compile(r"token|secret|password|credential|api.?key|authorization", re.I)
+_SECRET_ASSIGNMENT = re.compile(
+    r"(?i)([\w-]*(?:api[_-]?key|token|secret|password|authorization)[\w-]*[\"']?\s*[:=]\s*[\"']?)"
+    r"([^\s,;\"'}]+)"
+)
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def prepare_directories(directories: Iterable[Path]) -> None:
+    """Create the worker's check directories; an existing symlink on the way is refused."""
+    for directory in directories:
+        if not directory.is_absolute() or directory.resolve() != directory:
+            raise ValueError(f"check directory must be canonical, without a symlink: {directory}")
+        directory.mkdir(parents=True, exist_ok=True)
+        if directory.resolve() != directory or not directory.is_dir():
+            raise ValueError(f"check directory must be canonical, without a symlink: {directory}")
+
+
+def safe_detail(text: str) -> str:
+    """The tail of a native error with configured secrets and credential assignments masked."""
+    for key, value in os.environ.items():
+        if len(value) >= 4 and _SECRET_KEY.search(key):
+            text = text.replace(value, "<redacted>")
+    text = _SECRET_ASSIGNMENT.sub(r"\1<redacted>", text)
+    text = " ".join(_CONTROL.sub(" ", text).split())
+    return text[-DETAIL_CHARACTERS:]
 
 
 def write_targets(

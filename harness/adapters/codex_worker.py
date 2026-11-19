@@ -569,10 +569,7 @@ def start(args: argparse.Namespace) -> int:
         )
         return 0
     directories = check_directories(repo)
-    for directory in directories:
-        if directory.resolve() != directory:
-            raise ValueError(f"shared check directory must not use a symlink: {directory}")
-        directory.mkdir(parents=True, exist_ok=True)
+    worker_write_probe.prepare_directories(directories)
     write_probe = worker_write_probe.write_targets(
         worktree, staging.parent, directories, writer=brief["access"] == "write"
     )
