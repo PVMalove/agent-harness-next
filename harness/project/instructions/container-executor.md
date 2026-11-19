@@ -457,8 +457,9 @@ any other adapter must be an executable file.
 
 With `HARNESS_EXECUTOR=docker`, which the executor sets, `claude_worker.py`:
 
-- runs `claude -p` in the foreground with streaming JSON input and output. The adapter checks a
-  native Bash write probe before it sends the task and forwards `init` to the host;
+- runs `claude -p` in the foreground with `--input-format stream-json` and
+  `--output-format stream-json --verbose`, so the host reads the `init` event and the steps. The
+  adapter checks a native Bash write probe before it sends the task and forwards `init` to the host;
 - passes the brief's `allowed_tools` with `--permission-mode dontAsk` and the incoming reports
   directory with `--add-dir`; a read-only role also gets `Edit(//<report_staging_path>)` and can
   write only its report;
