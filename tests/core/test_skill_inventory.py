@@ -126,3 +126,40 @@ def test_inventory_includes_hook_and_template_provenance(tmp_path: Path) -> None
         "package_source": "harness/project/instructions/git-workflow.md",
         "status": "missing",
     }
+
+
+def test_mcp_reads_commit_map_without_creating_project_cache(tmp_path: Path) -> None:
+    import io
+
+    from harness.mcp_server import serve
+
+    git(tmp_path, "init", "-b", "main")
+    (tmp_path / "design.md").write_text("# Design\n")
+    git(tmp_path, "add", "design.md")
+    git(
+        tmp_path,
+        "-c",
+        "user.name=Tester",
+        "-c",
+        "user.email=test@example.com",
+        "commit",
+        "-m",
+        "design",
+    )
+    sha = git(tmp_path, "rev-parse", "HEAD")
+    request = {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "tools/call",
+        "params": {"name": "repo_map", "arguments": {"commit": sha}},
+    }
+    result = io.BytesIO()
+
+    serve(
+        tmp_path, lambda _: {}, io.BytesIO(json.dumps(request).encode() + b"\n"), result
+    )
+
+    payload = json.loads(result.getvalue())["result"]["structuredContent"]
+    assert payload["commit"] == sha
+    assert [item["path"] for item in payload["files"]] == ["design.md"]
+    assert not (tmp_path / ".harness").exists()

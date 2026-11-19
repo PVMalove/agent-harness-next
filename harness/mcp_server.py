@@ -6,7 +6,7 @@
 # Removing or altering this header is prohibited and voids all license rights.
 
 
-"""Local stdio access to the packager inventory and accepted QA evidence."""
+"""Local stdio access to project artifacts, repository context and accepted QA."""
 
 from __future__ import annotations
 
@@ -23,6 +23,11 @@ from harness.json_types import JsonObject
 MAX_FRAME = 1 << 20
 VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 INVENTORY = "skill_inventory"
+ARTIFACTS = "artifact_inventory"
+REPO_MAP = "repo_map"
+CONTEXT = "context_package"
+COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+CONTEXT_SECTIONS = ("summary", "diff", "symbol_graph", "file_hashes", "full")
 QA = "accepted_qa"
 QA_KEYS = ("ticket", "branch", "candidate_commit")
 TOOLS = [
@@ -39,6 +44,19 @@ TOOLS = [
     }
     for name, description, keys, required in (
         (INVENTORY, "Read the installed project skill inventory.", ("name",), []),
+        (ARTIFACTS, "Read the installed artifact inventory.", ("kind",), []),
+        (
+            REPO_MAP,
+            "Read the Repo Map at a full commit ID.",
+            ("commit", "seed"),
+            ["commit"],
+        ),
+        (
+            CONTEXT,
+            "Read an immutable batch Context Package.",
+            ("batch_id", "package_id", "section"),
+            ["batch_id", "package_id"],
+        ),
         (
             QA,
             "Read the accepted QA result for an exact candidate commit.",
@@ -68,6 +86,57 @@ def _qa(repo: Path, arguments: JsonObject) -> JsonObject:
         "candidate_commit": candidate,
         "batch_id": batch["batch_id"],
         "outcome": report["outcome"],
+    }
+
+
+def _repo_map(repo: Path, args: JsonObject) -> JsonObject:
+    from harness.repo_map.policy import DEFAULT_MAX_TOKENS, load_policy
+    from harness.repo_map.repo_map import build_map
+
+    policy = load_policy(repo / ".harness/orchestration.json", explicit=False)
+    budget = min(DEFAULT_MAX_TOKENS, policy.max_tokens or DEFAULT_MAX_TOKENS)
+    result: JsonObject = json.loads(
+        build_map(
+            repo,
+            args["commit"],
+            budget,
+            [args["seed"]] if "seed" in args else [],
+            policy,
+            read_only=True,
+        )
+    )
+    return result
+
+
+def _context(repo: Path, args: JsonObject) -> JsonObject:
+    from harness.orchestration.core.constants import STATE_REL
+    from harness.orchestration.ledger.ledger_ops import (
+        _load_batch,
+        _load_context_package,
+        command_state,
+    )
+    from harness.orchestration.workflow.history import (
+        _context_package_summary,
+        _validate_batch_integrity,
+        _validate_context_package,
+    )
+
+    root = (repo / STATE_REL).resolve()
+    with command_state(argparse.Namespace(repo=str(repo))):
+        batch = _load_batch(root, args["batch_id"])
+        _validate_batch_integrity(root, batch)
+        package = _load_context_package(root, args["package_id"])
+        _validate_context_package(root, batch, package)
+    section = args.get("section", "summary")
+    if section == "full":
+        return package
+    data = (
+        _context_package_summary(package) if section == "summary" else package[section]
+    )
+    return {
+        "context_package_id": package["context_package_id"],
+        "candidate_commit": package["candidate_commit"],
+        section: data,
     }
 
 
@@ -115,7 +184,8 @@ def _request(
     ):
         return _error(-32602, "Expected non-empty string arguments")
     if name == INVENTORY and set(arguments) <= {"name"}:
-        result = inventory(repo)
+        all_artifacts = inventory(repo)
+        result = {key: all_artifacts[key] for key in ("schema_version", "skills")}
         if "name" in arguments:
             result["skills"] = [
                 skill
@@ -123,10 +193,35 @@ def _request(
                 if skill["name"] == arguments["name"]
             ]
         return _tool_result(result)
+    if name == ARTIFACTS and set(arguments) <= {"kind"}:
+        kind = arguments.get("kind")
+        if kind not in (None, "skills", "hooks", "templates"):
+            return _error(-32602, "kind must be skills, hooks or templates")
+        artifact_result = inventory(repo)
+        if kind:
+            artifact_result = {
+                "schema_version": artifact_result["schema_version"],
+                kind: artifact_result[kind],
+            }
+        return _tool_result(artifact_result)
+    if (
+        name == REPO_MAP
+        and "commit" in arguments
+        and set(arguments) <= {"commit", "seed"}
+    ):
+        if not COMMIT.fullmatch(arguments["commit"]):
+            return _error(-32602, "commit must be a full lowercase Git object ID")
+        return _tool_result(_repo_map(repo, arguments))
+    if name == CONTEXT and {"batch_id", "package_id"} <= set(arguments) <= {
+        "batch_id",
+        "package_id",
+        "section",
+    }:
+        if arguments.get("section", "summary") not in CONTEXT_SECTIONS:
+            return _error(-32602, "Unknown Context Package section")
+        return _tool_result(_context(repo, arguments))
     if name == QA and arguments.keys() == set(QA_KEYS):
-        if not re.fullmatch(
-            r"[0-9a-f]{40}|[0-9a-f]{64}", arguments["candidate_commit"]
-        ):
+        if not COMMIT.fullmatch(arguments["candidate_commit"]):
             return _error(
                 -32602, "candidate_commit must be a full lowercase Git object ID"
             )

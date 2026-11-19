@@ -440,6 +440,22 @@ class QaPreparationE2ETests(PreparationFixture):
             }
             for index, candidate in enumerate((self.candidate, "f" * 40))
         ]
+        package_id = batch["context_packages"][-1]["context_package_id"]
+        requests.append(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "context_package",
+                    "arguments": {
+                        "batch_id": self.batch_id,
+                        "package_id": package_id,
+                        "section": "file_hashes",
+                    },
+                },
+            }
+        )
         source = io.BytesIO(
             b"".join(json.dumps(request).encode() + b"\n" for request in requests)
         )
@@ -447,7 +463,7 @@ class QaPreparationE2ETests(PreparationFixture):
 
         serve(self.repo, lambda repo: {}, source, sink)
 
-        accepted, absent = [
+        accepted, absent, package = [
             json.loads(line)["result"] for line in sink.getvalue().splitlines()
         ]
         self.assertEqual(
@@ -458,6 +474,9 @@ class QaPreparationE2ETests(PreparationFixture):
                 "outcome": "completed",
             },
         )
+        self.assertFalse(package["isError"])
+        self.assertEqual(package["structuredContent"]["context_package_id"], package_id)
+        self.assertIsInstance(package["structuredContent"]["file_hashes"], dict)
         self.assertTrue(absent["isError"])
         self.assertEqual(
             absent["structuredContent"]["error"]["code"], "qa_evidence_unavailable"

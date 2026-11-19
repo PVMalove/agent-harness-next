@@ -75,6 +75,8 @@ def _build_map(
     seeds: list[str],
     policy: RepoMapPolicy,
     backend: ParserBackend | None,
+    *,
+    degradation_reason: str = MINIMAL_POLICY_REASON,
 ) -> str:
     """Построить карту для уже отобранных путей: разбор, граф, ранжирование и отбор файлов в бюджет.
 
@@ -86,7 +88,6 @@ def _build_map(
     diagnostics: list[Diagnostic] = []
     tier: Literal["minimal", "full"] = "minimal"
     parser: Literal["path-only", "bundle"] = "path-only"
-    degradation_reason = MINIMAL_POLICY_REASON
     bundle_provenance: dict[str, object] = {}
     if backend is not None:
         parsed = backend.parse(pinned, paths)
@@ -162,6 +163,7 @@ def build_map(
     *,
     cache_dir: Path | None = None,
     backend: ParserBackend | None = None,
+    read_only: bool = False,
 ) -> str:
     """Построить Repo Map для коммита, по возможности переиспользуя проверенную запись кэша.
 
@@ -195,6 +197,20 @@ def build_map(
         backend is None or json.loads(cached).get("tier") == "full"
     ):
         return cached
+    if read_only:
+        return _build_map(
+            pinned,
+            paths,
+            max_tokens,
+            normalized_seeds,
+            effective_policy,
+            None,
+            degradation_reason=(
+                "read-only request has no matching cached parser result"
+                if backend is not None
+                else MINIMAL_POLICY_REASON
+            ),
+        )
     result = _build_map(
         pinned, paths, max_tokens, normalized_seeds, effective_policy, backend
     )

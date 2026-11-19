@@ -1689,7 +1689,7 @@ def cmd_mcp(args: argparse.Namespace) -> int:
 
     serve(
         Path(args.repo).expanduser().resolve(),
-        skill_provenance,
+        artifact_provenance,
         sys.stdin.buffer,
         sys.stdout.buffer,
     )
