@@ -86,12 +86,6 @@ def _manifest(repo: Path) -> tuple[list[str], dict[str, list[str]]]:
             raise ValueError(
                 "runtime event commands must be a list of non-empty strings"
             )
-    if len(set(runtimes)) > 1 and any(
-        not adapter.multi_install_safe
-        for adapter in NATIVE_ADAPTERS
-        if adapter.runtime in runtimes
-    ):
-        raise ValueError("a selected runtime does not support multi-install")
     reject_secrets(manifest)
     return runtimes, events
 

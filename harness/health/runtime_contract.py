@@ -24,7 +24,6 @@ class NativeAdapter:
     invocation_policy: str
     events: dict[str, str]
     flat_hooks: bool = False
-    multi_install_safe: bool = True
     guard_config: str | None = None
 
     def guard_path(self) -> str:
