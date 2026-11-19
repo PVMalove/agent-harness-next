@@ -1,6 +1,6 @@
 ---
 name: to-tickets
-description: Decomposes an approved /to-spec specification and its approved Discovery Context into an ordered, verifiable set of atomic tickets with explicit dependencies and verification criteria, then publishes them after the user approves the plan. Use explicitly after /publish-epic, or on an agreed plan. Never changes production code, tests, CONTEXT.md, ADRs, or the specification's decisions.
+description: Decomposes an approved /to-spec specification and its approved Discovery Context into an ordered, verifiable set of atomic tickets with explicit dependencies and verification criteria, then publishes them after the user approves the plan; with `--review <epic>`, rechecks the published tickets against the epic's acceptance criteria without writing. Use explicitly after /publish-epic, or on an agreed plan. Never changes production code, tests, CONTEXT.md, ADRs, or the specification's decisions.
 disable-model-invocation: true
 ---
 
