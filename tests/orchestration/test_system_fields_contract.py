@@ -100,6 +100,7 @@ V1_FIELDS = frozenset(
         "report.check_result",
         "report.evidence_status",
         "review.severity",
+        "review.spec.criteria.status",
         "review.recommendation",
         "finding.severity",
         "risk.trigger",
@@ -257,6 +258,7 @@ def test_the_defaults_and_groups_of_the_inventory() -> None:
         for field_id, field in registry.fields.items()
         if field.default is not None
     } == {
+        "worktree.session_network_access": "disabled",
         "dispatch.purpose": "work",
         "config.approval_policy": "manual_all",
         "config.human_approval_gate": "trusted",
@@ -303,7 +305,10 @@ def test_the_fields_that_drive_no_automatic_decision() -> None:
         for field_id, field in registry.fields.items()
         if not field.automatic_decisions
     } == {
+        "worktree.session_runtime",
+        "worktree.session_network_access",
         "pipeline.rewind_stage",
+        "review.spec.criteria.status",
         "diagnostic.code",
         "diagnostic.severity",
         "attention.event_kind",
@@ -636,6 +641,16 @@ def _schema_enums() -> dict[str, tuple[list[object], object]]:
 CLI = _cli_choices()
 # Every registry field and the code vocabularies that must hold exactly its values.
 BINDINGS: dict[str, dict[str, Iterable[str]]] = {
+    "worktree.session_runtime": {
+        "worktree prepare --runtime": [
+            str(value) for value in CLI[(("worktree", "prepare"), "--runtime")]
+        ],
+    },
+    "worktree.session_network_access": {
+        "worktree prepare --network-access": [
+            str(value) for value in CLI[(("worktree", "prepare"), "--network-access")]
+        ],
+    },
     "batch.state": {"BatchState": constants.BatchState},
     "batch.next_action": {
         "NEXT_ACTION_DISPATCH_ROLE keys | ACCEPT_NEXT_STEP actions": {
@@ -702,6 +717,9 @@ BINDINGS: dict[str, dict[str, Iterable[str]]] = {
     },
     "report.evidence_status": {"EvidenceStatus": constants.EvidenceStatus},
     "review.severity": {"REVIEW_SEVERITIES": constants.REVIEW_SEVERITIES},
+    "review.spec.criteria.status": {
+        "SPEC_CRITERION_STATUSES": constants.SPEC_CRITERION_STATUSES
+    },
     "review.recommendation": {"ReviewRecommendation": constants.ReviewRecommendation},
     "finding.severity": {"FINDING_SEVERITIES": constants.FINDING_SEVERITIES},
     "risk.trigger": {
@@ -901,6 +919,11 @@ SCHEMA_BINDINGS = {
 EQUAL, SUBSET = "equal", "subset"
 # Every CLI option with choices: the field it takes and whether it takes all or some values.
 CLI_BINDINGS: dict[CommandOption, tuple[str, str]] = {
+    (("worktree", "prepare"), "--runtime"): ("worktree.session_runtime", EQUAL),
+    (("worktree", "prepare"), "--network-access"): (
+        "worktree.session_network_access",
+        EQUAL,
+    ),
     (("batch", "create"), "--auto-retry-min-severity"): (
         "config.auto_retry_min_severity",
         EQUAL,
@@ -1615,6 +1638,7 @@ def test_an_exact_effort_is_recorded_unchanged() -> None:
 # The other required arguments of each command whose options take choices; the option under test
 # comes last, so it overrides a value given here.
 REQUIRED_ARGS: dict[tuple[str, ...], list[str]] = {
+    ("worktree", "prepare"): ["--runtime", "codex", "--worktree", "w"],
     ("batch", "create"): [
         *("--ticket", "#1", "--branch", "feature/x", "--worktree", "w"),
         *("--definition-of-done", "done", "--prohibited-change", "none"),

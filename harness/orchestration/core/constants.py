@@ -340,6 +340,7 @@ RECOVERY_EVIDENCE_COMMANDS = (
     "batch auto-report, batch decision-packet, dispatch status and ledger validate"
 )
 REVIEW_SEVERITIES = {"none", "clean", "warning", "blocker"}
+SPEC_CRITERION_STATUSES = ("met", "missing", "unverified")
 FINDING_SEVERITIES = {"info", "warning", "blocker"}
 # Retry thresholds ordered by rank; `error` is a threshold only and ranks with `blocker`.
 AUTO_RETRY_SEVERITY_RANKS = {"info": 0, "warning": 1, "error": 2, "blocker": 2}
@@ -866,6 +867,7 @@ TELEMETRY_SESSION_KINDS = ("worker", "coordinator")
 SANDBOXES_REL = Path(".harness") / ".sandboxes"
 SCRATCH_REL = SANDBOXES_REL / "scratch"
 AGENT_INBOX_REL = SCRATCH_REL / "inbox"
+REVIEW_CONTEXT_PREFIX = "review-context-"
 # Coordinator state and tool sandboxes are runtime files: they never make a worktree dirty.
 RUNTIME_PATH_PREFIXES = (f"{STATE_REL.as_posix()}/", f"{SANDBOXES_REL.as_posix()}/")
 # Cyrillic in a brief means the coordinator leaked its own report language into an agent handoff.

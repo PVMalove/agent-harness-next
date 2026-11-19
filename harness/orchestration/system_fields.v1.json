@@ -6,6 +6,25 @@
     "not-recognized": "The field also carries diagnostic text: a value outside the list is kept as text and never triggers the behavior of a listed value, while a variant of a listed value that differs only by case, surrounding spaces or a separator is refused with a remedy naming the exact spelling."
   },
   "fields": {
+    "worktree.session_runtime": {
+      "description": "Native application selected by worktree prepare for the coordinator session.",
+      "automatic_decisions": false,
+      "unrecognized": "reject",
+      "values": {
+        "codex": "Launch Codex with the named coordinator permission profile.",
+        "claude": "Launch Claude Code with the shared paths and native worktree attachment."
+      }
+    },
+    "worktree.session_network_access": {
+      "description": "Codex command network policy selected explicitly when preparing a coordinator session.",
+      "automatic_decisions": false,
+      "unrecognized": "reject",
+      "default": "disabled",
+      "values": {
+        "disabled": "Keep command network access disabled.",
+        "enabled": "Enable command network access, including runtime IPC. Without a proxy, commands get direct network access."
+      }
+    },
     "batch.state": {
       "description": "Lifecycle state of a batch record; the coordinator branches on it before every batch command.",
       "automatic_decisions": true,
@@ -432,6 +451,16 @@
         "clean": "The axis was reviewed and is clean.",
         "warning": "The axis has a warning finding.",
         "blocker": "The axis has a blocking finding."
+      }
+    },
+    "review.spec.criteria.status": {
+      "description": "Spec Review verdict on one acceptance criterion of the reviewed candidate.",
+      "automatic_decisions": false,
+      "unrecognized": "reject",
+      "values": {
+        "met": "The evidence shows that this candidate meets the criterion.",
+        "missing": "The evidence shows that this candidate does not meet the criterion.",
+        "unverified": "The available evidence cannot establish the result."
       }
     },
     "review.recommendation": {

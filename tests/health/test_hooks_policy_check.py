@@ -199,7 +199,7 @@ def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_n
     assert "count-skill-usage" in message
 
 
-def test_the_second_runtime_lists_the_change_impact_edit_rows_with_their_out_of_hook_check(
+def test_the_second_runtime_wires_change_impact_hooks_and_lacks_only_claude_tools(
     repo: Path,
 ) -> None:
     result = check(repo)
@@ -207,17 +207,20 @@ def test_the_second_runtime_lists_the_change_impact_edit_rows_with_their_out_of_
 
     _, marker, lacking = message.partition("codex: нет события или payload: ")
     assert marker
+    # Write and Edit arrive as apply_patch; only the first runtime's MultiEdit and NotebookEdit lack.
     for row in (
-        "impact-first-touch (вне hook: ChangeImpact-gate по ADR 0023)",
-        "sensitive-path-recheck (вне hook: граница strict (dispatch propose, qa run, publish))",
-        "targeted-check-reminder (вне hook: сверка checks_run)",
+        "impact-first-touch (MultiEdit, NotebookEdit; вне hook: ChangeImpact-gate по ADR 0023)",
+        "sensitive-path-recheck (MultiEdit, NotebookEdit; вне hook: граница strict "
+        "(dispatch propose, qa run, publish))",
+        "targeted-check-reminder (MultiEdit, NotebookEdit; вне hook: сверка checks_run)",
     ):
         assert row in lacking
-    # The hooks are advisory and checked outside the hook: no advisory finding, no missing wiring.
-    unprotected = message.partition("без события и без проверки вне hook: ")[2]
-    for hook_id in ("impact-first-touch", "sensitive-path-recheck", "targeted-check"):
-        assert hook_id not in unprotected.split(";")[0]
-    assert "не подключён hook targeted-check-reminder" not in message
+    for hook_id in (
+        "impact-first-touch",
+        "sensitive-path-recheck",
+        "targeted-check-reminder",
+    ):
+        assert f"не подключён hook {hook_id}" not in message
     assert "claude: нет события" not in message
 
 
@@ -303,7 +306,7 @@ def test_hook_catalog_agrees_with_the_templates() -> None:
             )
 
 
-def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards() -> None:
+def test_the_second_runtime_delivers_write_and_edit_to_patch_aware_hooks() -> None:
     catalog = {(spec.hook_id, spec.event): spec for spec in HOOK_CATALOG}
 
     def delivered(hook_id: str) -> tuple[str, ...]:
@@ -312,8 +315,12 @@ def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards()
     assert delivered("protect-hook-policy") == ("Bash", "Write", "Edit")
     assert delivered("block-scratch-outside-docs-tasks") == ("Write", "Edit")
     assert delivered("test-author-guard") == ("Write", "Edit", "Bash")
-    for advisory in ("impact-first-touch", "sensitive-path-recheck", "targeted-check-reminder"):
-        assert delivered(advisory) == ()
+    for advisory in (
+        "impact-first-touch",
+        "sensitive-path-recheck",
+        "targeted-check-reminder",
+    ):
+        assert delivered(advisory) == ("Write", "Edit")
 
 
 def test_the_runtime_autostart_hook_is_shipped_to_claude_code_only() -> None:

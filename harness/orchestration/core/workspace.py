@@ -93,7 +93,9 @@ WORKTREE_WRITE_REMEDY = (
     "main checkout that can write to the issue worktree and its git metadata. A sandboxed session "
     "cannot write a worktree it did not create until it opens that access: in Claude Code call "
     "EnterWorktree with path=<issue worktree>, then ExitWorktree with action=keep, and repeat the "
-    "command from the main checkout. Otherwise use the single-session route (/fast-implement)"
+    "command from the main checkout. For Codex, use 'worktree prepare --runtime codex "
+    "--worktree <issue worktree> --launch' from the operator's terminal. "
+    "Otherwise use the single-session route (/fast-implement)"
 )
 
 
@@ -110,17 +112,22 @@ def _require_writable_worktree(worktree: str) -> None:
         ("issue worktree", path),
         ("git metadata directory", git_metadata),
     ):
-        try:
-            descriptor, probe = tempfile.mkstemp(
-                prefix=".harness-write-probe-", dir=directory
-            )
-            os.close(descriptor)
-            os.unlink(probe)
-        except OSError as exc:
-            raise CoordinatorError(
-                f"the session cannot write to the {label} {directory}: {exc.strerror or exc}",
-                remedy=WORKTREE_WRITE_REMEDY,
-            ) from exc
+        _probe_writable_directory(directory, label, remedy=WORKTREE_WRITE_REMEDY)
+
+
+def _probe_writable_directory(directory: Path, label: str, *, remedy: str) -> None:
+    """Test the actual write and unlink permissions of the calling session."""
+    try:
+        descriptor, probe = tempfile.mkstemp(
+            prefix=".harness-write-probe-", dir=directory
+        )
+        os.close(descriptor)
+        os.unlink(probe)
+    except OSError as exc:
+        raise CoordinatorError(
+            f"the session cannot write to the {label} {directory}: {exc.strerror or exc}",
+            remedy=remedy,
+        ) from exc
 
 
 def _worktree_roots(repo: Path) -> set[Path]:

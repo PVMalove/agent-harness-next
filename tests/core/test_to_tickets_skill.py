@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from harness.bin.harness import package_files
 from harness.console.backend.domain.task_board import parse_body
 from tests.core.test_developer_skill import _frontmatter, _section
@@ -12,6 +14,7 @@ TICKETS = ENGINEERING / "to-tickets"
 EPIC = ENGINEERING / "publish-epic"
 TEMPLATE = "references/ticket-template.md"
 PUBLISH = "references/publish.md"
+REVIEW = "references/acceptance-review.md"
 
 
 def _text(path: Path) -> str:
@@ -63,19 +66,77 @@ def test_non_goals_and_unapproved_paths_stay_out_of_tickets() -> None:
     assert "as a new path that needs the user's approval" in template
 
 
-def test_plan_is_traced_acyclic_and_approved_before_any_write() -> None:
+def test_plan_is_traced_acyclic_and_version_approved_before_publication() -> None:
     skill = TICKETS / "SKILL.md"
     approve = _section(skill, "Approve the plan")
     assert "every requirement `R<n>` and every acceptance criterion" in approve
     assert "the blocking graph has no cycles" in approve
     assert "no ticket names an unapproved path or implements a non-goal" in approve
     assert "Wait for explicit approval" in approve
-    assert "Write nothing until the user approves the plan" in _text(skill)
+    assert "Before approval, write only local plan drafts" in _text(skill)
+    assert "ticket-plan-v<N>.md" in approve
+    assert "show only the changed cards" in approve
+    assert "SHA-256" in approve
+    assert "Verify the approved draft's SHA-256 before publishing" in _section(
+        skill, "Publish and finish"
+    )
     decompose = _section(skill, "Decompose")
     assert "minimum number of tickets" in decompose
     assert "vertical slice" in decompose
     assert "File overlap alone is not a blocker" in decompose
     assert "Wave 1 has no blockers" in decompose
+
+
+def test_acceptance_review_preserves_meaning_before_plan_approval() -> None:
+    skill = TICKETS / "SKILL.md"
+    approve = _section(skill, "Approve the plan")
+    assert f"`{REVIEW}`" in approve
+    assert "rerun the acceptance review" in approve
+    decompose = _section(skill, "Decompose")
+    assert "**First demonstrable scenario**" in decompose
+    assert "earliest feasible wave" in decompose
+    review = _section(TICKETS / REVIEW, "Compare acceptance criteria")
+    assert "conditions, actions, and observable results" in review
+    assert "assert the absence of duplicates" in review
+    assert "one row per acceptance criterion" in _text(TICKETS / TEMPLATE)
+
+
+def test_repeat_acceptance_review_reads_current_tickets_and_exits() -> None:
+    skill = TICKETS / "SKILL.md"
+    check = _section(skill, "Check the input")
+    assert "`--review <epic>`" in check
+    assert f"`{REVIEW}`" in check
+    assert "return before decomposition" in check
+    review = _section(TICKETS / REVIEW, "Review published tickets")
+    for marker in ("current tracker", "open and closed", "report incomplete coverage", "read-only"):
+        assert marker in review
+
+
+@pytest.mark.parametrize("heading", ["Local ticket file", "Tracker issue body"])
+def test_published_acceptance_criteria_keep_the_spec_ids(heading: str) -> None:
+    template = (TICKETS / TEMPLATE).read_text(encoding="utf-8")
+    card = template.split(f"## {heading}", 1)[1].split("```markdown", 1)[1]
+    card = card.split("```", 1)[0]
+    criterion = card.split("## Acceptance criteria", 1)[1].strip().splitlines()[0]
+    assert criterion == "- [ ] [R<n>] <Action> -> <Verify: exact test or command>"
+
+    body = parse_body(
+        card.replace("R<n>", "R3")
+        .replace("<Action>", "Export active records")
+        .replace("<Verify: exact test or command>", "pytest -k active_exports")
+    )
+    assert body.criteria == ("[R3] Export active records -> pytest -k active_exports",)
+    approve = _section(TICKETS / "SKILL.md", "Approve the plan")
+    assert (
+        "the IDs in each ticket criterion agree with the traceability matrix" in approve
+    )
+
+
+def test_applicable_epic_non_goals_become_ticket_scope_boundaries() -> None:
+    scope = _section(TICKETS / "SKILL.md", "Keep to the approved scope")
+    assert "Copy each applicable, verifiable non-goal" in scope
+    assert "into the affected ticket's `## Out of scope`" in scope
+    assert "Keep the rationale for rejected alternatives in the spec" in scope
 
 
 def test_tickets_never_start_implementation() -> None:
@@ -165,7 +226,7 @@ def test_instructions_name_publish_epic_as_the_epic_owner() -> None:
 def test_engineering_suite_packages_both_complete_skills() -> None:
     files = package_files(["engineering-suite"])
     expected = {
-        "to-tickets": ("SKILL.md", "agents/openai.yaml", TEMPLATE, PUBLISH),
+        "to-tickets": ("SKILL.md", "agents/openai.yaml", TEMPLATE, PUBLISH, REVIEW),
         "publish-epic": ("SKILL.md", "agents/openai.yaml"),
     }
     registry = (ROOT / "skills/REGISTRY.md").read_text(encoding="utf-8")

@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Адаптер payload `apply_patch` второго runtime для критичных guards Write/Edit (issue #830).
+"""Адаптер payload `apply_patch` второго runtime для hooks Write/Edit (issue #830).
+
+Им пользуются критичные guards (`protect-hook-policy`, `block-scratch-outside-docs-tasks`,
+`test-author-guard`) и advisory-hooks ChangeImpact (`change_impact_hooks.py`).
 
 Второй runtime присылает правку файлов как `tool_name: "apply_patch"` с телом патча в
 `tool_input.command` и без `file_path`; shell-вызов `apply_patch <<'EOF'` приходит как `Bash`.

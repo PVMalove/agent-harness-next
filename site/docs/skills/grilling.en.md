@@ -39,10 +39,9 @@ references/domain-doc-writes.md before any glossary or ADR edit. It overrides im
 4. Give a significant fork its own round with the Decision & Clarity Protocol. Wait for the user's
    response before advancing any round.
 
-Handle these commands at any round:
-- `остановимся` (stop) ends the interview with a partial summary.
-- `углубимся сюда` (go deeper here) keeps the focus on the indicated question and checks its evidence and trade-offs.
-- `отложим этот вопрос` (defer this question) parks it and its dependents. Continue with independent questions.
+At any round, `остановимся` (stop) ends the interview with a partial summary. `углубимся сюда` (go deeper
+here) keeps the focus on the indicated question and checks its evidence and trade-offs. `отложим этот вопрос`
+(defer this question) parks it and its dependents. Continue with independent questions.
 
 For repository work, consult enabled project memory once before the first design round by
 `.harness/instructions/project-memory.md`; repeat only if a settled decision changes the subject.
@@ -91,25 +90,26 @@ deferral, or stop authorizes no write for the unresolved fork.
 
 When no active questions remain or the user stops, give this summary in the user's language:
 1. Goal and scope.
-2. Accepted decisions, with IDs and the selected option number for each significant fork.
-3. Rejected alternatives and why.
-4. Open questions and assumptions. For an early stop or a blocking deferral, label the result
-   partial and include **Открытые вопросы и блокеры для спецификации** with dependencies.
+2. When deciding whether to pursue an idea, a verdict with the strongest evidence for and against: `go`
+   (evidence supports the problem; the user accepts a feasible direction), `needs-clarification` (name the
+   blocking unknowns and the evidence that would resolve them), or `kill` (the user stops; the decisive reason).
+3. Accepted decisions with IDs and each significant fork's selected option; rejected alternatives and why.
+4. Open questions and assumptions; mark every unsupported claim as an assumption. For an early stop or a
+   blocking deferral, label the result partial and include **Открытые вопросы и блокеры для спецификации** with dependencies.
 5. Approved files (Discovery Context). Show the list verbatim, or state that no paths were approved.
+   Reread the artifact and compare the approved list line for line with the chat summary. If a
+   nonempty list could not be written or verified, report that status and keep it in chat.
 6. For `/grill-with-docs`, report actual glossary edits and ADRs proposed or created.
 7. Risks and next step. Offer to revisit decisions by ID or, when ready, to run `/to-spec` manually.
-   Wait for the answer. Reopen only the named decisions and their dependents.
-
-Reread the artifact and compare the approved list line for line with the chat summary. If a
-nonempty list could not be written or verified, report that status and keep it in chat. Never invoke
-`/to-spec` automatically or treat the summary as approval to create tickets, branches, or code.
+   Wait for the answer. Reopen only the named decisions and their dependents. Never invoke
+   `/to-spec` automatically or treat the summary as approval to create tickets, branches, or code.
 
 </div>
 
 ## 3. Contracts
 
 - **Input (Input/Brief):** an idea, a plan, or a decision; the available facts and the questions on the frontier.
-- **Output (Output/Report):** the tree of settled decisions, the synthesis of the plan, and an explicit request for the next step.
+- **Output (Output/Report):** the tree of settled decisions, the synthesis of the plan, a `go`, `needs-clarification`, or `kill` verdict with evidence when an idea is assessed, and an explicit request for the next step.
 
 ## 4. Architecture diagram
 

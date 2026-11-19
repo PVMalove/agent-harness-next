@@ -228,6 +228,15 @@ def commit_map_for(brief: JsonReport, commit_sha: str) -> list[dict[str, object]
     ]
 
 
+def spec_criteria(brief: JsonReport) -> list[dict[str, str]]:
+    """Строки Spec Review, где каждый критерий brief выполнен: их требует полное review."""
+    criteria = brief["definition_of_done"]
+    return [
+        {"criterion": criterion, "status": "met", "evidence": "clean-room check passed"}
+        for criterion in (criteria if isinstance(criteria, list) else [])
+    ]
+
+
 def fill_agents(repo: Path) -> None:
     """Заменить незаполненные маркеры `{{...}}` в AGENTS.md проекта на `N/A`."""
     agents = repo / "AGENTS.md"

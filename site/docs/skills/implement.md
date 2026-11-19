@@ -57,26 +57,15 @@ python .harness/orchestration/coordinator.py --repo . dispatch status
 opt-in capability сами. Доведите один тикет до конечного состояния batch, прежде чем браться за
 следующий.
 
-До любой записи в трекер (смены метки `status::*`) проверьте, что сессия запущена в основном
-checkout и может писать в каждый каталог, куда пишет конвейер:
-
-- для issue worktree, которого ещё нет: `runtime status` называет feature `worktree.create`
-  или сессия может писать в `.git/worktrees`;
-- для существующего issue worktree: его каталог git-метаданных (из
-  `git -C <worktree> rev-parse --absolute-git-dir`);
-- каталог issue worktree, если он уже есть;
-- `.harness/.sandboxes/scratch/inbox/`.
-
-Проверьте каждый каталог: создайте и удалите в нём один временный файл. Сессия в sandbox пишет только
-внутри своего каталога. Worktree, созданный не этой сессией, остаётся read-only в `.git/worktrees`
-даже из основного checkout, пока сессия не откроет запись: в Claude Code вызовите `EnterWorktree`
-с `path` — путём issue worktree, затем `ExitWorktree` с `action: keep`
-(`docs/agents/worktrees.md` → Session write access) и повторите проверку. Если два вызова проверку
-не исправили, остановитесь с одним сообщением: назовите каталог
-и действие, то есть откройте сессию в основном checkout, которая может писать в issue worktree и его
-git-метаданные. Не трогайте ни трекер, ни ledger. `batch create`, а для write-роли также
-`dispatch preflight` и `dispatch send` отказывают, если сессия не может писать в issue worktree или
-каталог его git-метаданных.
+До записи в трекер убедитесь, что сессия открыта в основном checkout. Для существующего
+worktree задачи примените процедуру своего runtime (в Claude Code — `EnterWorktree` с
+`path=<issue-worktree>`, затем `ExitWorktree` с `action: keep`, без команд координатора между
+ними) и выполните `worktree check --worktree <issue-worktree>` внутри песочницы сессии.
+Продолжайте после `"writable": true`. Если команда
+отказала, укажите путь из ошибки и способ подготовить сессию. Для нового worktree проверьте,
+что `runtime status` перечисляет `worktree.create` или сессия может писать в `.git/worktrees`.
+До смены статуса тикета проверьте запись в каталог отчётов. Проверьте запись в новый checkout перед
+созданием batch. [Право записи сессии](../agents/worktrees.md)
 
 Если другой batch держит тот же незавершённый тикет, ветку или worktree либо исчерпан
 `concurrency_budget`, проверьте `batch list --open`, конфликтующий dispatch и его decision packet.
@@ -114,11 +103,9 @@ coordinator останавливается, сообщает о нём разр�
    из памяти. Тикет без родительского эпика использует `base_branch`: не передавайте
    `--integration-ref`.
 2. **Issue worktree.** Создайте его до `batch create`: `batch create` отказывает, если
-   `git worktree list` не показывает worktree. Используйте `worktree create` и точные команды из
-   `docs/agents/worktrees.md` → Coordinator issue worktree; там же описано восстановление после
-   недоделанного ручного `git worktree add -b`. Если в ответе `session_write_access.writable: false`,
-   до `batch create` откройте запись двумя вызовами из Session write access. Оставайтесь в основном
-   checkout.
+   `git worktree list` не показывает worktree. Создайте его через `worktree create` и добейтесь
+   `"writable": true` от `worktree check` до `batch create`. При отказе подготовьте сессию по
+   инструкции для своего runtime и повторите проверку. Работайте из основного checkout.
 3. **Scope batch.** Запустите `batch preflight` с теми же флагами scope, что и у `batch create`.
    Сначала переведите тикет на английский: `batch create` отклоняет кириллицу в `--goal`,
    `--definition-of-done` и `--prohibited-change`. Команды, пути и ID оставьте дословными.

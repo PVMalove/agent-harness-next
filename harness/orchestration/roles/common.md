@@ -56,7 +56,7 @@ Escalate a mismatch or unavailable model identity instead of copying the expecte
 This is the only startup discovery needed before role-specific files; after the probe,
 work from the package rather than navigating to a guessed relative repository path.
 
-Before a final reply, submit the JSON completion report with `report submit --file
+Before a final reply, submit the JSON completion report with `report submit --compact --file
 <report_staging_path>` and verify that it was recorded. Chat text alone does not complete a dispatch.
 If submission fails before recording, preserve the staged report bytes and relay the exact path,
 command and error as a blocker. The coordinator can deliver that unchanged file with audited relay
@@ -65,7 +65,8 @@ coordinator for `report complete`, rather than submitting again. A planned check
 continuation protocol, not a completion report.
 
 The Context Package's `starting_files`, `symbol_graph`, and `related_tests` are the working set for
-the role's task: read those first. A starting file with non-empty `sections` is a large Markdown
+the role's task. Start from the brief's summary and use the role manifest to expand it. A starting
+file with non-empty `sections` is a large Markdown
 or Python file seeded as a section index: read only the `start_line`–`end_line` ranges the task
 needs, not the whole file. Repository search is scoped to Context Package paths and reserved
 as a last resort, not the default way to build understanding. When the package is insufficient — a

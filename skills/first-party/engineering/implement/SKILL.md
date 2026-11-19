@@ -36,20 +36,15 @@ so repeat the command after its `retry_after_seconds`.
 Do not infer or repair an opt-in capability. Process one ticket to a terminal batch state before
 beginning another.
 
-Before any tracker write (the `status::*` label swap), confirm that this session is rooted in the
-main checkout and can write every directory the pipeline writes: for an existing issue worktree,
-its directory and its git metadata directory from `git -C <worktree> rev-parse --absolute-git-dir`,
-and `.harness/.sandboxes/scratch/inbox/`. Probe each by creating and removing one temporary file.
-For an issue worktree that does not exist yet, `runtime status` must list the feature
-`worktree.create`, or the session must be able to write `.git/worktrees`. A sandboxed session writes
-only inside its own directory, and a worktree it did not create stays read-only under
-`.git/worktrees` even from the main checkout until the session opens that access: in Claude Code
-call `EnterWorktree` with `path` set to the issue worktree, then `ExitWorktree` with `action: keep`
-(`docs/agents/worktrees.md` → Session write access), and probe again. On a failure the two calls do
-not repair, stop with one message that names the directory and the action: open the session in the
-main checkout, one that can write the issue worktree and its git metadata. Touch neither the
-tracker nor the ledger. `batch create`, and `dispatch preflight` and `dispatch send` for a write role,
-refuse an issue worktree or git metadata directory the session cannot write.
+Before any tracker write, confirm this session is rooted in the main checkout. For an existing
+issue worktree, follow `docs/agents/worktrees.md` → Session write access for this runtime (Claude
+Code: `EnterWorktree` with `path=<issue-worktree>`, then `ExitWorktree` with `action: keep`, no
+coordinator command between them) and run `worktree check --worktree <issue-worktree>` inside the
+session sandbox. Continue on
+`"writable": true`. On refusal, report the affected path and the setup command for this runtime.
+For a new issue worktree, verify `runtime status` lists `worktree.create` or that the session can
+write `.git/worktrees`. Probe the report inbox before changing ticket status and check the new
+checkout before creating the batch.
 
 If another batch holds the same unfinished ticket, branch or worktree, or the `concurrency_budget`
 is exhausted, read `references/recovery.md` → "A batch blocks the ticket" before proposing anything.
@@ -90,10 +85,10 @@ Start these steps only after the ticket pre-flight above (blockers, `status::in-
    checkout or from memory. A ticket without a parent epic uses `base_branch`: omit `--integration-ref`.
 2. **Issue worktree.** Create it before `batch create`. `batch create` refuses a worktree that
    `git worktree list` does not show. Use `worktree create` and the exact commands in
-   `docs/agents/worktrees.md` → Coordinator issue worktree; the recovery after a half-done manual
-   `git worktree add -b` is there too. If the answer has `session_write_access.writable: false`,
-   open the access with the two calls of Session write access before `batch create`. Stay in the
-   main checkout.
+   `docs/agents/worktrees.md` → Coordinator issue worktree. Confirm `"writable": true` from
+   `worktree check` before `batch create`. If access is missing, open it for this runtime (Claude
+   Code: the `EnterWorktree`/`ExitWorktree` pair above) and repeat the check. Stay in the main
+   checkout.
 3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`
    and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:
@@ -230,9 +225,11 @@ another checkout as your actual directory. Confirm your active model and the pro
 Proceed only after a successful self-report; escalate a mismatch or unavailable model identity.
 Immediately after self-report and at least every <heartbeat.every_seconds> seconds while working, run:
 <coordinator CLI> dispatch heartbeat --dispatch <dispatch_id>
-Context Package <context_package_id>: start from its starting_files, symbol_graph and
-related_tests. For a starting file with non-empty sections, read only the start_line–end_line
-ranges the task needs.
+Context Package <context_package_id>: start from its summary in the brief. Read only the indicated
+start_line–end_line ranges needed for the task.
+For more, read one section of the pinned package:
+<coordinator CLI> context-package show --dispatch <dispatch_id> --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
@@ -242,8 +239,8 @@ or {"status": "present", "details": "<Russian description>"} when present. A non
 details; present requires a non-empty description. Put other explanations in output. Strings, translated
 statuses, passed and not-run are invalid; no aliases or old report formats are accepted.
 Then run:
-<coordinator CLI> report submit --file "<report_staging_path>"
-Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+<coordinator CLI> report submit --compact --file "<report_staging_path>"
+Confirm the ledger receipt in one line. Relay any blocked transition or required next action.
 If submission fails before recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
 already recorded, so submit it only once. Chat text alone does not complete the dispatch.

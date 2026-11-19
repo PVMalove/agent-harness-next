@@ -30,8 +30,8 @@ from harness.orchestration.core.config import (
     _batch_verification_commands,
     _communication_policy,
     _preflight_policy,
+    _qa_gate_commands,
     _reject_sensitive,
-    _verification_commands,
 )
 from harness.orchestration.core.constants import (
     ATTENTION_STATE_FIELDS,
@@ -465,7 +465,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
         "prohibited_changes": prohibited,
         "developer_verification_commands": developer_commands,
         "review_verification_commands": review_commands,
-        "verification_commands": _verification_commands(config),
+        "verification_commands": _qa_gate_commands(config),
         "required_gates": _strings(
             getattr(args, "required_gate", None) or ["none"], "required_gates"
         ),

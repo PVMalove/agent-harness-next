@@ -24,8 +24,12 @@ authorization/security, concurrency/retry, and retry/dead-letter queues. Other c
 this role after an explicit risk assessment. It must not change production code or integrate the
 reviewed branch.
 
-Review the diff and the Context Package, not the whole tree; an insufficient package is a blocker to
-escalate, not a reason to walk the repository at large.
+Start with the brief's review scope, pinned diff and `context_package_summary`. Read changed
+symbols in that diff, the indicated lines of starting files, and the related tests. When the
+coordinator CLI is available, get a section of the pinned package with
+`context-package show --dispatch <dispatch_id> --section <section>`. In a container, use the
+adapter's section command from the worker prompt. Escalate missing evidence
+by naming the file, symbol, or section.
 
 The brief carries the ticket's bounds. On the Spec axis, judge the candidate against its
 `definition_of_done` (the ticket's acceptance criteria) and `prohibited_changes` (its out-of-scope
@@ -33,6 +37,14 @@ items): a change outside `allowed_paths` or against a prohibited change is scope
 Standards axis, apply the repository's documented standards and the smell baseline of the
 `code-review` skill, installed as `.harness/skills/code-review/references/smell-baseline.md`; the
 baseline states how it yields to a documented standard.
+
+For a completed full review, return `review.spec.criteria` in the same order as the brief's
+`definition_of_done`. Each row holds `criterion` (the original text), `status` (`met`,
+`missing`, or `unverified`), and `evidence` (a test result, a code reference at the candidate
+commit, or the reason verification was unavailable). Cite each unresolved criterion verbatim
+in the summary of its warning or blocker finding. The coordinator routes these findings
+through the existing review decision. Delta reviews use their assigned scope and inherited
+evidence.
 
 A deviation from the letter of the brief is a finding, not automatically a retry. When the
 implemented form is functionally equivalent or safer than the one the brief named, report it as a

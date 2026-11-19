@@ -109,6 +109,7 @@ worker она также сверяет адаптеры `.harness/adapters/` с
 | `concurrency_budget` | целое ≥ 1 | 1 | Сколько batch могут быть активны одновременно. Единственный предел параллелизма: пересечение файлов его не заменяет. |
 | `verification_commands` | список строк | `[]` | Полный gate clean-room QA. Пустой список — QA без проверок; впишите реальные команды проекта. |
 | `qa_preparation` | список строк | `[]` | Команды, которые готовят окружение clean-room QA (установка зависимостей и т.п.). QA выполняет их в том же checkout candidate SHA до `verification_commands` и останавливается на первой упавшей. Без поля QA сразу гоняет gate; report не меняется. |
+| `pre_qa_commands` | список строк | `[]` | Проверки проекта в начале QA-гейта, после подготовки окружения. Developer и review их не запускают. Новый батч закрепляет команды, а QA записывает результаты для SHA кандидата. Слот оверлея `pre-qa` правит этот же список. |
 | `qa_environment_probes` | список строк | `[]` | Независимые пробы окружения QA (например, доступность реестра). QA запускает их только после упавшей `qa_preparation`. Упавшая проба при успешных `qa_project_file_checks` подтверждает инфраструктурную причину. |
 | `qa_project_file_checks` | список строк | `[]` | Офлайн-проверки файлов проекта (например, согласованность lock-файла). QA запускает их только после упавшей `qa_preparation`. Упавшая проверка подтверждает дефект проекта. Без проб и проверок QA не подтверждает инфраструктурную причину. |
 | `developer_verification_commands` | список строк | = `verification_commands` | Быстрые проверки developer. Без поля developer гоняет полный gate, а `harness health` предупреждает. |
@@ -402,3 +403,34 @@ exactly-once: исполнение с неизвестным эффектом о
 новым control runtime; plan и прежние brief/report не переписываются. Ранний 429 writer-а сохраняет
 известный чистый startup SHA отдельным evidence без фиктивного checkpoint. После recovery даже
 429 требует человеческого approval. Подробный контракт: [Operator recovery](playbook.md#operator-recovery).
+
+## Оверлеи workflow
+
+`harness workflow-overlays <repo> --manifest checks.yaml` показывает результат композиции.
+Добавьте `--apply`, чтобы записать его в проектную `.harness/orchestration.json` с резервной
+копией. JSON-манифесты работают со стандартной библиотекой. Для импорта YAML используйте
+интерпретатор с PyYAML, например
+`uv run --no-project --with PyYAML==6.0.3 -- python harness/bin/harness.py workflow-overlays <repo> --manifest checks.yaml --apply`.
+
+```yaml
+overlays:
+  - id: compatibility
+    priority: 5
+    edits:
+      - slot: pre-qa
+        operation: append
+        commands:
+          - python scripts/check_compatibility.py
+```
+
+Слоты `post-developer` и `pre-review` добавляют проверки к соответствующим спискам команд,
+в том числе к профилям верификации; базовые команды этих списков оверлей не меняет. Слоты
+`qa-preparation` и `pre-qa` правят сами поля `qa_preparation` и `pre_qa_commands`: операции
+применяются к командам из этих полей, поэтому у каждого этапа QA один итоговый список. Команды
+`pre_qa_commands` выполняет только QA-гейт кандидата, developer и review их не получают.
+Пустые слоты пропускаются.
+
+Операции `append`, `prepend`, `replace` и `remove` применяются по порядку оверлеев.
+Меньшее число `priority` побеждает при замене. При равном приоритете оверлеи применяются
+в алфавитном порядке ID. `enabled: false` отключает оверлей. Согласования Harness остаются
+в силе. Манифест с `overlays: []` удаляет все оверлеи.

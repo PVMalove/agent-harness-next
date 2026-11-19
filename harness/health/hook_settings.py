@@ -20,6 +20,8 @@ from typing import Literal
 
 from harness.json_types import JsonObject
 
+from .runtime_contract import NATIVE_ADAPTER_BY_RUNTIME
+
 
 def entry_digest(event: str, matcher: str, handler: JsonObject) -> str:
     """Отпечаток тройки (событие, matcher, handler): sha256 канонического JSON."""
@@ -424,25 +426,28 @@ HOOK_CATALOG: tuple[HookSpec, ...] = (
         "impact-first-touch",
         "impact-first-touch.sh",
         "PreToolUse",
-        ("Write", "Edit"),
+        ("Write", "Edit", "MultiEdit", "NotebookEdit"),
         False,
         "ChangeImpact-gate по ADR 0023",
+        apply_patch=True,
     ),
     HookSpec(
         "sensitive-path-recheck",
         "sensitive-path-recheck.sh",
         "PreToolUse",
-        ("Write", "Edit"),
+        ("Write", "Edit", "MultiEdit", "NotebookEdit"),
         False,
         "граница strict (dispatch propose, qa run, publish)",
+        apply_patch=True,
     ),
     HookSpec(
         "targeted-check-reminder",
         "targeted-check-reminder.sh",
         "PreToolUse",
-        ("Write", "Edit"),
+        ("Write", "Edit", "MultiEdit", "NotebookEdit"),
         False,
         "сверка checks_run",
+        apply_patch=True,
     ),
     HookSpec(
         "targeted-check-reminder",
@@ -519,9 +524,10 @@ class RuntimeAdapter:
 # маркер `.claude/.qa-gate/passed` для упавшего QA-прогона, и `require-qa-gate` разрешил бы PR.
 # События Stop и SubagentStop подтверждены тем же источником (страница hooks, 2026-10-27): payload
 # несёт `session_id`, `hook_event_name`, `stop_hook_active`, а SubagentStop — ещё `agent_id`; при коде 0
-# stdout принимает только JSON или пустую строку. Журнал касаний `targeted-check-reminder` на Write и
-# Edit к `apply_patch` не подключается (учётный hook), поэтому напоминание второго runtime на
-# правки молчит.
+# stdout принимает только JSON или пустую строку. Журнал касаний `targeted-check-reminder`
+# заполняется через ту же группу `apply_patch|Write|Edit`, что и остальные ChangeImpact hooks.
+# Shell-вызов `apply_patch <<'EOF'` разбирает только `protect-hook-policy` на Bash: hooks
+# ChangeImpact на Bash не подключены, и такой патч их обходит (ограничение адаптера).
 CODEX_SUPPORT: frozenset[EventTool] = frozenset(
     {
         ("PreToolUse", "Bash"),
@@ -544,7 +550,7 @@ def canonical_integration_id(identifier: object) -> object:
 ADAPTERS: tuple[RuntimeAdapter, ...] = (
     RuntimeAdapter(
         runtime="claude",
-        config=".claude/settings.local.json",
+        config=NATIVE_ADAPTER_BY_RUNTIME["claude"].guard_path(),
         template="settings.local.json.tmpl",
         integration_id="engineering-suite-hooks",
         verify=(
@@ -555,7 +561,7 @@ ADAPTERS: tuple[RuntimeAdapter, ...] = (
     ),
     RuntimeAdapter(
         runtime="codex",
-        config=".codex/hooks.json",
+        config=NATIVE_ADAPTER_BY_RUNTIME["codex"].guard_path(),
         template="codex-hooks.json.tmpl",
         integration_id="engineering-suite-codex-hooks",
         verify=(

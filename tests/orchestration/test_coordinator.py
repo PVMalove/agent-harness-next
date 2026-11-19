@@ -87,6 +87,29 @@ TOOLING_BLOCKER = {
     "command": "python -m pytest -q tests/orchestration/test_coordinator.py",
     "message": "Blocked: writes outside docs/tasks are not allowed",
 }
+
+
+def with_spec_criteria(brief: JsonObject, review: object) -> object:
+    """A full review whose Spec axis states no criteria meets each brief criterion.
+
+    Tests that are not about the criteria get the required rows; a test that states its own
+    criteria, or a delta review, keeps its review as written."""
+    spec = review.get("spec") if isinstance(review, dict) else None
+    if (
+        not isinstance(review, dict)
+        or not isinstance(spec, dict)
+        or "criteria" in spec
+        or brief.get("delta_review_of") is not None
+        or not brief.get("definition_of_done")
+    ):
+        return review
+    rows = [
+        {"criterion": criterion, "status": "met", "evidence": "verified by the test"}
+        for criterion in cast(list[str], brief["definition_of_done"])
+    ]
+    return {**review, "spec": {**spec, "criteria": rows}}
+
+
 # One brief item a read-only role left undone (issue #501).
 INCOMPLETE_ITEM = {
     "brief_item": "Map the rollback path into the commit plan",
@@ -401,6 +424,53 @@ class CoordinatorLedgerMigrationTests(unittest.TestCase):
             with self.subTest(payload=unreadable):
                 payload.write_text(unreadable, encoding="utf-8")
                 self.assertIsNone(coordinator.pinned_runtime_command(args))
+
+    def _pinned_compact_submit(self, snapshot_entry: str) -> tuple[list[str], list[str]]:
+        """The worker's compact submit and the command that re-runs it on a pinned snapshot whose
+        coordinator entry point is ``snapshot_entry``."""
+        (self.repo / ".harness" / "orchestration" / "coordinator.py").write_text(
+            snapshot_entry, encoding="utf-8"
+        )
+        batch = self._create_batch()
+        self._approve_batch(batch["batch_id"])
+        dispatch_id = self._create_architect_dispatch(batch["batch_id"])["dispatch_id"]
+        payload = workspace._prepare_agent_inbox(self.repo) / f"{dispatch_id}.json"
+        payload.write_text(json.dumps({"dispatch_id": dispatch_id}), encoding="utf-8")
+        (
+            self.repo / ".harness" / "orchestration" / "roles" / "architect.md"
+        ).write_text("reinstalled\n", encoding="utf-8")
+        submit = ["--repo", str(self.repo), "report", "submit", "--compact"]
+        submit += ["--file", str(payload)]
+        args = _ns(
+            repo=str(self.repo),
+            state_dir=str(self.state_dir),
+            file=str(payload),
+            compact=True,
+        )
+        with mock.patch.object(sys, "argv", ["coordinator.py", *submit]):
+            command = coordinator.pinned_runtime_command(args)
+        assert command is not None
+        return submit, command[4:]
+
+    def test_compact_submit_drops_compact_for_a_pinned_runtime_that_refuses_it(
+        self,
+    ) -> None:
+        """A batch pinned before the compact receipt runs a parser without --compact."""
+        submit, forwarded = self._pinned_compact_submit("# pinned entry point\n")
+
+        self.assertEqual(forwarded, [part for part in submit if part != "--compact"])
+
+    def test_compact_submit_keeps_compact_for_a_pinned_runtime_that_accepts_it(
+        self,
+    ) -> None:
+        submit, forwarded = self._pinned_compact_submit(
+            "import sys\n"
+            "if '--help' in sys.argv:\n"
+            "    print('  --compact  return a worker receipt')\n"
+            "    raise SystemExit(0)\n"
+        )
+
+        self.assertEqual(forwarded, submit)
 
     def test_schema_upgrade_waits_for_batches_pinned_to_another_runtime(self) -> None:
         batch = self._create_batch()
@@ -2468,6 +2538,121 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(status["dispatches"][0]["state"], "approved")
         self._start(brief["dispatch_id"])
 
+    def test_in_process_send_refuses_a_read_only_artifact_directory(self) -> None:
+        batch = self._create_batch()
+        brief = self._dispatch(batch["batch_id"], "architect")["brief"]
+        inbox = self.repo / ".harness/.sandboxes/scratch/inbox"
+        inbox.mkdir(parents=True, exist_ok=True)
+        args = self._args(
+            dispatch=brief["dispatch_id"], adapter=None, adapter_arg=None, checkout=None
+        )
+
+        with self._read_only(inbox.resolve()):
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                coordinator.send_dispatch(args)
+
+        self.assertIn(str(inbox), refused.exception.message)
+        status = coordinator.dispatch_status(
+            self._args(dispatch=brief["dispatch_id"], batch=None, stale_after=None)
+        )
+        self.assertEqual(status["dispatches"][0]["state"], "approved")
+        self._start(brief["dispatch_id"])
+
+    def _send(self, dispatch_id: str) -> JsonObject:
+        return coordinator.send_dispatch(
+            self._args(
+                dispatch=dispatch_id, adapter=None, adapter_arg=None, checkout=None
+            )
+        )
+
+    def _accept_architect_report(
+        self, batch_id: str, brief: JsonObject, launched: JsonObject
+    ) -> None:
+        coordinator.self_report_dispatch(
+            self._args(
+                dispatch=brief["dispatch_id"],
+                model="sonnet",
+                worktree=launched["worker_worktree"],
+            )
+        )
+        self._submit(brief["dispatch_id"], self._base_report(brief, "architect"))
+        self._decide(batch_id, "accept")
+
+    def test_in_process_send_probes_the_directories_of_the_dispatched_role(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        shared = self.repo / ".harness/.sandboxes"
+        runs, logs, npm = (shared / "runs/tests", shared / "logs", shared / "cache/npm")
+        for directory in (runs, logs, npm):
+            directory.mkdir(parents=True, exist_ok=True)
+
+        def unwritable(directory: Path) -> contextlib.AbstractContextManager[None]:
+            return self._read_only(directory.resolve())
+
+        architect = self._dispatch(batch["batch_id"], "architect")["brief"]
+        # Only a developer needs runs/tests; logs and caches help but never block.
+        with unwritable(runs), unwritable(logs), unwritable(npm):
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                launched = self._send(architect["dispatch_id"])
+        for directory in (runs, logs, npm):
+            self.assertIn(
+                f"warning: unwritable path not granted: {directory}", err.getvalue()
+            )
+        self._accept_architect_report(batch["batch_id"], architect, launched)
+
+        developer = self._dispatch(batch["batch_id"], "developer")["brief"]
+        with unwritable(runs):
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                self._send(developer["dispatch_id"])
+        self.assertIn(str(runs), refused.exception.message)
+        self.assertIn("cannot write", refused.exception.message)
+        with unwritable(logs), unwritable(npm):
+            with contextlib.redirect_stderr(io.StringIO()) as err:
+                self._start(developer["dispatch_id"])
+        self.assertIn(f"unwritable path not granted: {logs}", err.getvalue())
+        self.assertIn(f"unwritable path not granted: {npm}", err.getvalue())
+
+    def test_in_process_send_skips_an_optional_symlink_and_refuses_a_required_one(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        shared = self.repo / ".harness/.sandboxes"
+        (shared / "cache").mkdir(parents=True, exist_ok=True)
+        (shared / "runs").mkdir(parents=True, exist_ok=True)
+        outside = self.tmp / "outside"
+        outside.mkdir()
+        playwright, tests = shared / "cache/ms-playwright", shared / "runs/tests"
+        try:
+            playwright.symlink_to(outside, target_is_directory=True)
+            tests.symlink_to(outside, target_is_directory=True)
+        except OSError as exc:
+            self.skipTest(f"directory symlinks unavailable: {exc}")
+
+        architect = self._dispatch(batch["batch_id"], "architect")["brief"]
+        # A read-only role does not need runs/tests: both symlinks are only skipped.
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            launched = self._send(architect["dispatch_id"])
+        for directory in (tests, playwright):
+            self.assertIn(f"warning: symlink not granted: {directory}", err.getvalue())
+        self._accept_architect_report(batch["batch_id"], architect, launched)
+
+        developer = self._dispatch(batch["batch_id"], "developer")["brief"]
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            self._send(developer["dispatch_id"])
+        self.assertIn(f"required path is a symlink: {tests}", refused.exception.message)
+        tests.unlink()
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self._start(developer["dispatch_id"])
+        self.assertIn(f"warning: symlink not granted: {playwright}", err.getvalue())
+        self.assertEqual(list(outside.iterdir()), [])
+
     def _start(self, dispatch_id: str, *, checkout: Path | None = None) -> None:
         launched = coordinator.send_dispatch(
             self._args(
@@ -2514,6 +2699,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             "report_language": "ru",
         }
         report.update(overrides)
+        if role == "code-review" and "review" in report:
+            report["review"] = with_spec_criteria(brief, report["review"])
         return report
 
     def _decide(self, batch_id: str, decision: str, **extra: object) -> JsonObject:
@@ -2530,6 +2717,132 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self._start(brief["dispatch_id"])
         self._submit(brief["dispatch_id"], self._base_report(brief, "architect"))
         self._decide(batch_id, "accept")
+
+    def test_compact_report_receipt_leaves_full_decision_available(self) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        brief = self._dispatch(batch_id, "architect")["brief"]
+        dispatch_id = brief["dispatch_id"]
+        self._start(dispatch_id)
+        path = Path(brief["report_staging_path"])
+        path.write_text(
+            json.dumps(self._base_report(brief, "architect")), encoding="utf-8"
+        )
+
+        receipt = coordinator.submit_report(self._args(file=str(path), compact=True))
+
+        self.assertEqual(receipt["dispatch_id"], dispatch_id)
+        self.assertEqual(receipt["state"], "reported")
+        self.assertTrue(receipt["report"].endswith(f"{dispatch_id}.json"))
+        self.assertNotIn("decision_packet", receipt)
+        self.assertIn("decision-packet", receipt["next_coordinator_command"])
+        packet = coordinator.decision_packet(
+            self._args(batch=batch_id, dispatch=dispatch_id)
+        )
+        self.assertIn("accept", packet["options"])
+        repeated = coordinator.submit_report(self._args(file=str(path), compact=True))
+        self.assertTrue(repeated["already_recorded"])
+        self.assertEqual(repeated["report"], receipt["report"])
+
+    def test_compact_cli_submission_is_recorded_once_in_the_store(self) -> None:
+        self.assertIsNotNone(self._store_records, "this case runs on the runtime store")
+        batch_id = self._create_batch()["batch_id"]
+        brief = self._dispatch(batch_id, "architect")["brief"]
+        self._start(brief["dispatch_id"])
+        path = Path(brief["report_staging_path"])
+        report = self._base_report(brief, "architect")
+        path.write_text(json.dumps(report), encoding="utf-8")
+        submit = ("report", "submit", "--compact", "--file", str(path))
+
+        code, first, error = self._coordinator_cli(*submit)
+        self.assertEqual(code, 0, error)
+        code, second, error = self._coordinator_cli(*submit)
+        self.assertEqual(code, 0, error)
+
+        receipt, repeated = json.loads(first), json.loads(second)
+        self.assertNotIn("decision_packet", receipt)
+        self.assertNotIn("already_recorded", receipt)
+        self.assertTrue(self._stored(receipt["report"]).is_file())
+        self.assertTrue(repeated["already_recorded"])
+        self.assertEqual(repeated["report"], receipt["report"])
+        self.assertNotIn("decision_packet", repeated)
+        entry = self._batch_record(batch_id)["dispatches"][0]
+        self.assertEqual(entry["state"], "reported")
+        path.write_text(json.dumps({**report, "output": "changed"}), encoding="utf-8")
+        code, out, error = self._coordinator_cli(*submit)
+        self.assertNotEqual(code, 0)
+        self.assertIn("a different worker report is already recorded", out + error)
+        self.assertEqual(self._batch_record(batch_id)["dispatches"][0], entry)
+
+    def test_review_summary_check_accepts_a_pre_existing_dispatch_and_refuses_an_edit(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id)
+        dispatch_id = self._dispatch(batch_id, "code-review", candidate=candidate)[
+            "brief"
+        ]["dispatch_id"]
+        root = ledger_ops._state_root(self._args(), self.repo)
+        current = ledger_ops._load_batch(root, batch_id)
+        recorded = ledger_ops._load_dispatch(root, dispatch_id)
+        package = ledger_ops._load_context_package(root, recorded["context_package_id"])
+        focus = recorded["context_package_summary"]
+        self.assertIs(focus["review_focus"], True)
+
+        def validate(summary: JsonObject) -> None:
+            dispatch = {**recorded, "context_package_summary": summary}
+            batch = json.loads(json.dumps(current))
+            for entry in batch["dispatches"]:
+                if entry["dispatch_id"] == dispatch_id:
+                    entry["brief_sha256"] = hashlib.sha256(
+                        utils._canonical(dispatch).encode("utf-8")
+                    ).hexdigest()
+            coordinator._validate_dispatch(
+                self.repo, coordinator._config(self.repo), root, batch, dispatch
+            )
+
+        validate(focus)
+        # A review dispatch created before the review focus carries the whole-package summary.
+        validate(history._context_package_summary(package))
+        edited = {**focus, "related_tests": [*focus["related_tests"], "tests/forged.py"]}
+        with self.assertRaisesRegex(
+            coordinator.CoordinatorError, "summary does not match its immutable package"
+        ):
+            validate(edited)
+
+    def test_first_review_starts_with_changed_paths_and_can_read_the_shared_package(self) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id)
+
+        brief = self._dispatch(batch_id, "code-review", candidate=candidate)["brief"]
+        focus = brief["context_package_summary"]
+
+        self.assertIn("services/x.py", [file["path"] for file in focus["starting_files"]])
+        self.assertNotIn("README.md", [file["path"] for file in focus["starting_files"]])
+        self.assertNotIn("definition_of_done", focus)
+        self.assertTrue(brief["definition_of_done"])
+        self.assertEqual(focus["candidate_commit"], candidate)
+        full = coordinator.show_context_package(
+            self._args(dispatch=brief["dispatch_id"], section=None)
+        )
+        self.assertEqual(full["context_package_id"], brief["context_package_id"])
+        self.assertEqual(full["definition_of_done"], brief["definition_of_done"])
+        self.assertIn("services/x.py", full["diff"])
+        section = coordinator.show_context_package(
+            self._args(dispatch=brief["dispatch_id"], section="related_tests")
+        )
+        self.assertEqual(
+            section,
+            {
+                "context_package_id": brief["context_package_id"],
+                "related_tests": full["related_tests"],
+            },
+        )
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "no section named"):
+            coordinator.show_context_package(
+                self._args(dispatch=brief["dispatch_id"], section="missing")
+            )
 
     def test_invalid_check_result_is_rejected_before_recording_and_can_be_corrected(
         self,

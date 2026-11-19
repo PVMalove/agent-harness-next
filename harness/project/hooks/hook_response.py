@@ -61,8 +61,8 @@ HOOKS: Dict[str, Tuple[str, bool]] = {
     "runtime-autostart": ("runtime-autostart-failed", False),
 }
 # Advisory-hooks ChangeImpact (ADR 0024, раздел 2a): тело всегда завершается кодом 0 и называет
-# предупреждение префиксом ``[reason_code] `` первой строки stderr, строка ``evidence_ref=<путь>``
-# называет evidence. Конверт никогда их не блокирует. Hook работает только в профилях
+# предупреждение префиксом ``[reason_code] `` строки stderr, следующая строка ``evidence_ref=<путь>``
+# называет evidence; тело, которое проверяет несколько путей, печатает пару строк на каждый путь. Конверт никогда их не блокирует. Hook работает только в профилях
 # ``ACTIVE_PROFILES``: в остальных конверт отвечает allow, не запуская тело.
 ACTIVE_PROFILES: Dict[str, Tuple[str, ...]] = {
     "impact-first-touch": ("standard", "strict"),
@@ -201,15 +201,21 @@ def read_profile(root: Path) -> str:
 def decide_advisory(
     hook_id: str, profile: str, code: Optional[int], stderr: str
 ) -> Dict[str, object]:
-    """Вердикт advisory-hook: код 0 с его префиксом — warn, без префикса — allow; префикс
-    ``[internal-error]``, иной код, тайм-аут и сбой запуска — warn ``internal-error``.
-    Advisory-hook не блокирует ни в одном профиле."""
+    """Вердикт advisory-hook по всем строкам stderr: тело, которое проверяет несколько путей,
+    печатает предупреждение и диагностику каждого. Код 0 и строка ``[internal-error]`` — warn
+    ``internal-error``; иначе строки с префиксом hook — warn: remedy — их тексты, evidence_ref —
+    все строки ``evidence_ref=`` (через перевод строки); без них — allow. Иной код, тайм-аут и сбой
+    запуска — warn ``internal-error``. Advisory-hook не блокирует ни в одном профиле."""
     reason = HOOKS[hook_id][0]
     evidence = f".claude/hooks/{hook_id}.sh"
     lines = stderr.strip().splitlines()
     if code == 0:
-        named = REASON_PREFIX.match(lines[0]) if lines else None
-        if named is not None and named.group(1) == REASON_INTERNAL_ERROR:
+        named = [
+            (match.group(1), line[match.end() :])
+            for line in lines
+            if (match := REASON_PREFIX.match(line)) is not None
+        ]
+        if any(name == REASON_INTERNAL_ERROR for name, _ in named):
             return build_response(
                 hook_id,
                 profile,
@@ -218,16 +224,17 @@ def decide_advisory(
                 stderr.strip()[:REMEDY_LIMIT],
                 evidence,
             )
-        if named is None or named.group(1) != reason:
+        warnings = [text for name, text in named if name == reason]
+        if not warnings:
             return build_response(hook_id, profile, "allow", REASON_OK)
         refs = [
             line[len(EVIDENCE_PREFIX) :].strip()
-            for line in lines[1:]
+            for line in lines
             if line.startswith(EVIDENCE_PREFIX)
         ]
-        remedy = lines[0][named.end() :][:REMEDY_LIMIT]
+        remedy = "\n".join(warnings)[:REMEDY_LIMIT]
         return build_response(
-            hook_id, profile, "warn", reason, remedy, refs[0] if refs else evidence
+            hook_id, profile, "warn", reason, remedy, "\n".join(refs) or evidence
         )
     detail = f"hook вернул код {code}" if code is not None else "hook не отработал"
     if lines:
@@ -306,14 +313,18 @@ OBSERVED_TOOLS = frozenset(
 def observation_root() -> Path:
     """The main checkout: a hook of an issue worktree reports where ``harness health`` reads."""
     root = project_root()
+    # Read Git's own pointer files instead of starting `git`: hooks never spawn it.
     try:
-        done = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--git-common-dir"],
-            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5, check=True,
-        )
-    except (OSError, subprocess.SubprocessError):
+        marker = root / ".git"
+        if not marker.is_file():
+            return root
+        text = marker.read_text(encoding="utf-8").strip()
+        if not text.startswith("gitdir:"):
+            return root
+        gitdir = (root / text.removeprefix("gitdir:").strip()).resolve()
+        common = (gitdir / (gitdir / "commondir").read_text(encoding="utf-8").strip()).resolve()
+    except (OSError, ValueError):
         return root
-    common = (root / done.stdout.strip()).resolve()
     return common.parent if common.name == ".git" else root
 
 
