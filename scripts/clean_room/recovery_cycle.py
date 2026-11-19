@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-from scripts.clean_room.support import HARNESS, run_step
+from scripts.clean_room.support import HARNESS, run_step, spec_criteria
 
 
 def run(ctx: SimpleNamespace) -> None:
@@ -297,6 +297,7 @@ def run(ctx: SimpleNamespace) -> None:
             }
             for axis in ("standards", "spec")
         }
+        axes["spec"]["criteria"] = spec_criteria(brief)
         submit(
             brief,
             review={
