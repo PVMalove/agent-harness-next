@@ -2,7 +2,9 @@
 
 Run `/to-spec` explicitly (`$to-spec` in Codex) after `/grilling`, `/grill-me`, or `/grill-with-docs`. The skill carries
 the goal, accepted choices with their option numbers, and reasons for rejecting alternatives
-into the specification. For a direct invocation, first approve the files the skill can read.
+into the specification. For a direct invocation, first approve the files the skill can read. The
+skill reads files only within the approved scope and never changes code, tests, project
+configuration, `CONTEXT.md`, ADRs, or Discovery Context.
 
 ## Approval
 

@@ -23,8 +23,9 @@ creates branches, and never starts `/implement`.
   `Out of scope`. The rationale for rejected alternatives stays in the spec.
 - Each ticket is a vertical slice that carries its change and its checks; the build and tests stay
   green after every ticket. There are no tickets for drive-by cleanup or "all tests at the end".
-- If the spec names the first scenario to demonstrate, the skill schedules it in the earliest wave
-  its dependencies allow.
+- If the spec names the first scenario to demonstrate, the skill schedules its tickets in the
+  earliest wave their dependencies allow, marks them in the wave plan, and shows the check that
+  proves the scenario's result.
 - A blocking edge requires a result dependency or a requirement incompatibility. Tickets without
   blockers form Wave 1.
 - `afk` tickets get a story-point score and a `pipeline::fast` or `pipeline::full` label.
@@ -44,7 +45,12 @@ points, estimated hours from `story_points.hours` in `.harness/project.json`, an
 fails, the complete cards stay in chat. Finally, the skill offers to start a Wave 1 ticket
 manually with `/implement` or `/fast-implement`, matching its `pipeline::*` label.
 
-After tracker edits, run `/to-tickets --review <epic>`. The skill compares the current tickets
-with the approved specification and reports any missing or weakened checks in chat.
+## Repeat review (`--review <epic>`)
+
+After tracker edits, run `/to-tickets --review <epic>`. The skill reads the current cards of all
+child tickets, open and closed, from the tracker and compares their criteria with the epic's
+approved specification. In chat, it lists every missing or weakened check with a proposed
+correction. If a ticket or the child list cannot be read, it reports incomplete coverage. The mode
+changes nothing: tickets, the epic, and branches stay as they were.
 
 [Source SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/to-tickets/SKILL.md)
