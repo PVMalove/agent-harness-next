@@ -2603,6 +2603,73 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertTrue(repeated["already_recorded"])
         self.assertEqual(repeated["report"], receipt["report"])
 
+    def test_compact_cli_submission_is_recorded_once_in_the_store(self) -> None:
+        self.assertIsNotNone(self._store_records, "this case runs on the runtime store")
+        batch_id = self._create_batch()["batch_id"]
+        brief = self._dispatch(batch_id, "architect")["brief"]
+        self._start(brief["dispatch_id"])
+        path = Path(brief["report_staging_path"])
+        report = self._base_report(brief, "architect")
+        path.write_text(json.dumps(report), encoding="utf-8")
+        submit = ("report", "submit", "--compact", "--file", str(path))
+
+        code, first, error = self._coordinator_cli(*submit)
+        self.assertEqual(code, 0, error)
+        code, second, error = self._coordinator_cli(*submit)
+        self.assertEqual(code, 0, error)
+
+        receipt, repeated = json.loads(first), json.loads(second)
+        self.assertNotIn("decision_packet", receipt)
+        self.assertNotIn("already_recorded", receipt)
+        self.assertTrue(self._stored(receipt["report"]).is_file())
+        self.assertTrue(repeated["already_recorded"])
+        self.assertEqual(repeated["report"], receipt["report"])
+        self.assertNotIn("decision_packet", repeated)
+        entry = self._batch_record(batch_id)["dispatches"][0]
+        self.assertEqual(entry["state"], "reported")
+        path.write_text(json.dumps({**report, "output": "changed"}), encoding="utf-8")
+        code, out, error = self._coordinator_cli(*submit)
+        self.assertNotEqual(code, 0)
+        self.assertIn("a different worker report is already recorded", out + error)
+        self.assertEqual(self._batch_record(batch_id)["dispatches"][0], entry)
+
+    def test_review_summary_check_accepts_a_pre_existing_dispatch_and_refuses_an_edit(
+        self,
+    ) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id)
+        dispatch_id = self._dispatch(batch_id, "code-review", candidate=candidate)[
+            "brief"
+        ]["dispatch_id"]
+        root = ledger_ops._state_root(self._args(), self.repo)
+        current = ledger_ops._load_batch(root, batch_id)
+        recorded = ledger_ops._load_dispatch(root, dispatch_id)
+        package = ledger_ops._load_context_package(root, recorded["context_package_id"])
+        focus = recorded["context_package_summary"]
+        self.assertIs(focus["review_focus"], True)
+
+        def validate(summary: JsonObject) -> None:
+            dispatch = {**recorded, "context_package_summary": summary}
+            batch = json.loads(json.dumps(current))
+            for entry in batch["dispatches"]:
+                if entry["dispatch_id"] == dispatch_id:
+                    entry["brief_sha256"] = hashlib.sha256(
+                        utils._canonical(dispatch).encode("utf-8")
+                    ).hexdigest()
+            coordinator._validate_dispatch(
+                self.repo, coordinator._config(self.repo), root, batch, dispatch
+            )
+
+        validate(focus)
+        # A review dispatch created before the review focus carries the whole-package summary.
+        validate(history._context_package_summary(package))
+        edited = {**focus, "related_tests": [*focus["related_tests"], "tests/forged.py"]}
+        with self.assertRaisesRegex(
+            coordinator.CoordinatorError, "summary does not match its immutable package"
+        ):
+            validate(edited)
+
     def test_first_review_starts_with_changed_paths_and_can_read_the_shared_package(self) -> None:
         batch_id = self._create_batch()["batch_id"]
         self._accepted_architect(batch_id)

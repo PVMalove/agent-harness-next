@@ -906,3 +906,63 @@ class ContainerCleanupTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StoreCleanupTests(unittest.TestCase):
+    """Dispatch inputs are kept while a served runtime store still waits for their report."""
+
+    def setUp(self) -> None:
+        """Подготовить репозиторий, чей мигрированный store обслуживает runtime."""
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repo = (Path(temporary.name) / "repo").resolve()
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "main")
+        git(self.repo, "config", "user.name", "Test")
+        git(self.repo, "config", "user.email", "test@example.invalid")
+        (self.repo / ".gitignore").write_text("/.harness/\n", encoding="utf-8")
+        git(self.repo, "add", ".gitignore")
+        git(self.repo, "commit", "-m", "test: initial fixture")
+        support.build_state(self.repo)
+        migrated = support.migrate(self.repo)
+        self.assertEqual(migrated.returncode, 0, migrated.stderr)
+        runtime = support.ServingRuntime(self.repo)
+        self.addCleanup(runtime.stop)
+        patcher = mock.patch.dict(os.environ, runtime.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_soft_keeps_inputs_of_the_dispatch_the_store_still_waits_for(self) -> None:
+        reported, pending = support.DISPATCH_IDS
+        sandboxes = self.repo / ".harness" / ".sandboxes"
+        inbox = sandboxes / "scratch" / "inbox"
+        runs = sandboxes / "runs"
+        inbox.mkdir(parents=True)
+        runs.mkdir()
+        for dispatch_id in (reported, pending):
+            (inbox / f"{dispatch_id}.json").write_text("{}", encoding="utf-8")
+            (runs / f"review-context-{dispatch_id}.json").write_text(
+                "{}", encoding="utf-8"
+            )
+
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+
+        removed = {item["path"] for item in plan["remove"]}
+        self.assertIn(str(inbox / f"{reported}.json"), removed)
+        self.assertIn(str(runs / f"review-context-{reported}.json"), removed)
+        self.assertNotIn(str(inbox / f"{pending}.json"), removed)
+        self.assertNotIn(str(runs / f"review-context-{pending}.json"), removed)
+        self.assertIn(
+            {
+                "path": str(inbox / f"{pending}.json"),
+                "reason": f"staged report is pending for dispatch {pending}",
+            },
+            plan["skipped"],
+        )
+        self.assertIn(
+            {
+                "path": str(runs / f"review-context-{pending}.json"),
+                "reason": f"review context is pending for dispatch {pending}",
+            },
+            plan["skipped"],
+        )
