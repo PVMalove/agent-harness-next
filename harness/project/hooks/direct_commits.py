@@ -4,7 +4,7 @@
 `python direct_commits.py < payload.json` печатает `allow` и завершается с кодом 0, если ни один
 вызов commit/push не идёт из защищённой ветки (`master`, `main`, `base_branch`, `integration/*`)
 и ни один push не обновляет защищённый реф. Иначе причина выводится в stderr, код — 2.
-Исключения для /to-spec: push, который только создаёт отсутствующие на remote `integration/*`,
+Исключения для /publish-epic: push, который только создаёт отсутствующие на remote `integration/*`,
 и отдельный коммит документов прожарки в ещё не опубликованную `integration/*`.
 
 Вызовы находит разбор `pr_commands.parse`: упоминание commit/push в аргументах печатающих
@@ -55,7 +55,7 @@ LOCATION_OPTIONS = frozenset({"-C", "--git-dir", "--work-tree"})
 VALUE_OPTIONS = frozenset(
     {"-c", "--config-env", "--namespace", "--super-prefix", "--attr-source"}
 )
-# The only `git commit` options of the /to-spec grill docs commit: a message and output flags.
+# The only `git commit` options of the /publish-epic grill docs commit: a message and output flags.
 # Paths, `-a`, `--amend` and every other option commit more than the staged index.
 COMMIT_MESSAGE_OPTIONS = frozenset({"-m", "--message", "-F", "--file"})
 COMMIT_FLAGS = frozenset({"-q", "--quiet", "-s", "--signoff"})
@@ -353,7 +353,7 @@ def _push_block_reason(call: Call, base_branch: str) -> str:
 
 
 def _creates_integration_only(call: Call) -> bool:
-    """Push только создаёт `integration/*`: его можно выполнить из защищённой ветки (/to-spec).
+    """Push только создаёт `integration/*`: его можно выполнить из защищённой ветки (/publish-epic).
 
     Отсутствие этих веток на remote проверяет `_push_block_reason`, вызванный раньше.
     """
@@ -397,7 +397,7 @@ def _message_only(args: tuple[str, ...]) -> bool:
 
 
 def _grill_docs_commit(command: str, call: Call, branch: str) -> bool:
-    """Коммит документов прожарки в новую `integration/*` до её публикации (/to-spec).
+    """Коммит документов прожарки в новую `integration/*` до её публикации (/publish-epic).
 
     Разрешён, только если команда — один простой `git commit` с сообщением, индекс содержит
     только пути документации прожарки, а ветки нет на `origin`. Другая команда в том же вызове

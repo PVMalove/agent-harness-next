@@ -6,6 +6,8 @@ import importlib.util
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -19,6 +21,7 @@ from harness.health.hook_settings import (
     supported_tools,
 )
 from harness.json_types import JsonObject
+from tests.conftest import find_bash
 from tests.core.test_uninstall import git, harness
 
 PROJECT_TEMPLATES = Path(__file__).resolve().parents[2] / "harness" / "project"
@@ -26,6 +29,7 @@ PROJECT_TEMPLATES = Path(__file__).resolve().parents[2] / "harness" / "project"
 SETTINGS = ".claude/settings.local.json"
 CODEX = ".codex/hooks.json"
 HOOKS_DIR = ".claude/hooks"
+BASH = find_bash()
 
 
 @pytest.fixture
@@ -75,6 +79,109 @@ def test_installed_project_reports_profile_source_and_wiring(repo: Path) -> None
     assert "codex: критических hooks подключено 8/8" in message
 
 
+@pytest.mark.skipif(shutil.which(BASH) is None, reason="the managed hook is a Bash script")
+def test_health_explains_one_hook_and_reports_an_observed_denial(repo: Path) -> None:
+    hook = "block-scratch-outside-docs-tasks"
+    before = harness("health", str(repo), "--hook", hook, "--json")
+    assert before.returncode == 0, before.stderr
+    configured = json.loads(before.stdout)
+    assert configured["last_observation"] is None
+    assert configured["script"] == f".claude/hooks/{hook}.sh"
+    assert configured["runtimes"]["codex"]["config"] == ".codex/hooks.json"
+    assert configured["runtimes"]["codex"]["bindings"][0]["event"] == "PreToolUse"
+    assert "apply_patch" in configured["runtimes"]["codex"]["bindings"][0]["matcher"]
+
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Write",
+        "cwd": str(repo),
+        "tool_input": {
+            "file_path": str(repo / ".harness/.sandboxes/pr_body/private-notes.md"),
+            "content": "private data",
+        },
+    }
+    denied = subprocess.run(
+        [BASH, str(repo / HOOKS_DIR / f"{hook}.sh")],
+        input=json.dumps(payload), capture_output=True, text=True, check=False, cwd=repo,
+        env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)},
+    )
+    assert denied.returncode == 2, denied.stderr
+
+    after = harness("health", str(repo), "--hook", hook, "--json")
+    assert after.returncode == 0, after.stderr
+    observed = json.loads(after.stdout)["last_observation"]
+    assert observed["decision"] == "block"
+    assert observed["reason_code"] == "scratch-location"
+    assert observed["body_executed"] is True
+    assert observed["event"] == "PreToolUse"
+    assert observed["tool"] == "Write"
+    assert observed["runtime"] == "claude"
+    assert observed["stale"] is False
+    assert "private data" not in after.stdout
+    assert "private-notes.md" not in after.stdout
+
+
+def run_codex_merge_hook(checkout: Path) -> subprocess.CompletedProcess[str]:
+    """`block-pr-merge` as the second runtime runs it: no Claude variable, a Codex `turn_id`."""
+    payload = {
+        "session_id": "s",
+        "turn_id": "turn-1",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "cwd": str(checkout),
+        "tool_input": {"command": " ".join(("gh", "pr", "mer" + "ge", "41", "--secret-flag"))},
+    }
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    return subprocess.run(
+        [BASH, str(checkout / HOOKS_DIR / "block-pr-merge.sh")],
+        input=json.dumps(payload), capture_output=True, text=True, check=False,
+        cwd=checkout, env=env,
+    )
+
+
+@pytest.mark.skipif(shutil.which(BASH) is None, reason="the managed hook is a Bash script")
+def test_observation_names_the_runtime_and_goes_stale_once_that_runtime_is_unwired(
+    repo: Path,
+) -> None:
+    hook = "block-pr-merge"
+    assert run_codex_merge_hook(repo).returncode == 2
+
+    observed = json.loads(harness("health", str(repo), "--hook", hook, "--json").stdout)
+    assert observed["last_observation"]["runtime"] == "codex"
+    assert observed["last_observation"]["stale"] is False
+    assert "secret-flag" not in json.dumps(observed)
+
+    document = load(repo, CODEX)
+    drop_script(document, f"{hook}.sh")
+    save(repo, CODEX, document)
+
+    unwired = json.loads(harness("health", str(repo), "--hook", hook, "--json").stdout)
+    assert unwired["runtimes"]["codex"]["bindings"] == []
+    assert unwired["runtimes"]["claude"]["bindings"]
+    assert unwired["last_observation"]["runtime"] == "codex"
+    assert unwired["last_observation"]["stale"] is True
+
+
+@pytest.mark.skipif(shutil.which(BASH) is None, reason="the managed hook is a Bash script")
+def test_observation_from_an_issue_worktree_is_visible_from_the_main_checkout(
+    repo: Path, tmp_path: Path,
+) -> None:
+    git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com",
+        "commit", "--allow-empty", "-m", "init")
+    worktree = tmp_path / "issue-worktree"
+    git(repo, "worktree", "add", "-b", "feature/issue-1-x", str(worktree))
+    shutil.copytree(repo / HOOKS_DIR, worktree / HOOKS_DIR)
+
+    assert run_codex_merge_hook(worktree).returncode == 2
+
+    observed = json.loads(
+        harness("health", str(repo), "--hook", "block-pr-merge", "--json").stdout
+    )["last_observation"]
+    assert observed is not None
+    assert observed["decision"] == "block"
+    assert not (worktree / ".harness/.sandboxes/logs/hook-observations").exists()
+
+
 def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_not(
     repo: Path,
 ) -> None:
@@ -94,7 +201,7 @@ def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_n
     assert "count-skill-usage" in message
 
 
-def test_the_second_runtime_lists_the_change_impact_edit_rows_with_their_out_of_hook_check(
+def test_the_second_runtime_wires_change_impact_hooks_and_lacks_only_claude_tools(
     repo: Path,
 ) -> None:
     result = check(repo)
@@ -102,17 +209,20 @@ def test_the_second_runtime_lists_the_change_impact_edit_rows_with_their_out_of_
 
     _, marker, lacking = message.partition("codex: нет события или payload: ")
     assert marker
+    # Write and Edit arrive as apply_patch; only the first runtime's MultiEdit and NotebookEdit lack.
     for row in (
-        "impact-first-touch (вне hook: ChangeImpact-gate по ADR 0023)",
-        "sensitive-path-recheck (вне hook: граница strict (dispatch propose, qa run, publish))",
-        "targeted-check-reminder (вне hook: сверка checks_run)",
+        "impact-first-touch (MultiEdit, NotebookEdit; вне hook: ChangeImpact-gate по ADR 0023)",
+        "sensitive-path-recheck (MultiEdit, NotebookEdit; вне hook: граница strict "
+        "(dispatch propose, qa run, publish))",
+        "targeted-check-reminder (MultiEdit, NotebookEdit; вне hook: сверка checks_run)",
     ):
         assert row in lacking
-    # The hooks are advisory and checked outside the hook: no advisory finding, no missing wiring.
-    unprotected = message.partition("без события и без проверки вне hook: ")[2]
-    for hook_id in ("impact-first-touch", "sensitive-path-recheck", "targeted-check"):
-        assert hook_id not in unprotected.split(";")[0]
-    assert "не подключён hook targeted-check-reminder" not in message
+    for hook_id in (
+        "impact-first-touch",
+        "sensitive-path-recheck",
+        "targeted-check-reminder",
+    ):
+        assert f"не подключён hook {hook_id}" not in message
     assert "claude: нет события" not in message
 
 
@@ -198,7 +308,7 @@ def test_hook_catalog_agrees_with_the_templates() -> None:
             )
 
 
-def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards() -> None:
+def test_the_second_runtime_delivers_write_and_edit_to_patch_aware_hooks() -> None:
     catalog = {(spec.hook_id, spec.event): spec for spec in HOOK_CATALOG}
 
     def delivered(hook_id: str) -> tuple[str, ...]:
@@ -207,8 +317,12 @@ def test_the_second_runtime_delivers_write_and_edit_only_to_apply_patch_guards()
     assert delivered("protect-hook-policy") == ("Bash", "Write", "Edit")
     assert delivered("block-scratch-outside-docs-tasks") == ("Write", "Edit")
     assert delivered("test-author-guard") == ("Write", "Edit", "Bash")
-    for advisory in ("impact-first-touch", "sensitive-path-recheck", "targeted-check-reminder"):
-        assert delivered(advisory) == ()
+    for advisory in (
+        "impact-first-touch",
+        "sensitive-path-recheck",
+        "targeted-check-reminder",
+    ):
+        assert delivered(advisory) == ("Write", "Edit")
 
 
 def test_the_runtime_autostart_hook_is_shipped_to_claude_code_only() -> None:

@@ -51,6 +51,10 @@ DOCKER_CONTAINER_PROBLEM = (
     "or, without defaults, access_policy.operations.qa.container"
 )
 ROLE_FIELDS = frozenset({"name", "mode", "required_capabilities", "risk_triggers"})
+# The roles directory also holds the shared role contract, which is no role manifest.
+ROLE_CONTRACT_STEM = "common"
+# Existing 1.x installations named the shared contract "_common.md".
+ROLE_CONTRACT_STEMS = frozenset({ROLE_CONTRACT_STEM, "_common"})
 CONFIG_REQUIRED_FIELDS = (
     "provider_profiles",
     "assignment_plans",
@@ -72,6 +76,8 @@ CONFIG_ALLOWED_FIELDS = frozenset(CONFIG_REQUIRED_FIELDS) | {
     "verification_profiles",
     "retry_verification",
     "verification_plan_policy",
+    "pre_qa_commands",
+    "workflow_overlays",
     "qa_preparation",
     "qa_environment_probes",
     "qa_project_file_checks",
@@ -1600,7 +1606,7 @@ def configuration_problems(
             problems.append("missing .harness/orchestration/roles")
     else:
         for path in sorted(roles_root.glob("*.md")):
-            if path.stem == "_common":
+            if path.stem in ROLE_CONTRACT_STEMS:
                 continue
             try:
                 role = load_role_manifest(path)
@@ -1894,7 +1900,18 @@ def configuration_problems(
     problems.extend(
         verification_plan_policy_problems(config.get("verification_plan_policy"))
     )
-    for qa_key in ("qa_preparation", "qa_environment_probes", "qa_project_file_checks"):
+    from harness.orchestration.workflow_overlays import resolve_slots
+
+    try:
+        resolve_slots(config.get("workflow_overlays", []))
+    except ValueError as exc:
+        problems.append(str(exc))
+    for qa_key in (
+        "pre_qa_commands",
+        "qa_preparation",
+        "qa_environment_probes",
+        "qa_project_file_checks",
+    ):
         qa_commands = config.get(qa_key)
         if qa_commands is not None and not string_list(qa_commands):
             problems.append(

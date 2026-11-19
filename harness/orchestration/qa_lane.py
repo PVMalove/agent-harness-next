@@ -825,6 +825,32 @@ def _missing_executable(
     return None if failed is None else executables.get(str(failed.get("command")))
 
 
+# A failed preparation or probe output that reads as a network failure of the egress route.
+_NETWORK_FAILURE = re.compile(
+    r"(?i)timed out|timeout|tunnel connection failed|502 bad gateway|could not connect"
+    r"|connection (?:refused|reset)|name resolution"
+)
+
+
+def _unreachable_host(stages: JsonObject | None, hosts: list[str]) -> str | None:
+    """The allowlisted host a failed preparation or environment probe could not reach over the
+    network: the first plan host named in those failures, or every plan host when none is named;
+    ``None`` without a network failure."""
+    entries = stages.get("stages") if stages is not None else None
+    failed = [
+        f"{entry.get('command', '')}\n{entry.get('diagnostics', '')}"
+        for entry in (entries if isinstance(entries, list) else [])
+        if isinstance(entry, dict)
+        and entry.get("stage") in {"preparation", "environment-probe"}
+        and entry.get("result") == "fail"
+    ]
+    network = [text for text in failed if _NETWORK_FAILURE.search(text)]
+    if not network or not hosts:
+        return None
+    named = next((host for host in hosts if any(host in text for text in network)), None)
+    return named if named is not None else ", ".join(hosts)
+
+
 def _blocked_by(report: JsonObject, domain: FailureDomain) -> None:
     """A container QA whose command ended with a tooling, timeout or unknown failure: the code
     was not judged, so the report is ``blocked`` with that domain and no developer retry."""
@@ -1548,6 +1574,20 @@ def _unreported_failure(
             "worker_image; for cargo, build it from .harness/container/Dockerfile.qa), "
             "rebuild it, repeat dispatch propose (the image id is pinned), then " + remedy
         )
+    else:
+        network = dispatch.get("runtime_access", {}).get("network", {})
+        hosts = [str(host) for host in network.get("hosts", [])]
+        host = _unreachable_host(evidence.stages, hosts)
+        if host is not None:
+            cause += (
+                f": allowlisted host {host} was unreachable from the egress sidecar "
+                "(network timeout)"
+            )
+            remedy = (
+                "start harness-runtime with HTTPS_PROXY/HTTP_PROXY (and NO_PROXY) naming an "
+                "upstream proxy reachable from containers, rebuild harness-proxy:local, repeat "
+                "dispatch propose (the image id is pinned), then " + remedy
+            )
     return CoordinatorError(
         f"QA attempt {attempt} of {dispatch['dispatch_id']} ended with {cause}; "
         f"its evidence is {evidence.artifact.name}",

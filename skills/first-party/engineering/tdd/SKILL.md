@@ -12,7 +12,8 @@ integration, and end-to-end tests; choose the seam and test environment that mak
 real.
 
 Before writing a test, read `CONTEXT.md` when it exists and respect the ADRs for the area. Agree
-the public seam with the developer or user, or use the seam that the task already names.
+the public seam with the developer or user, or use the seam that the task already names: the
+ticket's `Action -> Verify` criteria or the spec's acceptance table.
 
 ## One behavior at an observable seam
 
@@ -45,44 +46,11 @@ current implementation.
 
 ## Optional test-author subagent
 
-Select the executor before invoking the helper. In full `/implement`, inherit runtime/model/effort
-from the approved developer brief; run `python3 -I -B .harness/health/test_author.py preflight
---repo <worker_worktree> --brief <brief path>` in its exact checkout. In the short route, omit
-`--brief` to select the explicit `test_author` profile from `.harness/project.json`. Missing or
-invalid settings and `runtime_unsupported` keep ordinary TDD; state the sanitized reason.
-There is no implied provider or model. See `docs/agents/test-author.md` for activation.
-
-Only exactly `{"status":"ok"}` enables the author. The current protected adapter uses
-`.claude/hooks/test-author-preflight.sh`; other selected runtimes keep ordinary TDD until a
-protected adapter exists. For full external Claude execution, require `Agent(test-author)` or
-`Agent` in the approved tools and call the native subagent without model/effort overrides;
-An author without a `model` line inherits the developer's approved settings. An in-process worker passes each
-handoff to `python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo
-<worker_worktree> --brief <brief path> --prompt-file <path>` under the same permission rule.
-Linked workers read evidence from the supplied shared log root.
-For the short route, pass each handoff in a prompt-file to `python3 -I -B
-.harness/health/test_author.py run --repo . --prompt-file <path>` so the configured project
-model/effort are applied even when the current developer session uses other settings.
-
-When preflight is `ok`, call the subagent before each implementation step. Give it one behavior
-requirement, one scenario, the agreed public seam, the public signatures and the existing fixtures;
-never give a proposed algorithm or implementation snippet as the basis of an expectation. The
-subagent may write only one test in `test_paths` and may run only that test through
-`.claude/hooks/run-test.sh <test-id>`. It replies in compact English with `status` (`red`,
-`needs_skeleton` or `contract_gap`), the requirement, inputs, independent expectation source, test
-id and, for `red`, sanitized Red evidence: the runner JSON plus the failed assertion, expectation
-and actual result from the run's `log.txt`. It must not write production code or a skeleton and it
-does not receive an orchestration manifest, dispatch, brief/report, approval, or ledger lifecycle.
-
-Check the expectation against the requirement before you implement, and never weaken an accepted
-expectation to reach Green; a justified contract change needs a new call and a new check. For
-`needs_skeleton`, write only types and signatures without logic, then rerun the subagent. A compile,
-import, fixture or environment error is not Red, and a test that is green at once does not count as
-a cycle. After three consecutive failed calls on one test, stop and report a blocker. The full
-protocol is in `developer.md` of the orchestration roles. The `/fast-implement` short route runs
-the same protocol in one session; there the seam is the one the developer agreed before the first
-test, instead of one taken from an architect brief, and an unavailable author keeps the ordinary
-route with the reason stated.
+An isolated subagent may write each Red test from the requirement alone. Read
+`references/test-author.md` before the first test whenever the calling route uses the author: it
+selects the executor for the full `/implement` route and the `/fast-implement` short route, and it
+holds the handoff, the reply statuses and the attempt limit. Without exactly `{"status":"ok"}` from
+preflight, continue with ordinary TDD and state the reason.
 
 For a bug fix, begin with a minimal reproducer at the seam where the bug is observable. Keep the
 expectation that describes the bug. Weakening it for Green only hides the regression and leaves no

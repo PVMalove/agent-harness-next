@@ -57,7 +57,7 @@ consumer.
 | --- | --- |
 | `$schema` | Link to the project configuration schema |
 | `language` | Output language (`ru` or `en`): code-review reports and the PR body template |
-| `base_branch` | Release branch: `/to-spec` creates epic integration branches from it; it is also the base for work without an epic |
+| `base_branch` | Release branch: epic integration branches start from it; it is also the base for work without an epic |
 | `branch_pattern` | Regular expression for the issue branch name |
 | `qa_gate_commands` | Commands of the full local quality run |
 | `shell` | Shell for `qa_gate_commands`: `bash` or `powershell` |

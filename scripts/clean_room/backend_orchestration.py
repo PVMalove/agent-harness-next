@@ -277,7 +277,11 @@ def run(ctx: SimpleNamespace) -> None:
     # Issue #537: the installed PR step carries the whole continuation (next step, separate
     # confirmation bound to the SHA pair, CI wait, local-QA fallback, merge handoff, the Release Gate
     # tree check after the merge) and still keeps the plain /qa-gate branch for a project without the
-    # optional orchestration.
+    # optional orchestration. Since #1214 the opt-in route lives in the skill's reference.
+    installed_pr_route = installed_pr_step.parent / "references" / "integration-route.md"
+    if not installed_pr_route.is_file():
+        sys.exit("installed to-pull-requests step is missing its integration route reference")
+    installed_pr_text += "\n" + installed_pr_route.read_text(encoding="utf-8")
     for required_pr_phrase in (
         "integration next",
         "integration collect-ci",
@@ -344,7 +348,7 @@ def run(ctx: SimpleNamespace) -> None:
         for path in (
             orchestration_project / ".harness" / "orchestration" / "roles"
         ).glob("*.md")
-        if path.name != "_common.md"
+        if path.name != "common.md"
     }
     if actual_role_files != expected_role_files:
         sys.exit(
@@ -370,7 +374,7 @@ def run(ctx: SimpleNamespace) -> None:
         / "SKILL.md"
     ).is_file():
         sys.exit("the skill the conflict-resolver role points to is not installed")
-    for name in ("_common.md", *sorted(expected_role_files)):
+    for name in ("common.md", *sorted(expected_role_files)):
         if not (
             orchestration_project / ".harness" / "orchestration" / "roles" / name
         ).is_file():
@@ -387,7 +391,7 @@ def run(ctx: SimpleNamespace) -> None:
             sys.exit(
                 f"installed playbook lacks the PR-continuation rule: {continuation_rule}"
             )
-    for entry in (playbook_path, orchestration_root / "roles/_common.md"):
+    for entry in (playbook_path, orchestration_root / "roles/common.md"):
         assert_contract_link(entry, contract, entry.name)
     pilot_path = orchestration_root / "pilot.md"
     if not pilot_path.is_file():

@@ -25,8 +25,8 @@ The feature "export reports to CSV" is worked out in one session, but it needs d
 
 1. **`/grill-with-docs`** runs rounds: which reports are exported, who starts the export, how numbers
    are formatted. The term "Exportable report" is added to the glossary.
-2. **`/to-spec`** finds the seam: the existing report formatting service. The epic is published with
-   the label `status::specs` and the integration branch name `integration/reports`.
+2. **`/to-spec`** finds the seam: the existing report formatting service. After approval, the skill saves the specification. Then `/publish-epic` publishes the epic with
+   `status::specs` and creates `integration/reports`.
 3. **`/to-tickets`** creates two vertical slices: "CSV formatting service" (`afk`, `status::ready`)
    and "Export button on the report page" (`afk`, `status::blocked`, waits for the first).
 4. **`/implement`** for the first ticket runs pre-flight, an issue worktree from `integration/reports`,

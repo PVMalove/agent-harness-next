@@ -66,7 +66,7 @@ _Avoid_: шаблонные артефакты, foundation-файлы.
 заменять или добавлять скиллы.
 _Avoid_: пакет, набор скиллов.
 
-В текущем составе `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`.
+В текущем составе `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`, `developer`, `publish-epic`.
 
 **Vendor-скилл**:
 Скилл из байт-в-байт snapshot закреплённого upstream-источника в `skills/vendor/`, связанный с
@@ -111,7 +111,7 @@ GitLab (включая self-hosted) или локальный markdown-трек�
 _Avoid_: таск-трекер команды, remote, хостинг кода.
 
 **Интеграционная ветка эпика** (`integration/<service-or-team>`):
-Ветка, которую `/to-spec` создаёт от `base_branch` после публикации эпика. `/to-tickets` переносит
+Ветка, которую `/publish-epic` создаёт от `base_branch` при публикации эпика. `/to-tickets` переносит
 её в дочерние тикеты; issue-ветки создаются от неё, а их PR направляются обратно в неё. Такой PR
 ссылается на тикет через `Related to #<ID>`, но не закрывает его: после подтверждённого merge
 тикет закрывают через CLI трекера. `Closes #<ID>` применяется только для PR в default branch;
@@ -405,7 +405,7 @@ _Avoid_: обязательный образ харнесса, образ, ко�
 pytest по умолчанию их отбрасывают; запускает их только CI job `docker-smoke` с `-m docker_smoke`.
 _Avoid_: smoke в `make verify`, проверка Podman или rootless Docker.
 
-**Role common contract** (`harness/orchestration/roles/_common.md`):
+**Role common contract** (`harness/orchestration/roles/common.md`):
 Общий Markdown-контракт для всех ролей: handoff, completion report, branch/worktree, commit proof и
 escalation. Индивидуальный role manifest содержит только уникальные границы, trigger и доказательства.
 _Avoid_: копирование общих правил в шесть role files, глобальный AGENTS.md.

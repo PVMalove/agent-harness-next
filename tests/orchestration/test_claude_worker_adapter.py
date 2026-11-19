@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import stat
@@ -14,6 +15,8 @@ import tempfile
 import unittest
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
+
+from tests.orchestration.test_runtime_adapters import CLAUDE_PROBE
 
 ADAPTER = Path(__file__).resolve().parents[2] / "harness/adapters/claude_worker.py"
 SPEC = importlib.util.spec_from_file_location("claude_worker", ADAPTER)
@@ -84,10 +87,11 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
     def fake_claude(self, exit_code: int) -> None:
         script = self.bin / "claude"
         script.write_text(
-            "#!/bin/sh\n"
-            f'pwd > "{self.cwd_dump}"\n'
-            f'cat > "{self.prompt_dump}"\n'
-            f"exit {exit_code}\n"
+            f"#!{sys.executable}\n"
+            + CLAUDE_PROBE
+            + f"Path({str(self.cwd_dump)!r}).write_text(os.getcwd())\n"
+            + f"Path({str(self.prompt_dump)!r}).write_text(prompt, encoding='utf-8')\n"
+            + f"sys.exit({exit_code})\n"
         )
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
@@ -144,6 +148,41 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertIn(f"--brief {shlex.quote(str(self.brief))}", prompt)
         self.assertIn("without model or effort overrides", prompt)
         self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), prompt)
+
+    def test_host_prompts_name_the_pinned_package_section_command(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief.update(role="code-review", allowed_tools=["Read"])
+        command = (
+            f"context-package show --dispatch {brief['dispatch_id']} --section <section>"
+        )
+        codex_path = ADAPTER.with_name("codex_worker.py")
+        codex_spec = importlib.util.spec_from_file_location("codex_worker", codex_path)
+        assert codex_spec and codex_spec.loader
+        codex_worker = importlib.util.module_from_spec(codex_spec)
+        codex_spec.loader.exec_module(codex_worker)
+        prompts = {
+            "claude": claude_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            ),
+            "codex": codex_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            ),
+        }
+        for runtime, prompt in prompts.items():
+            with self.subTest(runtime=runtime):
+                self.assertIn(command, prompt)
+                self.assertIn("precedent_cards, memory or goal", prompt)
+        skill = (
+            ADAPTER.parents[2] / "skills/first-party/engineering/implement/SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "context-package show --dispatch <dispatch_id> --section <section>", skill
+        )
+        with mock.patch.dict(os.environ, {"HARNESS_EXECUTOR": "docker"}):
+            container = claude_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            )
+        self.assertNotIn("context-package show", container)
 
     def test_another_role_keeps_its_original_directory_scope(self) -> None:
         brief = json.loads(self.brief.read_text())
@@ -206,9 +245,8 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         home = self.repo.parent / "home"
         local_bin = home / ".local" / "bin"
         local_bin.mkdir(parents=True)
-        script = local_bin / "claude"
-        script.write_text(f'#!/bin/sh\npwd > "{self.cwd_dump}"\nexit 7\n')
-        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        self.fake_claude(7)
+        (self.bin / "claude").rename(local_bin / "claude")
         git_dir = str(Path(shutil.which("git") or "git").parent)
         self.assertIsNone(shutil.which("claude", path=git_dir))
         cwd = Path.cwd()
@@ -252,6 +290,18 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertEqual(command[command.index("--effort") + 1], "medium")
         self.assertEqual(command[command.index("--permission-mode") + 1], "dontAsk")
         self.assertEqual(command[command.index("--allowedTools") + 1], "Read,Bash,Edit")
+        targets = [Path(path) for path in shlex.split(plan["probe"])[2:]]
+        self.assertIn(self.worktree, targets)
+        self.assertIn(Path(git(self.worktree, "rev-parse", "--absolute-git-dir")), targets)
+
+    def test_read_only_probe_checks_report_directory_without_source_writes(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief.update(role="code-review", access="read-only")
+
+        command = claude_worker.native_write_probe(brief, self.worktree, [])
+        arguments = shlex.split(command)
+
+        self.assertEqual(arguments[2:], [str(Path(brief["report_staging_path"]).parent)])
 
     def test_container_worker_is_asked_only_for_the_staged_report(self) -> None:
         brief = json.loads(self.brief.read_text())
@@ -285,11 +335,56 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertNotIn("coordinator.py", prompt)
         self.assertNotIn("report submit --file", prompt)
         command = plan["command"]
-        self.assertEqual(command[2], prompt)
+        self.assertNotIn(prompt, command)
+        self.assertIn("worker_write_probe.py", plan["probe"])
         self.assertEqual(
             command[command.index("--output-format") + 1 :][:2],
             ["stream-json", "--verbose"],
         )
+
+    def test_container_review_reads_one_verified_section(self) -> None:
+        brief = json.loads(self.brief.read_text(encoding="utf-8"))
+        brief.update(role="code-review", context_package_summary={"review_focus": True})
+        payload = json.dumps(
+            {
+                "context_package_id": brief["context_package_id"],
+                "related_tests": ["tests/test_order.py"],
+                "diff": "full diff must stay out of this output",
+            }
+        ).encode("utf-8")
+        package = (
+            self.repo
+            / ".harness"
+            / ".sandboxes"
+            / "runs"
+            / f"review-context-{brief['dispatch_id']}.json"
+        )
+        package.parent.mkdir(parents=True, exist_ok=True)
+        package.write_bytes(payload)
+        brief["context_package_sha256"] = hashlib.sha256(payload).hexdigest()
+        self.brief.write_text(json.dumps(brief), encoding="utf-8")
+        command = [
+            sys.executable,
+            str(ADAPTER),
+            "context",
+            "--repo",
+            str(self.repo),
+            "--brief",
+            str(self.brief),
+            "--section",
+            "related_tests",
+        ]
+
+        selected = subprocess.run(command, capture_output=True, text=True, check=True)
+
+        self.assertEqual(
+            json.loads(selected.stdout), {"related_tests": ["tests/test_order.py"]}
+        )
+        package.write_bytes(payload + b" ")
+        refused = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("hash", refused.stderr)
+        self.assertEqual(refused.stdout, "")
 
     @POSIX_ONLY
     def test_worker_runs_in_the_worktree_and_receives_the_prompt(self) -> None:
@@ -309,20 +404,13 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         )
 
     @POSIX_ONLY
-    def test_supervised_worker_gets_the_prompt_as_an_argument_and_its_code_is_returned(
+    def test_supervised_worker_gets_the_prompt_after_probe_and_returns_its_code(
         self,
     ) -> None:
         brief = json.loads(self.brief.read_text())
         brief["execution"] = {"kind": "process"}
         self.brief.write_text(json.dumps(brief))
-        script = self.bin / "claude"
-        script.write_text(
-            "#!/bin/sh\n"
-            f'pwd > "{self.cwd_dump}"\n'
-            f'printf "%s" "$2" > "{self.prompt_dump}"\n'
-            "exit 5\n"
-        )
-        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        self.fake_claude(5)
         extra = self.repo / "retry.txt"
         extra.write_text("Retry handoff: {}")
 

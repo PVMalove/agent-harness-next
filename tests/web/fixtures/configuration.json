@@ -210,7 +210,7 @@
     {
       "choices": [],
       "default": null,
-      "description": "Project release/base branch. /to-spec creates each epic's integration/<service-or-team> branch from it; it is also the fallback base for work without an epic.",
+      "description": "Project release/base branch. Epic integration/<service-or-team> branches start from it. It is also the fallback base for work without an epic.",
       "file": "project.json",
       "group": "project",
       "label": "Базовая ветка",

@@ -442,6 +442,11 @@ or a human records that report on the host with `report submit --file <path>`:
 
 ## Agent adapter in a container
 
+The initial code-review brief points to changed files and related checks. When the review needs
+more context, the Claude worker prompt names the adapter's `context --section` command. It reads
+one field of the pinned package from shared read-only storage and checks the package hash from the
+brief before printing. Cleanup retains this export while the dispatch may use it.
+
 Use the shipped Claude Code adapter:
 
 ```bash
@@ -457,8 +462,9 @@ any other adapter must be an executable file.
 
 With `HARNESS_EXECUTOR=docker`, which the executor sets, `claude_worker.py`:
 
-- runs `claude -p <prompt>` in the foreground with `--output-format stream-json --verbose`, so
-  the host reads the `init` event and the steps;
+- runs `claude -p` in the foreground with `--input-format stream-json` and
+  `--output-format stream-json --verbose`, so the host reads the `init` event and the steps. The
+  adapter checks a native Bash write probe before it sends the task and forwards `init` to the host;
 - passes the brief's `allowed_tools` with `--permission-mode dontAsk` and the incoming reports
   directory with `--add-dir`; a read-only role also gets `Edit(//<report_staging_path>)` and can
   write only its report;

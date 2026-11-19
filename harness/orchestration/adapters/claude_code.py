@@ -134,7 +134,7 @@ def _prompt(args: argparse.Namespace, brief: JsonObject) -> str:
     reason = brief.get("retry_reason")
     return f"""You are the {brief['role']} worker for dispatch {brief['dispatch_id']}.
 Read {Path(args.repo).resolve() / '.harness/instructions/technical-english.md'} before English coordination.
-Read {Path(args.repo).resolve() / '.harness/orchestration/roles/_common.md'} and the role manifest in that directory.
+Read {Path(args.repo).resolve() / '.harness/orchestration/roles/common.md'} and the role manifest in that directory.
 Immutable brief: {Path(args.brief).resolve()}
 Report staging path: {brief['report_staging_path']}
 Expected worktree: {brief['worktree']}
@@ -151,10 +151,12 @@ If self-report fails, stop before task work. Do not copy an expected model as ev
 After successful self-report, run {cli} dispatch heartbeat --dispatch {brief['dispatch_id']}
 Repeat heartbeat at least every {brief.get('liveness', {}).get('heartbeat_every_seconds')} seconds while working.
 Use the pinned Context Package and work only inside the brief's scope and commit plan.
+For more of the package, run {cli} context-package show --dispatch {brief['dispatch_id']} --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Architect retry reason, when present: {json.dumps(reason, ensure_ascii=False)}
 Write one honest completion report to the exact staging path. Use report_language: ru,
 outcome completed|blocked|failed, checks_run result pass|fail|not_run, and status/details objects for risks/blockers.
-Then run {cli} report submit --file {shlex.quote(brief['report_staging_path'])}.
+Then run {cli} report submit --compact --file {shlex.quote(brief['report_staging_path'])}.
 If submission fails, preserve the original file and return the exact command and error.
 If the result includes completion, relay it for report complete; never submit again.
 The monitor reads the runtime events of this session; write text only for a blocker and the final result.

@@ -774,8 +774,11 @@ class LifecycleLedger:
             raise LedgerSandboxDenied(
                 f"sandbox_denied: the coordinator cannot write {lock_dir} ({exc.strerror})",
                 remedy=f"let this process write {self.root} (for the Claude Code sandbox: "
-                "sandbox.filesystem.allowWrite), or run the command where that directory is "
-                "writable; an infrastructure refusal, not a task error",
+                "sandbox.filesystem.allowWrite; a Claude Code worker also needs the report "
+                "inbox and the main checkout's .harness/.sandboxes/runs/qa, runs/tests, logs, "
+                "cache/npm and cache/ms-playwright, or the whole .harness/.sandboxes), or run "
+                "the command where that directory is writable; an infrastructure refusal, "
+                "not a task error",
             ) from exc
         return lock_dir
 

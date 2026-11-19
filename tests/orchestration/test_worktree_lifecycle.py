@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
+import tomllib
 from pathlib import Path
 from unittest import mock
 
@@ -93,6 +95,223 @@ def _run(
         code = coordinator.main()
     captured = capsys.readouterr()
     return code, captured.out, captured.err
+
+
+@pytest.mark.parametrize(
+    ("agent", "network_flag"),
+    [("codex", ()), ("codex", ("--network-access", "enabled")), ("claude", ())],
+)
+def test_prepare_provisions_artifacts_and_builds_the_native_session_command(
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+    network_flag: tuple[str, ...],
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        None,
+        "prepare",
+        "--repo",
+        str(repo),
+        "--worktree",
+        str(tree),
+        "--runtime",
+        agent,
+        *network_flag,
+    )
+
+    assert code == 0, err
+    data = json.loads(out)
+    assert data["cwd"] == str(repo)
+    argv = data["argv"]
+    assert argv[0] == agent
+    dirs = [
+        repo / ".harness/orchestration/state",
+        *(
+            repo / ".harness/.sandboxes" / path
+            for path in (
+                "scratch/inbox",
+                "scratch/briefs",
+                "runs/qa",
+                "runs/tests",
+                "logs",
+                "cache/npm",
+                "cache/ms-playwright",
+            )
+        ),
+    ]
+    assert all(path.is_dir() for path in dirs)
+    if agent == "claude":
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        assert settings["sandbox"]["filesystem"]["allowWrite"] == [
+            str(path) for path in dirs
+        ]
+        assert argv[argv.index("--add-dir") + 1] == str(tree)
+        assert "EnterWorktree" in argv[-1]
+        assert "ExitWorktree" in argv[-1]
+        assert "worktree check" in argv[-1]
+    else:
+        settings = {}
+        for i, value in enumerate(argv[:-1]):
+            if value == "-c":
+                settings.update(tomllib.loads(argv[i + 1]))
+        profile = settings["permissions"][settings["default_permissions"]]
+        assert profile["network"] == {"enabled": bool(network_flag)}
+        filesystem = profile["filesystem"]
+        assert filesystem[":root"] == "read"
+        assert ":tmpdir" not in filesystem and ":slash_tmp" not in filesystem
+        assert settings["shell_environment_policy"]["set"]["TMPDIR"] == str(
+            repo / ".harness/.sandboxes/runs/tests"
+        )
+        gitdir = Path(_git(tree, "rev-parse", "--absolute-git-dir"))
+        assert all(filesystem[str(path)] == "write" for path in [*dirs, tree, gitdir])
+        assert filesystem[str(repo / ".git/hooks")] == "read"
+        # The main checkout is never writable; Git permissions may list it read-only.
+        assert filesystem.get(str(repo), "read") == "read"
+        assert str(tree.parent) not in filesystem
+
+
+def test_prepare_launch_starts_in_the_main_checkout_after_provisioning(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+    started: list[Path] = []
+
+    def launch(argv: list[str], *, cwd: Path) -> int:
+        assert argv[0] == "claude"
+        assert (cwd / ".harness/.sandboxes/cache/npm").is_dir()
+        started.append(cwd)
+        return 7
+
+    with mock.patch.object(subprocess, "call", side_effect=launch):
+        code, out, _ = _run(
+            monkeypatch,
+            capsys,
+            None,
+            "prepare",
+            "--repo",
+            str(repo),
+            "--worktree",
+            str(tree),
+            "--runtime",
+            "claude",
+            "--launch",
+        )
+
+    assert started == [repo]
+    assert code == 7
+    assert json.loads(out) == {"exit_code": 7}
+
+
+def test_worktree_check_detects_a_read_only_artifact_directory(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+    mkstemp = tempfile.mkstemp
+    runs = repo / ".harness/.sandboxes/runs/tests"
+    cache = repo / ".harness/.sandboxes/cache/npm"
+    denied = {runs, cache}
+    arguments = ("--repo", str(repo), "--worktree", str(tree))
+
+    assert (
+        _run(monkeypatch, capsys, None, "prepare", *arguments, "--runtime", "claude")[0]
+        == 0
+    )
+
+    def refuse(*, prefix: str, dir: Path) -> tuple[int, str]:
+        if dir in denied:
+            raise OSError(30, "Read-only file system")
+        return mkstemp(prefix=prefix, dir=dir)
+
+    with mock.patch("tempfile.mkstemp", side_effect=refuse):
+        code, _, err = _run(monkeypatch, capsys, None, "check", *arguments)
+
+    assert code == 2
+    assert str(runs) in err
+    assert "Read-only file system" in err
+
+    # A cache only helps, so an unwritable one is reported and the check passes.
+    denied.remove(runs)
+    with mock.patch("tempfile.mkstemp", side_effect=refuse):
+        code, out, err = _run(monkeypatch, capsys, None, "check", *arguments)
+
+    assert code == 0, err
+    assert json.loads(out)["writable"] is True
+    assert f"warning: unwritable path not granted: {cache}" in err
+
+
+@pytest.mark.parametrize("agent", ["codex", "claude"])
+def test_prepare_skips_an_optional_symlink_and_refuses_a_required_one(
+    repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+    shared = repo / ".harness/.sandboxes"
+    (shared / "cache").mkdir(parents=True)
+    (shared / "runs").mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    playwright, qa = shared / "cache/ms-playwright", shared / "runs/qa"
+    try:
+        playwright.symlink_to(outside, target_is_directory=True)
+        qa.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+    arguments = ("--repo", str(repo), "--worktree", str(tree), "--runtime", agent)
+
+    code, _, err = _run(monkeypatch, capsys, None, "prepare", *arguments)
+
+    assert code == 2
+    assert f"required path is a symlink: {qa}" in err
+
+    qa.unlink()
+    code, out, err = _run(monkeypatch, capsys, None, "prepare", *arguments)
+
+    assert code == 0, err
+    assert f"warning: symlink not granted: {playwright}" in err
+    argv = json.loads(out)["argv"]
+    if agent == "claude":
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        writable = set(settings["sandbox"]["filesystem"]["allowWrite"])
+    else:
+        permissions = tomllib.loads(next(value for value in argv if value.startswith("permissions=")))
+        filesystem = permissions["permissions"]["harness-coordinator"]["filesystem"]
+        writable = {path for path, mode in filesystem.items() if mode == "write"}
+    assert str(qa) in writable
+    assert str(playwright) not in writable
+    assert list(outside.iterdir()) == []
+
+
+def test_prepare_refuses_network_access_for_a_claude_session(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        None,
+        "prepare",
+        *("--repo", str(repo), "--worktree", str(tree), "--runtime", "claude"),
+        *("--network-access", "enabled"),
+    )
+
+    assert code == 2
+    assert out == ""
+    assert "--network-access applies to Codex sessions" in err
+    assert not (repo / ".harness/.sandboxes/cache").exists()
 
 
 def test_create_asks_the_runtime_for_a_worktree_in_the_managed_directory(
@@ -277,7 +496,9 @@ def test_the_real_runtime_creates_and_removes_a_managed_worktree(
         assert "[policy_denied]" in outside.stderr
         assert not (tmp_path / "elsewhere").exists()
 
-        removed = support.coordinator(project, "worktree", "remove", "--path", str(tree))
+        removed = support.coordinator(
+            project, "worktree", "remove", "--path", str(tree)
+        )
 
         assert removed.returncode == 0, removed.stderr
         assert json.loads(removed.stdout)["removed"] is True

@@ -323,8 +323,8 @@ def run(ctx: SimpleNamespace) -> None:
             "selecting mattpocock-suite and engineering-suite together unexpectedly succeeded"
         )
 
-    # engineering-suite inherits 25 upstream skills, overrides some of them in place, and adds 7 names;
-    # the clean-room check below expects 32 distinct installed skills (ADR 0001).
+    # engineering-suite inherits 25 upstream skills, overrides some of them in place, and adds 8 names;
+    # the clean-room check below expects 34 distinct installed skills (ADR 0001).
     pv_project = test_root / "pv_project"
     pv_project.mkdir(parents=True)
     run_step(["git", "init", "-q"], cwd=pv_project, check=True)
@@ -542,9 +542,9 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("installed Repo Map did not read the pinned commit")
 
     pv_skill_count = count_skill_files(pv_project / ".harness" / "skills")
-    if pv_skill_count != 32:
+    if pv_skill_count != 34:
         sys.exit(
-            f"expected 32 skills in a engineering-suite project (25 inherited, overrides replaced in place, + 7 additions), found {pv_skill_count}"
+            f"expected 34 skills in a engineering-suite project (25 inherited, overrides replaced in place, + 9 additions), found {pv_skill_count}"
         )
 
     # A failed older update could remove a retired managed skill's SKILL.md but leave
@@ -560,28 +560,58 @@ def run(ctx: SimpleNamespace) -> None:
     check_hook_settings_merge(pv_project)
     check_tracker_from_origin(test_root)
     check_package_root_without_init(test_root)
-    if not filecmp.cmp(
-        ROOT / "skills" / "first-party" / "engineering" / "to-spec" / "SKILL.md",
-        pv_project / ".harness" / "skills" / "to-spec" / "SKILL.md",
-        shallow=False,
-    ):
-        sys.exit("engineering-suite override did not install the first-party to-spec")
-    to_tickets_source = (
-        ROOT / "skills" / "first-party" / "engineering" / "to-tickets" / "SKILL.md"
+    to_spec_source = ROOT / "skills" / "first-party" / "engineering" / "to-spec"
+    for discovery in (".harness", ".claude", ".agents"):
+        for relative in (
+            "SKILL.md",
+            "agents/openai.yaml",
+            "references/spec-template.md",
+            "references/drill-down-template.md",
+        ):
+            installed = pv_project / discovery / "skills" / "to-spec" / relative
+            if not installed.is_file() or not filecmp.cmp(
+                to_spec_source / relative, installed, shallow=False
+            ):
+                sys.exit(
+                    f"engineering-suite did not expose {installed.relative_to(pv_project)}"
+                )
+    # Issue #1208: to-tickets loads its ticket template and publication steps lazily, and
+    # publish-epic owns epic publication; every discovery root exposes both complete skills.
+    skill_files = {
+        "to-tickets": (
+            "SKILL.md",
+            "agents/openai.yaml",
+            "references/ticket-template.md",
+            "references/publish.md",
+        ),
+        "publish-epic": ("SKILL.md", "agents/openai.yaml"),
+    }
+    for name, relatives in skill_files.items():
+        source_dir = ROOT / "skills" / "first-party" / "engineering" / name
+        for discovery in (".harness", ".claude", ".agents"):
+            for relative in relatives:
+                installed = pv_project / discovery / "skills" / name / relative
+                if not installed.is_file() or not filecmp.cmp(
+                    source_dir / relative, installed, shallow=False
+                ):
+                    sys.exit(
+                        f"engineering-suite did not expose {installed.relative_to(pv_project)}"
+                    )
+    to_tickets_text = "\n".join(
+        (pv_project / ".harness" / "skills" / "to-tickets" / relative).read_text(
+            encoding="utf-8"
+        )
+        for relative in skill_files["to-tickets"]
     )
-    to_tickets_installed = (
-        pv_project / ".harness" / "skills" / "to-tickets" / "SKILL.md"
-    )
-    if not filecmp.cmp(to_tickets_source, to_tickets_installed, shallow=False):
-        sys.exit("engineering-suite override did not install the first-party to-tickets")
-    to_tickets_text = to_tickets_installed.read_text(encoding="utf-8")
     for required_text in (
-        "enumerate every path under those directories",
+        "Path inventory",
         "one advisory sub-agent call",
-        "stop and report blocker",
+        "stop and report it",
         "result dependency",
         "known requirement incompatibility",
-        "file overlap",
+        "File overlap alone is not a blocker",
+        "`**Status** — Approved`",
+        "## Parent: #<epic>",
     ):
         if required_text not in to_tickets_text:
             sys.exit(f"to-tickets discovery contract is missing: {required_text}")
@@ -600,13 +630,24 @@ def run(ctx: SimpleNamespace) -> None:
     for required_text in ("integration next", "separate confirmation", "/qa-gate"):
         if required_text not in pr_step_text:
             sys.exit(f"installed to-pull-requests step lacks: {required_text}")
-    for name in ("grill-me", "grill-with-docs", "diagnosing-bugs", "architect", "tdd"):
+    for name in (
+        "grill-me",
+        "grill-with-docs",
+        "diagnosing-bugs",
+        "architect",
+        "developer",
+        "tdd",
+    ):
         if not filecmp.cmp(
             ROOT / "skills" / "first-party" / "engineering" / name / "SKILL.md",
             pv_project / ".harness" / "skills" / name / "SKILL.md",
             shallow=False,
         ):
             sys.exit(f"engineering-suite override did not install the first-party {name}")
+    # Issue 1156: both runtime discovery links resolve the installed developer skill.
+    for discovery in (".claude", ".agents"):
+        if not (pv_project / discovery / "skills" / "developer" / "SKILL.md").is_file():
+            sys.exit(f"{discovery}/skills does not resolve the developer skill")
     # Issue #552: the installed registry lists the first-party tdd, and the update baseline
     # records no drift for its files.
     _, tdd_description = frontmatter_metadata(

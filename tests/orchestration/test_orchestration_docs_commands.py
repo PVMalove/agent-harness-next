@@ -24,6 +24,17 @@ DOCUMENTS = (
     "site/docs/backend-orchestration.md",
     "site/docs/skills/implement.md",
     "skills/first-party/engineering/implement/SKILL.md",
+    *(
+        f"skills/first-party/engineering/implement/references/{name}.md"
+        for name in (
+            "auto-path",
+            "claude-code-runtime",
+            "commit-plan",
+            "recovery",
+            "test-author",
+            "workers",
+        )
+    ),
     "README.md",
 )
 _SPAN = re.compile(r"`([^`\n]+)`")

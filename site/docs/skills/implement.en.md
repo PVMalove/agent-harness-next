@@ -15,9 +15,15 @@
 
 ```yaml
 name: implement
-description: Coordinate one backend ticket through the approved architect, developer, review, QA, and publish handoffs.
+description: Coordinates one afk ticket labeled pipeline::full through architect, developer, code-review, QA and publish dispatches, then offers /to-pull-requests. Use explicitly when the backend-orchestration capability is installed; use /fast-implement for pipeline::fast and /to-guide for hitl. Never writes the feature code itself.
 disable-model-invocation: true
 ```
+
+The core lives in `SKILL.md`, and conditional procedures live in `references/`: the Claude Code
+runtime (`claude-code-runtime.md`), the full-route test author (`test-author.md`), the commit plan
+(`commit-plan.md`), the automatic path (`auto-path.md`), stops and recovery (`recovery.md`), and
+waiting for and observing workers (`workers.md`). The translation below covers the whole text in
+its former order.
 
 ### Implementation
 
@@ -44,30 +50,22 @@ This is the opt-in `backend-orchestration` route. Confirm that the installed coo
 python .harness/orchestration/coordinator.py --repo . dispatch status
 ```
 
-If the command is unavailable or does not read its state, stop and offer the developer
-`/fast-implement`. A `ledger_busy` answer is not unavailability: another coordinator operation holds
+If the command is unavailable or does not read its state, stop. For a `pipeline::fast` ticket,
+offer `/fast-implement`. For a `pipeline::full` ticket, explain that the route needs the
+`backend-orchestration` capability, or that the developer may relabel the ticket `pipeline::fast`
+on the tracker and run `/fast-implement`. A `ledger_busy` answer is not unavailability: another coordinator operation holds
 the ledger lock, so repeat the command after its `retry_after_seconds`. Do not repair and do not
 infer the opt-in capability. Take one ticket to a terminal batch state before starting the next.
 
-Before any tracker write (the `status::*` label swap), confirm that the session is rooted in the main
-checkout and can write every directory the pipeline writes:
-
-- for an issue worktree that does not exist yet: `runtime status` lists the feature
-  `worktree.create`, or the session can write `.git/worktrees`;
-- for an existing issue worktree: its git metadata directory (from
-  `git -C <worktree> rev-parse --absolute-git-dir`);
-- the issue worktree directory, when it exists;
-- `.harness/.sandboxes/scratch/inbox/`.
-
-Probe each directory by creating and removing one temporary file. A sandboxed session writes only
-inside its own directory, and a worktree it did not create stays read-only under
-`.git/worktrees` even from the main checkout until the session opens that access: in Claude Code
-call `EnterWorktree` with `path` set to the issue worktree, then `ExitWorktree` with `action: keep`
-(`docs/agents/worktrees.md` → Session write access), and probe again. On a failure the two calls
-do not repair, stop with one message that names the directory and the action: open the session in the main checkout, one that can write the issue
-worktree and its git metadata. Touch neither the tracker nor the ledger. `batch create`, and
-`dispatch preflight` and `dispatch send` for a write role, refuse an issue worktree or git metadata
-directory the session cannot write.
+Before any tracker write, confirm this session is rooted in the main checkout. For an existing
+issue worktree, follow `docs/agents/worktrees.md` → Session write access for this runtime (Claude
+Code: `EnterWorktree` with `path=<issue-worktree>`, then `ExitWorktree` with `action: keep`, no
+coordinator command between them) and run `worktree check --worktree <issue-worktree>` inside the
+session sandbox. Continue on
+`"writable": true`. On refusal, report the affected path and the setup command for this runtime.
+For a new issue worktree, verify `runtime status` lists `worktree.create` or that the session can
+write `.git/worktrees`. Probe the report inbox before changing ticket status and check the new
+checkout before creating the batch.
 
 If another batch holds the same unfinished ticket, branch, or worktree, or `concurrency_budget` is
 exhausted, check `batch list --open`, the conflicting dispatch, and its decision packet. Tell the
@@ -98,20 +96,23 @@ step.
 Start these steps only after the ticket pre-flight in "The coordinator contract" (blockers,
 `status::in-progress`).
 
-1. **Integration ref.** Use the ticket's `## Integration Branch` value. If the ticket has no such
+1. **Integration ref.** Use the ticket's `## Integration Branch` value (the `**Integration branch:**`
+   line on the local tracker). If the ticket has no such
    section, use its `## Git base` value. If it has neither, use the same section of the parent epic.
    A missing value for a ticket that has a parent epic is a blocker; do not infer it from the
    checkout or from memory. A ticket without a parent epic uses `base_branch`: omit
    `--integration-ref`.
-2. **Issue worktree.** Create it before `batch create`: `batch create` refuses a worktree that
+2. **Issue worktree.** Create it before `batch create`. `batch create` refuses a worktree that
    `git worktree list` does not show. Use `worktree create` and the exact commands in
-   `docs/agents/worktrees.md` → Coordinator issue worktree; the recovery after a half-done manual
-   `git worktree add -b` is there too. If the answer has `session_write_access.writable: false`,
-   open the access with the two calls of Session write access before `batch create`. Stay in the
-   main checkout.
+   `docs/agents/worktrees.md` → Coordinator issue worktree. Confirm `"writable": true` from
+   `worktree check` before `batch create`. If access is missing, follow Session write access for
+   this runtime and repeat the check. Stay in the main checkout.
 3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`,
-   and `--prohibited-change`. Keep commands, paths, and IDs verbatim.
+   and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:
+   each `## Acceptance criteria` item → `--definition-of-done`, each `## Out of scope` item →
+   `--prohibited-change`, and the paths of `## Contract touchpoints` and
+   `## Relevant Files (Discovery Context)` → `--allowed-path` and `--expected-file`.
 4. **Create the batch.** Repeat the list flags once for each value.
 
    ```bash
@@ -162,7 +163,7 @@ Resolve the tracker ticket, the issue branch, and the blockers without opening a
 same work. The ticket status is part of this pre-flight: after the write-access probe in "Route",
 before `batch create`, and before the issue branch is created. Check the ticket's blockers under any
 current label. If any is still open, stop, name them, and make sure that `status::blocked` is set.
-Otherwise replace the `status::*` label with `status::in-progress` exactly as steps 2–3 of phase 1 of
+Otherwise replace the `status::*` label with `status::in-progress` exactly as pre-flight steps 1–2 of
 `/fast-implement` do, and verify that it is the only `status::*` label. A failed label write is a
 blocker, not a warning.
 

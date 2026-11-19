@@ -11,9 +11,9 @@
 
 ## 2. Full description
 
-Database Migrations is a write role for schema and data boundaries only. It starts on the `schema-change` or `data-migration` risk trigger, works within the allowed paths of the brief for database/infrastructure, and does not take on unrelated service changes.
+Database Migrations is the write role for schema and data boundaries. The coordinator has no dispatch route to it yet (#1159): it is not planned, and a ticket that needs schema or data migration work escalates to the coordinator.
 
-The role creates the migration and records the rollout and rollback conditions. Before the handoff it checks the migration and compatibility with the project commands and runs the required risk review. Irreversibility, incomplete rollback evidence, or an overlap of zones requires a coordinator decision.
+Its intended scope is the brief's allowed paths for the database or infrastructure, without unrelated service changes. Its output would be a migration with its rollout and rollback considerations, proved by the project's migration and compatibility checks.
 
 ## 3. Contracts
 

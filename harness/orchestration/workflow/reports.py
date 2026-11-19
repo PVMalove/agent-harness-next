@@ -61,6 +61,7 @@ from harness.orchestration.core.constants import (
     REPORT_FIELDS,
     REPORT_OPTIONAL_FIELDS,
     REPORT_OUTCOMES,
+    SPEC_CRITERION_STATUSES,
     REVIEW_SEVERITIES,
     TELEMETRY_FIELDS,
     TELEMETRY_SESSION_KINDS,
@@ -1207,7 +1208,43 @@ def _persist_report(
     return report_json
 
 
-def _validate_review(review: object, dispatch: JsonObject) -> None:
+def _validate_spec_criteria(evidence: JsonObject, dispatch: JsonObject) -> None:
+    rows = evidence["criteria"]
+    if (
+        not isinstance(rows, list)
+        or not all(
+            isinstance(row, dict)
+            and set(row) == {"criterion", "status", "evidence"}
+            and _non_empty(row["criterion"])
+            and _non_empty(row["evidence"])
+            and row["status"] in SPEC_CRITERION_STATUSES
+            for row in rows
+        )
+        or [row["criterion"] for row in rows] != dispatch["definition_of_done"]
+    ):
+        raise CoordinatorError(
+            "Spec review criteria must account for every criterion in the approved brief",
+            remedy="list the original criteria in brief order with status and evidence",
+        )
+    findings = evidence["findings"]
+    if any(
+        row["status"] != "met"
+        and not any(
+            finding["severity"] in ("warning", "blocker")
+            and row["criterion"] in finding["summary"]
+            for finding in findings
+        )
+        for row in rows
+    ):
+        raise CoordinatorError(
+            "Spec review has unresolved criteria without actionable findings",
+            remedy="cite each unresolved criterion verbatim in a warning or blocker finding",
+        )
+
+
+def _validate_review(
+    review: object, dispatch: JsonObject, *, completed: bool = True
+) -> None:
     # ``carried_items`` (issue #499) is optional: the review's account of the brief's carried items.
     if not isinstance(review, dict) or set(review) - {
         "carried_items",
@@ -1241,6 +1278,19 @@ def _validate_review(review: object, dispatch: JsonObject) -> None:
             if inherited
             else {"severity", "findings", "risks", "blockers"}
         )
+        # A completed full Spec review accounts for every acceptance criterion of the reviewed
+        # candidate; a delta review keeps the scope of the prior review it narrows.
+        has_criteria = (
+            axis == "spec"
+            and delta_review_of is None
+            and isinstance(evidence, dict)
+            and (
+                "criteria" in evidence
+                or (completed and bool(dispatch.get("definition_of_done")))
+            )
+        )
+        if has_criteria:
+            expected_keys.add("criteria")
         if not isinstance(evidence, dict) or set(evidence) != expected_keys:
             raise CoordinatorError(
                 f"composite review {axis} evidence has an invalid schema",
@@ -1304,6 +1354,8 @@ def _validate_review(review: object, dispatch: JsonObject) -> None:
             )
         for field in ("risks", "blockers"):
             validate_evidence(evidence[field], f"composite review {axis} {field}")
+        if has_criteria:
+            _validate_spec_criteria(evidence, dispatch)
     carried_items.validate_review_accounting(review, dispatch)
 
 
@@ -1822,7 +1874,11 @@ def _validate_report(
             report["risk_triggers"], "completion report risk_triggers", allow_empty=True
         )
     if role.get("name") == "code-review":
-        _validate_review(report.get("review"), dispatch)
+        _validate_review(
+            report.get("review"),
+            dispatch,
+            completed=report.get("outcome") == "completed",
+        )
     elif "review" in report:
         raise CoordinatorError(
             "only the code-review role may submit composite review evidence",
@@ -2026,6 +2082,7 @@ def _record_report(
 def submit_report(args: argparse.Namespace) -> JsonObject:
     repo = _repo(args)
     path = _agent_authored_file(repo, args.file, "a completion report")
+    compact = getattr(args, "compact", False)
     relay_fields = [
         getattr(args, key, None)
         for key in ("relayed_by", "relay_reason", "source_sha256")
@@ -2110,39 +2167,34 @@ def submit_report(args: argparse.Namespace) -> JsonObject:
             )
         status = _load_dispatch_status(root, dispatch["dispatch_id"])
         entry = _dispatch_entry(batch, dispatch["dispatch_id"])
-        if report_relay is not None:
-            if (
-                path.resolve()
-                != Path(
-                    dispatch.get("report_staging_path")
-                    or _agent_inbox(repo) / f"{dispatch['dispatch_id']}.json"
-                ).resolve()
+        if report_relay is not None and path != Path(
+            dispatch.get("report_staging_path")
+            or _agent_inbox(repo) / f"{dispatch['dispatch_id']}.json"
+        ).resolve():
+            raise CoordinatorError(
+                "relay file does not match the worker staging path",
+                remedy="use the exact report_staging_path from the immutable brief",
+            )
+        if entry and entry.get("report") and (report_relay is not None or compact):
+            recorded_path = _records_root(root) / entry["report"]
+            recorded = _read_object(recorded_path, "recorded report")
+            prior_relay = entry.get("report_relay") or {}
+            if recorded != report or (
+                report_relay is not None
+                and prior_relay.get("source_sha256") != report_relay["source_sha256"]
             ):
                 raise CoordinatorError(
-                    "relay file does not match the worker staging path",
-                    remedy="use the exact report_staging_path from the immutable brief",
+                    "a different worker report is already recorded",
+                    remedy="inspect the recorded evidence; do not submit or replace it again",
                 )
-            if entry and entry.get("report"):
-                recorded = _read_object(
-                    _records_root(root) / entry["report"], "recorded report"
-                )
-                prior_relay = entry.get("report_relay", {})
-                if (
-                    recorded != report
-                    or prior_relay.get("source_sha256") != report_relay["source_sha256"]
-                ):
-                    raise CoordinatorError(
-                        "a different worker report is already recorded",
-                        remedy="inspect the recorded evidence; do not submit or replace it again",
-                    )
-                return {
-                    "dispatch_id": dispatch["dispatch_id"],
-                    "state": "reported",
-                    "report": str(_records_root(root) / entry["report"]),
-                    "already_recorded": True,
-                    "report_relay": prior_relay,
-                    "next_coordinator_action": "inspect the decision packet; use report complete only for a pending policy chain",
-                }
+            return {
+                "dispatch_id": dispatch["dispatch_id"],
+                "state": "reported",
+                "report": str(recorded_path),
+                "already_recorded": True,
+                **({"report_relay": prior_relay} if report_relay is not None else {}),
+                "next_coordinator_action": "inspect the decision packet; use report complete only for a pending policy chain",
+            }
         if (
             not entry
             or entry.get("state") != "dispatched"
@@ -2220,26 +2272,31 @@ def submit_report(args: argparse.Namespace) -> JsonObject:
             }
         )
         return response
-    if rebase_check is not None:
+    if rebase_check is not None and not compact:
         # The patch-id comparison of a rebase-fix-forward report (issue #504), for delta-review.
         response["rebase_check"] = rebase_check
     if auto_accept_policy is None:
-        from harness.orchestration.workflow.decisions import decision_packet
+        if not compact:
+            from harness.orchestration.workflow.decisions import decision_packet
 
-        packet = decision_packet(
-            argparse.Namespace(
-                repo=str(repo),
-                state_dir=getattr(args, "state_dir", None),
-                batch=batch["batch_id"],
-                dispatch=dispatch["dispatch_id"],
+            response["decision_packet"] = decision_packet(
+                argparse.Namespace(
+                    repo=str(repo),
+                    state_dir=getattr(args, "state_dir", None),
+                    batch=batch["batch_id"],
+                    dispatch=dispatch["dispatch_id"],
+                )
             )
-        )
-        response["decision_packet"] = packet
         if approvals.auto_active(config, batch):
             # Under `auto` the policy decides a report its chain does not accept (issue #643).
             response["next_coordinator_command"] = (
                 "python .harness/orchestration/coordinator.py --repo . batch auto-decide "
                 f"--batch {batch['batch_id']}"
+            )
+        elif compact:
+            response["next_coordinator_command"] = (
+                "python .harness/orchestration/coordinator.py --repo . batch decision-packet "
+                f"--batch {batch['batch_id']} --dispatch {dispatch['dispatch_id']}"
             )
         return response
     # The policy decision, risk assessment and next dispatch run after the ledger lock is released,

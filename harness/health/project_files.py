@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from harness.configuration import read_config_file
 
 from .model import JsonObject
+from .runtime_contract import NATIVE_ADAPTERS
 
 # --- Paths and constants ------------------------------------
 
@@ -30,8 +31,8 @@ INTEGRATIONS_REL = Path(".harness/integrations.json")
 # Effective hook policy, ADR 0024 section 3: written only by `harness init|adopt|update`.
 HOOK_POLICY_REL = Path(".harness/hook-policy.json")
 DISCOVERY_LINKS = {
-    ".agents/skills": "../.harness/skills",
-    ".claude/skills": "../.harness/skills",
+    root: "../.harness/skills"
+    for root in sorted({adapter.skill_root for adapter in NATIVE_ADAPTERS})
 }
 ORCHESTRATION_CONFIG_REL = Path(".harness/orchestration.json")
 ORCHESTRATION_SCHEMA_REL = Path(".harness/orchestration/orchestration.schema.json")
@@ -65,6 +66,7 @@ PROJECT_JSON_ALLOWED_FIELDS = frozenset(PROJECT_JSON_REQUIRED_FIELDS) | {
     "test_runner",
     "test_author",
     "hook_policy",
+    "pr_checklist",
 }
 STORY_POINTS_REQUIRED_FIELDS = (
     "scale",
@@ -72,7 +74,7 @@ STORY_POINTS_REQUIRED_FIELDS = (
     "full_threshold",
     "gray_zone",
 )
-STORY_POINTS_ALLOWED_FIELDS = frozenset(STORY_POINTS_REQUIRED_FIELDS)
+STORY_POINTS_ALLOWED_FIELDS = frozenset((*STORY_POINTS_REQUIRED_FIELDS, "hours"))
 
 # The optional `tracker` field (docs/adr/0011): the single definition of its rules. The project
 # tracker resolver (project_tracker.py) imports them from here, and `project.schema.json` repeats
@@ -904,6 +906,23 @@ def validate_project_data(data: object, problems: list[str]) -> None:
             problems.append(
                 ".harness/project.json qa_gate_commands must be a list of strings"
             )
+    if "pr_checklist" in data:
+        checklist = data["pr_checklist"]
+        if (
+            not isinstance(checklist, list)
+            or len(checklist) > 32
+            or any(
+                not isinstance(item, str)
+                or not item.strip()
+                or len(item) > 300
+                or "\n" in item
+                or "\r" in item
+                for item in checklist
+            )
+        ):
+            problems.append(
+                ".harness/project.json pr_checklist needs up to 32 non-empty single lines"
+            )
     if "shell" in data and data["shell"] not in ("bash", "powershell"):
         problems.append(
             f".harness/project.json shell must be 'bash' or 'powershell', got {data['shell']!r}"
@@ -955,6 +974,26 @@ def validate_project_data(data: object, problems: list[str]) -> None:
                     problems.append(
                         f".harness/project.json story_points.{field} must be an integer"
                     )
+            if "hours" in story_points and not _story_point_hours_valid(
+                story_points["hours"], scale
+            ):
+                problems.append(
+                    ".harness/project.json story_points.hours must map values from scale to positive hours"
+                )
+
+
+def _story_point_hours_valid(hours: object, scale: object) -> bool:
+    """`story_points.hours`: непустой объект, ключи — значения из `scale`, значения — часы больше нуля."""
+    if not isinstance(hours, dict) or not hours or not isinstance(scale, list):
+        return False
+    allowed = {str(value) for value in scale}
+    return all(
+        key in allowed
+        and isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and value > 0
+        for key, value in hours.items()
+    )
 
 
 def validate_orchestration_config(repo: Path, problems: list[str]) -> None:

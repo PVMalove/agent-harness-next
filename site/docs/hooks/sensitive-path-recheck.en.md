@@ -8,7 +8,7 @@
 
 ## 2. Full description
 
-An advisory hook `PreToolUse(Write|Edit)` of the `strict` profile from the matrix of ADR 0024, section 2a. It
+An advisory hook `PreToolUse(Write|Edit|MultiEdit|NotebookEdit)` of the `strict` profile from the matrix of ADR 0024, section 2a. It
 warns about an edit of a sensitive path from ADR 0024, section 2. The set is defined by the fixed policy
 constant `is_sensitive_path` in `harness/orchestration/hook_policy.py`; it has no configuration key. The set
 contains:
@@ -50,8 +50,8 @@ still blocked by the critical `protect-hook-policy`; this hook does not change t
 - **Remaining limitation.** A hardlink to a sensitive file bypasses only this warning:
   `realpath` does not resolve a hardlink. The critical `protect-hook-policy` and the diff check of
   the strict boundary, which sees the path from git, are authoritative.
-- **Second runtime.** It is not connected until the `apply_patch` adapter; `harness health` names
-  the check outside the hook — the strict boundary.
+- **Codex.** The hook receives native `apply_patch` events and checks the paths in the patch body.
+- **Codex limitation.** The hook does not see a shell `apply_patch <<'EOF'` call through the `Bash` tool: the ChangeImpact hooks are not wired to `Bash`, and only the critical `protect-hook-policy` parses such a patch. The strict boundary checks a sensitive path from such a patch.
 
 ## 3. Contract
 

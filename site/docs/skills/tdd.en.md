@@ -23,6 +23,9 @@ In the first-party version the substitution rules are in `SKILL.md`, and the exa
 
 ## Optional test author
 
+The protocol has one source shared by `/tdd`, `/fast-implement` and `developer`:
+`tdd/references/test-author.md`. Its main points:
+
 In full `/implement`, the executor inherits runtime, model, and effort from the approved developer brief.
 The short route selects the explicit `test_author` profile from `.harness/project.json`. The shared check is
 `python3 -I -B .harness/health/test_author.py preflight --repo <checkout>`; the full route adds

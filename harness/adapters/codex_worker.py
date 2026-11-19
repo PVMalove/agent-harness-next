@@ -19,6 +19,7 @@ import os
 import queue
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import threading
@@ -27,8 +28,21 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
+    import worker_write_probe  # type: ignore[import-not-found]
+else:
+    from harness.adapters import worker_write_probe
+
 STARTUP_CHECK_SECONDS = 10
 PERMISSION_PROFILE = "harness-worker"
+SHARED_ARTIFACT_DIRS = (
+    "runs/qa",
+    "runs/tests",
+    "logs",
+    "cache/npm",
+    "cache/ms-playwright",
+)
 # Items whose start is not a tool step; their content never reaches the event stream.
 NON_TOOL_ITEMS = frozenset({"agentMessage", "userMessage", "reasoning"})
 
@@ -59,6 +73,7 @@ class Job(TypedDict):
     prompt: str
     brief: Brief
     worktree: str
+    write_probe: list[str]
 
 
 class WorkerExited(ValueError):
@@ -87,9 +102,11 @@ Proceed only after a successful self-report; escalate a mismatch or unavailable 
 Immediately after self-report and at least every {heartbeat} seconds while working, run:
 {cli} dispatch heartbeat --dispatch {dispatch_id}
 Allowed tools: {allowed_tools}. Follow the brief tool allowlist throughout the task.
-Context Package {package}: start from its starting_files, symbol_graph and
-related_tests. For a starting file with non-empty sections, read only the start_line-end_line
-ranges the task needs.
+Context Package {package}: start from its summary in the brief. Read only the indicated
+start_line-end_line ranges needed for the task.
+For more, read one section of the pinned package:
+{cli} context-package show --dispatch {dispatch_id} --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
@@ -99,8 +116,8 @@ or {{"status": "present", "details": "<Russian description>"}} when present. A n
 details; present requires a non-empty description. Put other explanations in output. Strings, translated
 statuses, passed and not-run are invalid; no aliases or old report formats are accepted.
 Then run:
-{cli} report submit --file "{staging}"
-Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+{cli} report submit --compact --file "{staging}"
+Confirm the ledger receipt in one line. Relay any blocked transition or required next action.
 If submission returns ledger_busy, retry after its interval. If submission otherwise fails before
 recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
@@ -165,6 +182,13 @@ def git_commit_permissions(worktree: Path) -> dict[str, str]:
         permissions[str(gitdir)] = "write"
         permissions[str(common / "logs/refs")] = "write"
     permissions.update({str(common / name): "read" for name in ("config", "hooks")})
+    # The native profile permits temporary writes. Another checkout under a temporary
+    # root must still be read-only, including the main checkout of a linked worker.
+    for field in git("worktree", "list", "--porcelain", "-z").split("\0"):
+        if field.startswith("worktree "):
+            checkout = Path(field.removeprefix("worktree ")).resolve()
+            if checkout != worktree:
+                permissions[str(checkout)] = "read"
     return permissions
 
 
@@ -174,6 +198,7 @@ def worker_command(
     worktree: Path,
     binary: str = "codex",
     *,
+    shared_artifacts: tuple[Path, ...],
     network_access: bool = False,
 ) -> list[str]:
     access = brief.get("access")
@@ -188,9 +213,7 @@ def worker_command(
         str(worktree): "write" if access == "write" else "read",
         str(repo / ".harness/orchestration/state"): "write",
         str(Path(brief["report_staging_path"]).parent): "write",
-        str(repo / ".harness/.sandboxes/runs/qa"): "write",
-        str(repo / ".harness/.sandboxes/runs/tests"): "write",
-        str(repo / ".harness/.sandboxes/logs"): "write",
+        **{str(directory): "write" for directory in shared_artifacts},
     }
     if access == "write":
         filesystem.update({":tmpdir": "write", ":slash_tmp": "write"})
@@ -378,6 +401,22 @@ def serve_turn(
         thread = started.get("thread")
         if not isinstance(thread, dict) or not isinstance(thread.get("id"), str):
             raise ValueError("native thread/start returned no thread identity")
+        probe = server.request(
+            "command/exec",
+            {
+                "command": [
+                    sys.executable,
+                    str(Path(__file__).with_name("worker_write_probe.py").resolve()),
+                    *job["write_probe"],
+                ],
+                "cwd": str(worktree),
+                "permissionProfile": PERMISSION_PROFILE,
+                "timeoutMs": 5000,
+                "outputBytesCap": 2048,
+            },
+        )
+        if probe.get("exitCode") != 0:
+            raise ValueError(f"native worker write probe failed: {probe.get('stderr', '')}")
         evidence = {
             "source": "thread/start",
             "thread_id": thread["id"],
@@ -481,6 +520,87 @@ def log_path(brief: Brief) -> Path:
     )
 
 
+def required_sandbox_dirs(role: str) -> frozenset[str]:
+    """The ``.harness/.sandboxes`` directories without which ``role`` cannot do its work.
+
+    Every role stages its self-report in the inbox and runs its checks through the bounded
+    wrapper, whose temporary data lives in ``runs/qa``; a developer also runs the full
+    verification and the test-author, which write ``runs/tests``. The other shared
+    directories (``logs`` and the caches) only help a check, so the launch goes on without them.
+    """
+    required = {"scratch/inbox", "runs/qa"}
+    if role == "developer":
+        required.add("runs/tests")
+    return frozenset(required)
+
+
+def shared_artifact_dirs(repo: Path, role: str, *, create: bool) -> tuple[Path, ...]:
+    """The shared check directories to grant ``role``, with its required ones verified.
+
+    A directory reached through a symlink, or blocked by a non-directory, is neither created
+    nor granted. A required one refuses the launch; any other is skipped with a warning and the
+    launch continues with the remaining grants. Creation never follows a symlink, so one planted
+    between a check and a ``mkdir`` is detected instead of written through.
+    """
+    required = required_sandbox_dirs(role)
+    granted = []
+    for name in ("scratch/inbox", *SHARED_ARTIFACT_DIRS):
+        directory = repo / ".harness/.sandboxes" / name
+        problem = _real_directory_problem(repo, directory, create=create)
+        if problem is None and create:
+            # A parent swapped for a symlink after its own check redirects the path.
+            problem = _real_directory_problem(repo, directory, create=False)
+        if problem is None:
+            if name in SHARED_ARTIFACT_DIRS:
+                granted.append(directory)
+            continue
+        component, symlink = problem
+        reason = "is a symlink" if symlink else "exists and is not a directory"
+        if name in required:
+            kind = "a symlink" if symlink else "not a directory"
+            raise ValueError(
+                f"required path is {kind}: {directory} ({component} {reason}); "
+                f"the {role} worker cannot run without writing it"
+            )
+        label = "symlink not granted" if symlink else "non-directory not granted"
+        print(
+            f"warning: {label}: {directory} ({component} {reason}); "
+            "the launch continues without this write grant",
+            file=sys.stderr,
+            flush=True,
+        )
+    return tuple(granted)
+
+
+def _real_directory_problem(
+    base: Path, directory: Path, *, create: bool
+) -> tuple[Path, bool] | None:
+    """The first component of ``directory`` below ``base`` that is not a real directory, and
+    whether it is a symlink; None for a real directory chain.
+
+    With ``create`` each missing component is made by a single ``mkdir`` and then verified
+    without following symlinks. Without it, a missing component ends the walk: the real
+    launch creates it.
+    """
+    current = base
+    for part in directory.relative_to(base).parts:
+        current = current / part
+        if create:
+            try:
+                current.mkdir()
+            except FileExistsError:
+                pass
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            return None
+        if stat.S_ISLNK(mode):
+            return current, True
+        if not stat.S_ISDIR(mode):
+            return current, False
+    return None
+
+
 def start(args: argparse.Namespace) -> int:
     repo = Path(args.repo).resolve()
     brief_path = Path(args.brief).resolve()
@@ -516,11 +636,17 @@ def start(args: argparse.Namespace) -> int:
     prompt = build_prompt(brief, brief_path, repo, worktree, sha)
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
+    # A writable mount cannot create itself under a read-only parent inside Codex,
+    # so a real launch creates the directories first; a dry run only inspects them.
+    shared_artifacts = shared_artifact_dirs(
+        repo, brief["role"], create=not args.dry_run
+    )
     command = worker_command(
         brief,
         repo,
         worktree,
         args.codex_bin,
+        shared_artifacts=shared_artifacts,
         network_access=args.network_access == "enabled",
     )
     if args.dry_run:
@@ -535,6 +661,11 @@ def start(args: argparse.Namespace) -> int:
             )
         )
         return 0
+    # The probe checks exactly the shared directories granted above; `shared_artifact_dirs`
+    # already created them without following a symlink.
+    write_probe = worker_write_probe.write_targets(
+        worktree, staging.parent, shared_artifacts, writer=brief["access"] == "write"
+    )
     if brief.get("execution"):
         # Supervised: the runtime launches only briefs with `execution`. The turn runs in
         # this process, so the app-server stays in its group and its exit is this exit.
@@ -543,6 +674,7 @@ def start(args: argparse.Namespace) -> int:
             "prompt": prompt,
             "brief": brief,
             "worktree": str(worktree),
+            "write_probe": write_probe,
         }
         return serve_turn(job, emit=emit_event, receipt=None)
     log = log_path(brief)
@@ -567,6 +699,7 @@ def start(args: argparse.Namespace) -> int:
                     "prompt": prompt,
                     "brief": brief,
                     "worktree": str(worktree),
+                    "write_probe": write_probe,
                     "receipt": str(receipt),
                 }
             ).encode("utf-8")

@@ -726,6 +726,29 @@ def test_an_offline_dependency_install_is_environment_preparation_and_a_new_atte
     assert repo.status()["state"] == "approved"
 
 
+def test_a_network_timeout_in_preparation_names_the_host_and_the_upstream_proxy_remedy(
+    qa: Make,
+) -> None:
+    repo = qa(preparation=PREPARATION, hosts=["files.pythonhosted.org", "pypi.org"])
+    # Behind a corporate proxy the sidecar's direct connection to the index times out (#1201).
+    timeout = (
+        "error: Failed to fetch: `https://pypi.org/simple/pytest/`\n"
+        "  Caused by: operation timed out\n"
+    )
+    repo.engine.script("preparation-1", stderr=timeout, exit_code=2)
+    repo.engine.script("environment-probe-1", stderr="timed out\n", exit_code=6)
+
+    code, _, err = repo.qa_run()
+
+    assert code == 2, err
+    [attempt] = repo.attempts()
+    assert attempt["domain"] == "environment_preparation"
+    assert "allowlisted host pypi.org was unreachable" in err, err
+    assert "files.pythonhosted.org" not in err, err
+    assert "HTTPS_PROXY" in err and "harness-proxy:local" in err, err
+    assert repo.status()["state"] == "approved"
+
+
 def test_the_runs_share_one_sidecar_and_network_and_mount_the_pinned_cache(
     qa: Make, tmp_path: Path
 ) -> None:

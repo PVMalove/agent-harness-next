@@ -161,8 +161,7 @@ def build_parser(
 
     worktree = commands.add_parser(
         "worktree",
-        help="create or remove a managed issue worktree through harness-runtime, which "
-        "works outside the agent sandbox",
+        help="manage an issue worktree and prepare or check in-process session access",
     )
     worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
     worktree_create = worktree_commands.add_parser(
@@ -192,6 +191,31 @@ def build_parser(
             type=float,
             default=120.0,
             help="seconds to wait for the runtime to finish the git command",
+        )
+    prepare = worktree_commands.add_parser(
+        "prepare",
+        help="prepare shared directories and build a native coordinator launch command",
+    )
+    prepare.add_argument("--runtime", choices=("codex", "claude"), required=True)
+    prepare.add_argument(
+        "--network-access",
+        choices=("disabled", "enabled"),
+        help="Codex command networking (default disabled). Enabled permits direct access without a proxy.",
+    )
+    prepare.add_argument(
+        "--launch", action="store_true", help="start the coordinator session"
+    )
+    prepare.set_defaults(handler=handlers.prepare_session)
+    check = worktree_commands.add_parser(
+        "check", help="probe write access from the running coordinator session"
+    )
+    check.set_defaults(handler=handlers.check_session)
+    for session_command in (prepare, check):
+        session_command.add_argument(
+            "--repo", default=argparse.SUPPRESS, help="main checkout"
+        )
+        session_command.add_argument(
+            "--worktree", required=True, help="registered issue worktree"
         )
 
     batch = commands.add_parser("batch")
@@ -642,6 +666,17 @@ def build_parser(
         "--max-package-tokens", type=int, help="optional stricter token ceiling"
     )
     context_package_register.set_defaults(handler=handlers.register_context_package)
+    context_package_show = context_package_commands.add_parser(
+        "show", help="read the package pinned to a dispatch"
+    )
+    _common(context_package_show)
+    context_package_show.add_argument("--dispatch", required=True)
+    context_package_show.add_argument(
+        "--section", help="return one field, for example starting_files, related_tests or symbol_graph"
+    )
+    context_package_show.set_defaults(
+        handler=handlers.show_context_package, installed_runtime_only=True
+    )
 
     dispatch = commands.add_parser("dispatch")
     dispatch_commands = dispatch.add_subparsers(dest="dispatch_command", required=True)
@@ -1105,6 +1140,11 @@ def build_parser(
     report_submit = report_commands.add_parser("submit", aliases=["record"])
     _common(report_submit)
     report_submit.add_argument("--file", required=True)
+    report_submit.add_argument(
+        "--compact",
+        action="store_true",
+        help="return a worker receipt without the coordinator's decision packet",
+    )
     report_submit.add_argument(
         "--relayed-by", help="coordinator delivering an unchanged worker report"
     )

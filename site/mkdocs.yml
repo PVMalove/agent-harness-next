@@ -228,12 +228,14 @@ nav:
                   - triage: skills/triage.md
               - Спецификация и тикеты:
                   - to-spec: skills/to-spec.md
+                  - publish-epic: skills/publish-epic.md
                   - to-tickets: skills/to-tickets.md
                   - to-guide: skills/to-guide.md
               - Реализация:
                   - architect: skills/architect.md
                   - implement: skills/implement.md
                   - fast-implement: skills/fast-implement.md
+                  - developer: skills/developer.md
                   - tdd: skills/tdd.md
               - Качество и публикация:
                   - code-review: skills/code-review.md
@@ -248,7 +250,6 @@ nav:
                   - messaging-integration: skills/messaging-integration.md
               - Роли оркестрации:
                   - coordinator: skills/coordinator.md
-                  - developer: skills/developer.md
                   - verification: skills/verification.md
                   - code-review-role: skills/code-review-role.md
                   - qa: skills/qa.md

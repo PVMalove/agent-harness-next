@@ -783,7 +783,8 @@ def _base_branch(repo: Path) -> str | None:
 
 def _git_base_problem(body: str, base_branch: str | None) -> str | None:
     """Why the ticket's `## Git base` disagrees with its integration branch; None when it agrees
-    (or cannot be judged)."""
+    (or cannot be judged). A ticket whose `## Integration Branch` names the branch needs no
+    separate `## Git base`: /to-tickets writes only the former."""
     integration = _section(body, "Integration Branch")
     expected: str | None
     if integration is not None:
@@ -795,6 +796,8 @@ def _git_base_problem(body: str, base_branch: str | None) -> str | None:
         return None
     git_base = _section(body, "Git base")
     if git_base is None:
+        if integration is not None:
+            return None
         return f"нет секции Git base (ожидалась {expected})"
     if not _names_branch(git_base, expected):
         return f"Git base не называет {expected}"
@@ -802,9 +805,9 @@ def _git_base_problem(body: str, base_branch: str | None) -> str | None:
 
 
 def check_git_base(context: HealthContext) -> CheckResult:
-    """Open tickets in work: `## Git base` must name the ticket's integration branch, or the
-    project's `base_branch` for a ticket without an epic. Read-only; ticket bodies never reach the
-    output."""
+    """Open tickets in work: a `## Git base` must name the ticket's integration branch, or the
+    project's `base_branch` for a ticket without an epic; a ticket with `## Integration Branch`
+    needs no `## Git base`. Read-only; ticket bodies never reach the output."""
     check_id = "tracker.git_base"
     target = _offline_or_local(check_id, context)
     if isinstance(target, CheckResult):
@@ -858,6 +861,7 @@ def check_git_base(context: HealthContext) -> CheckResult:
         message="расхождение Git base с integration-веткой: " + "; ".join(problems),
         fix=Fix(
             text="в каждом тикете из списка приведите секцию `## Git base` к его integration-ветке "
-            "(или к base_branch проекта для тикета без эпика); проверка не меняет тикеты"
+            "или удалите её, если есть `## Integration Branch` (для тикета без эпика укажите "
+            "base_branch проекта); проверка не меняет тикеты"
         ),
     )

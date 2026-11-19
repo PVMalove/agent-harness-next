@@ -299,6 +299,45 @@ def _context_package_summary(package: JsonObject) -> JsonObject:
     return summary
 
 
+def _review_context_summary(
+    package: JsonObject, review_scope: list[str], carried: JsonObject
+) -> JsonObject:
+    """Seed the reviewer from its assigned paths without duplicating the ticket or package."""
+    paths = set(review_scope)
+    paths.update(
+        path for items in carried.values() for item in items for path in item["files"]
+    )
+    graph = {
+        path: node for path, node in package["symbol_graph"].items() if path in paths
+    }
+    neighbours = {
+        path
+        for node in graph.values()
+        for relation in ("imports", "imported_by", "references", "referenced_by")
+        for path in node.get(relation, [])
+    }
+    # Keep the startup list small. The complete test list is available in the pinned package.
+    tests = [
+        path for path in package["related_tests"] if path in paths or path in neighbours
+    ]
+    tests = (tests or package["related_tests"])[:8]
+    files = paths.union(tests)
+    return {
+        "review_focus": True,
+        "base_commit": package["base_commit"],
+        "candidate_commit": package["candidate_commit"],
+        "starting_files": [
+            item for item in package["starting_files"] if item["path"] in files
+        ],
+        "symbol_context": {
+            path: node["context"][:8]
+            for path, node in graph.items()
+            if node.get("context")
+        },
+        "related_tests": tests,
+    }
+
+
 def _context_package_quality_warning(package: JsonObject) -> JsonObject | None:
     """Return the Repo Map degradation facts a human must see before approving a dispatch."""
     provenance = package.get("parser_provenance")
@@ -1531,12 +1570,22 @@ def _validate_dispatch(
                 + INTERNAL_INVARIANT_REMEDY,
             )
         summary = dispatch.get("context_package_summary")
-        if summary is not None and summary != _context_package_summary(package):
-            raise CoordinatorError(
-                "dispatch Context Package summary does not match its immutable package",
-                remedy="the dispatch's Context Package summary does not match its immutable package -- "
-                + INTERNAL_INVARIANT_REMEDY,
+        if summary is not None:
+            expected_summary = (
+                _review_context_summary(
+                    package, dispatch["review_scope"], dispatch.get("carried_items") or {}
+                )
+                if dispatch["role"] == "code-review"
+                and isinstance(summary, dict)
+                and summary.get("review_focus") is True
+                else _context_package_summary(package)
             )
+            if summary != expected_summary:
+                raise CoordinatorError(
+                    "dispatch Context Package summary does not match its immutable package",
+                    remedy="the dispatch's Context Package summary does not match its immutable package -- "
+                    + INTERNAL_INVARIANT_REMEDY,
+                )
     elif (
         package_id is not None
         or package_sha is not None

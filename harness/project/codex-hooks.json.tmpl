@@ -18,7 +18,10 @@
         "matcher": "apply_patch|Write|Edit",
         "hooks": [
           { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel)\" && bash \".claude/hooks/protect-hook-policy.sh\"" },
-          { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel)\" && bash \".claude/hooks/block-scratch-outside-docs-tasks.sh\"" }
+          { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel)\" && bash \".claude/hooks/block-scratch-outside-docs-tasks.sh\"" },
+          { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel)\" && bash \".claude/hooks/impact-first-touch.sh\"" },
+          { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel)\" && bash \".claude/hooks/sensitive-path-recheck.sh\"" },
+          { "type": "command", "command": "cd \"$(git rev-parse --show-toplevel)\" && bash \".claude/hooks/targeted-check-reminder.sh\"" }
         ]
       }
     ],

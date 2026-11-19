@@ -199,6 +199,29 @@ def test_an_advisory_hook_warns_by_its_prefix_and_never_blocks(
         assert (failed["decision"], failed["reason_code"]) == ("warn", "internal-error")
 
 
+@pytest.mark.parametrize("hook_id", ADVISORY)
+def test_an_advisory_verdict_reads_every_line_and_keeps_every_evidence(
+    hook_id: str,
+) -> None:
+    reason = hook_response.HOOKS[hook_id][0]
+    # One body reports several paths: a diagnostic of the first path precedes later warnings.
+    several = (
+        "уведомление не записано: store full\n"
+        f"[{reason}] first\nevidence_ref=.harness/a.json\n"
+        f"[{reason}] second\nevidence_ref=.harness/b.json\n"
+    )
+    crashed = f"[{reason}] first\nevidence_ref=.harness/a.json\n[internal-error] boom\n"
+
+    warned = hook_response.decide(hook_id, "strict", 0, several)
+    failed = hook_response.decide(hook_id, "strict", 0, crashed)
+
+    assert (warned["decision"], warned["reason_code"]) == ("warn", reason)
+    assert warned["remedy"] == "first\nsecond"
+    assert warned["evidence_ref"] == ".harness/a.json\n.harness/b.json"
+    assert (failed["decision"], failed["reason_code"]) == ("warn", "internal-error")
+    assert "boom" in str(failed["remedy"])
+
+
 @needs_bash
 @pytest.mark.parametrize("hook_id", ADVISORY)
 def test_an_advisory_hook_body_runs_only_in_its_active_profiles(

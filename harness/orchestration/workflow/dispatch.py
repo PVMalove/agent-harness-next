@@ -126,6 +126,7 @@ from harness.orchestration.workflow.history import (
     _context_package_freshness,
     _context_package_quality_warning,
     _context_package_summary,
+    _review_context_summary,
     _context_package_tier,
     _current_developer_candidate,
     _effective_base,
@@ -1577,6 +1578,14 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                 stale_after // 3,
             ),
         )
+        context_summary = None
+        if context_package is not None:
+            if is_review_work and delta_review_of is None and delta_scope is None:
+                context_summary = _review_context_summary(
+                    context_package, review_scope, carried
+                )
+            else:
+                context_summary = _context_package_summary(context_package)
         brief: JsonObject = {
             "dispatch_id": dispatch_id,
             "batch_id": batch["batch_id"],
@@ -1620,9 +1629,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                 if context_package
                 else None
             ),
-            "context_package_summary": _context_package_summary(context_package)
-            if context_package
-            else None,
+            "context_package_summary": context_summary,
             "worker_attestation_required": _worker_attestation_required(config),
             "communication_policy": batch.get(
                 "communication_policy", _communication_policy(config)

@@ -11,11 +11,16 @@
 
 ## 2. Полный перевод текста скила
 
+Ядро навыка лежит в `SKILL.md`, а процедуры по условию — в `references/`: рантайм Claude Code
+(`claude-code-runtime.md`), тест-автор полного маршрута (`test-author.md`), план коммитов
+(`commit-plan.md`), автоматический путь (`auto-path.md`), остановки и восстановление (`recovery.md`),
+ожидание и наблюдение воркеров (`workers.md`). Ниже перевод всего текста в прежнем порядке.
+
 <div class="ah-skill-text" markdown="1">
 
 ```yaml
 name: implement
-description: Провести один backend-тикет через утверждённые handoff архитектора, разработчика, review, QA и publish.
+description: Проводит один afk-тикет с меткой pipeline::full через dispatch архитектора, разработчика, code-review, QA и publish и предлагает /to-pull-requests. Вызывается явно, когда установлена capability backend-orchestration; для pipeline::fast — /fast-implement, для hitl — /to-guide. Сам код фичи не пишет.
 disable-model-invocation: true
 ```
 
@@ -44,32 +49,23 @@ disable-model-invocation: true
 python .harness/orchestration/coordinator.py --repo . dispatch status
 ```
 
-Если команда недоступна или не читает своё состояние, остановитесь и предложите разработчику
-`/fast-implement`. Ответ `ledger_busy` не означает недоступность: блокировку ledger держит другая
+Если команда недоступна или не читает своё состояние, остановитесь. Для тикета `pipeline::fast`
+предложите `/fast-implement`. Для тикета `pipeline::full` объясните, что маршруту нужна capability
+`backend-orchestration`, или что разработчик может сменить метку на `pipeline::fast` в трекере и
+запустить `/fast-implement`. Ответ `ledger_busy` не означает недоступность: блокировку ledger держит другая
 операция coordinator, поэтому повторите команду через `retry_after_seconds`. Не выводите и не чините
 opt-in capability сами. Доведите один тикет до конечного состояния batch, прежде чем браться за
 следующий.
 
-До любой записи в трекер (смены метки `status::*`) проверьте, что сессия запущена в основном
-checkout и может писать в каждый каталог, куда пишет конвейер:
-
-- для issue worktree, которого ещё нет: `runtime status` называет feature `worktree.create`
-  или сессия может писать в `.git/worktrees`;
-- для существующего issue worktree: его каталог git-метаданных (из
-  `git -C <worktree> rev-parse --absolute-git-dir`);
-- каталог issue worktree, если он уже есть;
-- `.harness/.sandboxes/scratch/inbox/`.
-
-Проверьте каждый каталог: создайте и удалите в нём один временный файл. Сессия в sandbox пишет только
-внутри своего каталога. Worktree, созданный не этой сессией, остаётся read-only в `.git/worktrees`
-даже из основного checkout, пока сессия не откроет запись: в Claude Code вызовите `EnterWorktree`
-с `path` — путём issue worktree, затем `ExitWorktree` с `action: keep`
-(`docs/agents/worktrees.md` → Session write access) и повторите проверку. Если два вызова проверку
-не исправили, остановитесь с одним сообщением: назовите каталог
-и действие, то есть откройте сессию в основном checkout, которая может писать в issue worktree и его
-git-метаданные. Не трогайте ни трекер, ни ledger. `batch create`, а для write-роли также
-`dispatch preflight` и `dispatch send` отказывают, если сессия не может писать в issue worktree или
-каталог его git-метаданных.
+До записи в трекер убедитесь, что сессия открыта в основном checkout. Для существующего
+worktree задачи примените процедуру своего runtime (в Claude Code — `EnterWorktree` с
+`path=<issue-worktree>`, затем `ExitWorktree` с `action: keep`, без команд координатора между
+ними) и выполните `worktree check --worktree <issue-worktree>` внутри песочницы сессии.
+Продолжайте после `"writable": true`. Если команда
+отказала, укажите путь из ошибки и способ подготовить сессию. Для нового worktree проверьте,
+что `runtime status` перечисляет `worktree.create` или сессия может писать в `.git/worktrees`.
+До смены статуса тикета проверьте запись в каталог отчётов. Проверьте запись в новый checkout перед
+созданием batch. [Право записи сессии](../agents/worktrees.md)
 
 Если другой batch держит тот же незавершённый тикет, ветку или worktree либо исчерпан
 `concurrency_budget`, проверьте `batch list --open`, конфликтующий dispatch и его decision packet.
@@ -100,20 +96,22 @@ coordinator останавливается, сообщает о нём разр�
 Начинайте эти шаги только после pre-flight тикета из раздела «Контракт coordinator»
 (блокеры, `status::in-progress`).
 
-1. **Integration ref.** Возьмите значение секции `## Integration Branch` тикета. Если её нет,
+1. **Integration ref.** Возьмите значение секции `## Integration Branch` тикета (строку
+   `**Integration branch:**` в локальном трекере). Если её нет,
    возьмите `## Git base`. Если нет ни той, ни другой, возьмите ту же секцию родительского эпика.
    Если у тикета есть родительский эпик, а значения нет, это блокер: не выводите его из checkout или
    из памяти. Тикет без родительского эпика использует `base_branch`: не передавайте
    `--integration-ref`.
 2. **Issue worktree.** Создайте его до `batch create`: `batch create` отказывает, если
-   `git worktree list` не показывает worktree. Используйте `worktree create` и точные команды из
-   `docs/agents/worktrees.md` → Coordinator issue worktree; там же описано восстановление после
-   недоделанного ручного `git worktree add -b`. Если в ответе `session_write_access.writable: false`,
-   до `batch create` откройте запись двумя вызовами из Session write access. Оставайтесь в основном
-   checkout.
+   `git worktree list` не показывает worktree. Создайте его через `worktree create` и добейтесь
+   `"writable": true` от `worktree check` до `batch create`. При отказе подготовьте сессию по
+   инструкции для своего runtime и повторите проверку. Работайте из основного checkout.
 3. **Scope batch.** Запустите `batch preflight` с теми же флагами scope, что и у `batch create`.
    Сначала переведите тикет на английский: `batch create` отклоняет кириллицу в `--goal`,
    `--definition-of-done` и `--prohibited-change`. Команды, пути и ID оставьте дословными.
+   Сопоставьте разделы тикета: каждый пункт `## Acceptance criteria` → `--definition-of-done`,
+   каждый пункт `## Out of scope` → `--prohibited-change`, пути из `## Contract touchpoints` и
+   `## Relevant Files (Discovery Context)` → `--allowed-path` и `--expected-file`.
 4. **Создание batch.** Повторяйте флаги-списки по одному разу на каждое значение.
 
    ```bash
@@ -163,7 +161,7 @@ coordinator останавливается, сообщает о нём разр�
 тикета входит в этот pre-flight: после проверки записи из раздела «Маршрут», до `batch create` и до
 создания issue-ветки. Проверьте блокеры тикета при любой текущей метке. Если хоть один ещё открыт,
 остановитесь, назовите их и убедитесь, что на тикете стоит `status::blocked`. Иначе замените метку
-`status::*` на `status::in-progress` так же, как шаги 2–3 фазы 1 `/fast-implement`, и проверьте, что
+`status::*` на `status::in-progress` так же, как шаги 1–2 предполётной проверки `/fast-implement`, и проверьте, что
 она единственная `status::*`. Неудачная запись метки это блокер, а не предупреждение.
 
 До `batch create` запустите preflight на уровне batch с ограниченными ожидаемыми файлами, сервисами и

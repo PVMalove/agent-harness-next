@@ -1,5 +1,6 @@
 interface:
   display_name: "Fast implement"
-  short_description: "Build work from a spec or tickets in one ungated session"
+  short_description: "Implement a pipeline::fast ticket in one session"
+  default_prompt: "Use $fast-implement to implement the pipeline::fast ticket test-first in this session."
 policy:
   allow_implicit_invocation: false

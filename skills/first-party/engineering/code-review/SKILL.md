@@ -3,19 +3,18 @@ name: code-review
 description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes — Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
 ---
 
-Two-axis review of the diff between `HEAD` and a fixed point the user supplies:
+Two-axis review of the diff between `HEAD` and a fixed point the user supplies. Never edit code;
+report findings only.
 
 - **Standards** — does the code conform to this repo's documented coding standards?
 - **Spec** — does the code faithfully implement the originating issue / spec?
 
 Both axes run as **parallel sub-agents** so they don't pollute each other's context, then this skill aggregates their findings.
 
-### Runtime boundary
-
-This workflow is runtime-neutral. Keep the output language driven by `language` from
-`.harness/project.json`, and use the existing manually configured review mechanism. The workflow
+This workflow is runtime-neutral: use the existing manually configured review mechanism. It
 must not launch a runtime-specific adapter, choose a provider or model, or change the reviewed
-branch.
+branch. Write both sub-agent briefs and the aggregated report in the
+`language` from `.harness/project.json` (default `ru`), whatever the prompt's language.
 
 The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to run `harness update`, which seeds it from the harness templates. On GitLab, every `glab` command takes `-R <project-url>`; `<project-url>` and the other GitLab placeholders (`<host>`, `<project-id>`) are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions.
 
@@ -25,24 +24,14 @@ The issue tracker should have been provided to you. If `docs/agents/issue-tracke
 
 Whatever the user said is the fixed point — a commit SHA, branch name, tag, `main`, `HEAD~5`, etc. If they didn't specify one, ask for it.
 
-If the user names a PR or MR, its target branch is the fixed point. Read the target and source branches — GitHub: `gh pr view <n> --json baseRefName,headRefName`; GitLab: `glab mr view <iid> -R <project-url> -F json` (`target_branch`, `source_branch`). Then run `git fetch origin <target>` and use `origin/<target>` as the fixed point. The current checkout must be the source branch; if it is not, tell the user instead of switching branches (see _Runtime boundary_).
+If the user names a PR or MR, its target branch is the fixed point. Read the target and source branches — GitHub: `gh pr view <n> --json baseRefName,headRefName`; GitLab: `glab mr view <iid> -R <project-url> -F json` (`target_branch`, `source_branch`). Then run `git fetch origin <target>` and use `origin/<target>` as the fixed point. The current checkout must be the source branch; if it is not, tell the user instead of switching branches.
 
 Capture the diff command once: `git diff <fixed-point>...HEAD` (three-dot, so the comparison is against the merge-base). Also note the list of commits via `git log <fixed-point>..HEAD --oneline`.
 
 Before going further, confirm the fixed point resolves (`git rev-parse <fixed-point>`) and the diff is non-empty. A bad ref or empty diff should fail here — not inside two parallel sub-agents.
 
-For the gated `/implement` route, review also consumes the coordinator's pinned Context Package and
-candidate SHA. Review verifies that pinned candidate even if the integration base moved ahead: there
-is no mandatory base-freshness gate. PR preparation on a moved base goes through
-`integration refresh`, which rebases only the batch's issue branch onto the exact target SHA. A
-delta-review is either test-only (after a Warning: a new candidate with a test-only diff, brief
-field `delta_review_of`) or after a fix-forward (brief section `delta_review_scope`, chosen by the
-coordinator). A fix-forward delta-review reviews both axes on the delta alone and relies on the
-prior review's report for the rest of the candidate. The coordinator escalates it to a full review
-when the candidate or the new commits match a risk trigger the prior review did not see, change a
-file outside the carried items, break a rebased copy's `git patch-id`, drop a previous-candidate
-commit, or add no commits. Either delta-review is an independent review dispatch, never an in-place
-replacement of the original evidence.
+For the gated `/implement` route (a coordinator Context Package and candidate SHA, or a
+delta-review), read `references/gated-route.md`.
 
 ### 2. Identify the spec source
 
@@ -53,29 +42,16 @@ Look for the originating spec, in this order:
 3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
 4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".
 
+When the ticket names `## Parent: #<epic>`, also fetch the epic. Its specification's
+`## Non-Goals & Rejected Alternatives` and `## Surgical File & Contract Changes`, with the ticket's
+`## Out of scope`, `## Contract touchpoints` and `## Relevant Files (Discovery Context)`, define
+what counts as scope creep; pass them to the Spec axis.
+
 ### 3. Identify the standards sources
 
 Anything in the repo that documents how code should be written, such as `CODING_STANDARDS.md` or `CONTRIBUTING.md`.
 
-On top of whatever the repo documents, the Standards axis always carries the **smell baseline** below — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Two rules bind it:
-
-- **The repo overrides.** A documented repo standard always wins; where it endorses something the baseline would flag, suppress the smell.
-- **Always a judgement call.** Each smell is a labelled heuristic ("possible Feature Envy"), never a hard violation — and, like any standard here, skip anything tooling already enforces.
-
-Each smell reads _what it is_ → _how to fix_; match it against the diff:
-
-- **Mysterious Name** — a function, variable, or type whose name doesn't reveal what it does or holds. → rename it; if no honest name comes, the design's murky.
-- **Duplicated Code** — the same logic shape appears in more than one hunk or file in the change. → extract the shared shape, call it from both.
-- **Feature Envy** — a method that reaches into another object's data more than its own. → move the method onto the data it envies.
-- **Data Clumps** — the same few fields or params keep travelling together (a type wanting to be born). → bundle them into one type, pass that.
-- **Primitive Obsession** — a primitive or string standing in for a domain concept that deserves its own type. → give the concept its own small type.
-- **Repeated Switches** — the same `switch`/`if`-cascade on the same type recurs across the change. → replace with polymorphism, or one map both sites share.
-- **Shotgun Surgery** — one logical change forces scattered edits across many files in the diff. → gather what changes together into one module.
-- **Divergent Change** — one file or module is edited for several unrelated reasons. → split so each module changes for one reason.
-- **Speculative Generality** — abstraction, parameters, or hooks added for needs the spec doesn't have. → delete it; inline back until a real need shows.
-- **Message Chains** — long `a.b().c().d()` navigation the caller shouldn't depend on. → hide the walk behind one method on the first object.
-- **Middle Man** — a class or function that mostly just delegates onward. → cut it, call the real target direct.
-- **Refused Bequest** — a subclass or implementer that ignores or overrides most of what it inherits. → drop the inheritance, use composition.
+On top of whatever the repo documents, the Standards axis always carries the **smell baseline** — a fixed set of Fowler code smells (_Refactoring_, ch.3) that applies even when a repo documents nothing. Read `references/smell-baseline.md` before launching the Standards axis: it states how the baseline yields to the repo's standards. Like any standard here, skip anything tooling already enforces.
 
 ### 4. Review both axes
 
@@ -84,12 +60,13 @@ Launch the `code-review-standards` and `code-review-spec` subagents defined in `
 **`code-review-standards` prompt** — include:
 
 - The full diff command and commit list.
-- The list of standards-source files you found in step 3, **plus the smell baseline from step 3** pasted in full — the sub-agent has no other access to it.
+- The list of standards-source files you found in step 3, **plus `references/smell-baseline.md`** pasted in full — the sub-agent has no other access to it.
 
 **`code-review-spec` prompt** — include:
 
 - The diff command and commit list.
-- The path or fetched contents of the spec.
+- The path or fetched contents of the spec, and of the parent epic's specification and the ticket's
+  scope sections when step 2 found them.
 
 If the spec is missing, skip the `code-review-spec` sub-agent and note this in the final report.
 
@@ -102,12 +79,7 @@ End with a one-line summary: total findings per axis, and the worst issue _withi
 ## Why two axes
 
 A change can pass one axis and fail the other:
-
 - Code that follows every standard but implements the wrong thing → **Standards pass, Spec fail.**
 - Code that does exactly what the issue asked but breaks the project's conventions → **Spec pass, Standards fail.**
 
 Reporting them separately stops one axis from masking the other.
-
-### Output language
-
-Read `language` from `.harness/project.json` (default `ru` if the file or field is absent). If `ru`, write the entire report — both sub-agent briefs and the aggregated output — in Russian regardless of the prompt's language. If `en`, write in English.

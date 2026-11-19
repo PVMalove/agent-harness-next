@@ -15,6 +15,7 @@ from scripts.clean_room.support import (
     capture,
     commit_map_for,
     run_step,
+    spec_criteria,
 )
 
 
@@ -950,6 +951,7 @@ def run(ctx: SimpleNamespace) -> None:
                 "findings": [],
                 "risks": {"status": "none", "details": ""},
                 "blockers": {"status": "none", "details": ""},
+                "criteria": spec_criteria(review_record["brief"]),
             },
         },
     }

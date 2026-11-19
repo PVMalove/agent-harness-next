@@ -1,5 +1,6 @@
 #!/bin/bash
-# Advisory. PreToolUse(Write|Edit): records the touched file in the journal of the operation.
+# Advisory. PreToolUse(Write|Edit|MultiEdit|NotebookEdit, apply_patch of the second runtime): records
+# every touched file in the journal of the operation.
 # Stop and SubagentStop (end of a role turn): reminds to report the targeted checks of the brief in
 # checks_run when files changed after the last report. The reminder is a systemMessage; the hook never
 # blocks and never continues the turn (ADR 0024, section 2a). It runs no tests, make or git.

@@ -7,8 +7,12 @@ It ships in `engineering-suite`, runs manually as `/architect`, and returns a de
 the current boundary, the options, the recommendation, the trade-offs, the risks, the acceptance criteria,
 and the first TDD seams.
 The skill studies the evidence and does not change production code, tests, configuration, or repository files.
-The brief does not authorize implementation, commit, push, or PR creation. If the developer wants a
-durable ADR, the accepted decision goes through `domain-modeling`.
+The brief does not authorize implementation, commit, push, or PR creation, and does not rewrite the
+specification or the ticket. The skill treats the parent specification's
+`## Architecture & Selected Approach` as settled and its `## Non-Goals & Rejected Alternatives` as
+rejected, reopening one only with new evidence and saying so. If the decision changes the
+specification, it offers `/to-spec`. A durable ADR goes through `domain-modeling` under the write
+rules in `grilling/references/domain-doc-writes.md`.
 
 Before it compares the options, with memory enabled, it runs
 `harness memory search . "<decision, boundary, and module>"` once. It interprets the search status and the source status
@@ -24,7 +28,7 @@ The interactive skill and the coordinator's `architect` role are separate. The r
 tool policy: a direct memory search call stays unavailable, and missing evidence is
 escalated to the coordinator. The following contract applies to the role.
 
-Source: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md) and the shared contract [`_common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/_common.md).
+Source: [`harness/orchestration/roles/architect.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/architect.md) and the shared contract [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
 ## 1. Name and localization
 
@@ -54,7 +58,7 @@ Use this role before a significant boundary decision, especially when the decisi
 
 Prescribe the shape of the change, not only its behaviour, and prefer an idiom that keeps the diff reviewable. Boilerplate repeated at every call site adds a nesting level in Python, so `git diff` records every line of every touched block as removed and re-added: a mechanical change can then exceed the batch's own line budget, while a centralised context manager or decorator expresses the same guarantee within it. When a brief rules such an idiom out, say why in the brief, so the developer escalates instead of discovering the cost after the fact.
 
-The result is one short architecture decision brief: the boundaries, the viable options, the chosen option, the trade-offs, the risks, the acceptance criteria, and the first TDD seams. Its proof is the targeted evidence from the repository and the requirements, sufficient for the coordinator to make the decision; an ADR is required only for a significant irreversible trade-off. The completion report refers to this brief and does not repeat its narrative.
+The result is one short architecture decision brief: the boundaries, the viable options, the chosen option, the trade-offs, the risks, the `definition_of_done` items it serves, and the first TDD seams. Its proof is the targeted evidence from the repository and the requirements that is enough for the coordinator to decide. An ADR is needed only for a substantial irreversible trade-off. Write the whole brief in the completion report's `output`: the developer receives only that field, as `accepted_design.output`, and takes its seam from it.
 
 Propose the commit plan in the report field `commit_plan` as ordered entries `{id, summary, expected_paths, covers}`, one entry per independently reviewable commit. `covers` lists the Definition of Done item numbers (counted from one) that the entry implements, and every item is covered at least once. Every `expected_paths` entry lies inside the brief's `allowed_paths`: a path the plan needs beyond them is a risk in `risks`, not a plan entry. `report submit` refuses a plan that breaks these rules and names the reason. The coordinator's default plan is one entry per item. When the proposed plan differs from it, set `risks.status: present` and describe the difference in `risks.details`: the report then waits for a manual accept. An accept, manual or by `batch auto-decide` under `approval_policy: auto`, pins the reported plan without a plan file.
 

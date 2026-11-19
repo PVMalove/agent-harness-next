@@ -48,9 +48,9 @@ Hook проверяет действие агента до того, как он
 | `require-qa-gate.sh` | `PreToolUse(Bash)` | Создание PR/MR, если QA не проходил или провалился для текущего дерева |
 | `require-bounded-check.sh` | `PreToolUse(Bash)` | Полный прогон набора проверок без обёртки сводкой; точечный тест не блокируется |
 | `block-dangerous-git.sh` | `PreToolUse(Bash)` | Разрушительные операции: `reset --hard`, `clean -f`, `branch -D`, `checkout .`, `restore .` |
-| `impact-first-touch.sh` | `PreToolUse(Write, Edit)` | Ничего: предупреждает о первом касании пути, влияние которого не вычисляется по графу |
-| `sensitive-path-recheck.sh` | `PreToolUse(Write, Edit)` | Ничего: в `strict` сообщает о каждой правке чувствительного пути и пишет запись доказательства |
-| `targeted-check-reminder.sh` | `PreToolUse(Write, Edit)`, `Stop`, `SubagentStop` | Ничего: в `standard` и `strict` напоминает отчитать точечные проверки, если файлы менялись после отчёта |
+| `impact-first-touch.sh` | `PreToolUse(Write, Edit, MultiEdit, NotebookEdit)` | Ничего: предупреждает о первом касании пути, влияние которого не вычисляется по графу |
+| `sensitive-path-recheck.sh` | `PreToolUse(Write, Edit, MultiEdit, NotebookEdit)` | Ничего: в `strict` сообщает о каждой правке чувствительного пути и пишет запись доказательства |
+| `targeted-check-reminder.sh` | `PreToolUse(Write, Edit, MultiEdit, NotebookEdit)`, `Stop`, `SubagentStop` | Ничего: в `standard` и `strict` напоминает отчитать точечные проверки, если файлы менялись после отчёта |
 | `runtime-autostart.sh` | `PreToolUse(Bash)`, `Stop`, `SubagentStop` (только Claude Code) | Ничего: перед командой coordinator запускает или переиспользует `harness-runtime serve`, в конце хода освобождает владельца; при сбое выводит предупреждение с причиной и журналом |
 | `count-skill-usage.sh` | `PreToolUse(Skill)` | Ничего: считает частоту вызова скиллов |
 | `mark-qa-gate-passed.sh` | `PostToolUse(Bash)` | Ничего: записывает маркер прохождения QA для прямого запуска команд |

@@ -1120,8 +1120,10 @@ no environment failure, so `resume-stop` does not treat it as one.
 A worker must write the coordinator state: at least `.harness/orchestration/state` with its
 `.coordinator.lock` directory and ledger records, and the report inbox. `report submit` takes that
 lock, `dispatch heartbeat` does not, so heartbeats can succeed while a submit fails. Grant the
-write through the runtime's own sandbox settings (Claude Code: `sandbox.filesystem.allowWrite`
-with the state and inbox directories) before launch. A refused lock returns
+write through the runtime's own sandbox settings before launch. Claude Code:
+`sandbox.filesystem.allowWrite` with the state and inbox directories and the main checkout's
+`.harness/.sandboxes/runs/qa`, `runs/tests`, `logs`, `cache/npm` and `cache/ms-playwright` for
+verification and browser checks, or the whole `.harness/.sandboxes`. A refused lock returns
 `sandbox_denied: ...` with the exact path, not a traceback. Classify it as infrastructure, not as
 a task error; deliver the staged file with the relay below only after the cause is named. The
 adapter probe takes and releases the real lock (a lock held by another operation counts as
@@ -1247,16 +1249,15 @@ worker:
 An adapter that exits before its worker leaves an empty group: the runtime records the execution
 as exited, and the dispatch is blocked with `worker-exited-without-report` while the worker still
 runs. An exit without a report carries the worker's code in `runtime_failure.exit_code`. Claude
-runs `claude -p <prompt>` in the foreground with `--output-format stream-json --verbose`; it
-refuses a prompt above 120000 UTF-8 bytes (30000 characters on Windows) and asks to shorten
-`--extra-prompt-file`. Codex serves the turn in the adapter's own process and writes allowlisted
+runs `claude -p` in the foreground with streaming JSON on stdin and stdout. Codex serves the
+turn in the adapter's own process and writes allowlisted
 `harness-event` JSON lines (session connected, tool item type, agent output, error, turn result),
 never raw app-server JSON, tool input or reasoning. Follow the run log with
 `dispatch logs --dispatch <id> [--follow]` (see "Observable external workers").
 
 Without `execution` (a file ledger, or a runtime without `execution.launch`) the adapter keeps the
 detached launch: `dispatch send` waits for the adapter without a timeout, so the adapter passes the
-lifecycle prompt to a detached worker through stdin and returns after startup. An early exit,
+job to a detached process and returns after startup. An early exit,
 including exit zero, is then a launch failure with a bounded log tail.
 
 Both adapters reject `qa`, `purpose: publish`, a transport other than `external`, and absent or
@@ -1264,10 +1265,17 @@ empty `allowed_tools`.
 Claude uses the brief's model, effort and native tool allowlist; its only additional directory is
 the incoming reports directory. Codex uses an `app-server` connection and a native named
 permission profile. The checkout has the brief's source access; the main coordinator state and
-incoming report directory remain writable for lifecycle evidence. Both source-access modes
-can write shared `.harness/.sandboxes/runs/qa` and `.harness/.sandboxes/runs/tests` temporary
-data and `.sandboxes/logs` for the mandatory bounded check wrapper and full verification;
-this does not grant access to other issue worktrees.
+incoming report directory remain writable for lifecycle evidence. A Codex worker, with either
+source access, can write the shared `.harness/.sandboxes/` subdirectories `runs/qa`,
+`runs/tests`, and `logs` for verification, and `cache/npm` and `cache/ms-playwright` for browser
+checks. The adapter creates these directories before launching Codex, whose sandbox needs
+existing writable roots under read-only parents. A path reached through a symlink or blocked by
+a non-directory is neither created nor granted. For a path the role requires (the report inbox
+and `runs/qa` for every role, `runs/tests` for a developer, and so `.harness/.sandboxes`
+itself) the adapter refuses the launch at startup with `required path is a symlink` or
+`required path is not a directory` and the path. For `logs` and the caches it prints a
+`symlink not granted` or `non-directory not granted` warning with the path and launches with
+the remaining grants. Other cache directories and other issue worktrees receive no write grant.
 Write roles additionally receive their Git admin directory, shared objects, refs and ref logs so
 they can create commits in a linked worktree. The common Git directory permits creating
 `packed-refs.lock` and atomically replacing `packed-refs`; existing other shared metadata stays
@@ -1277,6 +1285,17 @@ read-only; branch restrictions remain a workflow contract, since Git ref locks n
 The adapter verifies the actual worker's `thread/start` model, effort, CWD and permission profile
 before sending its task. It gives
 that session's native identity to the worker, which still performs its own model/Git self-report.
+Both adapters probe writes before sending task input. Codex calls `command/exec` with the same
+named permission profile as the worker. Claude sends a probe-only turn and waits for the matching
+native Bash result in that session. The probe creates and removes one temporary file per directory.
+It checks the report directory and the shared check directories allowed by the runtime plan. Write
+roles also check the selected checkout, its Git admin directory, and the `objects` and `refs` of
+the common Git directory. The adapter creates missing check directories first and refuses one
+reached through a symlink; Codex instead skips an optional shared directory with a warning and
+probes only the directories it granted. On failure the adapter reports the resource, or the native refusal text
+with secrets masked, and withholds task input. A detached Claude launch returns only after the
+probe verdict. Claude roles need plain `Bash` in `allowed_tools`. `--dry-run` does not run the
+probe.
 Codex versions without named permission-profile support refuse startup; there is no broader-access
 fallback. Its prompt carries the tool allowlist; this is not a native Codex tool filter.
 Neither adapter grants `danger-full-access`.
@@ -1427,6 +1446,11 @@ A minimal brief can be rendered as:
 ```
 
 ## Delivering a worker report after a tool refusal
+
+Workers use `report submit --compact --file <path>` for a receipt with the report reference,
+transition status and any next action. When a human decision is pending, the coordinator reads
+`batch decision-packet`. Repeating the same recorded worker report in compact mode returns its
+receipt.
 
 A worker that cannot submit keeps its original `report_staging_path` bytes and returns the exact
 command/error. The coordinator may deliver that existing file through `report submit --file <path>
