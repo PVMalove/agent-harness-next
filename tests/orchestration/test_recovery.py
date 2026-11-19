@@ -32,6 +32,7 @@ from tests.orchestration.test_coordinator import (
     _git,
     _ns,
     ORCHESTRATION_ROOT,
+    with_spec_criteria,
 )
 
 from .legacy_state import file_ledger_source, runs_on_file_ledger, seed_file_ledger
@@ -1335,6 +1336,8 @@ class RecoveryTests(unittest.TestCase):
             "report_language": "ru",
         }
         report.update(overrides)
+        if role == "code-review" and "review" in report:
+            report["review"] = with_spec_criteria(brief, report["review"])
         return report
 
     def _decide(self, batch_id: str, decision: str, **extra: object) -> JsonObject:

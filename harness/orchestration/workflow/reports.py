@@ -1242,7 +1242,9 @@ def _validate_spec_criteria(evidence: JsonObject, dispatch: JsonObject) -> None:
         )
 
 
-def _validate_review(review: object, dispatch: JsonObject) -> None:
+def _validate_review(
+    review: object, dispatch: JsonObject, *, completed: bool = True
+) -> None:
     # ``carried_items`` (issue #499) is optional: the review's account of the brief's carried items.
     if not isinstance(review, dict) or set(review) - {
         "carried_items",
@@ -1276,11 +1278,16 @@ def _validate_review(review: object, dispatch: JsonObject) -> None:
             if inherited
             else {"severity", "findings", "risks", "blockers"}
         )
+        # A completed full Spec review accounts for every acceptance criterion of the reviewed
+        # candidate; a delta review keeps the scope of the prior review it narrows.
         has_criteria = (
             axis == "spec"
             and delta_review_of is None
             and isinstance(evidence, dict)
-            and "criteria" in evidence
+            and (
+                "criteria" in evidence
+                or (completed and bool(dispatch.get("definition_of_done")))
+            )
         )
         if has_criteria:
             expected_keys.add("criteria")
@@ -1867,7 +1874,11 @@ def _validate_report(
             report["risk_triggers"], "completion report risk_triggers", allow_empty=True
         )
     if role.get("name") == "code-review":
-        _validate_review(report.get("review"), dispatch)
+        _validate_review(
+            report.get("review"),
+            dispatch,
+            completed=report.get("outcome") == "completed",
+        )
     elif "review" in report:
         raise CoordinatorError(
             "only the code-review role may submit composite review evidence",
