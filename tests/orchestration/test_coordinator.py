@@ -2468,6 +2468,26 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(status["dispatches"][0]["state"], "approved")
         self._start(brief["dispatch_id"])
 
+    def test_in_process_send_refuses_a_read_only_artifact_directory(self) -> None:
+        batch = self._create_batch()
+        brief = self._dispatch(batch["batch_id"], "architect")["brief"]
+        logs = self.repo / ".harness/.sandboxes/logs"
+        logs.mkdir(parents=True, exist_ok=True)
+        args = self._args(
+            dispatch=brief["dispatch_id"], adapter=None, adapter_arg=None, checkout=None
+        )
+
+        with self._read_only(logs.resolve()):
+            with self.assertRaises(coordinator.CoordinatorError) as refused:
+                coordinator.send_dispatch(args)
+
+        self.assertIn(str(logs), refused.exception.message)
+        status = coordinator.dispatch_status(
+            self._args(dispatch=brief["dispatch_id"], batch=None, stale_after=None)
+        )
+        self.assertEqual(status["dispatches"][0]["state"], "approved")
+        self._start(brief["dispatch_id"])
+
     def _start(self, dispatch_id: str, *, checkout: Path | None = None) -> None:
         launched = coordinator.send_dispatch(
             self._args(

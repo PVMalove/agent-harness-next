@@ -49,7 +49,39 @@ harness worktree-venv . .harness/.sandboxes/worktrees/issue-<ID>-<slug>
 - **Browser e2e (Playwright):** under the sandbox the home cache (`~/.cache/ms-playwright`) is read-only, so `playwright install` fails there. Set `PLAYWRIGHT_BROWSERS_PATH` to the main checkout's `.harness/.sandboxes/cache/ms-playwright`; for `npm ci`, `~/.npm` is read-only too, so pass `npm_config_cache=<main>/.harness/.sandboxes/cache/npm`. Build the frontend before every e2e run: a spec on an older build reports old failures. In the harness repository, `npm run test:e2e` in `harness/console/frontend` does all three: it builds `dist`, picks the browser directory, installs Chromium (a no-op when it is there), and runs Playwright with the arguments after `--`.
 - **Network for a first install:** `registry.npmjs.org` for `npm ci`; `cdn.playwright.dev` and `storage.googleapis.com` (Chrome for Testing) for Chromium. Add them to the sandbox's allowed domains for that command. Without them, the worker reports the e2e check as `not_run` and names the blocked host.
 
-**Session write access.** Run the coordinator from a session rooted in the main checkout. The session must be able to write the issue worktree and its git metadata directory (`<main>/.git/worktrees/<name>`, printed by `git -C <worktree> rev-parse --absolute-git-dir`): the writer's `git commit` creates its index lock there. A sandboxed session writes only inside its own directory, and it cannot write a worktree it did not create: the `.git/worktrees/<name>` of a worktree that the runtime, a human, or another session created stays read-only. `worktree create` reports this as `session_write_access`. To open the access in Claude Code, call `EnterWorktree` with `path` set to the issue worktree, then `ExitWorktree` with `action: keep`. The session returns to the main checkout, and the worktree and its git metadata stay writable until the session ends, for the in-process workers of the session too. Run no coordinator command between the two calls. A new session repeats the two calls. A subagent started with `isolation: worktree` cannot enter an existing worktree. `/implement` probes these directories before it changes the ticket's `status::*` label. `batch create`, and `dispatch preflight` and `dispatch send` for a write role, refuse a worktree whose directory or git metadata the session cannot write and name that directory. The remedy is the pair of calls above from a session in the main checkout, or the single-session route (`/fast-implement`).
+**Session write access.** Run the coordinator from the main checkout. After creating the
+registered issue worktree, run the launch command from the operator's terminal.
+
+```bash
+python .harness/orchestration/coordinator.py --repo . worktree prepare \
+  --runtime codex --worktree <issue-worktree> --launch
+```
+
+Use `--runtime claude` for Claude Code. Omit `--launch` to prepare the directories and print the
+launch arguments. The command prepares shared coordinator state, report and brief staging, QA and
+test runs, logs, and the npm and Playwright caches before startup.
+
+- **Codex** applies the named permission profile to the parent session. It grants
+  write access to the selected checkout, Git metadata needed for commits, and the prepared
+  directories. On Linux, the default Codex network sandbox also blocks the Unix socket used by
+  `harness-runtime`. To use the runtime from this session, add `--network-access enabled` if your
+  policy permits it. This enables direct command networking when Codex has no active network proxy.
+- **Claude Code** receives the writable artifact paths at launch. The session calls `EnterWorktree`
+  with the existing checkout's `path`, then immediately `ExitWorktree` with `action: keep`. The pair returns to the main checkout and keeps the worktree
+  and its Git admin directory writable for this session. In an existing Claude Code session,
+  prepare the directories and call the same pair before working.
+
+Run the write check through the coordinator session's shell tool inside its sandbox before dispatch.
+
+```bash
+python .harness/orchestration/coordinator.py --repo . worktree check \
+  --worktree <issue-worktree>
+```
+
+Wait for `"writable": true`. The command probes the checkout, its Git admin directory, and shared
+directories. Before reserving an in-process handoff, `dispatch send` repeats the shared-directory
+checks and also probes worktree write access for write roles. On refusal, use the reported path to
+repair the session and repeat the check.
 
 **Empty directory after `worktree remove`.** A session that opened write access to a worktree with the `EnterWorktree` `path` and `ExitWorktree` `keep` pair keeps its path in the sandbox configuration until the session ends. Before every command, the sandbox recreates an empty directory at that path as a mount point, so the directory comes back after `worktree remove`, even when git no longer lists the worktree. The sandbox also creates mask entries relative to the session's working directory: after a `cd` into `.harness/.sandboxes/worktrees/` or `.claude/worktrees/`, a `.claude/` directory with `.cc-writes` and empty `settings.json`-like files appears there. Neither is a worktree, and `git worktree prune` does not remove it. `harness health` names such directories apart and does not warn. `harness cleanup --mode hard` removes a directory that holds only directories and empty files; a directory that a live session still mounts stays, with the reason in `skipped`. Run the cleanup after that session ends. A repeated `worktree create` with the same path works over the empty directory.
 
