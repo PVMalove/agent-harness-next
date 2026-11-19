@@ -7,6 +7,10 @@
 <Describe the user-visible outcome, the problem it solves, and the scope. Give each functional
 requirement an ID such as `R1` so it can be traced to a check.>
 
+<For a complex epic with several deliverable scenarios, record the **First demonstrable scenario**.
+Name the actor, starting state, action, observable result, and why this result comes first. Link
+the relevant requirement IDs and describe how to verify the scenario independently of later slices.>
+
 ## Non-Goals & Rejected Alternatives
 
 <List the explicit exclusions. For each rejected alternative, record the decision ID, option
@@ -33,7 +37,9 @@ before the Discovery Context section.>
 ## Edge Cases & Failure Modes
 
 <For each relevant invalid input, error, timeout, or boundary state, describe the trigger, observable
-behavior, and recovery where applicable. Cover realistic failures at the affected boundary.>
+behavior, and recovery where applicable. Cover realistic failures at the affected boundary. For a
+migration, check whether the spec defines reading the old format, retry after partial failure, and
+their observable outcomes.>
 
 ## Acceptance & Verification Criteria
 

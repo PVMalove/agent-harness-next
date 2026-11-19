@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from harness.bin.harness import package_files
-from tests.core.test_developer_skill import _frontmatter
+from tests.core.test_developer_skill import _frontmatter, _section
 
 ROOT = Path(__file__).resolve().parents[2]
 ENGINEERING = ROOT / "skills/first-party/engineering"
@@ -44,6 +44,49 @@ def test_release_mode_closes_the_epic_and_leaves_the_changelog_alone() -> None:
         "never edits `CHANGELOG.md` or the project version",
     ):
         assert rule in release
+
+
+def test_release_verifies_every_epic_criterion_on_the_release_candidate() -> None:
+    release = REFERENCES / "release.md"
+    verify = _section(release, "3. Verify the integration branch")
+    assert (
+        "Record the full `HEAD` SHA as the release candidate before running checks"
+        in verify
+    )
+    assert "For each row of `## Acceptance & Verification Criteria`" in verify
+    assert "the exact check" in verify
+    assert "evidence for that criterion on the release candidate" in verify
+    assert "run the spec's check on that SHA" in verify
+    assert "including scenarios that span several tickets" in verify
+    assert "a closed ticket or a merged child PR" in verify
+    assert "`resolution::wontfix`" in verify
+    assert "stop before requesting release confirmation" in verify
+    body = _section(release, "4. Prepare the body")
+    assert "the results by epic criterion and the release candidate SHA" in body
+    assert "list unverified criteria" in body
+
+
+def test_release_acceptance_supports_legacy_tickets_and_the_local_tracker() -> None:
+    release = REFERENCES / "release.md"
+    verify = _section(release, "3. Verify the integration branch")
+    assert "For older tickets without IDs, match the observable scenario" in verify
+    assert (
+        "If the epic has no structured criteria, record epic acceptance as unverified"
+        in verify
+    )
+    local = _section(release, "Local markdown tracker")
+    assert "`.scratch/<feature>/spec.md`" in local
+    assert "show the criterion results before asking for confirmation" in local
+
+
+def test_release_confirmation_only_covers_the_tested_sha() -> None:
+    confirm = _section(REFERENCES / "release.md", "5. Confirm and open")
+    assert (
+        "recheck that both the local and remote integration refs match the release candidate SHA"
+        in confirm
+    )
+    assert "repeat verification and request fresh confirmation" in confirm
+    assert confirm.index("recheck that both") < confirm.index("gh pr create")
 
 
 def test_git_workflow_names_the_release_step_and_runs_qa_before_confirmation() -> None:

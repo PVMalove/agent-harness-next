@@ -92,6 +92,18 @@ def test_declined_path_requires_fresh_approval() -> None:
     assert "every repository file cited in the spec is approved" in gate
 
 
+def test_requirements_review_informs_the_existing_approval() -> None:
+    gate = _section(SKILL, "Approve and write the specification")
+    assert "from the agreed scope, handoff, and approved evidence" in gate
+    assert "missing or ambiguous in-scope behavior" in gate
+    assert "Decision & Clarity Protocol" in gate
+    assert "Present the review findings" in gate
+    template = SOURCE / SPEC_TEMPLATE
+    goal = _section(template, "Goal & Scope")
+    assert "**First demonstrable scenario**" in goal
+    assert "independently of later slices" in goal
+
+
 def test_details_returns_to_the_same_choice_without_writing() -> None:
     protocol = _section(SKILL, "Decision & Clarity Protocol")
     assert "`все` / `all` expands every displayed option" in protocol

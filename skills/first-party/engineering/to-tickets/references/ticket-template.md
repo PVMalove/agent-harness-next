@@ -35,7 +35,7 @@
 ## Plan layout
 
 1. **Waves** — one line per wave with its tickets, for example `Wave 1: 01, 02 · Wave 2: 03 (after 01)`.
-2. **Traceability matrix** — one row per requirement:
+2. **Traceability matrix** — one row per acceptance criterion, repeating the requirement ID as needed:
 
    | Requirement | Acceptance criterion | Tickets |
    | --- | --- | --- |
@@ -55,8 +55,10 @@
 - **What to build:** what the ticket delivers, in one to three sentences
 - **Contract touchpoints:** the allowlisted files to change or create and the signatures, schemas,
   or contracts affected
-- **Out of scope:** what this ticket must not touch, such as work owned by a neighbouring ticket
-- **Acceptance criteria:** `Action -> Verify` items with the exact test or command for each
+- **Out of scope:** applicable epic non-goals and work excluded from this ticket
+- **Acceptance criteria:** `[R<n>] Action -> Verify` items with the exact check for each. Prefix
+  each item with its IDs from the spec, for example `[R1] [R3]` when it verifies both. Use the
+  same text in the published ticket. Use plain `Action -> Verify` for criteria without spec IDs.
 - **Relevant Files (Discovery Context):** assigned and approved paths, each with its reason
 
 ## Local ticket file
@@ -89,7 +91,7 @@
 - `<path>` — <why this ticket needs it>
 
 ## Acceptance criteria
-- [ ] <Action> -> <Verify: exact test or command>
+- [ ] [R<n>] <Action> -> <Verify: exact test or command>
 ```
 
 ## Tracker issue body
@@ -120,7 +122,7 @@
 - `<path>` — <why this ticket needs it>
 
 ## Acceptance criteria
-- [ ] <Action> -> <Verify: exact test or command>
+- [ ] [R<n>] <Action> -> <Verify: exact test or command>
 
 ## Blocked by
 - Blocked by #<M> — <reason>, one line per blocking ticket, or "None — can start immediately"
