@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import stat
@@ -290,6 +291,50 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
             command[command.index("--output-format") + 1 :][:2],
             ["stream-json", "--verbose"],
         )
+
+    def test_container_review_reads_one_verified_section(self) -> None:
+        brief = json.loads(self.brief.read_text(encoding="utf-8"))
+        brief.update(role="code-review", context_package_summary={"review_focus": True})
+        payload = json.dumps(
+            {
+                "context_package_id": brief["context_package_id"],
+                "related_tests": ["tests/test_order.py"],
+                "diff": "full diff must stay out of this output",
+            }
+        ).encode("utf-8")
+        package = (
+            self.repo
+            / ".harness"
+            / ".sandboxes"
+            / "runs"
+            / f"review-context-{brief['dispatch_id']}.json"
+        )
+        package.parent.mkdir(parents=True, exist_ok=True)
+        package.write_bytes(payload)
+        brief["context_package_sha256"] = hashlib.sha256(payload).hexdigest()
+        self.brief.write_text(json.dumps(brief), encoding="utf-8")
+        command = [
+            sys.executable,
+            str(ADAPTER),
+            "context",
+            "--repo",
+            str(self.repo),
+            "--brief",
+            str(self.brief),
+            "--section",
+            "related_tests",
+        ]
+
+        selected = subprocess.run(command, capture_output=True, text=True, check=True)
+
+        self.assertEqual(
+            json.loads(selected.stdout), {"related_tests": ["tests/test_order.py"]}
+        )
+        package.write_bytes(payload + b" ")
+        refused = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("hash", refused.stderr)
+        self.assertEqual(refused.stdout, "")
 
     @POSIX_ONLY
     def test_worker_runs_in_the_worktree_and_receives_the_prompt(self) -> None:

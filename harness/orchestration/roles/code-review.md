@@ -27,7 +27,8 @@ reviewed branch.
 Start with the brief's review scope, pinned diff and `context_package_summary`. Read changed
 symbols in that diff, the indicated lines of starting files, and the related tests. When the
 coordinator CLI is available, get a section of the pinned package with
-`context-package show --dispatch <dispatch_id> --section <section>`. Escalate missing evidence
+`context-package show --dispatch <dispatch_id> --section <section>`. In a container, use the
+adapter's section command from the worker prompt. Escalate missing evidence
 by naming the file, symbol, or section.
 
 The brief carries the ticket's bounds. On the Spec axis, judge the candidate against its

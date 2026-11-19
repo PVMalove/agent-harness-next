@@ -54,7 +54,11 @@ class CleanupTests(unittest.TestCase):
         inbox.mkdir(parents=True)
         pending = inbox / "dispatch-pending.json"
         recorded = inbox / "dispatch-recorded.json"
-        for path in (pending, recorded):
+        runs = root / ".sandboxes" / "runs"
+        runs.mkdir()
+        active_context = runs / "review-context-dispatch-pending.json"
+        finished_context = runs / "review-context-dispatch-recorded.json"
+        for path in (pending, recorded, active_context, finished_context):
             path.write_text("{}", encoding="utf-8")
         batches = root / "orchestration" / "state" / "batches"
         batches.mkdir(parents=True)
@@ -79,7 +83,9 @@ class CleanupTests(unittest.TestCase):
         plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
 
         self.assertIn(str(recorded), {item["path"] for item in plan["remove"]})
+        self.assertIn(str(finished_context), {item["path"] for item in plan["remove"]})
         self.assertNotIn(str(pending), {item["path"] for item in plan["remove"]})
+        self.assertNotIn(str(active_context), {item["path"] for item in plan["remove"]})
         self.assertIn(
             {
                 "path": str(pending),

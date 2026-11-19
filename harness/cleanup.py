@@ -24,6 +24,7 @@ from harness.orchestration import container_executor
 from harness.orchestration.core.constants import (
     AGENT_INBOX_REL,
     CONTAINER_ENGINES,
+    REVIEW_CONTEXT_PREFIX,
     DispatchState,
 )
 from harness.orchestration.ledger.lifecycle import store_is_authority
@@ -492,7 +493,7 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
     return batches
 
 
-def _pending_report_dispatches(root: Path) -> set[str] | _Unread:
+def _pending_dispatches(root: Path) -> set[str] | _Unread:
     records = _read_batches(root)
     if isinstance(records, _Unread):
         return records
@@ -775,6 +776,20 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
     remove: list[CleanupItem] = []
     skipped: list[dict[str, str]] = []
     registered = _registered_worktrees(checkout)
+    pending_dispatches: set[str] | _Unread | None = None
+
+    def keep_dispatch_input(path: Path, dispatch_id: str, description: str) -> bool:
+        nonlocal pending_dispatches
+        if pending_dispatches is None:
+            pending_dispatches = _pending_dispatches(root)
+        if isinstance(pending_dispatches, _Unread):
+            reason = pending_dispatches.reason
+        elif dispatch_id in pending_dispatches:
+            reason = f"{description} is pending for dispatch {dispatch_id}"
+        else:
+            return False
+        skipped.append({"path": str(path), "reason": reason})
+        return True
 
     # 1. Runs: .sandboxes/runs
     runs_dir = sandboxes / "runs"
@@ -786,6 +801,17 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                 skipped.append({"path": str(path), "reason": "not a local directory"})
             elif path.is_file():
                 if _old_enough(path, min_age_hours):
+                    if (
+                        path.parent == runs_dir
+                        and path.name.startswith(f"{REVIEW_CONTEXT_PREFIX}dispatch-")
+                        and path.suffix == ".json"
+                        and keep_dispatch_input(
+                            path,
+                            path.stem.removeprefix(REVIEW_CONTEXT_PREFIX),
+                            "review context",
+                        )
+                    ):
+                        return
                     remove.append({"kind": "file", "path": str(path)})
                 else:
                     skipped.append(
@@ -829,7 +855,6 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
 
     # 2. Transit files in scratch, PR bodies, and logs.
     inbox = root.parent / AGENT_INBOX_REL
-    pending_reports: set[str] | _Unread | None = None
     for category in ("scratch", "pr_body", "logs"):
         parent = sandboxes / category
         if parent.is_dir() and not parent.is_symlink():
@@ -843,22 +868,9 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                         path.parent == inbox
                         and path.name.startswith("dispatch-")
                         and path.suffix == ".json"
+                        and keep_dispatch_input(path, path.stem, "staged report")
                     ):
-                        if pending_reports is None:
-                            pending_reports = _pending_report_dispatches(root)
-                        if isinstance(pending_reports, _Unread):
-                            skipped.append(
-                                {"path": str(path), "reason": pending_reports.reason}
-                            )
-                            continue
-                        if path.stem in pending_reports:
-                            skipped.append(
-                                {
-                                    "path": str(path),
-                                    "reason": f"staged report is pending for dispatch {path.stem}",
-                                }
-                            )
-                            continue
+                        continue
                     remove.append({"kind": "file", "path": str(path)})
                 elif path.is_file() and _inside(root, path):
                     skipped.append(

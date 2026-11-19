@@ -1580,12 +1580,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         )
         context_summary = None
         if context_package is not None:
-            if (
-                is_review_work
-                and delta_review_of is None
-                and delta_scope is None
-                and runtime_images is None
-            ):
+            if is_review_work and delta_review_of is None and delta_scope is None:
                 context_summary = _review_context_summary(
                     context_package, review_scope, carried
                 )
