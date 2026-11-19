@@ -1222,9 +1222,9 @@ def _install_hook_config(
     template_bytes = (
         full_bytes
         if template_document == full_document
-        else (
-            json.dumps(template_document, indent=2, ensure_ascii=False) + "\n"
-        ).encode("utf-8")
+        else (json.dumps(template_document, indent=2, ensure_ascii=False) + "\n").encode(
+            "utf-8"
+        )
     )
     target = repo / config
     written: list[str] = []
@@ -2548,16 +2548,10 @@ def parser() -> argparse.ArgumentParser:
         help="move a spec's ticket to a task-board column (replaces its status::* label)",
     )
     ticket_status.add_argument("repo")
+    ticket_status.add_argument("--spec", required=True, help="the spec (epic) of the ticket")
+    ticket_status.add_argument("--ticket", required=True, help="the ticket as the board shows it")
     ticket_status.add_argument(
-        "--spec", required=True, help="the spec (epic) of the ticket"
-    )
-    ticket_status.add_argument(
-        "--ticket", required=True, help="the ticket as the board shows it"
-    )
-    ticket_status.add_argument(
-        "--to",
-        required=True,
-        choices=("backlog", "ready", "progress", "review", "done"),
+        "--to", required=True, choices=("backlog", "ready", "progress", "review", "done")
     )
     ticket_status.set_defaults(func=cmd_ticket_status)
 

@@ -494,14 +494,7 @@ class QaPreparationE2ETests(PreparationFixture):
         brief = self.qa_brief()
         common = Path(
             subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(self.repo),
-                    "rev-parse",
-                    "--path-format=absolute",
-                    "--git-common-dir",
-                ],
+                ["git", "-C", str(self.repo), "rev-parse", "--path-format=absolute", "--git-common-dir"],
                 check=True,
                 capture_output=True,
                 text=True,
