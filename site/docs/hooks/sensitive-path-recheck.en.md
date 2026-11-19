@@ -8,7 +8,7 @@
 
 ## 2. Full description
 
-An advisory hook `PreToolUse(Write|Edit)` of the `strict` profile from the matrix of ADR 0024, section 2a. It
+An advisory hook `PreToolUse(Write|Edit|MultiEdit|NotebookEdit)` of the `strict` profile from the matrix of ADR 0024, section 2a. It
 warns about an edit of a sensitive path from ADR 0024, section 2. The set is defined by the fixed policy
 constant `is_sensitive_path` in `harness/orchestration/hook_policy.py`; it has no configuration key. The set
 contains:

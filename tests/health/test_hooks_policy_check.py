@@ -94,7 +94,7 @@ def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_n
     assert "count-skill-usage" in message
 
 
-def test_the_second_runtime_has_native_events_for_all_change_impact_hooks(
+def test_the_second_runtime_wires_change_impact_hooks_and_lacks_only_claude_tools(
     repo: Path,
 ) -> None:
     result = check(repo)
@@ -102,12 +102,19 @@ def test_the_second_runtime_has_native_events_for_all_change_impact_hooks(
 
     _, marker, lacking = message.partition("codex: нет события или payload: ")
     assert marker
+    # Write and Edit arrive as apply_patch; only the first runtime's MultiEdit and NotebookEdit lack.
+    for row in (
+        "impact-first-touch (MultiEdit, NotebookEdit; вне hook: ChangeImpact-gate по ADR 0023)",
+        "sensitive-path-recheck (MultiEdit, NotebookEdit; вне hook: граница strict "
+        "(dispatch propose, qa run, publish))",
+        "targeted-check-reminder (MultiEdit, NotebookEdit; вне hook: сверка checks_run)",
+    ):
+        assert row in lacking
     for hook_id in (
         "impact-first-touch",
         "sensitive-path-recheck",
         "targeted-check-reminder",
     ):
-        assert hook_id not in lacking
         assert f"не подключён hook {hook_id}" not in message
     assert "claude: нет события" not in message
 

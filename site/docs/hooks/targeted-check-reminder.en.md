@@ -10,7 +10,7 @@
 
 An advisory hook from the matrix of ADR 0024, section 2a, on two events:
 
-- **`PreToolUse(Write|Edit)`** — keeps a touch log of the operation and answers `allow` without output. The record
+- **`PreToolUse(Write|Edit|MultiEdit|NotebookEdit)`** — keeps a touch log of the operation and answers `allow` without output. The record
   `t-<sha256(realpath)[:32]>.json` contains the path, the checkout root, and the kind: `report` for a write to
   `.harness/.sandboxes/scratch/inbox/*.json` (`report_staging_path`), `touch` for everything else. The record
   is created through `O_EXCL` once and does not change.
@@ -51,7 +51,8 @@ At the end of the turn the hook finds the touches by `session_id` and, for a sub
 ## 3. Contract
 
 - **Input:** The JSON of the event in stdin: `session_id`, `agent_id` (for a subagent), `hook_event_name`;
-  `PreToolUse` also carries `cwd` and either `tool_input.file_path` or a patch in `tool_input.command`.
+  `PreToolUse` also carries `cwd` and `tool_input.file_path`, `tool_input.notebook_path` (`NotebookEdit`), or
+  a patch in `tool_input.command`. A shell `apply_patch <<'EOF'` call through `Bash` is not logged.
   `Stop` and `SubagentStop` carry `stop_hook_active`.
 - **Output:** Code `0` always. The reminder — `systemMessage` in stdout, the first stderr line
   `[targeted-checks-unreported] <text>`, the line `evidence_ref=<path>`, and the verdict `warn`; all other

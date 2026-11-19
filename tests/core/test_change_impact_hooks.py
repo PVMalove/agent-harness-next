@@ -281,6 +281,57 @@ def test_codex_verdict_keeps_the_evidence_of_every_warned_path(tmp_path: Path) -
     assert "uv.lock" in str(verdict["remedy"])
 
 
+def _claude_edit(project: Path, tool: str, path: Path) -> dict[str, object]:
+    """A Claude Code MultiEdit (`file_path` + `edits`) or NotebookEdit (`notebook_path`)."""
+    tool_input: dict[str, object] = (
+        {"notebook_path": str(path), "new_source": "x = 1", "cell_id": "c1"}
+        if tool == "NotebookEdit"
+        else {
+            "file_path": str(path),
+            "edits": [
+                {"old_string": "a", "new_string": "b"},
+                {"old_string": "c", "new_string": "d"},
+            ],
+        }
+    )
+    return {
+        **_identity("developer"),
+        "hook_event_name": "PreToolUse",
+        "tool_name": tool,
+        "tool_input": tool_input,
+        "cwd": str(project),
+    }
+
+
+@needs_bash
+@pytest.mark.parametrize(
+    ("tool", "risky"),
+    (
+        ("MultiEdit", "pyproject.toml"),
+        ("NotebookEdit", "skills/demo/auth.ipynb"),
+    ),
+)
+def test_multi_and_notebook_edits_reach_every_change_impact_hook(
+    tmp_path: Path, tool: str, risky: str
+) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    target = _write(project / risky, "{}\n")
+    code = _write(project / "app" / f"code{Path(risky).suffix}", "{}\n")
+
+    for hook_id in (FIRST_TOUCH, SENSITIVE):
+        result = _script(project, hook_id, _claude_edit(project, tool, target))
+
+        verdict = _decision(result)
+        assert verdict["decision"] == "warn", (hook_id, result.stderr)
+        assert verdict["reason_code"] != "internal-error", hook_id
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert risky in context
+    touched = _script(project, REMINDER, _claude_edit(project, tool, code))
+    assert _decision(touched)["reason_code"] == "ok", touched.stderr
+    _write(code, "{}  \n")
+    assert _decision(_script(project, REMINDER, _stop()))["decision"] == "warn"
+
+
 @needs_bash
 def test_codex_advisory_reports_an_unparseable_patch_without_blocking(
     tmp_path: Path,

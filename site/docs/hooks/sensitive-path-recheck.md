@@ -8,7 +8,7 @@
 
 ## 2. Полное описание
 
-Advisory-hook `PreToolUse(Write|Edit)` профиля `strict` из матрицы ADR 0024, раздел 2a. Hook
+Advisory-hook `PreToolUse(Write|Edit|MultiEdit|NotebookEdit)` профиля `strict` из матрицы ADR 0024, раздел 2a. Hook
 предупреждает о правке чувствительного пути из ADR 0024, раздел 2. Набор путей задаёт фиксированная
 константа политики `is_sensitive_path` в `harness/orchestration/hook_policy.py`; ключа конфигурации
 у набора нет. В набор входят:

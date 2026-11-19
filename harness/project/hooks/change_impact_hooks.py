@@ -3,15 +3,20 @@
 
 ``change_impact_hooks.py <hook_id>`` читает JSON события runtime из stdin:
 
-- ``impact-first-touch`` (PreToolUse, Write|Edit|apply_patch) предупреждает о касании рискованного пути, влияние
-  которого ChangeImpact не вычисляет по графу (конфиг сборки и проверок, capabilities, skills);
-- ``sensitive-path-recheck`` (PreToolUse, Write|Edit|apply_patch) предупреждает о правке чувствительного пути
-  (манифест, CI, миграции, auth, права доступа, hooks);
-- ``targeted-check-reminder`` на PreToolUse Write|Edit|apply_patch ведёт журнал касаний операции, а на Stop и
-  SubagentStop напоминает отчитать targeted-проверки brief, если файлы менялись после отчёта.
+- ``impact-first-touch`` (PreToolUse, Write|Edit|MultiEdit|NotebookEdit|apply_patch) предупреждает
+  о касании рискованного пути, влияние которого ChangeImpact не вычисляет по графу (конфиг сборки
+  и проверок, capabilities, skills);
+- ``sensitive-path-recheck`` (PreToolUse, Write|Edit|MultiEdit|NotebookEdit|apply_patch)
+  предупреждает о правке чувствительного пути (манифест, CI, миграции, auth, права доступа, hooks);
+- ``targeted-check-reminder`` на PreToolUse Write|Edit|MultiEdit|NotebookEdit|apply_patch ведёт журнал
+  касаний операции, а на Stop и SubagentStop напоминает отчитать targeted-проверки brief, если файлы
+  менялись после отчёта.
 
-Тело — advisory: оно всегда завершается кодом 0. Предупреждение — первая строка stderr
-``[reason_code] remedy``; stdout содержит только JSON протокола runtime. Профиль применяет конверт
+Путь правки — ``tool_input.file_path`` (у NotebookEdit — ``tool_input.notebook_path``); MultiEdit
+правит один ``file_path``. Патч ``apply_patch`` даёт по событию на каждый путь, включая цель Move.
+
+Тело — advisory: оно всегда завершается кодом 0. Предупреждение каждого пути — строка stderr
+``[reason_code] remedy`` и следующая за ней ``evidence_ref=<путь>``; stdout содержит только JSON протокола runtime. Профиль применяет конверт
 ``hook_response.py`` до запуска тела. Hook не читает ledger, brief и отчёты coordinator-а, не запускает
 тесты, make и git: только читает stdin и делает stat файлов.
 
@@ -119,12 +124,14 @@ MAX_RECORDS = 2048
 REPORT_GLOB = ".harness/.sandboxes/scratch/inbox/*.json"
 UNWATCHED_PREFIXES = (".harness/", "docs/tasks/")
 STOP_EVENTS = ("Stop", "SubagentStop")
+# Ключ пути правки в tool_input, если он не ``file_path``.
+PATH_KEYS = {"NotebookEdit": "notebook_path"}
 
 Output = Tuple[Optional[str], List[str]]
 
 
 class HookInputError(Exception):
-    """Событие нельзя прочитать: не JSON-объект, нет ``session_id`` или ``file_path``."""
+    """Событие нельзя прочитать: не JSON-объект, нет ``session_id`` или пути правки."""
 
 
 class StoreFull(Exception):
@@ -244,13 +251,14 @@ def checkout_path(file_path: str, cwd: str) -> Optional[Target]:
 
 
 def edited_path(event: Event) -> Optional[Target]:
-    """Путь ``tool_input.file_path`` события PreToolUse; другое событие или путь вне git — None."""
+    """Путь правки события PreToolUse (``PATH_KEYS``); другое событие или путь вне git — None."""
     if event.name != "PreToolUse":
         return None
+    key = PATH_KEYS.get(str(event.payload.get("tool_name")), "file_path")
     tool_input = event.payload.get("tool_input")
-    file_path = tool_input.get("file_path") if isinstance(tool_input, dict) else None
+    file_path = tool_input.get(key) if isinstance(tool_input, dict) else None
     if not isinstance(file_path, str) or not file_path:
-        raise HookInputError("в событии нет строки tool_input.file_path")
+        raise HookInputError(f"в событии нет строки tool_input.{key}")
     cwd = event.payload.get("cwd")
     return checkout_path(file_path, cwd if isinstance(cwd, str) else os.getcwd())
 

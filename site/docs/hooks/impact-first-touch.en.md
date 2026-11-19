@@ -8,8 +8,8 @@
 
 ## 2. Full description
 
-An advisory hook `PreToolUse(Write|Edit)` from the matrix of ADR 0024, section 2a. It reads
-`tool_input.file_path` and warns when the agent edits, for the first time in an operation, a path whose impact
+An advisory hook `PreToolUse(Write|Edit|MultiEdit|NotebookEdit)` from the matrix of ADR 0024, section 2a. It reads
+`tool_input.file_path` (`tool_input.notebook_path` for `NotebookEdit`) and warns when the agent edits, for the first time in an operation, a path whose impact
 ChangeImpact does not compute from the import graph: the build and check configuration (`pyproject.toml`, `uv.lock`,
 `Makefile`, `conftest.py`, `.github/*`, `scripts/verify.py`, `scripts/verification/*`) or the catalog of
 capabilities and skills (`harness/CAPABILITIES.json`, `skills/*`). The set matches the rules
@@ -36,7 +36,7 @@ The model receives the warning: stdout contains
   parallel calls warns. The marker also serves as an evidence record: its path is in
   `evidence_ref` of the verdict. The storage and its limits are described in
   [targeted-check-reminder.md](targeted-check-reminder.md).
-- **Internal error.** Unreadable JSON, no `session_id` or `tool_input.file_path`, a storage failure,
+- **Internal error.** Unreadable JSON, no `session_id` or edited path, a storage failure,
   any exception, a non-zero code, and the 10 s timeout (`ADVISORY_TIMEOUT_SECONDS`) give `warn`
   `internal-error` with code `0` and empty stdout ([hook-response.md](hook-response.md)).
 - **Codex.** The hook receives native `apply_patch` events and checks the paths in the patch body.
@@ -44,7 +44,7 @@ The model receives the warning: stdout contains
 ## 3. Contract
 
 - **Input:** The JSON of the `PreToolUse` event in stdin: `session_id`, `agent_id` (for a subagent),
-  `hook_event_name`, `tool_name`, `tool_input.file_path`, `cwd`; the profile comes only from `hook_policy` in
+  `hook_event_name`, `tool_name`, `tool_input.file_path` (`tool_input.notebook_path` for `NotebookEdit`), `cwd`; the profile comes only from `hook_policy` in
   `.harness/project.json`.
 - **Output:** Code `0` always. A first touch of a risky path gives `additionalContext` in stdout, the first
   stderr line `[risky-path-first-touch] <text>`, and the line `evidence_ref=<path>`; the last
