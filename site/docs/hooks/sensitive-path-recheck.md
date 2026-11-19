@@ -8,7 +8,7 @@
 
 ## 2. Полное описание
 
-Advisory-hook `PreToolUse(Write|Edit)` профиля `strict` из матрицы ADR 0024, раздел 2a. Hook
+Advisory-hook `PreToolUse(Write|Edit|MultiEdit|NotebookEdit)` профиля `strict` из матрицы ADR 0024, раздел 2a. Hook
 предупреждает о правке чувствительного пути из ADR 0024, раздел 2. Набор путей задаёт фиксированная
 константа политики `is_sensitive_path` в `harness/orchestration/hook_policy.py`; ключа конфигурации
 у набора нет. В набор входят:
@@ -51,8 +51,8 @@ Hook не видит пакет harness, поэтому держит копию 
 - **Остаточное ограничение.** Hardlink на чувствительный файл обходит только это предупреждение:
   `realpath` не раскрывает hardlink. Решают критический `protect-hook-policy` и diff-проверка
   границы strict, которая видит путь из git.
-- **Второй runtime.** Hook не подключён, пока нет адаптера `apply_patch`; `harness health` называет
-  проверку вне hook: границу strict.
+- **Codex.** Хук получает нативный `apply_patch` и сверяет пути из тела патча.
+- **Ограничение Codex.** Shell-вызов `apply_patch <<'EOF'` через инструмент `Bash` хук не видит: hooks ChangeImpact к `Bash` не подключены, такой патч разбирает только критический `protect-hook-policy`. Чувствительный путь из такого патча проверяет граница strict.
 
 ## 3. Контракт
 
