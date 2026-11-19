@@ -102,11 +102,10 @@ def test_a_worker_that_reports_after_five_seconds_is_reported_and_never_blocked(
     if runtime == "claude":
         call = wait_for(repo, "claude")
         argv = call["argv"]
-        assert isinstance(argv, list) and isinstance(argv[1], str)
-        # The prompt is the argument right after -p; the worker's stdin is empty.
+        assert isinstance(argv, list)
         assert argv[0] == "-p"
-        assert "dispatch self-report" in argv[1]
-        assert call["stdin"] == ""
+        assert argv[argv.index("--input-format") + 1] == "stream-json"
+        assert "dispatch self-report" in str(call["prompt"])
 
 
 def test_a_read_only_codex_worker_stages_and_submits_its_report_but_cannot_change_its_checkout(
