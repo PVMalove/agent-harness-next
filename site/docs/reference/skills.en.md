@@ -11,7 +11,7 @@ changed, and this is expected.
 | --- | --- |
 | `triage` | A namespaced taxonomy of state labels and a separate execution-mode axis instead of the upstream names. |
 | `to-spec` | Converts grilling decisions and approved Discovery Context into a local technical specification. |
-| `to-tickets` | Splits an approved specification into verifiable tickets with waves and a traceability matrix, links them to the epic, and does not rewrite its decisions. |
+| `to-tickets` | Splits an approved specification into verifiable tickets with waves and a traceability matrix, links them to the epic, and does not rewrite its decisions. With `--review <epic>`, rechecks the published tickets against the epic criteria without writing. |
 | `implement` | Gates with approval, separate roles, mandatory review and QA checks, an issue branch from the integration branch, an early blocker report, and a recovery route. |
 | `ask-matt` | Takes the developer's choice into account: a two-axis review, or a move to commit and push. |
 | `code-review` | Outputs the report in the language from the project configuration. |

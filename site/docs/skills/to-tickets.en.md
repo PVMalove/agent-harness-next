@@ -19,24 +19,40 @@ creates branches, and never starts `/implement`.
 - Tickets name only paths from the spec's `## Relevant Files (Discovery Context)` and
   `## Surgical File & Contract Changes`. A new path appears in the plan with its reason and enters
   a ticket only after your approval.
-- Items from `## Non-Goals & Rejected Alternatives` never become tickets.
+- Applicable non-goals from `## Non-Goals & Rejected Alternatives` go into the affected tickets'
+  `Out of scope`. The rationale for rejected alternatives stays in the spec.
 - Each ticket is a vertical slice that carries its change and its checks; the build and tests stay
   green after every ticket. There are no tickets for drive-by cleanup or "all tests at the end".
+- If the spec names the first scenario to demonstrate, the skill schedules its tickets in the
+  earliest wave their dependencies allow, marks them in the wave plan, and shows the check that
+  proves the scenario's result.
 - A blocking edge requires a result dependency or a requirement incompatibility. Tickets without
   blockers form Wave 1.
 - `afk` tickets get a story-point score and a `pipeline::fast` or `pipeline::full` label.
 
 ## Approval and publication
 
-The skill checks requirement and acceptance coverage and checks for dependency cycles. It saves
-the complete plan under `docs/tasks/<task-folder>/artifacts/ticket-plan-v<N>.md` and shows it on
-the first pass. After an edit, it shows the changes and links the complete revision. Before
-publishing, it verifies the SHA-256 of the approved draft.
+Before showing the plan, the skill checks that the `Action -> Verify` lines prove every outcome
+promised by the specification and that the dependency graph has no cycles. If a repeated import
+must leave no duplicates, the check must examine the records after the retry. The skill saves
+the complete plan under `docs/tasks/<task-folder>/artifacts/ticket-plan-v<N>.md`: the cards,
+waves, traceability matrix, new paths, and drafted epic sections. It shows the whole plan on the
+first pass and, after an edit, the changes with a link to the complete revision, then waits for
+explicit approval. Before publishing, it verifies the SHA-256 of the approved draft. Criteria
+with IDs from the spec keep those IDs in published lines such as `[R3] Action -> Verify`.
 
 After approval, the skill publishes the tickets to GitHub, GitLab, or
 `.scratch/<feature-slug>/issues/`, links them to the epic, and shows a summary table: link, title, wave, short summary, story
 points, estimated hours from `story_points.hours` in `.harness/project.json`, and labels. If a write
 fails, the complete cards stay in chat. Finally, the skill offers to start a Wave 1 ticket
 manually with `/implement` or `/fast-implement`, matching its `pipeline::*` label.
+
+## Repeat review (`--review <epic>`)
+
+After tracker edits, run `/to-tickets --review <epic>`. The skill reads the current cards of all
+child tickets, open and closed, from the tracker and compares their criteria with the epic's
+approved specification. In chat, it lists every missing or weakened check with a proposed
+correction. If a ticket or the child list cannot be read, it reports incomplete coverage. The mode
+changes nothing: tickets, the epic, and branches stay as they were.
 
 [Source SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/to-tickets/SKILL.md)
