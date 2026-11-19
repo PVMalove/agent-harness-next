@@ -436,3 +436,27 @@ def test_pre_qa_commands_are_project_configuration(project: Path) -> None:
     assert json.loads(result.stdout)["document"]["pre_qa_commands"] == [
         "python check_compatibility.py"
     ]
+
+
+def _without_risk_triggers(manifest: Path) -> None:
+    lines = manifest.read_text(encoding="utf-8").split("\n")
+    start = lines.index("risk_triggers:")
+    end = start + 1
+    while lines[end].startswith("  - "):
+        end += 1
+    manifest.write_text("\n".join(lines[:start] + lines[end:]), encoding="utf-8")
+
+
+def test_only_the_code_review_manifest_needs_risk_triggers(project: Path) -> None:
+    """#1234: only the code-review triggers route anything, so other roles may omit the field."""
+    from harness.orchestration.contract import configuration_problems
+
+    roles = project / ".harness/orchestration/roles"
+    authored = read_config(project)
+    _without_risk_triggers(roles / "developer.md")
+    assert not configuration_problems(authored, roles)
+    _without_risk_triggers(roles / "code-review.md")
+    problems = configuration_problems(authored, roles)
+    assert any(
+        "code-review" in problem and "risk trigger" in problem for problem in problems
+    )

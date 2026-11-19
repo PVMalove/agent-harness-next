@@ -10,8 +10,6 @@ name: verification
 mode: read-only
 required_capabilities:
   - backend-development
-risk_triggers:
-  - verification-infrastructure
 ```
 
 Используйте роль только после того, как отчёт developer остановился по операционной причине
@@ -24,7 +22,7 @@ risk_triggers:
 
 Если часть задания не выполнена, перечислите каждый пункт в `incomplete_items` по общему контракту.
 `target_role` может быть `verification` для суженного повтора на том же candidate,
-`code-review` или `qa`. Суженный повтор verification всё равно запускает все утверждённые команды проверки.
+или `code-review`. Суженный повтор verification всё равно запускает все утверждённые команды проверки.
 
 ## Когда использовать
 

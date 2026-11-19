@@ -110,7 +110,9 @@ coordinator останавливается, сообщает о нём разр�
    Сначала переведите тикет на английский: `batch create` отклоняет кириллицу в `--goal`,
    `--definition-of-done` и `--prohibited-change`. Команды, пути и ID оставьте дословными.
    Сопоставьте разделы тикета: каждый пункт `## Acceptance criteria` → `--definition-of-done`,
-   каждый пункт `## Out of scope` → `--prohibited-change`, пути из `## Contract touchpoints` и
+   каждый пункт `## Out of scope` → `--prohibited-change`, каждый пункт
+   `## Non-Goals & Rejected Alternatives` родительского эпика → `--prohibited-change`, если тикет
+   называет `## Parent: #<epic>`, пути из `## Contract touchpoints` и
    `## Relevant Files (Discovery Context)` → `--allowed-path` и `--expected-file`.
 4. **Создание batch.** Повторяйте флаги-списки по одному разу на каждое значение.
 

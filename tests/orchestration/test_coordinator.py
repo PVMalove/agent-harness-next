@@ -17395,7 +17395,8 @@ class CoordinatorRetryRoutingTableTests(unittest.TestCase):
 
     def test_a_narrowed_retry_reruns_the_read_only_stage_on_its_items(self) -> None:
         tooled = {**INCOMPLETE_ITEM, "tooling_blocker": dict(TOOLING_BLOCKER)}
-        for stage in ("architect", "verification", "code-review", "qa"):
+        # No report hands an item to qa (#1234), so qa has no narrowed retry.
+        for stage in ("architect", "verification", "code-review"):
             for items, (category, route) in (
                 ([INCOMPLETE_ITEM], (None, "narrowed-retry")),
                 ([INCOMPLETE_ITEM, tooled], ("tooling", "tooling-retry")),
@@ -17455,8 +17456,8 @@ class CoordinatorRetryRoutingTableTests(unittest.TestCase):
             ),
             (
                 "category",
-                "qa",
-                self._itemised("qa", INCOMPLETE_ITEM),
+                "verification",
+                self._itemised("verification", INCOMPLETE_ITEM),
                 "transport",
                 False,
                 "takes no --reason-category",
@@ -17482,16 +17483,16 @@ class CoordinatorRetryRoutingTableTests(unittest.TestCase):
             ),
             (
                 "failed check",
-                "qa",
-                self._itemised("qa", INCOMPLETE_ITEM, checks_run=failed),
+                "verification",
+                self._itemised("verification", INCOMPLETE_ITEM, checks_run=failed),
                 None,
                 False,
                 "check failed",
             ),
             (
                 "moved candidate",
-                "qa",
-                self._itemised("qa", INCOMPLETE_ITEM),
+                "code-review",
+                self._itemised("code-review", INCOMPLETE_ITEM),
                 None,
                 True,
                 "candidate changed",

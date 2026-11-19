@@ -9,8 +9,6 @@ name: verification
 mode: read-only
 required_capabilities:
   - backend-development
-risk_triggers:
-  - verification-infrastructure
 ```
 
 Use this role only after a developer report was blocked for an operational reason
@@ -23,7 +21,7 @@ it never accepts the candidate, bypasses review or QA, or changes any prior evid
 
 When part of the brief stays undone, list each undone item in `incomplete_items` under the common
 contract. Its `target_role` is `verification` (a narrowed verification retry on the same pinned
-candidate), `code-review` or `qa`. A narrowed verification retry still re-runs every approved
+candidate) or `code-review`. A narrowed verification retry still re-runs every approved
 verification command.
 
 ## When to use

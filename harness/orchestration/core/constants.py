@@ -556,11 +556,12 @@ INCOMPLETE_ITEM_OPTIONAL_FIELDS = frozenset({"tooling_blocker"})
 # The roles an incomplete item of each read-only stage may target: the stage itself (a narrowed
 # retry) or a later pipeline role. Verification is a target of no other stage: it runs only on a
 # registered blocked developer candidate.
+# No report hands an item to qa (#1234): `qa run` has no worker that could finish one, and the
+# QA report is the clean-room runner's, never a role's.
 INCOMPLETE_ITEM_TARGET_ROLES = {
-    "architect": ("architect", "developer", "code-review", "qa"),
-    "verification": ("verification", "code-review", "qa"),
-    "code-review": ("code-review", "qa"),
-    "qa": ("qa",),
+    "architect": ("architect", "developer", "code-review"),
+    "verification": ("verification", "code-review"),
+    "code-review": ("code-review",),
 }
 RISK_ASSESSMENT_FIELDS = {
     "risk_assessment_id",

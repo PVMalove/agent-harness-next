@@ -47,6 +47,6 @@ The architect brief therefore approves no verification commands: report `checks_
 list and name each decision-specific check with its result in `output`.
 
 When part of the brief stays undone, list each undone item in `incomplete_items` under the common
-contract. Its `target_role` is `architect` (a narrowed architect retry), `developer`, `code-review`
-or `qa`. A narrowed architect retry decides only the carried items; it repeats the commit plan only
+contract. Its `target_role` is `architect` (a narrowed architect retry), `developer` or
+`code-review`. A narrowed architect retry decides only the carried items; it repeats the commit plan only
 when an item changes that plan.

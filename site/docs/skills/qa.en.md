@@ -20,8 +20,6 @@ name: qa
 mode: read-only
 required_capabilities:
   - independent-verification
-risk_triggers:
-  - independent-verification-required
 ```
 
 ### QA

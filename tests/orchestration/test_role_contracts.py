@@ -168,3 +168,39 @@ def test_backend_orchestration_ships_the_role_references() -> None:
     for path in sorted(REFERENCES.glob("*.md")):
         relative = f".harness/orchestration/roles/references/{path.name}"
         assert files[relative] == path.read_bytes()
+
+
+def test_no_report_hands_an_item_to_qa() -> None:
+    """#1234: qa run has no worker that could finish an item, so no report may target it."""
+    import pytest
+
+    from harness.orchestration.core.constants import INCOMPLETE_ITEM_TARGET_ROLES
+    from harness.orchestration.core.utils import CoordinatorError
+    from harness.orchestration.workflow import reports
+
+    assert "qa" not in INCOMPLETE_ITEM_TARGET_ROLES
+    assert all("qa" not in targets for targets in INCOMPLETE_ITEM_TARGET_ROLES.values())
+    report = {
+        "role": "code-review",
+        "incomplete_items": [
+            {"brief_item": "Run the e2e suite", "reason": "No browser", "target_role": "qa"}
+        ],
+    }
+    with pytest.raises(CoordinatorError, match="target_role 'qa'"):
+        reports._validate_incomplete_items(report, {"mode": "read-only"})
+    for name in ("architect", "code-review", "verification", "common"):
+        assert "or `qa`" not in _role(name)
+        assert "`code-review`, `qa`" not in _role(name)
+
+
+def test_placeholder_risk_triggers_are_gone() -> None:
+    for name in ("qa", "verification", "rebaser", "conflict-resolver"):
+        assert "risk_triggers:" not in (ROLES / f"{name}.md").read_text(encoding="utf-8")
+
+
+def test_implement_carries_the_epic_non_goals_into_prohibited_changes() -> None:
+    text = _text(SKILLS / "implement/SKILL.md")
+    assert (
+        "each item of the parent epic's `## Non-Goals & Rejected Alternatives` → "
+        "`--prohibited-change`" in text
+    )

@@ -111,7 +111,8 @@ Start these steps only after the ticket pre-flight in "The coordinator contract"
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`,
    and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:
    each `## Acceptance criteria` item → `--definition-of-done`, each `## Out of scope` item →
-   `--prohibited-change`, and the paths of `## Contract touchpoints` and
+   `--prohibited-change`, each item of the parent epic's `## Non-Goals & Rejected Alternatives` →
+   `--prohibited-change` when the ticket names `## Parent: #<epic>`, and the paths of `## Contract touchpoints` and
    `## Relevant Files (Discovery Context)` → `--allowed-path` and `--expected-file`.
 4. **Create the batch.** Repeat the list flags once for each value.
 
