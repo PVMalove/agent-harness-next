@@ -66,6 +66,7 @@ PROJECT_JSON_ALLOWED_FIELDS = frozenset(PROJECT_JSON_REQUIRED_FIELDS) | {
     "test_runner",
     "test_author",
     "hook_policy",
+    "pr_checklist",
 }
 STORY_POINTS_REQUIRED_FIELDS = (
     "scale",
@@ -904,6 +905,23 @@ def validate_project_data(data: object, problems: list[str]) -> None:
         ):
             problems.append(
                 ".harness/project.json qa_gate_commands must be a list of strings"
+            )
+    if "pr_checklist" in data:
+        checklist = data["pr_checklist"]
+        if (
+            not isinstance(checklist, list)
+            or len(checklist) > 32
+            or any(
+                not isinstance(item, str)
+                or not item.strip()
+                or len(item) > 300
+                or "\n" in item
+                or "\r" in item
+                for item in checklist
+            )
+        ):
+            problems.append(
+                ".harness/project.json pr_checklist needs up to 32 non-empty single lines"
             )
     if "shell" in data and data["shell"] not in ("bash", "powershell"):
         problems.append(

@@ -90,6 +90,10 @@ What needs to happen when deploying to other environments — DB migrations, new
 
 Read `language` from `.harness/project.json` (default `ru`) to pick the section headings. The headings are output text in the project language. Do not translate them.
 
+When `.harness/project.json` has a `pr_checklist`, address each relevant item in the matching
+body section with project evidence. Use section 7 for rollout and deployment items. Mark a relevant
+item without evidence in section 6. Keep the required header, sections, and ticket footer.
+
 **`language: ru`**:
 
 ```markdown

@@ -1680,6 +1680,36 @@ def cmd_workflow_overlays(args: argparse.Namespace) -> int:
     return 0
 
 
+def installed_capabilities(repo: Path) -> set[str]:
+    lock = load_lock(repo) or {}
+    catalog = capabilities()
+    available: set[str] = set()
+    for selected in lock.get("capabilities", []):
+        name: str | None = canonical_capability(selected)
+        while name and name not in available:
+            if name not in catalog:
+                fail(f"installed capability is unknown: {name}")
+            available.add(name)
+            name = catalog[name].get("extends")
+    return available
+
+
+def cmd_presets(args: argparse.Namespace) -> int:
+    from harness.overlay_install import read_manifest
+    from harness.presets import apply_preset
+
+    repo = Path(args.repo).expanduser().resolve()
+    try:
+        result = apply_preset(
+            repo, read_manifest(Path(args.manifest).expanduser()),
+            installed_capabilities(repo), apply=args.apply,
+        )
+    except (OSError, ValueError) as exc:
+        fail(f"preset: {exc}")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
+    return 0
+
+
 def cmd_runtime_events(args: argparse.Namespace) -> int:
     from harness.runtime_events import adapter_inventory, sync
 
@@ -2360,6 +2390,12 @@ def parser() -> argparse.ArgumentParser:
     overlays.add_argument("--manifest")
     overlays.add_argument("--apply", action="store_true")
     overlays.set_defaults(func=cmd_workflow_overlays)
+
+    presets = commands.add_parser("presets", help="preview or apply a team preset")
+    presets.add_argument("repo")
+    presets.add_argument("--manifest", required=True)
+    presets.add_argument("--apply", action="store_true")
+    presets.set_defaults(func=cmd_presets)
 
     events = commands.add_parser(
         "runtime-events", help="synchronise native project lifecycle hooks"

@@ -176,6 +176,7 @@ described separately.
 | `base_branch` | Required non-empty string. Project release/base branch: epic setup uses it as the base for the integration branch; without an epic, it is the fallback base. Example: `main`. |
 | `branch_pattern` | Required non-empty string containing a valid regular expression for issue branch names. Enforced by branch hooks. Example: `^feature/issue-[0-9]+-.+`. |
 | `qa_gate_commands` | Required array of strings; the schema requires each string to be non-empty. QA gate runs commands in order. An empty array is valid configuration, but qa-gate stops and asks you to supply checks. |
+| `pr_checklist` | Optional pull request checklist. The author addresses relevant items in the corresponding body sections. |
 | `shell` | Optional string: `bash` or `powershell`. If absent, qa-gate uses `bash`. |
 | `tracker` | Optional explicit tracker selection object. Requires `tracker.type`; GitHub/GitLab also require host and project. |
 | `ci_required_checks` | Optional array of unique non-empty CI check names. All must pass to accept CI evidence through `integration collect-ci`. An empty or missing list keeps local QA as the fallback. |
