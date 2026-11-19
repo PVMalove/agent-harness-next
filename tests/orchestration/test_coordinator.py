@@ -2531,6 +2531,61 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self._submit(brief["dispatch_id"], self._base_report(brief, "architect"))
         self._decide(batch_id, "accept")
 
+    def test_compact_report_receipt_leaves_full_decision_available(self) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        brief = self._dispatch(batch_id, "architect")["brief"]
+        dispatch_id = brief["dispatch_id"]
+        self._start(dispatch_id)
+        path = Path(brief["report_staging_path"])
+        path.write_text(
+            json.dumps(self._base_report(brief, "architect")), encoding="utf-8"
+        )
+
+        receipt = coordinator.submit_report(self._args(file=str(path), compact=True))
+
+        self.assertEqual(receipt["dispatch_id"], dispatch_id)
+        self.assertEqual(receipt["state"], "reported")
+        self.assertTrue(receipt["report"].endswith(f"{dispatch_id}.json"))
+        self.assertNotIn("decision_packet", receipt)
+        self.assertIn("decision-packet", receipt["next_coordinator_command"])
+        packet = coordinator.decision_packet(
+            self._args(batch=batch_id, dispatch=dispatch_id)
+        )
+        self.assertIn("accept", packet["options"])
+        repeated = coordinator.submit_report(self._args(file=str(path), compact=True))
+        self.assertTrue(repeated["already_recorded"])
+        self.assertEqual(repeated["report"], receipt["report"])
+
+    def test_first_review_starts_with_changed_paths_and_can_read_the_shared_package(self) -> None:
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id)
+
+        brief = self._dispatch(batch_id, "code-review", candidate=candidate)["brief"]
+        focus = brief["context_package_summary"]
+
+        self.assertIn("services/x.py", [file["path"] for file in focus["starting_files"]])
+        self.assertNotIn("README.md", [file["path"] for file in focus["starting_files"]])
+        self.assertNotIn("definition_of_done", focus)
+        self.assertTrue(brief["definition_of_done"])
+        self.assertEqual(focus["candidate_commit"], candidate)
+        full = coordinator.show_context_package(
+            self._args(dispatch=brief["dispatch_id"], section=None)
+        )
+        self.assertEqual(full["context_package_id"], brief["context_package_id"])
+        self.assertEqual(full["definition_of_done"], brief["definition_of_done"])
+        self.assertIn("services/x.py", full["diff"])
+        section = coordinator.show_context_package(
+            self._args(dispatch=brief["dispatch_id"], section="related_tests")
+        )
+        self.assertEqual(
+            section,
+            {
+                "context_package_id": brief["context_package_id"],
+                "related_tests": full["related_tests"],
+            },
+        )
+
     def test_invalid_check_result_is_rejected_before_recording_and_can_be_corrected(
         self,
     ) -> None:

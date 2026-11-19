@@ -1428,6 +1428,11 @@ A minimal brief can be rendered as:
 
 ## Delivering a worker report after a tool refusal
 
+Workers use `report submit --compact --file <path>` for a receipt with the report reference,
+transition status and any next action. When a human decision is pending, the coordinator reads
+`batch decision-packet`. Repeating the same recorded worker report in compact mode returns its
+receipt.
+
 A worker that cannot submit keeps its original `report_staging_path` bytes and returns the exact
 command/error. The coordinator may deliver that existing file through `report submit --file <path>
 --relayed-by <coordinator> --relay-reason <verified-refusal> --source-sha256 <original-file-sha256>`.

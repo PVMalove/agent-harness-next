@@ -126,6 +126,7 @@ from harness.orchestration.workflow.history import (
     _context_package_freshness,
     _context_package_quality_warning,
     _context_package_summary,
+    _review_context_summary,
     _context_package_tier,
     _current_developer_candidate,
     _effective_base,
@@ -1400,6 +1401,19 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         runtime_images = runtime_access.pin_images(
             access_plan, transport, role_name, purpose
         )
+        context_summary = None
+        if context_package is not None:
+            if (
+                is_review_work
+                and delta_review_of is None
+                and delta_scope is None
+                and runtime_images is None
+            ):
+                context_summary = _review_context_summary(
+                    context_package, review_scope, carried
+                )
+            else:
+                context_summary = _context_package_summary(context_package)
         qa_execution = _qa_execution_section(
             repo, root, config, {"role": role_name, "runtime_access": access_plan}
         )
@@ -1620,9 +1634,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                 if context_package
                 else None
             ),
-            "context_package_summary": _context_package_summary(context_package)
-            if context_package
-            else None,
+            "context_package_summary": context_summary,
             "worker_attestation_required": _worker_attestation_required(config),
             "communication_policy": batch.get(
                 "communication_policy", _communication_policy(config)

@@ -63,14 +63,20 @@ def test_non_goals_and_unapproved_paths_stay_out_of_tickets() -> None:
     assert "as a new path that needs the user's approval" in template
 
 
-def test_plan_is_traced_acyclic_and_approved_before_any_write() -> None:
+def test_plan_is_traced_acyclic_and_version_approved_before_publication() -> None:
     skill = TICKETS / "SKILL.md"
     approve = _section(skill, "Approve the plan")
     assert "every requirement `R<n>` and every acceptance criterion" in approve
     assert "the blocking graph has no cycles" in approve
     assert "no ticket names an unapproved path or implements a non-goal" in approve
     assert "Wait for explicit approval" in approve
-    assert "Write nothing until the user approves the plan" in _text(skill)
+    assert "Before approval, write only local plan drafts" in _text(skill)
+    assert "ticket-plan-v<N>.md" in approve
+    assert "show only the changed cards" in approve
+    assert "SHA-256" in approve
+    assert "Verify the approved draft's SHA-256 before publishing" in _section(
+        skill, "Publish and finish"
+    )
     decompose = _section(skill, "Decompose")
     assert "minimum number of tickets" in decompose
     assert "vertical slice" in decompose

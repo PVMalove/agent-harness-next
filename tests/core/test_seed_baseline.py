@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from harness.bin.harness import write_lock
 from harness.json_types import JsonObject
 from tests.core.test_uninstall import git, harness
 
@@ -88,6 +89,30 @@ def test_update_keeps_the_seed_baseline(repo: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert seed_files(repo) == before
+
+
+def test_lock_keeps_previous_bytes_if_atomic_publish_fails(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = repo / LOCK
+    before = lock_path.read_bytes()
+    files_before = set(lock_path.parent.iterdir())
+    lock = load_lock(repo)
+    lock["package_version"] = "replacement-version"
+
+    def refuse_replace(src: Path, dst: Path) -> None:
+        assert Path(dst) == lock_path
+        assert Path(src).parent == lock_path.parent
+        assert json.loads(Path(src).read_bytes()) == lock
+        assert lock_path.read_bytes() == before
+        raise OSError("replacement refused")
+
+    monkeypatch.setattr(os, "replace", refuse_replace)
+    with pytest.raises(OSError, match="replacement refused"):
+        write_lock(repo, lock)
+
+    assert lock_path.read_bytes() == before
+    assert set(lock_path.parent.iterdir()) == files_before
 
 
 @pytest.mark.parametrize(

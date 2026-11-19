@@ -19,8 +19,13 @@ from ctypes import wintypes
 from pathlib import Path
 from typing import NotRequired, TypedDict
 
+from harness.json_types import JsonObject
 from harness.orchestration import container_executor
-from harness.orchestration.core.constants import CONTAINER_ENGINES
+from harness.orchestration.core.constants import (
+    AGENT_INBOX_REL,
+    CONTAINER_ENGINES,
+    DispatchState,
+)
 from harness.orchestration.ledger.lifecycle import store_is_authority
 from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
 from harness.repo_map.bundle_install import INSTALL_DIR_HASH_PREFIX
@@ -414,9 +419,8 @@ def _remember_batch(
         batches[path] = (batch_id, state)
 
 
-def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
-    """Сопоставить worktree с id и состоянием batch; _Unread, если ledger не прочитан:
-    с RUNTIME_UNAVAILABLE при неотвечающем runtime, иначе с LEDGER_UNAVAILABLE."""
+def _read_batches(root: Path) -> dict[str, JsonObject] | _Unread:
+    """Read batch records from the authoritative store, or the legacy snapshot."""
     state = root / "orchestration" / "state"
     if not state.exists():
         return {}
@@ -431,25 +435,9 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
             records = reply.result.get("records")
             if not isinstance(records, dict):
                 return _Unread(LEDGER_UNAVAILABLE)
-            store_batches: dict[Path, tuple[str, str]] = {}
-            for key, batch in records.items():
-                if not isinstance(batch, dict) or not isinstance(
-                    batch.get("state"), str
-                ):
-                    return _Unread(LEDGER_UNAVAILABLE)
-                value = batch.get("worktree")
-                if not isinstance(value, str) or not value:
-                    if batch["state"] in TERMINAL_BATCH_STATES:
-                        continue
-                    return _Unread(LEDGER_UNAVAILABLE)
-                path = Path(value)
-                _remember_batch(
-                    store_batches,
-                    (path if path.is_absolute() else root.parent / path).resolve(),
-                    str(batch.get("batch_id", Path(str(key)).stem)),
-                    batch["state"],
-                )
-            return store_batches
+            if any(not isinstance(batch, dict) for batch in records.values()):
+                return _Unread(LEDGER_UNAVAILABLE)
+            return {Path(str(key)).stem: batch for key, batch in records.items()}
         except RuntimeClientError as error:
             if error.code == "runtime_unavailable":
                 return _Unread(RUNTIME_UNAVAILABLE)
@@ -469,25 +457,67 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
             records = state / "batches"
         if not records.exists():
             return _Unread(LEDGER_UNAVAILABLE) if pointer.exists() else {}
-        batches: dict[Path, tuple[str, str]] = {}
-        for record in records.glob("batch-*.json"):
-            batch = json.loads(record.read_text(encoding="utf-8"))
-            if batch["state"] in TERMINAL_BATCH_STATES and not isinstance(
-                batch.get("worktree"), str
-            ):
-                continue
-            worktree = Path(batch["worktree"])
-            _remember_batch(
-                batches,
-                (
-                    worktree if worktree.is_absolute() else root.parent / worktree
-                ).resolve(),
-                str(batch.get("batch_id", record.stem)),
-                batch["state"],
-            )
+        batches = {
+            record.stem: json.loads(record.read_text(encoding="utf-8"))
+            for record in records.glob("batch-*.json")
+        }
+        if any(not isinstance(batch, dict) for batch in batches.values()):
+            return _Unread(LEDGER_UNAVAILABLE)
         return batches
     except (OSError, ValueError, KeyError, TypeError):
         return _Unread(LEDGER_UNAVAILABLE)
+
+
+def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
+    records = _read_batches(root)
+    if isinstance(records, _Unread):
+        return records
+    batches: dict[Path, tuple[str, str]] = {}
+    for key, record in records.items():
+        state = record.get("state")
+        if not isinstance(state, str):
+            return _Unread(LEDGER_UNAVAILABLE)
+        value = record.get("worktree")
+        if not isinstance(value, str) or not value:
+            if state in TERMINAL_BATCH_STATES:
+                continue
+            return _Unread(LEDGER_UNAVAILABLE)
+        path = Path(value)
+        _remember_batch(
+            batches,
+            (root.parent / path).resolve(),
+            str(record.get("batch_id", key)),
+            state,
+        )
+    return batches
+
+
+def _pending_report_dispatches(root: Path) -> set[str] | _Unread:
+    records = _read_batches(root)
+    if isinstance(records, _Unread):
+        return records
+    pending: set[str] = set()
+    for record in records.values():
+        state = record.get("state")
+        if not isinstance(state, str):
+            return _Unread(LEDGER_UNAVAILABLE)
+        if state in TERMINAL_BATCH_STATES:
+            continue
+        entries = record.get("dispatches", [])
+        if not isinstance(entries, list):
+            return _Unread(LEDGER_UNAVAILABLE)
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(
+                entry.get("dispatch_id"), str
+            ):
+                return _Unread(LEDGER_UNAVAILABLE)
+            if not entry.get("report") and entry.get("state") not in (
+                DispatchState.REPORTED,
+                DispatchState.ABANDONED,
+                DispatchState.CANCELLED,
+            ):
+                pending.add(entry["dispatch_id"])
+    return pending
 
 
 def _docker_selected(root: Path) -> bool:
@@ -798,6 +828,8 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                 _process_run_entry(entry, is_qa=False)
 
     # 2. Transit files in scratch, PR bodies, and logs.
+    inbox = root.parent / AGENT_INBOX_REL
+    pending_reports: set[str] | _Unread | None = None
     for category in ("scratch", "pr_body", "logs"):
         parent = sandboxes / category
         if parent.is_dir() and not parent.is_symlink():
@@ -807,6 +839,26 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                     and _inside(root, path)
                     and _old_enough(path, min_age_hours)
                 ):
+                    if (
+                        path.parent == inbox
+                        and path.name.startswith("dispatch-")
+                        and path.suffix == ".json"
+                    ):
+                        if pending_reports is None:
+                            pending_reports = _pending_report_dispatches(root)
+                        if isinstance(pending_reports, _Unread):
+                            skipped.append(
+                                {"path": str(path), "reason": pending_reports.reason}
+                            )
+                            continue
+                        if path.stem in pending_reports:
+                            skipped.append(
+                                {
+                                    "path": str(path),
+                                    "reason": f"staged report is pending for dispatch {path.stem}",
+                                }
+                            )
+                            continue
                     remove.append({"kind": "file", "path": str(path)})
                 elif path.is_file() and _inside(root, path):
                     skipped.append(

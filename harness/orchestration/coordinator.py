@@ -156,6 +156,9 @@ from harness.orchestration.workflow.completion import complete_report as complet
 from harness.orchestration.workflow.context_package import (
     register_context_package as register_context_package,
 )
+from harness.orchestration.workflow.context_package import (
+    show_context_package as show_context_package,
+)
 from harness.orchestration.workflow.decisions import decide_batch as decide_batch
 from harness.orchestration.workflow.decisions import decision_packet as decision_packet
 from harness.orchestration.workflow.delivery import observe_dispatch as observe_dispatch

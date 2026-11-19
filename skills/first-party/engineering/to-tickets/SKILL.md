@@ -7,8 +7,8 @@ disable-model-invocation: true
 Invoke only on an explicit request (`/to-tickets`, or `$to-tickets` in Codex). Read
 `docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md` first; if either is missing, tell
 the user to run `harness update`. Read the specification, its approved paths, and the tracker.
-Write nothing until the user approves the plan. Then write only ticket files, tracker issues, and
-the epic appends in `references/publish.md`. Never edit production code, tests, `CONTEXT.md`, ADRs,
+Before approval, write only local plan drafts. After approval, write ticket files, tracker issues,
+and the epic appends in `references/publish.md`. Never edit production code, tests, `CONTEXT.md`, ADRs,
 or the specification's decisions. Never create branches or worktrees and never start `/implement`.
 
 ## Check the input
@@ -59,15 +59,22 @@ Before showing the plan, check that:
 - the blocking graph has no cycles
 - no ticket names an unapproved path or implements a non-goal
 
-Show the ticket cards, the waves, the traceability matrix, the paths awaiting approval, and the
-drafted epic sections. Ask whether the granularity, blocking edges, scores, pipeline labels, and
-epic sections are right; the user may override a pipeline label without changing the score. Wait
-for explicit approval. When the user asks for changes, revise only the named tickets and show the
-plan again.
+Save the complete plan in a new `docs/tasks/<task-folder>/artifacts/ticket-plan-v<N>.md`.
+Use the existing epic folder or a descriptive slug for a standalone plan. Keep prior revisions.
+Include the cards, waves, traceability matrix, paths awaiting approval, and drafted epic sections.
+Record the file's SHA-256 and link the exact revision using its absolute path.
+
+Show the full plan on the first pass. On revision, update the requested cards and affected
+dependencies or coverage, repeat the checks above, and show only the changed cards, changed
+dependencies, criteria, and other affected decisions. Link the complete new revision. Ask for
+approval of that revision, including its paths, granularity, scores, labels, and epic sections.
+The user may override a pipeline label without changing the score. Wait for explicit approval.
 
 ## Publish and finish
 
-After approval, read `references/publish.md` and follow it for the configured tracker. If a write
+Verify the approved draft's SHA-256 before publishing. If the file is missing or changed, show a
+new revision and request approval. Otherwise read `references/publish.md` and follow it using
+the approved file as the source for the configured tracker. If a write
 fails or the tracker is unavailable, report the error and leave the complete ticket cards in chat.
 
 Finish with the summary table from `references/publish.md`. Offer to adjust the tickets, or to start

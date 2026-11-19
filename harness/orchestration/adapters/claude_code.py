@@ -154,7 +154,7 @@ Use the pinned Context Package and work only inside the brief's scope and commit
 Architect retry reason, when present: {json.dumps(reason, ensure_ascii=False)}
 Write one honest completion report to the exact staging path. Use report_language: ru,
 outcome completed|blocked|failed, checks_run result pass|fail|not_run, and status/details objects for risks/blockers.
-Then run {cli} report submit --file {shlex.quote(brief['report_staging_path'])}.
+Then run {cli} report submit --compact --file {shlex.quote(brief['report_staging_path'])}.
 If submission fails, preserve the original file and return the exact command and error.
 If the result includes completion, relay it for report complete; never submit again.
 The monitor reads the runtime events of this session; write text only for a blocker and the final result.

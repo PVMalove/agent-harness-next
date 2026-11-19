@@ -48,6 +48,46 @@ class CleanupTests(unittest.TestCase):
         git(self.repo, "add", ".gitignore")
         git(self.repo, "commit", "-m", "test: initial fixture")
 
+    def test_soft_keeps_pending_worker_report_but_can_remove_recorded_staging(self) -> None:
+        root = self.repo / ".harness"
+        inbox = root / ".sandboxes" / "scratch" / "inbox"
+        inbox.mkdir(parents=True)
+        pending = inbox / "dispatch-pending.json"
+        recorded = inbox / "dispatch-recorded.json"
+        for path in (pending, recorded):
+            path.write_text("{}", encoding="utf-8")
+        batches = root / "orchestration" / "state" / "batches"
+        batches.mkdir(parents=True)
+        (batches / "batch-active.json").write_text(
+            json.dumps(
+                {
+                    "state": "paused",
+                    "worktree": str(self.repo),
+                    "dispatches": [
+                        {"dispatch_id": "dispatch-pending", "state": "dispatched"},
+                        {
+                            "dispatch_id": "dispatch-recorded",
+                            "state": "reported",
+                            "report": "reports/example.json",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+
+        self.assertIn(str(recorded), {item["path"] for item in plan["remove"]})
+        self.assertNotIn(str(pending), {item["path"] for item in plan["remove"]})
+        self.assertIn(
+            {
+                "path": str(pending),
+                "reason": "staged report is pending for dispatch dispatch-pending",
+            },
+            plan["skipped"],
+        )
+
     def test_soft_previews_old_runs_scratch_logs_and_legacy_dirs_but_keeps_active_run_and_ledger(
         self,
     ) -> None:
@@ -376,6 +416,10 @@ class CleanupTests(unittest.TestCase):
         (state / "ledger.json").write_text(
             json.dumps({"version": STORE_LEDGER_VERSION}), encoding="utf-8"
         )
+        inbox = self.repo / ".harness" / ".sandboxes" / "scratch" / "inbox"
+        staged = inbox / "dispatch-unconfirmed.json"
+        inbox.mkdir(parents=True)
+        staged.write_text("{}", encoding="utf-8")
         reason = "runtime does not answer: start `harness-runtime serve --repo <repo>`"
         with mock.patch("harness.cleanup.RuntimeClient") as client:
             client.return_value.call.side_effect = RuntimeClientError(
@@ -391,6 +435,7 @@ class CleanupTests(unittest.TestCase):
         self.assertIn(
             {"path": str(self._worktrees_dir()), "reason": reason}, plan["skipped"]
         )
+        self.assertIn({"path": str(staged), "reason": reason}, plan["skipped"])
         self.assertEqual(facts[tree.resolve()], reason)
         self.assertEqual(
             REASONS_RU[reason],

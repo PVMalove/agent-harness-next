@@ -28,10 +28,10 @@ creates branches, and never starts `/implement`.
 
 ## Approval and publication
 
-Before writing, the skill checks that every requirement `R<n>` and every acceptance criterion is
-covered by at least one ticket and that the dependency graph has no cycles. It then shows the
-cards, waves, traceability matrix, new paths, and drafted epic sections, and waits for explicit
-approval.
+The skill checks requirement and acceptance coverage and checks for dependency cycles. It saves
+the complete plan under `docs/tasks/<task-folder>/artifacts/ticket-plan-v<N>.md` and shows it on
+the first pass. After an edit, it shows the changes and links the complete revision. Before
+publishing, it verifies the SHA-256 of the approved draft.
 
 After approval, the skill publishes the tickets to GitHub, GitLab, or
 `.scratch/<feature-slug>/issues/`, links them to the epic, and shows a summary table: link, title, wave, short summary, story

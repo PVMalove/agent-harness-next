@@ -642,6 +642,18 @@ def build_parser(
         "--max-package-tokens", type=int, help="optional stricter token ceiling"
     )
     context_package_register.set_defaults(handler=handlers.register_context_package)
+    context_package_show = context_package_commands.add_parser(
+        "show", help="read the package pinned to a dispatch"
+    )
+    _common(context_package_show)
+    context_package_show.add_argument("--dispatch", required=True)
+    context_package_show.add_argument(
+        "--section",
+        choices=("starting_files", "symbol_graph", "related_tests", "precedent_cards", "memory", "diff"),
+    )
+    context_package_show.set_defaults(
+        handler=handlers.show_context_package, installed_runtime_only=True
+    )
 
     dispatch = commands.add_parser("dispatch")
     dispatch_commands = dispatch.add_subparsers(dest="dispatch_command", required=True)
@@ -1105,6 +1117,11 @@ def build_parser(
     report_submit = report_commands.add_parser("submit", aliases=["record"])
     _common(report_submit)
     report_submit.add_argument("--file", required=True)
+    report_submit.add_argument(
+        "--compact",
+        action="store_true",
+        help="return a worker receipt without the coordinator's decision packet",
+    )
     report_submit.add_argument(
         "--relayed-by", help="coordinator delivering an unchanged worker report"
     )

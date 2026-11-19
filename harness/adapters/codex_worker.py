@@ -87,9 +87,8 @@ Proceed only after a successful self-report; escalate a mismatch or unavailable 
 Immediately after self-report and at least every {heartbeat} seconds while working, run:
 {cli} dispatch heartbeat --dispatch {dispatch_id}
 Allowed tools: {allowed_tools}. Follow the brief tool allowlist throughout the task.
-Context Package {package}: start from its starting_files, symbol_graph and
-related_tests. For a starting file with non-empty sections, read only the start_line-end_line
-ranges the task needs.
+Context Package {package}: start from its summary in the brief. Read only the indicated
+start_line-end_line ranges needed for the task.
 Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
@@ -99,8 +98,8 @@ or {{"status": "present", "details": "<Russian description>"}} when present. A n
 details; present requires a non-empty description. Put other explanations in output. Strings, translated
 statuses, passed and not-run are invalid; no aliases or old report formats are accepted.
 Then run:
-{cli} report submit --file "{staging}"
-Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+{cli} report submit --compact --file "{staging}"
+Confirm the ledger receipt in one line. Relay any blocked transition or required next action.
 If submission returns ledger_busy, retry after its interval. If submission otherwise fails before
 recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is

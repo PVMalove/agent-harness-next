@@ -38,9 +38,12 @@ from harness.orchestration.core.utils import (
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
     _load_batch,
+    _load_context_package,
+    _load_dispatch,
     _replace_record,
     _state_root,
     _write_record,
+    read_state,
 )
 from harness.orchestration.ledger.lifecycle import (
     BatchRecord,
@@ -51,7 +54,34 @@ from harness.orchestration.workflow.history import (
     _current_developer_candidate,
     _reusable_context_package,
     _validate_batch_integrity,
+    _validate_context_package,
 )
+
+def show_context_package(args: argparse.Namespace) -> JsonObject:
+    """Read the package pinned to the immutable dispatch, including historical dispatches."""
+    repo = _repo(args)
+    root = _state_root(args, repo)
+    with read_state(LifecycleLedger(root), repo):
+        dispatch = _load_dispatch(root, args.dispatch)
+        package_id = dispatch.get("context_package_id")
+        if not isinstance(package_id, str):
+            raise CoordinatorError(
+                "dispatch has no pinned Context Package",
+                remedy="use a dispatch that references a Context Package",
+            )
+        batch = _load_batch(root, dispatch["batch_id"])
+        package = _load_context_package(root, package_id)
+        _validate_context_package(root, batch, package)
+        recorded_hash = hashlib.sha256(_canonical(package).encode("utf-8")).hexdigest()
+        if recorded_hash != dispatch.get("context_package_sha256"):
+            raise CoordinatorError(
+                "dispatch Context Package hash does not match its immutable package",
+                remedy="inspect ledger integrity before using this package",
+            )
+        section = args.section
+        if section:
+            return {"context_package_id": package_id, section: package.get(section)}
+        return package
 
 
 def _persist_context_package(
