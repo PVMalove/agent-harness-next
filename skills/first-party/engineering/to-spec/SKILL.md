@@ -5,8 +5,10 @@ disable-model-invocation: true
 ---
 
 Invoke only on an explicit request (`/to-spec`, or `$to-spec` in Codex). Load this file by itself
-before any repository exploration. Use the project's language and keep the template headings intact.
-Write only the approved specification file. Never create tasks, publish, or change Git state.
+before any repository exploration, then read repository evidence only within the approved scope.
+Use the project's language and keep the template headings intact. Write only the approved spec file.
+Never modify production code, tests, project configuration, `CONTEXT.md`, ADRs, or Discovery Context.
+Never create tasks, publish, or change Git state.
 
 ## Load the handoff
 
@@ -56,8 +58,7 @@ For each unresolved fork, stop assembling the specification and do the following
    `все` / `all` expands every displayed option. Reply in chat without writing any files.
    Then show the same choices again and wait. A detail request never approves an option or a write.
 
-Wait for an explicit choice or an explicit instruction to save a Draft. Do not write or overwrite
-the specification while waiting. Keep unresolved choices and their dependencies open in a Draft.
+Wait for an explicit choice or an explicit instruction to save a Draft, writing nothing meanwhile.
 
 ## Approve and write the specification
 
@@ -65,7 +66,6 @@ Read `references/spec-template.md` when assembling the specification.
 Use `Approved` when all blocking choices are settled and the user approves the scope and verification.
 Use `Draft — has open blockers` only at the user's explicit request. Record each blocker, its dependent
 work, and the decision needed to proceed. Leave unresolved implementation details unspecified.
-
 Review the requirements before approval. Pick the highest-impact risks from the agreed scope,
 handoff, and approved evidence. For each, identify the covering requirement and observable
 criterion, or ask how missing or ambiguous in-scope behavior should work. Use the
