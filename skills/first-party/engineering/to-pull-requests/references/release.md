@@ -55,9 +55,10 @@ SHA as the release candidate before running checks.
   run the spec's check on that SHA, including scenarios that span several tickets. For a manual
   check, record the steps and observed result. A check with no result is `not_run`.
 - Treat a closed ticket or a merged child PR as a reference to the work. A criterion linked to a
-  child closed as `resolution::wontfix` still needs evidence. If a required check failed or lacks
-  evidence, list the affected criteria and stop before requesting release confirmation. Resolve
-  the gap through a child ticket or an approved update to the epic spec.
+  child closed as `resolution::wontfix` still needs evidence. Every criterion row is required; never
+  treat one as optional. If any check failed, lacks evidence, or is `not_run`, list the affected
+  criteria and stop before requesting release confirmation. Resolve the gap through a child ticket
+  or an approved update to the epic spec.
 - If the epic has no structured criteria, record epic acceptance as unverified and continue with
   the existing child and QA checks.
 
