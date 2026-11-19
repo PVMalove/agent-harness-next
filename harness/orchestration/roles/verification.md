@@ -3,8 +3,6 @@ name: verification
 mode: read-only
 required_capabilities:
   - backend-development
-risk_triggers:
-  - verification-infrastructure
 ---
 
 # Verification

@@ -191,3 +191,8 @@ def test_no_report_hands_an_item_to_qa() -> None:
     for name in ("architect", "code-review", "verification", "common"):
         assert "or `qa`" not in _role(name)
         assert "`code-review`, `qa`" not in _role(name)
+
+
+def test_placeholder_risk_triggers_are_gone() -> None:
+    for name in ("qa", "verification", "rebaser", "conflict-resolver"):
+        assert "risk_triggers:" not in (ROLES / f"{name}.md").read_text(encoding="utf-8")

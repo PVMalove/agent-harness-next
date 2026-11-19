@@ -10,8 +10,6 @@ name: verification
 mode: read-only
 required_capabilities:
   - backend-development
-risk_triggers:
-  - verification-infrastructure
 ```
 
 Используйте роль только после того, как отчёт developer остановился по операционной причине

@@ -9,8 +9,6 @@ name: verification
 mode: read-only
 required_capabilities:
   - backend-development
-risk_triggers:
-  - verification-infrastructure
 ```
 
 Use this role only after a developer report was blocked for an operational reason

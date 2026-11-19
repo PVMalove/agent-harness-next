@@ -3,8 +3,6 @@ name: rebaser
 mode: write
 required_capabilities:
   - conflict-resolution
-risk_triggers:
-  - integration-conflict
 ---
 
 # Rebaser

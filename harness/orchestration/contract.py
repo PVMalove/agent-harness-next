@@ -1632,7 +1632,8 @@ def configuration_problems(
                 problems.append(
                     f"orchestration role manifest {path.name} required_capabilities must be a non-empty list"
                 )
-            if not string_list(role.get("risk_triggers")):
+            # Only the code-review triggers route a change (#1234); another role may omit them.
+            if "risk_triggers" in role and not string_list(role["risk_triggers"]):
                 problems.append(
                     f"orchestration role manifest {path.name} risk_triggers must be a non-empty list"
                 )
