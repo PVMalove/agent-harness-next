@@ -402,6 +402,53 @@ class CoordinatorLedgerMigrationTests(unittest.TestCase):
                 payload.write_text(unreadable, encoding="utf-8")
                 self.assertIsNone(coordinator.pinned_runtime_command(args))
 
+    def _pinned_compact_submit(self, snapshot_entry: str) -> tuple[list[str], list[str]]:
+        """The worker's compact submit and the command that re-runs it on a pinned snapshot whose
+        coordinator entry point is ``snapshot_entry``."""
+        (self.repo / ".harness" / "orchestration" / "coordinator.py").write_text(
+            snapshot_entry, encoding="utf-8"
+        )
+        batch = self._create_batch()
+        self._approve_batch(batch["batch_id"])
+        dispatch_id = self._create_architect_dispatch(batch["batch_id"])["dispatch_id"]
+        payload = workspace._prepare_agent_inbox(self.repo) / f"{dispatch_id}.json"
+        payload.write_text(json.dumps({"dispatch_id": dispatch_id}), encoding="utf-8")
+        (
+            self.repo / ".harness" / "orchestration" / "roles" / "architect.md"
+        ).write_text("reinstalled\n", encoding="utf-8")
+        submit = ["--repo", str(self.repo), "report", "submit", "--compact"]
+        submit += ["--file", str(payload)]
+        args = _ns(
+            repo=str(self.repo),
+            state_dir=str(self.state_dir),
+            file=str(payload),
+            compact=True,
+        )
+        with mock.patch.object(sys, "argv", ["coordinator.py", *submit]):
+            command = coordinator.pinned_runtime_command(args)
+        assert command is not None
+        return submit, command[4:]
+
+    def test_compact_submit_drops_compact_for_a_pinned_runtime_that_refuses_it(
+        self,
+    ) -> None:
+        """A batch pinned before the compact receipt runs a parser without --compact."""
+        submit, forwarded = self._pinned_compact_submit("# pinned entry point\n")
+
+        self.assertEqual(forwarded, [part for part in submit if part != "--compact"])
+
+    def test_compact_submit_keeps_compact_for_a_pinned_runtime_that_accepts_it(
+        self,
+    ) -> None:
+        submit, forwarded = self._pinned_compact_submit(
+            "import sys\n"
+            "if '--help' in sys.argv:\n"
+            "    print('  --compact  return a worker receipt')\n"
+            "    raise SystemExit(0)\n"
+        )
+
+        self.assertEqual(forwarded, submit)
+
     def test_schema_upgrade_waits_for_batches_pinned_to_another_runtime(self) -> None:
         batch = self._create_batch()
         args = _ns(repo=str(self.repo), state_dir=str(self.state_dir))
