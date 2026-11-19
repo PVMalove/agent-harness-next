@@ -196,3 +196,11 @@ def test_no_report_hands_an_item_to_qa() -> None:
 def test_placeholder_risk_triggers_are_gone() -> None:
     for name in ("qa", "verification", "rebaser", "conflict-resolver"):
         assert "risk_triggers:" not in (ROLES / f"{name}.md").read_text(encoding="utf-8")
+
+
+def test_implement_carries_the_epic_non_goals_into_prohibited_changes() -> None:
+    text = _text(SKILLS / "implement/SKILL.md")
+    assert (
+        "each item of the parent epic's `## Non-Goals & Rejected Alternatives` → "
+        "`--prohibited-change`" in text
+    )
