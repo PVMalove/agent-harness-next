@@ -15,11 +15,12 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -176,7 +177,7 @@ class CleanRoomPolicy:
         finally:
             # The checkout is a standalone repository: removing the directory leaves nothing
             # registered in the main repository's .git.
-            shutil.rmtree(checkout_root, ignore_errors=True)
+            shutil.rmtree(checkout_root, onexc=_remove_read_only)
 
     def _populate(self, checkout: Path) -> None:
         """Build a standalone repository at the candidate without writing to the main repository's .git.
@@ -215,7 +216,7 @@ class CleanRoomPolicy:
         alternates = checkout / ".git" / "objects" / "info" / "alternates"
         try:
             alternates.parent.mkdir(parents=True, exist_ok=True)
-            alternates.write_text(f"{common / 'objects'}\n", encoding="utf-8")
+            alternates.write_bytes(f"{common / 'objects'}\n".encode("utf-8"))
             # A shallow source ends its history at a boundary; the checkout must share it,
             # as a linked worktree would, or history walks stop at missing parents.
             if (common / "shallow").is_file():
@@ -266,6 +267,12 @@ class CleanRoomPolicy:
         """Raise a classified gate error when one Git step of the clean checkout failed."""
         if completed.returncode != 0:
             raise _checkout_failure(step, _git_detail(completed), path, self.candidate_commit)
+
+
+def _remove_read_only(function: Callable[[str], object], path: str, _error: BaseException) -> None:
+    """Remove Git's read-only object files on Windows during checkout cleanup."""
+    os.chmod(path, stat.S_IWRITE)
+    function(path)
 
 
 # Git and OS wording of a write the environment refused (permissions, read-only mount, sandbox).

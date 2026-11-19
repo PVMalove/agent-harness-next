@@ -209,10 +209,9 @@ def test_container_review_starts_with_focus_and_can_read_the_pinned_package(
         (repo / ".harness/orchestration.json").write_text(json.dumps(config))
         adapter = repo / ".harness/adapters/claude_worker.py"
         adapter.parent.mkdir(parents=True)
-        shutil.copyfile(
-            Path(__file__).resolve().parents[2] / "harness/adapters/claude_worker.py",
-            adapter,
-        )
+        source_adapters = Path(__file__).resolve().parents[2] / "harness/adapters"
+        for name in (adapter.name, "worker_write_probe.py"):
+            shutil.copyfile(source_adapters / name, adapter.parent / name)
         engine = ScriptedEngine(tmp_path / "engine", "podman")
         engine.update(lambda state: state["images"].update({WORKER_TAG: WORKER_BARE}))
         assert migrate(repo).returncode == 0

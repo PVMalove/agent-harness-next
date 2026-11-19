@@ -1,5 +1,5 @@
 {
- "version": 14,
+ "version": 15,
  "engine": "sqlite3 FTS5 bm25, path tie-break",
  "corpus": "Tracked ADRs and CONTEXT.md; excludes task archives and tracker snapshots",
  "k_values": [
@@ -12,11 +12,11 @@
  "max_noise_ratio": 0.7,
  "dataset_hash": "27ae576158e8a67a0524831467f2e4d157f5beb707d8c7bf2ed5c24c04060d17",
  "source_hashes": {
-  "CONTEXT.md": "16b8ebaa42e9ffc6327848475edb94869b4b23be80569f1b863673b47fb5ee06",
+  "CONTEXT.md": "1b17afac931a7b341a3ba1cc75477a177fefb94c33f05e022d43a0e8d6a1210a",
   "docs/adr/0001-portable-capability-delivery.md": "7f35b9513f2a9b63ad081ef5ade53b971a39aa94743167b426b6e7be5611c602",
   "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
   "docs/adr/0003-orchestration-core.md": "e6522ae291e82560e5b12a48131652b5cfdc3025fd4ac383122c274735c879a6",
-  "docs/adr/0004-role-assignments.md": "acf8f9b02353f8e59dd38066a273b3e9b5cd1db970b3dc260f332fcbb5f791c9",
+  "docs/adr/0004-role-assignments.md": "c6a82d8d2480c7d3a9a5966d88a2baefc5374246934e0d0d52bf00123a13a961",
   "docs/adr/0005-implement-pipeline.md": "736203ddb2fd0fdf7d6e40aaa4d116de0f475d6c2d9a86e2313403f5cc0ddf92",
   "docs/adr/0006-scratch-artifacts.md": "67fea598a768ec5513a0818654e98b7e9c3bc9605161a33d85b2e66ab98c870f",
   "docs/adr/0007-python-quality.md": "866c0aa5cddae54238750e54733e281d0ed8cdd5e4c4336713c82ca4f30a6677",

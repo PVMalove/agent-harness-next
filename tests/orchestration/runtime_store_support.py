@@ -1247,7 +1247,26 @@ def lifecycle():
 """
 
 FAKE_CLAUDE = """
-record(event="claude", argv=sys.argv[1:], stdin=sys.stdin.read())
+import shlex
+
+def emit(event):
+    print(json.dumps(event), flush=True)
+
+command = json.loads(sys.stdin.readline())["message"]["content"].splitlines()[-1]
+emit({"type": "system", "subtype": "init"})
+emit({"type": "assistant", "message": {"content": [
+    {"type": "tool_use", "id": "probe", "name": "Bash", "input": {"command": command}},
+]}})
+probe = subprocess.run(shlex.split(command), capture_output=True, text=True, check=False)
+emit({"type": "user", "message": {"content": [
+    {"type": "tool_result", "tool_use_id": "probe", "is_error": probe.returncode != 0,
+     "content": probe.stderr if probe.returncode else probe.stdout},
+]}})
+emit({"type": "result", "subtype": "success", "is_error": probe.returncode != 0})
+if probe.returncode:
+    sys.exit(probe.returncode)
+prompt = json.loads(sys.stdin.readline())["message"]["content"]
+record(event="claude", argv=sys.argv[1:], prompt=prompt)
 sys.exit(lifecycle())
 """
 
@@ -1285,6 +1304,13 @@ for line in sys.stdin:
                   "cwd": params["cwd"],
                   "reasoningEffort": params.get("config", {}).get("model_reasoning_effort"),
                   "activePermissionProfile": {"id": params["permissions"]}}
+    elif method == "command/exec":
+        command = params["command"]
+        assert params["permissionProfile"] == config["default_permissions"]
+        assert all(may_write(path) for path in command[2:]), command[2:]
+        probe = subprocess.run(command, cwd=params["cwd"], capture_output=True,
+                               text=True, check=False)
+        result = {"exitCode": probe.returncode, "stdout": probe.stdout, "stderr": probe.stderr}
     elif method == "turn/start":
         result = {"turn": {"id": "turn-supervised", "status": "inProgress"}}
     else:

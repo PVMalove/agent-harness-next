@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -535,7 +536,7 @@ def test_an_unwritable_alternates_file_is_an_environment_refusal(
 ) -> None:
     repo, head = _committed_repo(tmp_path)
     with mock.patch(
-        "pathlib.Path.write_text", side_effect=PermissionError("Permission denied")
+        "pathlib.Path.write_bytes", side_effect=PermissionError("Permission denied")
     ):
         with pytest.raises(GateRunnerError) as raised:
             run_gate(["true"], CleanRoomPolicy(repo, head), stop_on_failure=True)
@@ -873,6 +874,33 @@ def test_a_clean_run_registers_no_git_worktree_and_leaves_no_checkout_directory(
     assert result.passed
     assert _worktree_list(repo) == before
     assert not (repo / ".git" / "worktrees").exists()
+    assert list(storage_path(repo, "runs", "qa").iterdir()) == []
+
+
+def test_alternates_uses_lf_even_when_text_writes_translate_newlines(tmp_path: Path) -> None:
+    repo, head = _committed_repo(tmp_path)
+    original = Path.write_text
+
+    def windows_text_write(
+        path: Path, data: str, encoding: str | None = None,
+        errors: str | None = None, newline: str | None = None,
+    ) -> int:
+        if path.name == "alternates":
+            data = data.replace("\n", "\r\n")
+        return original(path, data, encoding=encoding, errors=errors, newline=newline)
+
+    with mock.patch.object(Path, "write_text", windows_text_write):
+        with CleanRoomPolicy(repo, head).checkout() as checkout:
+            alternates = (checkout / ".git/objects/info/alternates").read_bytes()
+            assert alternates == (str(repo / ".git/objects") + "\n").encode("utf-8")
+
+
+def test_clean_checkout_removes_read_only_files(tmp_path: Path) -> None:
+    repo, head = _committed_repo(tmp_path)
+    with CleanRoomPolicy(repo, head).checkout() as checkout:
+        read_only = checkout / "read-only"
+        read_only.write_text("data", encoding="utf-8")
+        read_only.chmod(stat.S_IREAD)
     assert list(storage_path(repo, "runs", "qa").iterdir()) == []
 
 

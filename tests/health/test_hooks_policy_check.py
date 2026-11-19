@@ -21,6 +21,7 @@ from harness.health.hook_settings import (
     supported_tools,
 )
 from harness.json_types import JsonObject
+from tests.conftest import find_bash
 from tests.core.test_uninstall import git, harness
 
 PROJECT_TEMPLATES = Path(__file__).resolve().parents[2] / "harness" / "project"
@@ -28,6 +29,7 @@ PROJECT_TEMPLATES = Path(__file__).resolve().parents[2] / "harness" / "project"
 SETTINGS = ".claude/settings.local.json"
 CODEX = ".codex/hooks.json"
 HOOKS_DIR = ".claude/hooks"
+BASH = find_bash()
 
 
 @pytest.fixture
@@ -77,7 +79,7 @@ def test_installed_project_reports_profile_source_and_wiring(repo: Path) -> None
     assert "codex: критических hooks подключено 8/8" in message
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="the managed hook is a Bash script")
+@pytest.mark.skipif(shutil.which(BASH) is None, reason="the managed hook is a Bash script")
 def test_health_explains_one_hook_and_reports_an_observed_denial(repo: Path) -> None:
     hook = "block-scratch-outside-docs-tasks"
     before = harness("health", str(repo), "--hook", hook, "--json")
@@ -99,7 +101,7 @@ def test_health_explains_one_hook_and_reports_an_observed_denial(repo: Path) -> 
         },
     }
     denied = subprocess.run(
-        ["bash", str(repo / HOOKS_DIR / f"{hook}.sh")],
+        [BASH, str(repo / HOOKS_DIR / f"{hook}.sh")],
         input=json.dumps(payload), capture_output=True, text=True, check=False, cwd=repo,
         env={**os.environ, "CLAUDE_PROJECT_DIR": str(repo)},
     )
@@ -131,13 +133,13 @@ def run_codex_merge_hook(checkout: Path) -> subprocess.CompletedProcess[str]:
     }
     env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
     return subprocess.run(
-        ["bash", str(checkout / HOOKS_DIR / "block-pr-merge.sh")],
+        [BASH, str(checkout / HOOKS_DIR / "block-pr-merge.sh")],
         input=json.dumps(payload), capture_output=True, text=True, check=False,
         cwd=checkout, env=env,
     )
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="the managed hook is a Bash script")
+@pytest.mark.skipif(shutil.which(BASH) is None, reason="the managed hook is a Bash script")
 def test_observation_names_the_runtime_and_goes_stale_once_that_runtime_is_unwired(
     repo: Path,
 ) -> None:
@@ -160,7 +162,7 @@ def test_observation_names_the_runtime_and_goes_stale_once_that_runtime_is_unwir
     assert unwired["last_observation"]["stale"] is True
 
 
-@pytest.mark.skipif(shutil.which("bash") is None, reason="the managed hook is a Bash script")
+@pytest.mark.skipif(shutil.which(BASH) is None, reason="the managed hook is a Bash script")
 def test_observation_from_an_issue_worktree_is_visible_from_the_main_checkout(
     repo: Path, tmp_path: Path,
 ) -> None:

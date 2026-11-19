@@ -245,9 +245,8 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         home = self.repo.parent / "home"
         local_bin = home / ".local" / "bin"
         local_bin.mkdir(parents=True)
-        script = local_bin / "claude"
-        script.write_text(f'#!/bin/sh\npwd > "{self.cwd_dump}"\nexit 7\n')
-        script.chmod(script.stat().st_mode | stat.S_IEXEC)
+        self.fake_claude(7)
+        (self.bin / "claude").rename(local_bin / "claude")
         git_dir = str(Path(shutil.which("git") or "git").parent)
         self.assertIsNone(shutil.which("claude", path=git_dir))
         cwd = Path.cwd()
@@ -291,8 +290,9 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertEqual(command[command.index("--effort") + 1], "medium")
         self.assertEqual(command[command.index("--permission-mode") + 1], "dontAsk")
         self.assertEqual(command[command.index("--allowedTools") + 1], "Read,Bash,Edit")
-        self.assertIn(str(self.worktree), plan["probe"])
-        self.assertIn(git(self.worktree, "rev-parse", "--absolute-git-dir"), plan["probe"])
+        targets = [Path(path) for path in shlex.split(plan["probe"])[2:]]
+        self.assertIn(self.worktree, targets)
+        self.assertIn(Path(git(self.worktree, "rev-parse", "--absolute-git-dir")), targets)
 
     def test_read_only_probe_checks_report_directory_without_source_writes(self) -> None:
         brief = json.loads(self.brief.read_text())

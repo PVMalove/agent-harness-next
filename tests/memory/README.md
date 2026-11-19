@@ -90,6 +90,8 @@ the `CONTEXT.md` source hash changes, and the report is identical to the revisio
 Version 14 (#1208) re-evaluates `CONTEXT.md` after `/publish-epic` joins the engineering-suite
 additions and owns the epic integration branch; only the source hash changes and the report is
 identical to version 13.
+Version 15 (#1199) re-evaluates `CONTEXT.md` and ADR 0004 after the role and ChangeImpact updates.
+The report, including the per-query rankings, is identical to version 14.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 

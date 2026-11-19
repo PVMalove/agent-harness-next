@@ -77,6 +77,7 @@ class LightTestsCase(unittest.TestCase):
             {
                 "services/x.py": "VALUE = 1\n",
                 "tests/test_related.py": "import services.x\n\n" + PASSING,
+                "pytest.ini": "[pytest]\n",
                 f"{CRATE}/Cargo.toml": '[package]\nname = "state"\nversion = "0.1.0"\n',
                 f"{CRATE}/src/lib.rs": "pub fn value() -> u8 { 1 }\n",
                 "native/harness-runtime/Cargo.toml": "[workspace]\n",

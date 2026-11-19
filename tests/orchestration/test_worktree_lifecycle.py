@@ -281,8 +281,15 @@ def test_prepare_skips_an_optional_symlink_and_refuses_a_required_one(
     assert code == 0, err
     assert f"warning: symlink not granted: {playwright}" in err
     argv = json.loads(out)["argv"]
-    assert str(qa) in " ".join(argv)
-    assert str(playwright) not in " ".join(argv)
+    if agent == "claude":
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        writable = set(settings["sandbox"]["filesystem"]["allowWrite"])
+    else:
+        permissions = tomllib.loads(next(value for value in argv if value.startswith("permissions=")))
+        filesystem = permissions["permissions"]["harness-coordinator"]["filesystem"]
+        writable = {path for path, mode in filesystem.items() if mode == "write"}
+    assert str(qa) in writable
+    assert str(playwright) not in writable
     assert list(outside.iterdir()) == []
 
 
