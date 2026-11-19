@@ -102,7 +102,7 @@ report submit.
 WORK = """\
 Context Package {package}: start from its summary in the brief. Read only the indicated
 start_line-end_line ranges needed for the task.
-Work within the brief; escalate a blocker for anything the brief and the package leave out.
+{context_hint}Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
 Use exact English enums: outcome = completed | blocked | failed; checks_run[].result = pass | fail | not_run.
@@ -120,6 +120,12 @@ If submission returns ledger_busy, retry after its interval. If submission other
 recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
 already recorded, so submit it only once. Chat text alone does not complete the dispatch.
+"""
+
+HOST_CONTEXT = """\
+For more, read one section of the pinned package:
+{cli} context-package show --dispatch {dispatch_id} --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 """
 
 CONTAINER_END = """\
@@ -155,6 +161,9 @@ def build_prompt(
         sha=sha,
         heartbeat=brief["liveness"]["heartbeat_every_seconds"],
         package=brief["context_package_id"],
+        context_hint=""
+        if container
+        else HOST_CONTEXT.format(cli=cli, dispatch_id=brief["dispatch_id"]),
     )
     if container and (brief.get("context_package_summary") or {}).get("review_focus"):
         read_context = shlex.join(

@@ -151,6 +151,8 @@ If self-report fails, stop before task work. Do not copy an expected model as ev
 After successful self-report, run {cli} dispatch heartbeat --dispatch {brief['dispatch_id']}
 Repeat heartbeat at least every {brief.get('liveness', {}).get('heartbeat_every_seconds')} seconds while working.
 Use the pinned Context Package and work only inside the brief's scope and commit plan.
+For more of the package, run {cli} context-package show --dispatch {brief['dispatch_id']} --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Architect retry reason, when present: {json.dumps(reason, ensure_ascii=False)}
 Write one honest completion report to the exact staging path. Use report_language: ru,
 outcome completed|blocked|failed, checks_run result pass|fail|not_run, and status/details objects for risks/blockers.

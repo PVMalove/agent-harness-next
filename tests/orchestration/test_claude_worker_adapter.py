@@ -146,6 +146,41 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertIn("without model or effort overrides", prompt)
         self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), prompt)
 
+    def test_host_prompts_name_the_pinned_package_section_command(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief.update(role="code-review", allowed_tools=["Read"])
+        command = (
+            f"context-package show --dispatch {brief['dispatch_id']} --section <section>"
+        )
+        codex_path = ADAPTER.with_name("codex_worker.py")
+        codex_spec = importlib.util.spec_from_file_location("codex_worker", codex_path)
+        assert codex_spec and codex_spec.loader
+        codex_worker = importlib.util.module_from_spec(codex_spec)
+        codex_spec.loader.exec_module(codex_worker)
+        prompts = {
+            "claude": claude_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            ),
+            "codex": codex_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            ),
+        }
+        for runtime, prompt in prompts.items():
+            with self.subTest(runtime=runtime):
+                self.assertIn(command, prompt)
+                self.assertIn("precedent_cards, memory or goal", prompt)
+        skill = (
+            ADAPTER.parents[2] / "skills/first-party/engineering/implement/SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "context-package show --dispatch <dispatch_id> --section <section>", skill
+        )
+        with mock.patch.dict(os.environ, {"HARNESS_EXECUTOR": "docker"}):
+            container = claude_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            )
+        self.assertNotIn("context-package show", container)
+
     def test_another_role_keeps_its_original_directory_scope(self) -> None:
         brief = json.loads(self.brief.read_text())
         brief["role"] = "architect"

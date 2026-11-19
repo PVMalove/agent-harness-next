@@ -89,6 +89,9 @@ Immediately after self-report and at least every {heartbeat} seconds while worki
 Allowed tools: {allowed_tools}. Follow the brief tool allowlist throughout the task.
 Context Package {package}: start from its summary in the brief. Read only the indicated
 start_line-end_line ranges needed for the task.
+For more, read one section of the pinned package:
+{cli} context-package show --dispatch {dispatch_id} --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
