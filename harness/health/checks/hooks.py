@@ -1017,6 +1017,9 @@ def _envelope_part(
     )
 
 
+OBSERVED_RUNTIMES = ("claude", "codex", "unknown")
+
+
 def last_hook_observation(repo: Path, hook_id: str) -> JsonObject | None:
     """Return the latest local envelope verdict, if available."""
     path = repo / f".harness/.sandboxes/logs/hook-observations/{hook_id}.json"
@@ -1036,6 +1039,7 @@ def last_hook_observation(repo: Path, hook_id: str) -> JsonObject | None:
     executed = data.get("body_executed")
     event = data.get("event")
     tool = data.get("tool")
+    runtime = data.get("runtime")
     if (
         decision not in ("allow", "warn", "ask", "block")
         or profile not in HOOK_PROFILES
@@ -1054,7 +1058,32 @@ def last_hook_observation(repo: Path, hook_id: str) -> JsonObject | None:
         "body_executed": executed,
         "event": event if isinstance(event, str) and re.fullmatch(r"[A-Za-z]+", event) else None,
         "tool": tool if isinstance(tool, str) and re.fullmatch(r"[A-Za-z_]+", tool) else None,
+        # A record written before the field existed names no runtime.
+        "runtime": runtime if runtime in OBSERVED_RUNTIMES else None,
     }
+
+
+def observation_stale(
+    observation: JsonObject, installed: bool, runtimes: JsonObject
+) -> bool:
+    """An observation of wiring that is gone: the script, or every binding of its runtime and event.
+
+    A record without a known runtime is current while any runtime still binds the hook.
+    """
+    if not installed:
+        return True
+    runtime = observation.get("runtime")
+    names = [runtime] if isinstance(runtime, str) and runtime in runtimes else list(runtimes)
+    event = observation.get("event")
+    for name in names:
+        part = runtimes[name]
+        bindings = part.get("bindings") if isinstance(part, dict) else None
+        if isinstance(bindings, list) and any(
+            isinstance(binding, dict) and (event is None or binding.get("event") == event)
+            for binding in bindings
+        ):
+            return False
+    return True
 
 
 def describe_hook(repo: Path, hook_id: str) -> JsonObject:
@@ -1119,15 +1148,19 @@ def describe_hook(repo: Path, hook_id: str) -> JsonObject:
         }
     profile, problem = _profile_part(repo)
     script = f"{HOOKS_DIR}/{spec.script}"
+    installed = (repo / script).is_file()
+    observation = last_hook_observation(repo, hook_id)
+    if observation is not None:
+        observation["stale"] = observation_stale(observation, installed, runtimes)
     return {
         "hook_id": hook_id,
         "source": f"harness/project/hooks/{spec.script}",
         "script": script,
-        "installed": (repo / script).is_file(),
+        "installed": installed,
         "profile": profile,
         "profile_problem": problem,
         "runtimes": runtimes,
-        "last_observation": last_hook_observation(repo, hook_id),
+        "last_observation": observation,
     }
 
 

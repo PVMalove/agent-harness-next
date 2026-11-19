@@ -303,11 +303,38 @@ OBSERVED_TOOLS = frozenset(
 )
 
 
+def observation_root() -> Path:
+    """The main checkout: a hook of an issue worktree reports where ``harness health`` reads."""
+    root = project_root()
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--git-common-dir"],
+            stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=5, check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return root
+    common = (root / done.stdout.strip()).resolve()
+    return common.parent if common.name == ".git" else root
+
+
+def observed_runtime(event: object) -> str:
+    """Which runtime ran the hook, by its documented signals; never by tool input."""
+    fields = event if isinstance(event, dict) else {}
+    # `turn_id` and `model` are Codex extensions of the hook payload; `apply_patch` is its tool.
+    if "turn_id" in fields or fields.get("tool_name") == "apply_patch":
+        return "codex"
+    if os.environ.get("CLAUDE_PROJECT_DIR"):
+        return "claude"
+    if "model" in fields:
+        return "codex"
+    return "unknown"
+
+
 def observe(response: Dict[str, object], body_executed: bool, payload: bytes) -> None:
     """Store one local verdict per hook without recording tool input, paths or messages."""
-    directory = project_root() / ".harness/.sandboxes/logs/hook-observations"
     temporary: Optional[Path] = None
     try:
+        directory = observation_root() / ".harness/.sandboxes/logs/hook-observations"
         if directory.resolve() != directory:
             return
         if not directory.parent.parent.is_dir():
@@ -323,6 +350,7 @@ def observe(response: Dict[str, object], body_executed: bool, payload: bytes) ->
             event = json.loads(payload)
         except (ValueError, RecursionError):
             event = None
+        record["runtime"] = observed_runtime(event)
         if isinstance(event, dict):
             for source, field, values in (
                 ("hook_event_name", "event", OBSERVED_EVENTS),

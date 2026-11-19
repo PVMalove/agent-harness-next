@@ -113,8 +113,71 @@ def test_health_explains_one_hook_and_reports_an_observed_denial(repo: Path) -> 
     assert observed["body_executed"] is True
     assert observed["event"] == "PreToolUse"
     assert observed["tool"] == "Write"
+    assert observed["runtime"] == "claude"
+    assert observed["stale"] is False
     assert "private data" not in after.stdout
     assert "private-notes.md" not in after.stdout
+
+
+def run_codex_merge_hook(checkout: Path) -> subprocess.CompletedProcess[str]:
+    """`block-pr-merge` as the second runtime runs it: no Claude variable, a Codex `turn_id`."""
+    payload = {
+        "session_id": "s",
+        "turn_id": "turn-1",
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "cwd": str(checkout),
+        "tool_input": {"command": " ".join(("gh", "pr", "mer" + "ge", "41", "--secret-flag"))},
+    }
+    env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
+    return subprocess.run(
+        ["bash", str(checkout / HOOKS_DIR / "block-pr-merge.sh")],
+        input=json.dumps(payload), capture_output=True, text=True, check=False,
+        cwd=checkout, env=env,
+    )
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="the managed hook is a Bash script")
+def test_observation_names_the_runtime_and_goes_stale_once_that_runtime_is_unwired(
+    repo: Path,
+) -> None:
+    hook = "block-pr-merge"
+    assert run_codex_merge_hook(repo).returncode == 2
+
+    observed = json.loads(harness("health", str(repo), "--hook", hook, "--json").stdout)
+    assert observed["last_observation"]["runtime"] == "codex"
+    assert observed["last_observation"]["stale"] is False
+    assert "secret-flag" not in json.dumps(observed)
+
+    document = load(repo, CODEX)
+    drop_script(document, f"{hook}.sh")
+    save(repo, CODEX, document)
+
+    unwired = json.loads(harness("health", str(repo), "--hook", hook, "--json").stdout)
+    assert unwired["runtimes"]["codex"]["bindings"] == []
+    assert unwired["runtimes"]["claude"]["bindings"]
+    assert unwired["last_observation"]["runtime"] == "codex"
+    assert unwired["last_observation"]["stale"] is True
+
+
+@pytest.mark.skipif(shutil.which("bash") is None, reason="the managed hook is a Bash script")
+def test_observation_from_an_issue_worktree_is_visible_from_the_main_checkout(
+    repo: Path, tmp_path: Path,
+) -> None:
+    git(repo, "-c", "user.name=t", "-c", "user.email=t@example.com",
+        "commit", "--allow-empty", "-m", "init")
+    worktree = tmp_path / "issue-worktree"
+    git(repo, "worktree", "add", "-b", "feature/issue-1-x", str(worktree))
+    shutil.copytree(repo / HOOKS_DIR, worktree / HOOKS_DIR)
+
+    assert run_codex_merge_hook(worktree).returncode == 2
+
+    observed = json.loads(
+        harness("health", str(repo), "--hook", "block-pr-merge", "--json").stdout
+    )["last_observation"]
+    assert observed is not None
+    assert observed["decision"] == "block"
+    assert not (worktree / ".harness/.sandboxes/logs/hook-observations").exists()
 
 
 def test_events_the_second_runtime_lacks_are_listed_and_apply_patch_guards_are_not(
