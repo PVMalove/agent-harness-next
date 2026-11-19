@@ -23,10 +23,17 @@ in its body as the baseline. If it is missing or unapproved, ask for the approve
 before making a coverage claim. If the specification leaves the acceptance outcome undefined,
 report the gap in the specification itself.
 
-Read the current bodies of all linked child tickets, open and closed. On GitHub, use the paginated
-native sub-issues endpoint. On GitLab, use the paginated epic issue links and keep linked issues
-in the project with `## Parent: #<epic>` in their description. For the local tracker, read
-`.scratch/<feature-slug>/spec.md` and the ticket files under its `issues/` directory.
+Read the current bodies of all linked child tickets, open and closed. The placeholders follow the
+conventions in `docs/agents/issue-tracker.md`.
+
+- GitHub: list the children with
+  `gh api repos/<owner>/<repo>/issues/<epic>/sub_issues --paginate --jq '.[] | [.number, .state, .title] | @tsv'`,
+  then read each one with `gh issue view <n> --json title,state,body`.
+- GitLab: list the links with `GITLAB_HOST=<host> glab api --paginate projects/<project-id>/issues/<epic>/links`
+  and keep the linked issues of this project whose description carries `## Parent: #<epic>`. Read
+  each one with `glab issue view <n> -R <project-url> -F json`.
+- Local tracker: read `.scratch/<feature-slug>/spec.md` and the ticket files under its `issues/`
+  directory.
 
 Compare the published lines using the checks above. For older tickets without IDs, map criteria
 by their text where the obligation is clear and flag ambiguous mappings. Report each gap or
