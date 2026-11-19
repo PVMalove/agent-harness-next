@@ -281,6 +281,76 @@ def test_codex_verdict_keeps_the_evidence_of_every_warned_path(tmp_path: Path) -
     assert "uv.lock" in str(verdict["remedy"])
 
 
+@needs_bash
+def test_codex_hooks_warn_about_a_deleted_risky_path(tmp_path: Path) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    _write(project / "pyproject.toml", "[project]\n")
+    patch = _codex_patch(project, "*** Delete File: pyproject.toml")
+
+    for hook_id in (FIRST_TOUCH, SENSITIVE):
+        result = _script(project, hook_id, patch)
+
+        assert _decision(result)["decision"] == "warn", hook_id
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert "pyproject.toml" in context
+
+
+@needs_bash
+def test_codex_hooks_skip_a_move_target_outside_the_repository(tmp_path: Path) -> None:
+    project = _project(tmp_path / "project", {"profile": "strict"})
+    _write(project / ".github" / "workflows" / "old.yml", "name: old\n")
+    # Risky only by its path from the project root: never risky from another checkout's root.
+    outside = tmp_path / "elsewhere" / ".github" / "workflows" / "new.yml"
+    patch = _codex_patch(
+        project,
+        "*** Update File: .github/workflows/old.yml",
+        f"*** Move to: {outside}",
+        "@@",
+        "-name: old",
+        "+name: new",
+    )
+
+    result = _script(project, FIRST_TOUCH, patch)
+
+    verdict = _decision(result)
+    assert (verdict["decision"], verdict["reason_code"]) == (
+        "warn",
+        "risky-path-first-touch",
+    )
+    context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+    assert ".github/workflows/old.yml" in context
+    assert "new.yml" not in context
+    assert "\n" not in str(verdict["evidence_ref"])
+
+
+@needs_bash
+def test_codex_hooks_name_a_file_patched_twice_once(tmp_path: Path) -> None:
+    project = _project(tmp_path, {"profile": "strict"})
+    patch = _codex_patch(
+        project,
+        "*** Add File: pyproject.toml",
+        "+[project]",
+        "*** Update File: pyproject.toml",
+        "@@",
+        "-[project]",
+        "+[tool]",
+    )
+
+    for hook_id in (FIRST_TOUCH, SENSITIVE):
+        result = _script(project, hook_id, patch)
+
+        verdict = _decision(result)
+        assert verdict["decision"] == "warn", hook_id
+        assert "\n" not in str(verdict["evidence_ref"]), hook_id
+        context = json.loads(result.stdout)["hookSpecificOutput"]["additionalContext"]
+        assert context.count("pyproject.toml") == 1, hook_id
+    _script(project, REMINDER, patch)
+    touches = list(
+        (project / ".harness" / ".sandboxes" / "hook-events").glob("*/t-*.json")
+    )
+    assert len(touches) == 1
+
+
 def _claude_edit(project: Path, tool: str, path: Path) -> dict[str, object]:
     """A Claude Code MultiEdit (`file_path` + `edits`) or NotebookEdit (`notebook_path`)."""
     tool_input: dict[str, object] = (
