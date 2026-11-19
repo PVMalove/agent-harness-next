@@ -17,11 +17,17 @@ def write_targets(
 ) -> list[str]:
     directories = [report_dir, *check_dirs]
     if writer:
-        git_dir = subprocess.check_output(
-            ["git", "-C", str(worktree), "rev-parse", "--absolute-git-dir"],
+        git_dir, common = subprocess.check_output(
+            [
+                "git", "-C", str(worktree), "rev-parse", "--path-format=absolute",
+                "--absolute-git-dir", "--git-common-dir",
+            ],
             text=True,
-        ).strip()
-        directories.extend((worktree, Path(git_dir)))
+        ).splitlines()
+        # A linked worktree's own administration is not where a commit lands: objects and
+        # refs live in the common directory shared by every checkout.
+        shared = Path(common).resolve()
+        directories.extend((worktree, Path(git_dir), shared / "objects", shared / "refs"))
     return list(dict.fromkeys(str(directory) for directory in directories))
 
 

@@ -1113,3 +1113,34 @@ def test_codex_stops_a_stuck_worker_by_group_only_where_posix_groups_exist(
 
     assert codex_worker.start(args) == 1
     assert process.stopped_by == stopped_by
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or os.geteuid() == 0, reason="POSIX permissions that bind the test user"
+)
+@pytest.mark.parametrize("shared", ("objects", "refs"))
+def test_writer_probe_refuses_read_only_common_git_storage_of_a_linked_worktree(
+    dispatch: tuple[Path, Path, dict[str, object]], shared: str
+) -> None:
+    from harness.adapters import worker_write_probe
+
+    repo, main, brief = dispatch
+    linked = main.parent / "linked"
+    subprocess.run(
+        ["git", "-C", str(main), "worktree", "add", "-b", "linked", str(linked)],
+        check=True, capture_output=True,
+    )
+    common = main / ".git"
+    incoming = Path(str(brief["report_staging_path"])).parent
+    targets = worker_write_probe.write_targets(linked, incoming, [], writer=True)
+    assert str(common / "objects") in targets and str(common / "refs") in targets
+    (common / shared).chmod(0o555)
+    try:
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "harness/adapters/worker_write_probe.py"), *targets],
+            capture_output=True, text=True, check=False,
+        )
+    finally:
+        (common / shared).chmod(0o755)
+    assert result.returncode == 1
+    assert f"write probe refused: {common / shared}" in result.stderr
