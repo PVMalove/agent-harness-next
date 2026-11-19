@@ -80,10 +80,12 @@ The second runtime gets the file `.codex/hooks.json` from the template `harness/
 ### The hooks.policy check in harness health
 `harness health . --hook block-scratch-outside-docs-tasks --json` shows the source and installed
 script, events, matchers, and bindings for each runtime. `last_observation` contains the latest
-local verdict from the hook wrapper. The record includes the timestamp, event, tool, reason code,
-and whether the wrapper ran the script. It lives under `.harness/.sandboxes/logs/` and omits tool
-arguments and affected file paths. A value of `null` means no execution was recorded.
-Configuration wiring alone does not prove execution.
+local verdict from the hook wrapper. The record includes the timestamp, runtime (`claude`,
+`codex`, or `unknown`), event, tool, reason code, and whether the wrapper ran the script. It lives
+under `.harness/.sandboxes/logs/` of the main checkout, also for a hook that ran in an issue
+worktree, and omits tool arguments and affected file paths. A value of `null` means no execution
+was recorded. `stale: true` means the script is gone or the record's runtime no longer binds the
+hook to its event. Configuration wiring alone does not prove execution.
 
 `harness health` contains the `hooks.policy` check for projects with `engineering-suite` or `backend-orchestration`. It shows:
 

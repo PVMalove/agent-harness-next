@@ -1280,8 +1280,12 @@ Both adapters probe writes before sending task input. Codex calls `command/exec`
 named permission profile as the worker. Claude sends a probe-only turn and waits for the matching
 native Bash result in that session. The probe creates and removes one temporary file per directory.
 It checks the report directory and the shared check directories allowed by the runtime plan. Write
-roles also check the selected checkout and its Git admin directory. On failure the adapter reports
-the resource and withholds task input. `--dry-run` does not run the probe.
+roles also check the selected checkout, its Git admin directory, and the `objects` and `refs` of
+the common Git directory. The adapter creates missing check directories first and refuses one
+reached through a symlink. On failure the adapter reports the resource, or the native refusal text
+with secrets masked, and withholds task input. A detached Claude launch returns only after the
+probe verdict. Claude roles need plain `Bash` in `allowed_tools`. `--dry-run` does not run the
+probe.
 Codex versions without named permission-profile support refuse startup; there is no broader-access
 fallback. Its prompt carries the tool allowlist; this is not a native Codex tool filter.
 Neither adapter grants `danger-full-access`.
