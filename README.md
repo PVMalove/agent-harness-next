@@ -48,6 +48,11 @@ python3 harness/bin/harness.py health /path/to/repository
 Без `--capability` устанавливается `project-foundation`. `harness diff` показывает изменения
 управляемого snapshot, `harness update` обновляет его и сохраняет локальные правки.
 
+Команда `harness inventory . --json` показывает источник, capability и дрейф каждого
+скилла. `harness mcp .` предоставляет этот инвентарь и статус принятого QA через локальный
+stdio MCP. Подробности и настройки нативных Runtime Events описаны в
+[руководстве по CLI и адаптерам](docs/runtime-integrations.md).
+
 `install-global.py --cli` ставит команду `harness` в `~/.local/bin`; она запускает CLI клона, из
 которого запущен установщик. `harness self-update [--ref <ветка>]` переводит этот клон на последний
 коммит ветки `origin`. Чтобы агент мог запускать `harness update`, добавьте в

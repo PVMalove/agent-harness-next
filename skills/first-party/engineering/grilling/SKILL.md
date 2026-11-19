@@ -11,6 +11,12 @@ the user also wants to maintain the glossary and consider ADRs.
 When this engine runs with `/domain-modeling` (from `/grill-with-docs`, `/triage`, or directly), read
 references/domain-doc-writes.md before any glossary or ADR edit. It overrides immediate writes there.
 
+When the goal is to decide whether to pursue an idea, record a verdict at the end of the
+interview. Use `go` when evidence supports the problem and the user accepts a feasible direction.
+Use `needs-clarification` when named unknowns block the decision and state what evidence would
+resolve them. Use `kill` when the user decides to stop and record the decisive reason. Cite the
+strongest evidence for and against the idea, and mark unsupported claims as assumptions.
+
 ## Run the interview
 
 1. Start each round with **Accepted decisions**, **Open questions and hypotheses**, and **Current

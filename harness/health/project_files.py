@@ -21,6 +21,7 @@ from urllib.parse import urlsplit
 from harness.configuration import read_config_file
 
 from .model import JsonObject
+from .runtime_contract import NATIVE_ADAPTERS
 
 # --- Paths and constants ------------------------------------
 
@@ -30,8 +31,8 @@ INTEGRATIONS_REL = Path(".harness/integrations.json")
 # Effective hook policy, ADR 0024 section 3: written only by `harness init|adopt|update`.
 HOOK_POLICY_REL = Path(".harness/hook-policy.json")
 DISCOVERY_LINKS = {
-    ".agents/skills": "../.harness/skills",
-    ".claude/skills": "../.harness/skills",
+    root: "../.harness/skills"
+    for root in sorted({adapter.skill_root for adapter in NATIVE_ADAPTERS})
 }
 ORCHESTRATION_CONFIG_REL = Path(".harness/orchestration.json")
 ORCHESTRATION_SCHEMA_REL = Path(".harness/orchestration/orchestration.schema.json")

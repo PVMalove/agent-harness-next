@@ -74,6 +74,7 @@ from harness.memory import (
 from harness import runtime_cutover
 from harness.storage import storage_path
 from harness.runtime_adapters import adapter_problem, is_adapter
+from harness import skill_invocation
 from harness.seed_links import propose_contract_links, print_contract_proposals
 from harness.health import registry as health_registry
 from harness.health import render as health_render
@@ -351,7 +352,9 @@ def _resource_target(source: Path) -> Path:
     return Path(".harness") / source.relative_to(PACKAGE)
 
 
-def package_files(names: list[str]) -> dict[str, bytes]:
+def package_files(
+    names: list[str], explicit: set[str] | None = None
+) -> dict[str, bytes]:
     """Сформировать словарь относительных целевых путей и байтового содержимого файлов пакета."""
     # Общий контракт технического английского ставится в любую установку, вне каталога capability:
     # он не зависит от optional backend-orchestration.
@@ -367,6 +370,19 @@ def package_files(names: list[str]) -> dict[str, bytes]:
             relative = path.relative_to(source)
             target = Path(".harness/skills") / source.name / relative
             result[target.as_posix()] = path.read_bytes()
+        if explicit and source.name in explicit:
+            root = f".harness/skills/{source.name}"
+            skill_path = f"{root}/SKILL.md"
+            codex_path = f"{root}/agents/openai.yaml"
+            try:
+                result[skill_path] = skill_invocation.restrict_frontmatter(
+                    result[skill_path]
+                )
+                result[codex_path] = skill_invocation.restrict_codex(
+                    result.get(codex_path, b"")
+                )
+            except ValueError as exc:
+                fail(f"cannot set explicit invocation for {source.name}: {exc}")
     for source in selected_resources(names):
         if source.is_file():
             if _packageable(source):
@@ -475,9 +491,35 @@ def read_seed_baseline(lock: JsonObject | None) -> dict[str, str | None] | None:
     return dict(value)
 
 
-def write_snapshot(repo: Path, selected: list[str], *, force: bool) -> list[str]:
+def explicit_invocation(
+    repo: Path, selected: list[str], lock: JsonObject, args: argparse.Namespace
+) -> set[str]:
+    try:
+        previous = skill_invocation.requested_skills(lock)
+    except ValueError as exc:
+        fail(str(exc))
+    requested = set(args.no_model_invocation or [])
+    cleared = set(args.clear_no_model_invocation or [])
+    names = {source.name for source in selected_skills(selected)}
+    if unknown := (requested | cleared) - names:
+        fail(f"unknown managed skill(s): {', '.join(sorted(unknown))}")
+    if requested & cleared:
+        fail("a skill cannot be both added to and cleared from explicit invocation")
+    selected_skills_with_policy = ((previous | requested) - cleared) & names
+    try:
+        skill_invocation.check_targets(
+            repo, selected_skills_with_policy | previous, lock.get("files") or {}
+        )
+    except ValueError as exc:
+        fail(str(exc))
+    return selected_skills_with_policy
+
+
+def write_snapshot(
+    repo: Path, selected: list[str], *, force: bool, explicit: set[str]
+) -> list[str]:
     """Записать снимок файлов возможностей, сформировать harness.lock и обновить реестр."""
-    files = package_files(selected)
+    files = package_files(selected, explicit)
     previous_lock = load_lock(repo) or {}
     previous_hashes = previous_lock.get("files") or {}
     for relative in files:
@@ -521,6 +563,8 @@ def write_snapshot(repo: Path, selected: list[str], *, force: bool) -> list[str]
         "capabilities": selected,
         "files": {relative: digest(data) for relative, data in sorted(files.items())},
     }
+    if explicit:
+        lock["explicit_invocation"] = sorted(explicit)
     if "seed_files" in previous_lock:
         lock["seed_files"] = previous_lock["seed_files"]
     write_lock(repo, lock)
@@ -624,7 +668,11 @@ def snapshot_diff(repo: Path, override: list[str] | None = None) -> JsonObject:
         return {"state": "missing", "detail": "no .harness/harness.lock"}
 
     selected = selected_capabilities(override or lock.get("capabilities"))
-    current = package_files(selected)
+    try:
+        explicit = skill_invocation.requested_skills(lock)
+    except ValueError as exc:
+        fail(str(exc))
+    current = package_files(selected, explicit)
     previous: dict[str, str] = lock.get("files") or {}
     added: list[str] = []
     missing: list[str] = []
@@ -1409,6 +1457,7 @@ def cmd_init(args: argparse.Namespace) -> int:
         fail(f"project harness already exists; use 'harness update {repo}'")
 
     selected = selected_capabilities(args.capability)
+    explicit = explicit_invocation(repo, selected, load_lock(repo) or {}, args)
     values = {
         "PROJECT_NAME": repo.name,
         "PROJECT_SUMMARY": "{{PROJECT_SUMMARY}}",
@@ -1441,7 +1490,7 @@ def cmd_init(args: argparse.Namespace) -> int:
     if not claude.exists():
         claude.write_text(CLAUDE_MD_SEED, encoding="utf-8", newline="\n")
 
-    written = write_snapshot(repo, selected, force=False)
+    written = write_snapshot(repo, selected, force=False, explicit=explicit)
     written.extend(
         ensure_links(
             repo,
@@ -1485,12 +1534,113 @@ def cmd_diff(args: argparse.Namespace) -> int:
     return 0 if result["state"] == "clean" else 1
 
 
+def skill_provenance(repo: Path) -> JsonObject:
+    """Explain the current package source and local state of each project skill."""
+    diff = snapshot_diff(repo)
+    sources: dict[str, JsonObject] = {}
+    catalog = capabilities()
+    for capability in diff.get("capabilities", []):
+        for source in resolve_capability_skills(capability, catalog).values():
+            entry = sources.setdefault(
+                source.name,
+                {
+                    "package_source": (source / "SKILL.md")
+                    .relative_to(ROOT)
+                    .as_posix(),
+                    "capabilities": [],
+                },
+            )
+            entry["capabilities"].append(capability)
+
+    drift: dict[str, dict[str, list[str]]] = {}
+    prefix = ".harness/skills/"
+    for status in (
+        "added",
+        "missing",
+        "package_changed",
+        "local_changed",
+        "conflict",
+        "retired",
+    ):
+        for relative in diff.get(status, []):
+            if relative.startswith(prefix):
+                name = relative[len(prefix) :].split("/", 1)[0]
+                drift.setdefault(name, {}).setdefault(status, []).append(relative)
+
+    skills_dir = repo / prefix
+    local = (
+        {
+            path.name
+            for path in skills_dir.iterdir()
+            if not path.is_symlink() and (path / "SKILL.md").is_file()
+        }
+        if skills_dir.is_dir() and not skills_dir.is_symlink()
+        else set()
+    )
+    return {
+        "schema_version": 1,
+        "skills": [
+            {
+                "name": name,
+                "path": f"{prefix}{name}/SKILL.md",
+                **sources.get(name, {"package_source": None, "capabilities": []}),
+                "drift": drift.get(name, {}),
+            }
+            for name in sorted(sources.keys() | drift.keys() | local)
+        ],
+    }
+
+
+def cmd_runtime_events(args: argparse.Namespace) -> int:
+    from harness.runtime_events import adapter_inventory, sync
+
+    if args.list_adapters:
+        print(
+            json.dumps({"schema_version": 1, "adapters": adapter_inventory()}, indent=2)
+        )
+        return 0
+    repo = Path(args.repo).expanduser().resolve()
+    ensure_git_repo(repo)
+    try:
+        changed = sync(repo)
+    except (OSError, ValueError) as exc:
+        fail(f"runtime events: {exc}")
+    for path in changed:
+        print(f"updated {path}")
+    return 0
+
+
+def cmd_mcp(args: argparse.Namespace) -> int:
+    from harness.mcp_server import serve
+
+    serve(
+        Path(args.repo).expanduser().resolve(),
+        skill_provenance,
+        sys.stdin.buffer,
+        sys.stdout.buffer,
+    )
+    return 0
+
+
+def cmd_inventory(args: argparse.Namespace) -> int:
+    inventory = skill_provenance(Path(args.repo).expanduser().resolve())
+    if args.json:
+        print(json.dumps(inventory, indent=2, ensure_ascii=False))
+    else:
+        for skill in inventory["skills"]:
+            origin = skill["package_source"] or "project"
+            state = ", ".join(skill["drift"]) or "current"
+            print(f"{skill['path']}  {origin}  [{state}]")
+    return 0
+
+
 def cmd_adopt(args: argparse.Namespace) -> int:
     """Внедрить harness в существующий проект с сохранением собственных скиллов."""
     repo = Path(args.repo).expanduser().resolve()
     ensure_git_repo(repo)
     read_seed_baseline(load_lock(repo))
     selected = selected_capabilities(args.capability)
+    explicit = explicit_invocation(repo, selected, load_lock(repo) or {}, args)
     selected_names = [source.name for source in selected_skills(selected)]
     occupied = [repo / ".harness/skills" / name for name in selected_names]
     occupied = [path for path in occupied if path.exists() or path.is_symlink()]
@@ -1506,7 +1656,7 @@ def cmd_adopt(args: argparse.Namespace) -> int:
         else:
             shutil.rmtree(path)
 
-    written = write_snapshot(repo, selected, force=False)
+    written = write_snapshot(repo, selected, force=False, explicit=explicit)
     ensure_links(
         repo, replace=args.replace_conflicts, fix_hint="re-run with --replace-conflicts"
     )
@@ -1555,6 +1705,8 @@ def cmd_update(args: argparse.Namespace) -> int:
             or args.force_managed_files
             or args.force_seed_files
             or args.force_seed_file
+            or args.no_model_invocation
+            or args.clear_no_model_invocation
         ):
             fail(
                 "--record-seed-baseline only records the seed baseline; "
@@ -1566,7 +1718,8 @@ def cmd_update(args: argparse.Namespace) -> int:
     cutover = runtime_cutover.prepare(repo, args)
     selected = selected_capabilities(args.capability or lock.get("capabilities"))
     result = snapshot_diff(repo, selected)
-    current_files = package_files(selected)
+    explicit = explicit_invocation(repo, selected, lock, args)
+    current_files = package_files(selected, explicit)
     blocked = [
         relative
         for relative in result.get("local_changed", []) + result.get("conflict", [])
@@ -1605,7 +1758,7 @@ def cmd_update(args: argparse.Namespace) -> int:
         fail("update aborted due to local skill changes (drift).")
 
     previous = set((lock.get("files") or {}).keys())
-    current = set(package_files(selected).keys())
+    current = set(current_files)
     for relative in sorted(previous - current):
         path = repo / relative
         if is_adapter(relative) and adapter_problem(
@@ -1616,7 +1769,7 @@ def cmd_update(args: argparse.Namespace) -> int:
         if path.is_file():
             path.unlink()
 
-    written = write_snapshot(repo, selected, force=force_managed)
+    written = write_snapshot(repo, selected, force=force_managed, explicit=explicit)
     ensure_links(
         repo,
         replace=force_managed,
@@ -2010,6 +2163,21 @@ def cmd_parsers(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_invocation_args(command: argparse.ArgumentParser) -> None:
+    command.add_argument(
+        "--no-model-invocation",
+        metavar="SKILL",
+        action="append",
+        help="require explicit invocation for this managed skill (repeatable)",
+    )
+    command.add_argument(
+        "--clear-no-model-invocation",
+        metavar="SKILL",
+        action="append",
+        help="restore the packaged invocation policy for this managed skill (repeatable)",
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     """Сконфигурировать парсер аргументов командной строки CLI harness."""
     root = argparse.ArgumentParser(prog="harness")
@@ -2084,7 +2252,28 @@ def parser() -> argparse.ArgumentParser:
     init.add_argument("--capability", action="append")
     init.add_argument("--base-branch", default="main")
     _add_engineering_args(init)
+    _add_invocation_args(init)
     init.set_defaults(func=cmd_init)
+
+    inventory = commands.add_parser(
+        "inventory", help="explain project skill provenance"
+    )
+    inventory.add_argument("repo")
+    inventory.add_argument("--json", action="store_true")
+    inventory.set_defaults(func=cmd_inventory)
+
+    events = commands.add_parser(
+        "runtime-events", help="synchronise native project lifecycle hooks"
+    )
+    events.add_argument("repo")
+    events.add_argument("--list-adapters", action="store_true")
+    events.set_defaults(func=cmd_runtime_events)
+
+    mcp = commands.add_parser(
+        "mcp", help="serve local read-only project tools through stdio"
+    )
+    mcp.add_argument("repo")
+    mcp.set_defaults(func=cmd_mcp)
 
     diff = commands.add_parser("diff")
     diff.add_argument("repo")
@@ -2097,6 +2286,7 @@ def parser() -> argparse.ArgumentParser:
     adopt.add_argument("--capability", action="append")
     adopt.add_argument("--replace-conflicts", action="store_true")
     _add_engineering_args(adopt)
+    _add_invocation_args(adopt)
     adopt.set_defaults(func=cmd_adopt)
 
     update = commands.add_parser("update")
@@ -2127,6 +2317,7 @@ def parser() -> argparse.ArgumentParser:
     )
     _add_engineering_args(update)
     runtime_cutover.add_arguments(update)
+    _add_invocation_args(update)
     update.set_defaults(func=cmd_update)
 
     registry = commands.add_parser("registry")

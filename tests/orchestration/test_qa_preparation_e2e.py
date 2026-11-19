@@ -10,6 +10,7 @@ a prepared report or a replaced route.
 from __future__ import annotations
 
 import argparse
+import io
 import json
 import os
 import subprocess
@@ -112,6 +113,7 @@ class PreparationFixture(unittest.TestCase):
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-m", "declare the QA gate")
         _git(self.repo, "push", "origin", "master")
+        self.configure_before_batch()
         # The QA lane is repository-scoped: its ledger is the repository's own state directory.
         self.fx.state_dir = self.repo / coordinator.STATE_REL
         self.batch_id = self.fx._create_batch()["batch_id"]
@@ -119,6 +121,9 @@ class PreparationFixture(unittest.TestCase):
         self.candidate = self.fx._accepted_candidate(self.batch_id)
         self.fx._reported_review(self.batch_id, self.candidate)
         self.fx._decide(self.batch_id, "accept")
+
+    def configure_before_batch(self) -> None:
+        """Optionally add project configuration before the verification plan is pinned."""
 
     def _script(self, name: str, body: str) -> str:
         path = self.scripts / f"{name}.py"
@@ -186,6 +191,32 @@ class PreparationFixture(unittest.TestCase):
 
     def developer_retries(self) -> int:
         return decisions._developer_retry_count(self.fx._batch_record(self.batch_id))
+
+
+class PreQaE2ETests(PreparationFixture):
+    def configure_before_batch(self) -> None:
+        self.pre_qa = self._script("pre_qa", "raise SystemExit(1)")
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps(
+                {
+                    "verification_commands": self.gate,
+                    "pre_qa_commands": [self.pre_qa],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_pre_qa_failure_is_recorded_and_stops_the_candidate_gate(self) -> None:
+        brief = self.qa_brief()
+        report = self.report_of(self.run_qa(brief))
+
+        self.assertEqual(brief["candidate_commit"], self.candidate)
+        self.assertEqual(report["outcome"], "failed")
+        self.assertEqual(
+            [(item["command"], item["result"]) for item in report["checks_run"]],
+            [(self.pre_qa, "fail"), *((command, "not_run") for command in self.gate)],
+        )
+        self.assertFalse(self.gate_ran.exists())
 
 
 class QaPreparationE2ETests(PreparationFixture):
@@ -385,6 +416,53 @@ class QaPreparationE2ETests(PreparationFixture):
         self.assertNotIn("qa_stages", report)
         self.assertEqual([c["result"] for c in report["checks_run"]], ["pass", "pass"])
 
+    def test_mcp_reads_accepted_qa_for_exact_candidate(self) -> None:
+        from harness.mcp_server import serve
+
+        self.configure(preparation=None)
+        brief = self.qa_brief()
+        self.run_qa(brief)
+        self.fx._decide(self.batch_id, "accept")
+        batch = self.fx._batch_record(self.batch_id)
+        requests = [
+            {
+                "jsonrpc": "2.0",
+                "id": index,
+                "method": "tools/call",
+                "params": {
+                    "name": "accepted_qa",
+                    "arguments": {
+                        "ticket": batch["ticket"],
+                        "branch": batch["branch"],
+                        "candidate_commit": candidate,
+                    },
+                },
+            }
+            for index, candidate in enumerate((self.candidate, "f" * 40))
+        ]
+        source = io.BytesIO(
+            b"".join(json.dumps(request).encode() + b"\n" for request in requests)
+        )
+        sink = io.BytesIO()
+
+        serve(self.repo, lambda repo: {}, source, sink)
+
+        accepted, absent = [
+            json.loads(line)["result"] for line in sink.getvalue().splitlines()
+        ]
+        self.assertEqual(
+            accepted["structuredContent"],
+            {
+                "batch_id": self.batch_id,
+                "candidate_commit": self.candidate,
+                "outcome": "completed",
+            },
+        )
+        self.assertTrue(absent["isError"])
+        self.assertEqual(
+            absent["structuredContent"]["error"]["code"], "qa_evidence_unavailable"
+        )
+
     @unittest.skipIf(
         hasattr(os, "geteuid") and os.geteuid() == 0,
         "a privileged process is not denied by file permissions",
@@ -397,7 +475,14 @@ class QaPreparationE2ETests(PreparationFixture):
         brief = self.qa_brief()
         common = Path(
             subprocess.run(
-                ["git", "-C", str(self.repo), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                [
+                    "git",
+                    "-C",
+                    str(self.repo),
+                    "rev-parse",
+                    "--path-format=absolute",
+                    "--git-common-dir",
+                ],
                 check=True,
                 capture_output=True,
                 text=True,

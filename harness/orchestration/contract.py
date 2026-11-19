@@ -74,6 +74,7 @@ CONFIG_ALLOWED_FIELDS = frozenset(CONFIG_REQUIRED_FIELDS) | {
     "verification_profiles",
     "retry_verification",
     "verification_plan_policy",
+    "pre_qa_commands",
     "qa_preparation",
     "qa_environment_probes",
     "qa_project_file_checks",
@@ -1896,7 +1897,12 @@ def configuration_problems(
     problems.extend(
         verification_plan_policy_problems(config.get("verification_plan_policy"))
     )
-    for qa_key in ("qa_preparation", "qa_environment_probes", "qa_project_file_checks"):
+    for qa_key in (
+        "pre_qa_commands",
+        "qa_preparation",
+        "qa_environment_probes",
+        "qa_project_file_checks",
+    ):
         qa_commands = config.get(qa_key)
         if qa_commands is not None and not string_list(qa_commands):
             problems.append(

@@ -34,6 +34,14 @@ Standards axis, apply the repository's documented standards and the smell baseli
 `code-review` skill, installed as `.harness/skills/code-review/references/smell-baseline.md`; the
 baseline states how it yields to a documented standard.
 
+For a completed full review, return `review.spec.criteria` in the same order as the brief's
+`definition_of_done`. Each row holds `criterion` (the original text), `status` (`met`,
+`missing`, or `unverified`), and `evidence` (a test result, a code reference at the candidate
+commit, or the reason verification was unavailable). Cite each unresolved criterion verbatim
+in the summary of its warning or blocker finding. The coordinator routes these findings
+through the existing review decision. Delta reviews use their assigned scope and inherited
+evidence.
+
 A deviation from the letter of the brief is a finding, not automatically a retry. When the
 implemented form is functionally equivalent or safer than the one the brief named, report it as a
 `warning` with that assessment stated. A human approver can then record `override-warning` and keep

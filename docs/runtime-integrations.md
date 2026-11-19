@@ -1,0 +1,56 @@
+# Инвентаризация и адаптеры агентов
+
+`harness inventory <repo> --json` показывает ожидаемый источник каждой поставляемой версии
+скилла, выбравшие его capability, путь в проекте и дрейф файлов по категориям `harness diff`.
+У скиллов проекта поле `package_source` равно `null`. Версия контракта указана в `schema_version`.
+
+## Локальный MCP
+
+Настройте MCP-клиент на команду `harness mcp /absolute/path/to/repo` с транспортом stdio.
+Сервер предоставляет два инструмента для чтения:
+
+- `skill_inventory` возвращает тот же результат, что и CLI. Необязательный аргумент `name`
+  фильтрует ответ по имени скилла.
+- `accepted_qa` принимает `ticket`, `branch` и полный `candidate_commit`. Возвращает SHA,
+  ID батча и результат принятого QA. Если хранилищем управляет `harness-runtime`, чтение
+  требует работающего локального сервиса.
+
+MCP не запускает проверки. Размер каждого сообщения ограничен 1 МиБ.
+
+## Runtime Events
+
+`harness runtime-events . --list-adapters` показывает нативные пути, правила загрузки скиллов
+и возможность совместной установки. Для регистрации команд создайте
+`.harness/runtime-events.json` в целевом проекте:
+
+```json
+{
+  "runtimes": ["claude", "codex", "cursor"],
+  "events": {
+    "session_start": ["python scripts/log_session_start.py"]
+  }
+}
+```
+
+Выполните `harness runtime-events .`. Поддерживаются `session_start`, `session_end` и
+`stop`. Адаптеры пишут в `.claude/settings.json`, `.codex/hooks.json` и
+`.cursor/hooks.json`. Команда получает нативный JSON своего runtime через stdin. Если
+Cursor уже импортирует события Claude Code, выберите одну регистрацию событий для Cursor.
+
+Чтобы отключить запись, уберите команду или runtime из манифеста и повторите синхронизацию.
+Чтобы отключить все записи, удалите манифест и повторите синхронизацию. Harness удаляет
+только неизменённые записи из своего файла владения `.harness/runtime-events.lock.json`.
+При хранении нативных конфигов в Git храните этот файл вместе с ними.
+
+## Явный вызов скилла
+
+```bash
+harness update . --no-model-invocation qa-gate
+harness update . --clear-no-model-invocation qa-gate
+```
+
+Повторите флаг для каждого скилла. `init` и `adopt` принимают те же параметры.
+Harness записывает выбор в `harness.lock` и устанавливает нативную настройку Claude Code
+и Cursor в `SKILL.md`, а настройку Codex в `agents/openai.yaml`. Скиллы с исходным
+запретом, включая `to-pull-requests`, сохраняют его после очистки переопределения.
+Подтверждение перед открытием PR по-прежнему требуется.

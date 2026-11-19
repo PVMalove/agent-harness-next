@@ -177,12 +177,17 @@ def _config(repo: Path) -> JsonObject:
     project = _configuration_data(bundle["project.json"], "project config")
     _reject_sensitive(project, "project config")
     defaults = _default_config(repo, project=project)
-    if value.get("assignment_plans"):
-        return LoadedConfiguration(value, result.source_sha256, project)
-    # Policy-only configuration and QA defaults must belong to the same generation.
-    if "developer_verification_commands" not in value:
-        del defaults["developer_verification_commands"]
-    return LoadedConfiguration({**defaults, **value}, result.source_sha256, project)
+    if not value.get("assignment_plans"):
+        # Policy-only configuration and QA defaults must belong to the same generation.
+        if "developer_verification_commands" not in value:
+            del defaults["developer_verification_commands"]
+        value = {**defaults, **value}
+    if prefix := _qa_preparation_commands(value, "pre_qa_commands"):
+        gate = _verification_commands(value)
+        value.setdefault("developer_verification_commands", gate)
+        value.setdefault("review_verification_commands", gate)
+        value["verification_commands"] = prefix + gate
+    return LoadedConfiguration(value, result.source_sha256, project)
 
 
 class LoadedConfiguration(dict[str, object]):
