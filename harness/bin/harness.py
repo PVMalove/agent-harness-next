@@ -1694,16 +1694,33 @@ def installed_capabilities(repo: Path) -> set[str]:
     return available
 
 
+def cmd_catalogs(args: argparse.Namespace) -> int:
+    from harness.catalogs import list_catalogs
+
+    repo = Path(args.repo).expanduser().resolve()
+    try:
+        inventory = list_catalogs(repo, args.source)
+    except (OSError, ValueError) as exc:
+        fail(f"catalogs: {exc}")
+    print(json.dumps(inventory, indent=2, ensure_ascii=False))
+    return 0
+
+
 def cmd_presets(args: argparse.Namespace) -> int:
+    from harness.catalogs import load_preset
     from harness.overlay_install import read_manifest
     from harness.presets import apply_preset
 
     repo = Path(args.repo).expanduser().resolve()
+    if bool(args.catalog) != bool(args.entry):
+        fail("--catalog and --entry must be supplied together")
     try:
-        result = apply_preset(
-            repo, read_manifest(Path(args.manifest).expanduser()),
-            installed_capabilities(repo), apply=args.apply,
+        preset = (
+            load_preset(repo, args.catalog, args.entry)
+            if args.catalog
+            else read_manifest(Path(args.manifest).expanduser())
         )
+        result = apply_preset(repo, preset, installed_capabilities(repo), apply=args.apply)
     except (OSError, ValueError) as exc:
         fail(f"preset: {exc}")
     print(json.dumps(result, indent=2, ensure_ascii=False))
@@ -2391,9 +2408,17 @@ def parser() -> argparse.ArgumentParser:
     overlays.add_argument("--apply", action="store_true")
     overlays.set_defaults(func=cmd_workflow_overlays)
 
+    catalogs = commands.add_parser("catalogs", help="list project catalog sources and presets")
+    catalogs.add_argument("repo")
+    catalogs.add_argument("--source")
+    catalogs.set_defaults(func=cmd_catalogs)
+
     presets = commands.add_parser("presets", help="preview or apply a team preset")
     presets.add_argument("repo")
-    presets.add_argument("--manifest", required=True)
+    preset_source = presets.add_mutually_exclusive_group(required=True)
+    preset_source.add_argument("--manifest")
+    preset_source.add_argument("--catalog")
+    presets.add_argument("--entry")
     presets.add_argument("--apply", action="store_true")
     presets.set_defaults(func=cmd_presets)
 
