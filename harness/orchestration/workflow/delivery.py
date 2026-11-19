@@ -18,6 +18,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -43,6 +44,7 @@ from harness.orchestration.core.config import (
 )
 from harness.orchestration.core.constants import (
     LIVE_DISPATCH_STATES,
+    REVIEW_CONTEXT_PREFIX,
     ROLE_TRANSPORTS,
     RUNTIME_PATH_PREFIXES,
 )
@@ -73,6 +75,7 @@ from harness.orchestration.ledger.ledger_ops import (
     _ledger_errors,
     _ledger_lock,
     _load_batch,
+    _load_context_package,
     _load_dispatch,
     _load_dispatch_status,
     _records_root,
@@ -142,6 +145,34 @@ def _worker_brief_path(repo: Path, root: Path, dispatch: JsonObject) -> Path:
             ) from None
     path.chmod(0o400)
     return path
+
+
+def _export_review_context(repo: Path, root: Path, dispatch: JsonObject) -> None:
+    """Publish the pinned review package in the container's existing read-only storage."""
+    dispatch_id = _safe_id(dispatch["dispatch_id"], "dispatch")
+    package = _load_context_package(root, dispatch["context_package_id"])
+    content = _canonical(package).encode("utf-8")
+    try:
+        path = storage_path(repo, "runs", f"{REVIEW_CONTEXT_PREFIX}{dispatch_id}.json")
+        if path.parent.resolve() != path.parent or path.is_symlink():
+            raise ValueError("review context export path is symlinked")
+        if path.exists():
+            if path.is_file() and path.read_bytes() == content:
+                return
+            raise ValueError("the exported review context differs from its pinned package")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(
+            dir=path.parent, prefix=".review-context-"
+        ) as staging:
+            staged = Path(staging) / path.name
+            staged.write_bytes(content)
+            staged.chmod(0o400)
+            os.replace(staged, path)
+    except (OSError, ValueError) as exc:
+        raise CoordinatorError(
+            f"cannot export pinned review context: {exc}",
+            remedy="inspect the project's runs directory and repeat send for the same dispatch",
+        ) from exc
 
 
 def _validate_checkout(
@@ -483,6 +514,8 @@ def _reserve_handoff(
             remedy="create the dispatch without a runtime_access provider, or on the file "
             "ledger; nothing was handed off and the brief is unchanged",
         )
+    if container and (dispatch.get("context_package_summary") or {}).get("review_focus"):
+        _export_review_context(repo, root, dispatch)
     handoff = _Handoff(
         dispatch=dispatch,
         status=status,

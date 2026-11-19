@@ -9,6 +9,9 @@ engine itself.
 from __future__ import annotations
 
 import json
+import hashlib
+import shutil
+import subprocess
 import sys
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -18,7 +21,16 @@ import pytest
 
 from harness.json_types import JsonObject
 from harness.orchestration import container_executor, runtime_access
-from tests.orchestration.runtime_store_support import Supervised
+from tests.orchestration import test_coordinator as coordinator_tests
+from tests.orchestration.legacy_state import seed_file_ledger
+from tests.orchestration.runtime_store_support import (
+    STATE_REL,
+    ServingRuntime,
+    Supervised,
+    _supervised_config,
+    coordinator_with,
+    migrate,
+)
 from tests.orchestration.scripted_engine import WORKER_ID as WORKER_CONTAINER
 from tests.orchestration.scripted_engine import PROXY_ID, ScriptedEngine, docker_info
 
@@ -169,6 +181,128 @@ def test_the_runtime_launches_the_approved_worker_with_the_adr_0025_argv(
     assert ["podman", "start", WORKER_CONTAINER] in engine.calls()
     assert_only_podman(engine)
     assert repo.wait_execution("running")["container_id"] == WORKER_CONTAINER
+
+
+def test_container_review_starts_with_focus_and_can_read_the_pinned_package(
+    tmp_path: Path,
+) -> None:
+    fixture = coordinator_tests.CoordinatorRetryRoutingTests()
+    fixture.file_ledger = True
+    fixture.setUp()
+    runtime = None
+    try:
+        repo = fixture.repo
+        fixture.state_dir = repo / STATE_REL
+        seed_file_ledger(fixture.state_dir)
+        batch = fixture._create_batch()["batch_id"]
+        fixture._accepted_architect(batch)
+        candidate = fixture._accepted_candidate(batch)
+        config = _supervised_config({"stop_grace_seconds": 1})
+        assignments = config["assignment_plans"]
+        assert isinstance(assignments, dict)
+        for role in ("code-review", "developer"):
+            assignment = assignments[role]
+            assert isinstance(assignment, dict)
+            assignment["transport"] = "external"
+        config["access_policy"] = policy()
+        config["extensions"] = {"runtime_access": "docker"}
+        (repo / ".harness/orchestration.json").write_text(json.dumps(config))
+        adapter = repo / ".harness/adapters/claude_worker.py"
+        adapter.parent.mkdir(parents=True)
+        shutil.copyfile(
+            Path(__file__).resolve().parents[2] / "harness/adapters/claude_worker.py",
+            adapter,
+        )
+        engine = ScriptedEngine(tmp_path / "engine", "podman")
+        engine.update(lambda state: state["images"].update({WORKER_TAG: WORKER_BARE}))
+        assert migrate(repo).returncode == 0
+        runtime = ServingRuntime(repo, env=engine_env(engine))
+
+        fields = [
+            "--batch",
+            batch,
+            "--role",
+            "code-review",
+            "--candidate-commit",
+            candidate,
+        ]
+        proposal = answer(
+            coordinator_with(repo, runtime, "dispatch", "propose", *fields)
+        )
+        created = answer(
+            coordinator_with(
+                repo,
+                runtime,
+                "dispatch",
+                "create",
+                *fields,
+                "--transition-digest",
+                proposal["transition_digest"],
+                "--approved-by",
+                "maintainer",
+                "--approved-at",
+                "2026-09-17T00:00:00Z",
+            )
+        )
+        brief = created["brief"]
+        assert brief["context_package_summary"]["review_focus"] is True
+        assert "definition_of_done" not in brief["context_package_summary"]
+        dispatch_id = created["dispatch_id"]
+        sent = answer(
+            coordinator_with(
+                repo,
+                runtime,
+                "dispatch",
+                "send",
+                "--dispatch",
+                dispatch_id,
+                "--adapter",
+                str(adapter),
+                "--worktree",
+                str(fixture.worktree),
+                "--checkout",
+                str(fixture.worktree),
+            )
+        )
+
+        package = repo / f".harness/.sandboxes/runs/review-context-{dispatch_id}.json"
+        assert (
+            hashlib.sha256(package.read_bytes()).hexdigest()
+            == brief["context_package_sha256"]
+        )
+        assert sent["execution"]["kind"] == "container"
+        selected = answer(
+            subprocess.run(
+                [
+                    sys.executable,
+                    str(adapter),
+                    "context",
+                    "--repo",
+                    str(repo),
+                    "--brief",
+                    sent["brief"],
+                    "--section",
+                    "starting_files",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        )
+        assert set(selected) == {"starting_files"}
+        assert "services/x.py" in [item["path"] for item in selected["starting_files"]]
+        [launch] = [call for call in engine.calls() if call[1] == "create"]
+        assert (
+            f"type=bind,source={repo / '.harness'},target={repo / '.harness'},readonly"
+            in flag_values(launch, "--mount")
+        )
+        assert not any(
+            str(package) in mount for mount in flag_values(launch, "--mount")
+        )
+    finally:
+        if runtime is not None:
+            runtime.stop()
+        fixture.tearDown()
 
 
 def test_status_follows_the_container_and_its_exit_removes_it_with_podman(

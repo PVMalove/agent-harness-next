@@ -26,8 +26,10 @@ installing it never changes the pinned runtime of an open batch.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -63,6 +65,7 @@ class Brief(TypedDict):
     resolved_transport: str
     purpose: str
     execution: NotRequired[dict[str, object]]
+    context_package_summary: NotRequired[dict[str, object] | None]
 
 
 HOST_START = """\
@@ -97,10 +100,9 @@ report submit.
 """
 
 WORK = """\
-Context Package {package}: start from its starting_files, symbol_graph and
-related_tests. For a starting file with non-empty sections, read only the start_line-end_line
-ranges the task needs.
-Work within the brief; escalate a blocker for anything the brief and the package leave out.
+Context Package {package}: start from its summary in the brief. Read only the indicated
+start_line-end_line ranges needed for the task.
+{context_hint}Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
 Use exact English enums: outcome = completed | blocked | failed; checks_run[].result = pass | fail | not_run.
@@ -112,12 +114,18 @@ statuses, passed and not-run are invalid; no aliases or old report formats are a
 
 HOST_END = """\
 Then run:
-{cli} report submit --file "{staging}"
-Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+{cli} report submit --compact --file "{staging}"
+Confirm the ledger receipt in one line. Relay any blocked transition or required next action.
 If submission returns ledger_busy, retry after its interval. If submission otherwise fails before
 recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
 already recorded, so submit it only once. Chat text alone does not complete the dispatch.
+"""
+
+HOST_CONTEXT = """\
+For more, read one section of the pinned package:
+{cli} context-package show --dispatch {dispatch_id} --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 """
 
 CONTAINER_END = """\
@@ -141,7 +149,8 @@ def build_prompt(
             str(repo),
         )
     )
-    template = CONTAINER_PROMPT if in_container() else PROMPT
+    container = in_container()
+    template = CONTAINER_PROMPT if container else PROMPT
     prompt = template.format(
         role=brief["role"],
         dispatch_id=brief["dispatch_id"],
@@ -152,7 +161,28 @@ def build_prompt(
         sha=sha,
         heartbeat=brief["liveness"]["heartbeat_every_seconds"],
         package=brief["context_package_id"],
+        context_hint=""
+        if container
+        else HOST_CONTEXT.format(cli=cli, dispatch_id=brief["dispatch_id"]),
     )
+    if container and (brief.get("context_package_summary") or {}).get("review_focus"):
+        read_context = shlex.join(
+            [
+                "python3",
+                str(Path(__file__).resolve()),
+                "context",
+                "--repo",
+                str(repo),
+                "--brief",
+                str(brief_path),
+                "--section",
+            ]
+        )
+        prompt += (
+            "\nFor more of the pinned review Context Package, run "
+            f"{read_context} <section>. Request only the section you need "
+            "(for example related_tests, starting_files, symbol_graph or precedent_cards).\n"
+        )
     if brief["role"] == "developer" and any(
         tool in brief["allowed_tools"] for tool in ("Agent", "Agent(test-author)")
     ):
@@ -352,6 +382,29 @@ def exit_status(returncode: int) -> int:
     return returncode if returncode >= 0 else 128 - returncode
 
 
+def read_context_section(args: argparse.Namespace) -> int:
+    brief = json.loads(Path(args.brief).read_bytes())
+    dispatch_id = brief["dispatch_id"]
+    if (
+        brief.get("role") != "code-review"
+        or not (brief.get("context_package_summary") or {}).get("review_focus")
+        or not re.fullmatch(r"dispatch-[a-zA-Z0-9-]+", dispatch_id)
+    ):
+        raise ValueError("expected a compact review brief")
+    runs = Path(args.repo).resolve() / ".harness/.sandboxes/runs"
+    path = runs / f"review-context-{dispatch_id}.json"
+    content = path.read_bytes()
+    if hashlib.sha256(content).hexdigest() != brief["context_package_sha256"]:
+        raise ValueError("review Context Package hash differs from the approved brief")
+    package = json.loads(content)
+    if package.get("context_package_id") != brief["context_package_id"]:
+        raise ValueError("review Context Package does not match the approved brief")
+    if args.section not in package:
+        raise ValueError("requested section is absent from the pinned review Context Package")
+    print(json.dumps({args.section: package[args.section]}, ensure_ascii=False))
+    return 0
+
+
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -375,6 +428,13 @@ def main(argv: list[str]) -> int:
         help="print the command and prompt; start nothing",
     )
     dispatch.set_defaults(handler=start)
+    context = sub.add_parser(
+        "context", help="read one section of a container review's pinned context"
+    )
+    context.add_argument("--repo", required=True)
+    context.add_argument("--brief", required=True)
+    context.add_argument("--section", required=True)
+    context.set_defaults(handler=read_context_section)
     args = parser.parse_args(argv)
     try:
         return int(args.handler(args))
@@ -385,7 +445,8 @@ def main(argv: list[str]) -> int:
         TypeError,
         subprocess.SubprocessError,
     ) as exc:
-        print(f"claude worker could not start: {exc}", file=sys.stderr)
+        action = "read context" if args.command == "context" else "start"
+        print(f"claude worker could not {action}: {exc}", file=sys.stderr)
         return 1
 
 

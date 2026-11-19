@@ -48,6 +48,52 @@ class CleanupTests(unittest.TestCase):
         git(self.repo, "add", ".gitignore")
         git(self.repo, "commit", "-m", "test: initial fixture")
 
+    def test_soft_keeps_pending_worker_report_but_can_remove_recorded_staging(self) -> None:
+        root = self.repo / ".harness"
+        inbox = root / ".sandboxes" / "scratch" / "inbox"
+        inbox.mkdir(parents=True)
+        pending = inbox / "dispatch-pending.json"
+        recorded = inbox / "dispatch-recorded.json"
+        runs = root / ".sandboxes" / "runs"
+        runs.mkdir()
+        active_context = runs / "review-context-dispatch-pending.json"
+        finished_context = runs / "review-context-dispatch-recorded.json"
+        for path in (pending, recorded, active_context, finished_context):
+            path.write_text("{}", encoding="utf-8")
+        batches = root / "orchestration" / "state" / "batches"
+        batches.mkdir(parents=True)
+        (batches / "batch-active.json").write_text(
+            json.dumps(
+                {
+                    "state": "paused",
+                    "worktree": str(self.repo),
+                    "dispatches": [
+                        {"dispatch_id": "dispatch-pending", "state": "dispatched"},
+                        {
+                            "dispatch_id": "dispatch-recorded",
+                            "state": "reported",
+                            "report": "reports/example.json",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+
+        self.assertIn(str(recorded), {item["path"] for item in plan["remove"]})
+        self.assertIn(str(finished_context), {item["path"] for item in plan["remove"]})
+        self.assertNotIn(str(pending), {item["path"] for item in plan["remove"]})
+        self.assertNotIn(str(active_context), {item["path"] for item in plan["remove"]})
+        self.assertIn(
+            {
+                "path": str(pending),
+                "reason": "staged report is pending for dispatch dispatch-pending",
+            },
+            plan["skipped"],
+        )
+
     def test_soft_previews_old_runs_scratch_logs_and_legacy_dirs_but_keeps_active_run_and_ledger(
         self,
     ) -> None:
@@ -376,6 +422,10 @@ class CleanupTests(unittest.TestCase):
         (state / "ledger.json").write_text(
             json.dumps({"version": STORE_LEDGER_VERSION}), encoding="utf-8"
         )
+        inbox = self.repo / ".harness" / ".sandboxes" / "scratch" / "inbox"
+        staged = inbox / "dispatch-unconfirmed.json"
+        inbox.mkdir(parents=True)
+        staged.write_text("{}", encoding="utf-8")
         reason = "runtime does not answer: start `harness-runtime serve --repo <repo>`"
         with mock.patch("harness.cleanup.RuntimeClient") as client:
             client.return_value.call.side_effect = RuntimeClientError(
@@ -391,6 +441,7 @@ class CleanupTests(unittest.TestCase):
         self.assertIn(
             {"path": str(self._worktrees_dir()), "reason": reason}, plan["skipped"]
         )
+        self.assertIn({"path": str(staged), "reason": reason}, plan["skipped"])
         self.assertEqual(facts[tree.resolve()], reason)
         self.assertEqual(
             REASONS_RU[reason],
@@ -855,3 +906,63 @@ class ContainerCleanupTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StoreCleanupTests(unittest.TestCase):
+    """Dispatch inputs are kept while a served runtime store still waits for their report."""
+
+    def setUp(self) -> None:
+        """Подготовить репозиторий, чей мигрированный store обслуживает runtime."""
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repo = (Path(temporary.name) / "repo").resolve()
+        self.repo.mkdir()
+        git(self.repo, "init", "-b", "main")
+        git(self.repo, "config", "user.name", "Test")
+        git(self.repo, "config", "user.email", "test@example.invalid")
+        (self.repo / ".gitignore").write_text("/.harness/\n", encoding="utf-8")
+        git(self.repo, "add", ".gitignore")
+        git(self.repo, "commit", "-m", "test: initial fixture")
+        support.build_state(self.repo)
+        migrated = support.migrate(self.repo)
+        self.assertEqual(migrated.returncode, 0, migrated.stderr)
+        runtime = support.ServingRuntime(self.repo)
+        self.addCleanup(runtime.stop)
+        patcher = mock.patch.dict(os.environ, runtime.environ)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_soft_keeps_inputs_of_the_dispatch_the_store_still_waits_for(self) -> None:
+        reported, pending = support.DISPATCH_IDS
+        sandboxes = self.repo / ".harness" / ".sandboxes"
+        inbox = sandboxes / "scratch" / "inbox"
+        runs = sandboxes / "runs"
+        inbox.mkdir(parents=True)
+        runs.mkdir()
+        for dispatch_id in (reported, pending):
+            (inbox / f"{dispatch_id}.json").write_text("{}", encoding="utf-8")
+            (runs / f"review-context-{dispatch_id}.json").write_text(
+                "{}", encoding="utf-8"
+            )
+
+        plan = plan_cleanup(self.repo, "soft", min_age_hours=0)
+
+        removed = {item["path"] for item in plan["remove"]}
+        self.assertIn(str(inbox / f"{reported}.json"), removed)
+        self.assertIn(str(runs / f"review-context-{reported}.json"), removed)
+        self.assertNotIn(str(inbox / f"{pending}.json"), removed)
+        self.assertNotIn(str(runs / f"review-context-{pending}.json"), removed)
+        self.assertIn(
+            {
+                "path": str(inbox / f"{pending}.json"),
+                "reason": f"staged report is pending for dispatch {pending}",
+            },
+            plan["skipped"],
+        )
+        self.assertIn(
+            {
+                "path": str(runs / f"review-context-{pending}.json"),
+                "reason": f"review context is pending for dispatch {pending}",
+            },
+            plan["skipped"],
+        )

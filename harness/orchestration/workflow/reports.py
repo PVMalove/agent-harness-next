@@ -2026,6 +2026,7 @@ def _record_report(
 def submit_report(args: argparse.Namespace) -> JsonObject:
     repo = _repo(args)
     path = _agent_authored_file(repo, args.file, "a completion report")
+    compact = getattr(args, "compact", False)
     relay_fields = [
         getattr(args, key, None)
         for key in ("relayed_by", "relay_reason", "source_sha256")
@@ -2110,39 +2111,34 @@ def submit_report(args: argparse.Namespace) -> JsonObject:
             )
         status = _load_dispatch_status(root, dispatch["dispatch_id"])
         entry = _dispatch_entry(batch, dispatch["dispatch_id"])
-        if report_relay is not None:
-            if (
-                path.resolve()
-                != Path(
-                    dispatch.get("report_staging_path")
-                    or _agent_inbox(repo) / f"{dispatch['dispatch_id']}.json"
-                ).resolve()
+        if report_relay is not None and path != Path(
+            dispatch.get("report_staging_path")
+            or _agent_inbox(repo) / f"{dispatch['dispatch_id']}.json"
+        ).resolve():
+            raise CoordinatorError(
+                "relay file does not match the worker staging path",
+                remedy="use the exact report_staging_path from the immutable brief",
+            )
+        if entry and entry.get("report") and (report_relay is not None or compact):
+            recorded_path = _records_root(root) / entry["report"]
+            recorded = _read_object(recorded_path, "recorded report")
+            prior_relay = entry.get("report_relay") or {}
+            if recorded != report or (
+                report_relay is not None
+                and prior_relay.get("source_sha256") != report_relay["source_sha256"]
             ):
                 raise CoordinatorError(
-                    "relay file does not match the worker staging path",
-                    remedy="use the exact report_staging_path from the immutable brief",
+                    "a different worker report is already recorded",
+                    remedy="inspect the recorded evidence; do not submit or replace it again",
                 )
-            if entry and entry.get("report"):
-                recorded = _read_object(
-                    _records_root(root) / entry["report"], "recorded report"
-                )
-                prior_relay = entry.get("report_relay", {})
-                if (
-                    recorded != report
-                    or prior_relay.get("source_sha256") != report_relay["source_sha256"]
-                ):
-                    raise CoordinatorError(
-                        "a different worker report is already recorded",
-                        remedy="inspect the recorded evidence; do not submit or replace it again",
-                    )
-                return {
-                    "dispatch_id": dispatch["dispatch_id"],
-                    "state": "reported",
-                    "report": str(_records_root(root) / entry["report"]),
-                    "already_recorded": True,
-                    "report_relay": prior_relay,
-                    "next_coordinator_action": "inspect the decision packet; use report complete only for a pending policy chain",
-                }
+            return {
+                "dispatch_id": dispatch["dispatch_id"],
+                "state": "reported",
+                "report": str(recorded_path),
+                "already_recorded": True,
+                **({"report_relay": prior_relay} if report_relay is not None else {}),
+                "next_coordinator_action": "inspect the decision packet; use report complete only for a pending policy chain",
+            }
         if (
             not entry
             or entry.get("state") != "dispatched"
@@ -2220,26 +2216,31 @@ def submit_report(args: argparse.Namespace) -> JsonObject:
             }
         )
         return response
-    if rebase_check is not None:
+    if rebase_check is not None and not compact:
         # The patch-id comparison of a rebase-fix-forward report (issue #504), for delta-review.
         response["rebase_check"] = rebase_check
     if auto_accept_policy is None:
-        from harness.orchestration.workflow.decisions import decision_packet
+        if not compact:
+            from harness.orchestration.workflow.decisions import decision_packet
 
-        packet = decision_packet(
-            argparse.Namespace(
-                repo=str(repo),
-                state_dir=getattr(args, "state_dir", None),
-                batch=batch["batch_id"],
-                dispatch=dispatch["dispatch_id"],
+            response["decision_packet"] = decision_packet(
+                argparse.Namespace(
+                    repo=str(repo),
+                    state_dir=getattr(args, "state_dir", None),
+                    batch=batch["batch_id"],
+                    dispatch=dispatch["dispatch_id"],
+                )
             )
-        )
-        response["decision_packet"] = packet
         if approvals.auto_active(config, batch):
             # Under `auto` the policy decides a report its chain does not accept (issue #643).
             response["next_coordinator_command"] = (
                 "python .harness/orchestration/coordinator.py --repo . batch auto-decide "
                 f"--batch {batch['batch_id']}"
+            )
+        elif compact:
+            response["next_coordinator_command"] = (
+                "python .harness/orchestration/coordinator.py --repo . batch decision-packet "
+                f"--batch {batch['batch_id']} --dispatch {dispatch['dispatch_id']}"
             )
         return response
     # The policy decision, risk assessment and next dispatch run after the ledger lock is released,

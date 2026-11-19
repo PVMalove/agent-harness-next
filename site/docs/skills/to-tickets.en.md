@@ -32,12 +32,14 @@ creates branches, and never starts `/implement`.
 
 ## Approval and publication
 
-Before writing, the skill checks that the `Action -> Verify` lines prove every outcome promised
-by the specification and that the dependency graph has no cycles. If a repeated import must
-leave no duplicates, the check must examine the records after the retry. The skill then shows
-the cards, waves, traceability matrix, new paths, and drafted epic sections, and waits for explicit
-approval. Criteria with IDs from the spec keep those IDs in published lines such as
-`[R3] Action -> Verify`.
+Before showing the plan, the skill checks that the `Action -> Verify` lines prove every outcome
+promised by the specification and that the dependency graph has no cycles. If a repeated import
+must leave no duplicates, the check must examine the records after the retry. The skill saves
+the complete plan under `docs/tasks/<task-folder>/artifacts/ticket-plan-v<N>.md`: the cards,
+waves, traceability matrix, new paths, and drafted epic sections. It shows the whole plan on the
+first pass and, after an edit, the changes with a link to the complete revision, then waits for
+explicit approval. Before publishing, it verifies the SHA-256 of the approved draft. Criteria
+with IDs from the spec keep those IDs in published lines such as `[R3] Action -> Verify`.
 
 After approval, the skill publishes the tickets to GitHub, GitLab, or
 `.scratch/<feature-slug>/issues/`, links them to the epic, and shows a summary table: link, title, wave, short summary, story

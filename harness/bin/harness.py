@@ -16,8 +16,10 @@ import os
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -454,11 +456,28 @@ def write_lock(repo: Path, lock: JsonObject) -> None:
     """Записать .harness/harness.lock: единственный писатель lock — CLI harness."""
     lock_path = repo / LOCK_REL
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(
-        json.dumps(lock, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8",
-        newline="\n",
-    )
+    try:
+        mode = stat.S_IMODE(lock_path.stat().st_mode)
+    except FileNotFoundError:
+        # NamedTemporaryFile creates 0600; a new lock gets the umask default of open().
+        umask = os.umask(0)
+        os.umask(umask)
+        mode = 0o666 & ~umask
+    data = (json.dumps(lock, indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            dir=lock_path.parent, prefix=f".{lock_path.name}.", delete=False
+        ) as stream:
+            temporary = Path(stream.name)
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        temporary.chmod(mode)
+        os.replace(temporary, lock_path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def read_seed_baseline(lock: JsonObject | None) -> dict[str, str | None] | None:

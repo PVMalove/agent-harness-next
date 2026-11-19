@@ -22,6 +22,9 @@ preserved. Hard cleanup removes the worktree of a `completed`, `failed`, `abando
 than the threshold. The plan and the `--apply` result name the `batch_id` and `state` of each
 worktree. Remote branches are never deleted.
 
+Both modes keep a staged worker report in `scratch/inbox/` while its dispatch can still deliver it.
+If cleanup cannot read the ledger, it keeps staged reports and reports the reason.
+
 This guide defines only task artifacts and scratchpads. Orchestration contracts are in
 `.harness/orchestration/playbook.md`; run `harness --help` for the CLI.
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from harness.bin.harness import write_lock
 from harness.json_types import JsonObject
 from tests.core.test_uninstall import git, harness
 
@@ -88,6 +89,49 @@ def test_update_keeps_the_seed_baseline(repo: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert seed_files(repo) == before
+
+
+def test_lock_keeps_previous_bytes_if_atomic_publish_fails(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = repo / LOCK
+    before = lock_path.read_bytes()
+    files_before = set(lock_path.parent.iterdir())
+    lock = load_lock(repo)
+    lock["package_version"] = "replacement-version"
+
+    def refuse_replace(src: Path, dst: Path) -> None:
+        assert Path(dst) == lock_path
+        assert Path(src).parent == lock_path.parent
+        assert json.loads(Path(src).read_bytes()) == lock
+        assert lock_path.read_bytes() == before
+        raise OSError("replacement refused")
+
+    monkeypatch.setattr(os, "replace", refuse_replace)
+    with pytest.raises(OSError, match="replacement refused"):
+        write_lock(repo, lock)
+
+    assert lock_path.read_bytes() == before
+    assert set(lock_path.parent.iterdir()) == files_before
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits")
+def test_lock_keeps_its_mode_and_a_new_lock_gets_the_umask_default(repo: Path) -> None:
+    lock_path = repo / LOCK
+    lock = load_lock(repo)
+    previous = os.umask(0o022)
+    try:
+        lock_path.chmod(0o604)
+        write_lock(repo, lock)
+        assert stat.S_IMODE(lock_path.stat().st_mode) == 0o604
+
+        lock_path.unlink()
+        write_lock(repo, lock)
+    finally:
+        os.umask(previous)
+
+    assert stat.S_IMODE(lock_path.stat().st_mode) == 0o644
+    assert load_lock(repo) == lock
 
 
 @pytest.mark.parametrize(
