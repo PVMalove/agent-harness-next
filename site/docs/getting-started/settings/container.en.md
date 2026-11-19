@@ -262,8 +262,9 @@ Use the shipped Claude Code adapter `.harness/adapters/claude_worker.py`. The co
 `.py` adapter of a container plan with the image's `python3`, and the adapter lives in `.harness/`,
 which the container sees at the same path. Under `HARNESS_EXECUTOR=docker` the adapter:
 
-- runs `claude -p <prompt>` in the foreground with `--output-format stream-json --verbose`, so
-  the host reads the `init` event and the worker's steps;
+- runs `claude -p` in the foreground with `--input-format stream-json` and
+  `--output-format stream-json --verbose`, so the host reads the `init` event and the worker's steps. The
+  adapter checks a native Bash write probe before it sends the task and forwards `init` to the host;
 - passes the brief's `allowed_tools` with `--permission-mode dontAsk` and the incoming reports
   directory with `--add-dir`; a read-only role gets `Edit(//<report_staging_path>)` and can write
   only its report;

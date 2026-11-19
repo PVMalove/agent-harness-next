@@ -171,7 +171,8 @@ def test_prepare_provisions_artifacts_and_builds_the_native_session_command(
         gitdir = Path(_git(tree, "rev-parse", "--absolute-git-dir"))
         assert all(filesystem[str(path)] == "write" for path in [*dirs, tree, gitdir])
         assert filesystem[str(repo / ".git/hooks")] == "read"
-        assert str(repo) not in filesystem
+        # The main checkout is never writable; Git permissions may list it read-only.
+        assert filesystem.get(str(repo), "read") == "read"
         assert str(tree.parent) not in filesystem
 
 

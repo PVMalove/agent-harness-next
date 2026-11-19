@@ -78,6 +78,15 @@ The second runtime gets the file `.codex/hooks.json` from the template `harness/
 - **Project trust.** The project hooks of this runtime start only after the user has trusted the `.codex/` layer of the project and confirmed each hook by hash. Before that the hooks do not work, and the Rust runtime checks and the coordinator provide protection, not the hooks. After `harness init` and after every `harness update` that changes `.codex/hooks.json`, the hook must be confirmed again, because the hash has changed.
 
 ### The hooks.policy check in harness health
+`harness health . --hook block-scratch-outside-docs-tasks --json` shows the source and installed
+script, events, matchers, and bindings for each runtime. `last_observation` contains the latest
+local verdict from the hook wrapper. The record includes the timestamp, runtime (`claude`,
+`codex`, or `unknown`), event, tool, reason code, and whether the wrapper ran the script. It lives
+under `.harness/.sandboxes/logs/` of the main checkout, also for a hook that ran in an issue
+worktree, and omits tool arguments and affected file paths. A value of `null` means no execution
+was recorded. `stale: true` means the script is gone or the record's runtime no longer binds the
+hook to its event. Configuration wiring alone does not prove execution.
+
 `harness health` contains the `hooks.policy` check for projects with `engineering-suite` or `backend-orchestration`. It shows:
 
 - **Profile and source.** `профиль standard (.harness/project.json)` or `профиль standard (по умолчанию)` when there is no `hook_policy` key, plus the list of escalations. An invalid `hook_policy` is `fail`, because the hooks apply `strict`.

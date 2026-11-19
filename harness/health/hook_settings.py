@@ -595,6 +595,18 @@ def is_wired(document: JsonObject, spec: HookSpec, tool: str) -> bool:
     )
 
 
+def installed_bindings(document: JsonObject, script: str) -> list[tuple[str, str, str]]:
+    """Return event, matcher and managed-entry digest for the configured script."""
+    groups = _groups(document)
+    if isinstance(groups, str):
+        raise ValueError(groups)
+    return [
+        (event, matcher, entry_digest(event, matcher, handler))
+        for event, matcher, handler in _triples(groups)
+        if script_name(handler) == script
+    ]
+
+
 def supported_tools(
     spec: HookSpec,
     support: frozenset[EventTool] | None,

@@ -34,6 +34,8 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -300,8 +302,97 @@ def run_inner(
     return done.returncode, done.stdout, done.stderr
 
 
-def emit(stdout: bytes, stderr: bytes, response: Dict[str, object]) -> int:
+OBSERVED_EVENTS = frozenset(
+    ("PreToolUse", "PostToolUse", "Stop", "SubagentStop", "EnterWorktree", "SessionStart")
+)
+OBSERVED_TOOLS = frozenset(
+    ("Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Skill", "apply_patch")
+)
+
+
+def observation_root() -> Path:
+    """The main checkout: a hook of an issue worktree reports where ``harness health`` reads."""
+    root = project_root()
+    # Read Git's own pointer files instead of starting `git`: hooks never spawn it.
+    try:
+        marker = root / ".git"
+        if not marker.is_file():
+            return root
+        text = marker.read_text(encoding="utf-8").strip()
+        if not text.startswith("gitdir:"):
+            return root
+        gitdir = (root / text.removeprefix("gitdir:").strip()).resolve()
+        common = (gitdir / (gitdir / "commondir").read_text(encoding="utf-8").strip()).resolve()
+    except (OSError, ValueError):
+        return root
+    return common.parent if common.name == ".git" else root
+
+
+def observed_runtime(event: object) -> str:
+    """Which runtime ran the hook, by its documented signals; never by tool input."""
+    fields = event if isinstance(event, dict) else {}
+    # `turn_id` and `model` are Codex extensions of the hook payload; `apply_patch` is its tool.
+    if "turn_id" in fields or fields.get("tool_name") == "apply_patch":
+        return "codex"
+    if os.environ.get("CLAUDE_PROJECT_DIR"):
+        return "claude"
+    if "model" in fields:
+        return "codex"
+    return "unknown"
+
+
+def observe(response: Dict[str, object], body_executed: bool, payload: bytes) -> None:
+    """Store one local verdict per hook without recording tool input, paths or messages."""
+    temporary: Optional[Path] = None
+    try:
+        directory = observation_root() / ".harness/.sandboxes/logs/hook-observations"
+        if directory.resolve() != directory:
+            return
+        if not directory.parent.parent.is_dir():
+            return
+        directory.mkdir(parents=True, exist_ok=True)
+        record = {
+            field: response[field]
+            for field in ("hook_id", "profile", "decision", "reason_code")
+        }
+        record["observed_at"] = datetime.now(timezone.utc).isoformat()
+        record["body_executed"] = body_executed
+        try:
+            event = json.loads(payload)
+        except (ValueError, RecursionError):
+            event = None
+        record["runtime"] = observed_runtime(event)
+        if isinstance(event, dict):
+            for source, field, values in (
+                ("hook_event_name", "event", OBSERVED_EVENTS),
+                ("tool_name", "tool", OBSERVED_TOOLS),
+            ):
+                value = event.get(source)
+                if isinstance(value, str) and value in values:
+                    record[field] = value
+        path = directory / f"{response['hook_id']}.json"
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=directory, delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            json.dump(record, handle)
+        temporary.replace(path)
+    except (OSError, RuntimeError):
+        pass  # Observation has no authority over the hook verdict.
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def emit(
+    stdout: bytes, stderr: bytes, response: Dict[str, object], *,
+    payload: bytes = b"", body_executed: bool = True,
+) -> int:
     """Передать вывод исходного сценария и вердикт; вернуть код возврата по decision."""
+    observe(response, body_executed, payload)
     if response["decision"] == "ask":
         # PreToolUse в Claude Code: человеку задают вопрос, причина показывается вместе с запросом.
         stdout = json.dumps(
@@ -342,14 +433,17 @@ def main(argv: List[str]) -> int:
         profile = read_profile(project_root())
         advisory = hook_id in ADVISORY_HOOKS
         if profile not in ACTIVE_PROFILES.get(hook_id, PROFILES):
-            return emit(b"", b"", build_response(hook_id, profile, "allow", REASON_OK))
+            return emit(
+                b"", b"", build_response(hook_id, profile, "allow", REASON_OK),
+                payload=payload, body_executed=False,
+            )
         default = ADVISORY_TIMEOUT_SECONDS if advisory else INNER_TIMEOUT_SECONDS
         timeout = TIMEOUTS.get(hook_id, default)
         code, out, err = run_inner(argv[2:], payload, timeout)
         response = decide(hook_id, profile, code, err.decode("utf-8", "replace"))
         if advisory and response["reason_code"] == REASON_INTERNAL_ERROR:
             out = b""  # частичный вывод тела сломал бы протокол runtime
-        return emit(out, err, response)
+        return emit(out, err, response, payload=payload)
     except Exception as exc:  # критичный hook не должен открывать проход при сбое
         print(f"hook_response.py: внутренняя ошибка: {exc}", file=sys.stderr)
         return 2 if critical else 0

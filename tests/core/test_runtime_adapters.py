@@ -33,6 +33,7 @@ def test_install_preserves_unknown_adapter(repo: Path, command: str) -> None:
 def install(repo: Path) -> None:
     result = harness("init", str(repo), "--capability", "backend-orchestration")
     assert result.returncode == 0, result.stderr
+    assert (repo / ".harness/adapters/worker_write_probe.py").is_file()
 
 
 def test_update_refuses_local_adapter_unless_explicit_force(repo: Path) -> None:
