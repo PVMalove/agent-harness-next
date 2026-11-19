@@ -10,14 +10,32 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 
 SLOTS = ("post-developer", "pre-review", "qa-preparation", "pre-qa")
+# A QA slot edits the configuration list of its stage, so each stage keeps one list of commands.
+CONFIG_KEYS = {"qa-preparation": "qa_preparation", "pre-qa": "pre_qa_commands"}
 OPERATIONS = ("append", "prepend", "replace", "remove")
 _ID = re.compile(r"[a-z][a-z0-9-]{0,63}")
 
 
-def resolve_slots(value: object) -> dict[str, list[str]]:
-    slots: dict[str, list[str]] = {slot: [] for slot in SLOTS}
+def resolve_config(config: Mapping[str, object]) -> dict[str, list[str]]:
+    """Resolve the overlays of a configuration; each QA slot starts from its configuration key."""
+    base: dict[str, list[str]] = {}
+    for slot, key in CONFIG_KEYS.items():
+        commands = config.get(key, [])
+        if not isinstance(commands, list) or any(
+            not isinstance(command, str) for command in commands
+        ):
+            raise ValueError(f"{key} must be a list of strings")
+        base[slot] = commands
+    return resolve_slots(config.get("workflow_overlays", []), base)
+
+
+def resolve_slots(
+    value: object, base: Mapping[str, list[str]] | None = None
+) -> dict[str, list[str]]:
+    slots = {slot: list((base or {}).get(slot, [])) for slot in SLOTS}
     if not isinstance(value, list) or len(value) > 64:
         raise ValueError("workflow_overlays must be a list of at most 64 overlays")
     seen: set[str] = set()

@@ -182,9 +182,9 @@ def _config(repo: Path) -> JsonObject:
         if "developer_verification_commands" not in value:
             del defaults["developer_verification_commands"]
         value = {**defaults, **value}
-    from harness.orchestration.workflow_overlays import resolve_slots
+    from harness.orchestration.workflow_overlays import CONFIG_KEYS, resolve_config
 
-    slots = resolve_slots(value.get("workflow_overlays", []))
+    slots = resolve_config(value)
     if extra := slots["post-developer"]:
         value["developer_verification_commands"] = (
             _developer_verification_commands(value) + extra
@@ -204,14 +204,9 @@ def _config(repo: Path) -> JsonObject:
                 list[JsonObject], value.get("verification_profiles", [])
             )
         ]
-    if extra := slots["qa-preparation"]:
-        value["qa_preparation"] = _qa_preparation_commands(value) + extra
-    prefix = slots["pre-qa"] + _qa_preparation_commands(value, "pre_qa_commands")
-    if prefix:
-        gate = _verification_commands(value)
-        value.setdefault("developer_verification_commands", gate)
-        value.setdefault("review_verification_commands", gate)
-        value["verification_commands"] = prefix + gate
+    for slot, key in CONFIG_KEYS.items():
+        if slots[slot] or key in value:
+            value[key] = slots[slot]
     return LoadedConfiguration(value, result.source_sha256, project)
 
 
@@ -442,6 +437,16 @@ def _role(repo: Path, name: str) -> JsonObject:
 def _verification_commands(config: JsonObject) -> list[str]:
     commands = config.get("verification_commands")
     return _strings(commands, "verification_commands", allow_empty=True)
+
+
+def _qa_gate_commands(config: JsonObject) -> list[str]:
+    """Candidate QA gate: the project's pre-QA checks run first, then the full verification list.
+
+    Only the QA gate takes the pre-QA checks; developer and review fall back to the bare list.
+    """
+    return _qa_preparation_commands(config, "pre_qa_commands") + _verification_commands(
+        config
+    )
 
 
 def _developer_verification_commands(config: JsonObject) -> list[str]:

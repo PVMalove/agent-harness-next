@@ -21,7 +21,7 @@ from harness.configuration import (
 from harness.configuration_store import ConfigurationStore, json_bytes
 from harness.json_types import JsonObject
 from harness.orchestration.config_boundary import inspect_configuration
-from harness.orchestration.workflow_overlays import resolve_slots
+from harness.orchestration.workflow_overlays import resolve_config
 
 
 def read_manifest(path: Path) -> JsonObject:
@@ -71,7 +71,7 @@ def workflow_overlays(repo: Path, manifest: Path | None, *, apply: bool) -> Json
             raise ValueError("workflow overlay manifest requires an overlays field")
         reject_secrets(supplied)
         document["workflow_overlays"] = supplied["overlays"]
-    slots = resolve_slots(document.get("workflow_overlays", []))
+    slots = resolve_config(document)
     if manifest is not None:
         desired = json_bytes(document)
         result = inspect_configuration(repo, desired)

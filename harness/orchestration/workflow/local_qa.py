@@ -25,8 +25,8 @@ from harness.orchestration.core import utils
 from harness.orchestration.core.config import (
     _attention_policy,
     _config,
+    _qa_gate_commands,
     _qa_preparation_commands,
-    _verification_commands,
 )
 from harness.orchestration.core.config import _execution_policy, _lease_ttl
 from harness.orchestration import operation_access, qa_lane, qa_lease, verification_plan
@@ -483,7 +483,7 @@ def integration_local_qa(args: argparse.Namespace) -> JsonObject:
         commands = (
             ticket_diff_plan_commands(plan)
             if plan is not None
-            else _verification_commands(_config(repo))
+            else _qa_gate_commands(_config(repo))
         )
         if not commands:
             raise CoordinatorError(

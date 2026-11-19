@@ -210,6 +210,10 @@ class PreQaE2ETests(PreparationFixture):
         brief = self.qa_brief()
         report = self.report_of(self.run_qa(brief))
 
+        batch = self.fx._batch_record(self.batch_id)
+        self.assertEqual(batch["verification_commands"], [self.pre_qa, *self.gate])
+        self.assertEqual(batch["developer_verification_commands"], self.gate)
+        self.assertEqual(batch["review_verification_commands"], self.gate)
         self.assertEqual(brief["candidate_commit"], self.candidate)
         self.assertEqual(report["outcome"], "failed")
         self.assertEqual(
