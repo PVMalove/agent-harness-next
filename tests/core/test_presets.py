@@ -49,3 +49,21 @@ def test_preset_preview_is_read_only_and_apply_is_additive(tmp_path: Path) -> No
     assert project["pr_checklist"] == ["Record rollout order"]
     assert harness(*args, "--apply").returncode == 0
     assert json.loads(path.read_bytes()) == project
+
+
+def test_schema_and_validator_agree_on_pr_checklist_items(tmp_path: Path) -> None:
+    from harness.configuration_schema import schema_problems
+    from harness.health.project_files import validate_project_data
+
+    git(tmp_path, "init", "-b", "main")
+    installed = harness(
+        "init", str(tmp_path), "--capability", "engineering-suite", "--qa-gate-command", "gate"
+    )
+    assert installed.returncode == 0, installed.stderr
+    project = json.loads((tmp_path / ".harness/project.json").read_bytes())
+    for item, valid in (("Record rollout order", True), ("   ", False), ("a\n", False)):
+        document = {**project, "pr_checklist": [item]}
+        problems: list[str] = []
+        validate_project_data(document, problems)
+        assert (not problems) == valid, item
+        assert (not schema_problems(tmp_path, "project.json", document)) == valid, item

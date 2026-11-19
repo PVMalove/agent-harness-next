@@ -45,8 +45,8 @@
     "pr_checklist": {
       "type": "array",
       "maxItems": 32,
-      "items": {"type": "string", "minLength": 1, "maxLength": 300, "pattern": "^[^\\r\\n]+$"},
-      "description": "Additional project questions to address when preparing a pull request."
+      "items": {"type": "string", "minLength": 1, "maxLength": 300, "pattern": "^[^\\r\\n]*\\S[^\\r\\n]*$(?![\\s\\S])"},
+      "description": "Additional project questions to address when preparing a pull request: up to 32 single-line items, each with a non-whitespace character."
     },
     "shell": {
       "type": "string",
