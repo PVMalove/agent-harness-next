@@ -1120,8 +1120,10 @@ no environment failure, so `resume-stop` does not treat it as one.
 A worker must write the coordinator state: at least `.harness/orchestration/state` with its
 `.coordinator.lock` directory and ledger records, and the report inbox. `report submit` takes that
 lock, `dispatch heartbeat` does not, so heartbeats can succeed while a submit fails. Grant the
-write through the runtime's own sandbox settings (Claude Code: `sandbox.filesystem.allowWrite`
-with the state and inbox directories) before launch. A refused lock returns
+write through the runtime's own sandbox settings before launch. Claude Code:
+`sandbox.filesystem.allowWrite` with the state and inbox directories and the main checkout's
+`.harness/.sandboxes/runs/qa`, `runs/tests`, `logs`, `cache/npm` and `cache/ms-playwright` for
+verification and browser checks, or the whole `.harness/.sandboxes`. A refused lock returns
 `sandbox_denied: ...` with the exact path, not a traceback. Classify it as infrastructure, not as
 a task error; deliver the staged file with the relay below only after the cause is named. The
 adapter probe takes and releases the real lock (a lock held by another operation counts as
