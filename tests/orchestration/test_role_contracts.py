@@ -58,6 +58,24 @@ def test_common_contract_lists_every_required_report_field() -> None:
     assert "`not applicable — read-only role`" in common
 
 
+def test_every_writer_role_belongs_to_every_role_class_of_a_writer() -> None:
+    """A new writer joins every class at once (#1251): attestation, worktree writes, risk and
+    the stage rank of `batch rewind`."""
+    from harness.orchestration.core.constants import (
+        BATCH_WRITER_ROLES,
+        NEXT_ACTION_DISPATCH_ROLE,
+        RISK_ASSESSED_ROLES,
+    )
+    from harness.orchestration.workflow.recovery import STAGE_RANKS
+
+    writers = {*BATCH_WRITER_ROLES, "conflict-resolver", "rebaser"}
+    assert writers <= ISSUE_WORKTREE_WRITER_ROLES
+    assert writers <= RISK_ASSESSED_ROLES
+    assert ISSUE_WORKTREE_WRITER_ROLES <= WORKER_ROLES_REQUIRING_ISSUE_WORKTREE
+    dispatchable = set(BATCH_WRITER_ROLES) | set(NEXT_ACTION_DISPATCH_ROLE.values())
+    assert dispatchable <= set(STAGE_RANKS)
+
+
 def test_roles_call_the_brief_list_definition_of_done() -> None:
     for name in ("common", "developer", "architect"):
         text = _role(name)

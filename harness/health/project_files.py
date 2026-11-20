@@ -41,13 +41,6 @@ BACKEND_ORCHESTRATION_CAPABILITY = "backend-orchestration"
 SEED_CAPABILITIES = ("engineering-suite", BACKEND_ORCHESTRATION_CAPABILITY)
 
 
-def canonical_capability(name: str) -> str:
-    """Accept installed snapshots and CLI commands using the former suite name.
-
-    The ``pvmalove-suite`` alias is kept through the 2.x releases and removed in 3.0.0."""
-    return "engineering-suite" if name == "pvmalove-suite" else name
-
-
 PROJECT_JSON_REQUIRED_FIELDS = (
     "language",
     "base_branch",

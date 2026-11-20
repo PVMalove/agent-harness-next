@@ -23,7 +23,7 @@ are defined in `.harness/instructions/issue-tracker.md` → GitLab → Conventio
    tracker take the first issue file in filename order with `**Workflow:** status::ready`. If none
    qualifies, say why: only `hitl` tickets remain (offer `/to-guide`), only `pipeline::full` ones
    remain (offer `/implement`), nothing is unblocked, or everything is claimed.
-3. **Nothing named:** when `.harness/instructions/git-workflow.md` has an Issue First rule, stop and ask for an
+3. **Nothing named:** when `.claude/rules/git-delivery.md` has an Issue First rule, stop and ask for an
    existing ticket, or to prepare one with `/to-spec`, `/publish-epic` and `/to-tickets`.
 
 ## Pre-flight

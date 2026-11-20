@@ -141,7 +141,7 @@ def test_harness_install_names_the_capabilities_and_those_outside_the_catalog(
     state = HarnessState(
         installed=True,
         installed_version="2.0.0",
-        capabilities=("pvmalove-suite", "backend-orchestration"),
+        capabilities=("retired-suite", "backend-orchestration"),
         skills=30,
         managed_files=200,
         updated_at="",
@@ -150,8 +150,8 @@ def test_harness_install_names_the_capabilities_and_those_outside_the_catalog(
     monkeypatch.setattr(home_facts, "harness_state", lambda repo: state)
     install = home_facts.harness_install(tmp_path)
     assert install.capabilities == 2
-    assert install.capability_names == ("pvmalove-suite", "backend-orchestration")
-    assert install.uncatalogued == ("pvmalove-suite",)
+    assert install.capability_names == ("retired-suite", "backend-orchestration")
+    assert install.uncatalogued == ("retired-suite",)
 
 
 def test_recent_sessions_list_the_newest_batches_with_their_route() -> None:

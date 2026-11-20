@@ -1040,6 +1040,19 @@ def test_codex_reports_early_exit_with_log_tail(
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process session")
+def test_codex_worker_that_dies_right_after_readiness_is_rejected(
+    dispatch: tuple[Path, Path, dict[str, object]],
+) -> None:
+    repo, worker, _ = dispatch
+    # The receipt says ready, then the app-server is gone at once (#1251).
+    binary = fake_app_server(repo, worker, after_turn="        sys.exit(3)\n")
+
+    result = invoke(dispatch, "--codex-bin", str(binary), runtime="codex")
+
+    assert result.returncode == 1, result.stdout
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX fake executable and process session")
 def test_codex_starts_detached_in_worker_with_stdin(
     dispatch: tuple[Path, Path, dict[str, object]],
 ) -> None:

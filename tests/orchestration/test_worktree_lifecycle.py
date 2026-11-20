@@ -517,6 +517,60 @@ def test_commit_asks_the_runtime_to_commit_the_named_paths(
     assert _git(tree, "status", "--porcelain") == "?? left.txt"
 
 
+def test_commit_refuses_a_message_file_inside_the_worktree_before_asking(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-21-message-inside")
+    message = tree / "message.txt"
+    message.write_text("feat: staged by itself\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message-file",
+        str(message),
+    )
+
+    assert code == 2
+    assert out == ""
+    assert "inside the worktree" in err
+    assert runtime.calls == []
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "feat: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n",
+        "feat: x\n\nGenerated with Claude Code\n",
+    ],
+)
+def test_commit_and_merge_refuse_an_assistant_attribution_before_asking(
+    repo: Path,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-22-attribution")
+    (tree / "added.txt").write_text("new\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+    common = ("--repo", str(repo), "--path", str(tree), "--message", message)
+
+    for command in (["commit"], ["merge", "--revision", "main"]):
+        code, out, err = _run(monkeypatch, capsys, runtime, *command, *common)
+
+        assert code == 2, command
+        assert out == ""
+        assert "assistant attribution" in err
+    assert runtime.calls == []
+
+
 @pytest.mark.parametrize("branch", ["integration/team", "release-notes"])
 def test_commit_refuses_a_worktree_off_an_issue_branch_before_asking(
     repo: Path,
@@ -769,6 +823,28 @@ def test_read_only_git_metadata_commits_through_a_runtime_that_serves_it(
             assert (
                 worktree_lifecycle.require_committable_worktree(repo, str(tree)) == route
             )
+
+
+def test_a_worktree_outside_the_managed_roots_never_takes_the_runtime_route(
+    repo: Path, tmp_path: Path
+) -> None:
+    tree = tmp_path / "outside-issue-17"
+    _git(repo, "worktree", "add", "--quiet", "-b", "feature/issue-17-outside", str(tree))
+    refusal = CoordinatorError("git metadata", remedy="open write access")
+
+    with (
+        mock.patch.object(
+            worktree_lifecycle,
+            "_require_writable_worktree",
+            mock.Mock(side_effect=refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle, "runtime_commits", mock.Mock(return_value=True)
+        ),
+    ):
+        with pytest.raises(CoordinatorError) as refused:
+            worktree_lifecycle.require_committable_worktree(repo, str(tree))
+    assert refused.value is refusal
 
 
 def test_an_unwritable_worktree_directory_is_refused_even_with_the_runtime(

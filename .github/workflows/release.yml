@@ -71,10 +71,21 @@ jobs:
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.12'
+      # The console SPA build is untracked; the archive carries it (ADR 0029 §4).
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22.14.0"
+          cache: npm
+          cache-dependency-path: harness/console/frontend/package-lock.json
+      - name: Build the console SPA
+        working-directory: harness/console/frontend
+        run: |
+          npm ci
+          npm run build
       - name: Build archive, checksum, and release notes
         env:
           RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
-        run: python scripts/build_release.py --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release"
+        run: python scripts/build_release.py --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/release" --require-console-build
       # For a master push the tag does not exist yet: gh creates it on the verified commit.
       - name: Create GitHub Release
         env:

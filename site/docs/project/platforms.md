@@ -22,7 +22,8 @@ CI проверяет Agent Harness Next 2.0 на платформах из та
 | Задание | Что проверяет |
 | --- | --- |
 | `lint` | ruff, mypy, `cargo fmt --check`, Clippy, публичные метаданные Git |
-| `rust` | `cargo test` workspace `native/harness-runtime` и debug-сборка `harness-runtime` для остальных заданий |
+| `rust` | `cargo test` workspace `native/harness-runtime` |
+| `runtime-build` | Одна debug-сборка `harness-runtime`, которую скачивают остальные задания Linux |
 | `docs` | Строгая сборка публичного сайта |
 | `verify` | Полный `make verify`: тесты harness и clean-room установка |
 | `console-spa` | Сборка веб-консоли, Vitest и Playwright в Chromium |

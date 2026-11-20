@@ -538,15 +538,6 @@ CODEX_SUPPORT: frozenset[EventTool] = frozenset(
 )
 
 
-def canonical_integration_id(identifier: object) -> object:
-    """Keep managed hook fingerprints usable across the suite rename."""
-    if identifier == "pvmalove-suite-hooks":
-        return "engineering-suite-hooks"
-    if identifier == "pvmalove-suite-codex-hooks":
-        return "engineering-suite-codex-hooks"
-    return identifier
-
-
 ADAPTERS: tuple[RuntimeAdapter, ...] = (
     RuntimeAdapter(
         runtime="claude",

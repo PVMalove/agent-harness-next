@@ -30,7 +30,7 @@ export function Timeline({ batchId, id = "report-timeline" }: { batchId: string;
             <span>{batchTimingText(timeline.batch, language)}</span>
           </div>
           <p className="report-route">
-            {t("маршрут")}: <span>{roleFlowText(timeline)}</span>
+            {t("маршрут")}: <span>{roleFlowText(timeline, t)}</span>
           </p>
           <ol className="timeline">
             {timeline.events.map((event, index) => (

@@ -246,3 +246,31 @@ def test_the_relaunched_process_marks_that_the_tui_started(tmp_path: Path) -> No
             == 0
         )
     assert marker.is_file()
+
+
+@pytest.mark.parametrize("built", [True, False])
+def test_web_mode_warns_when_the_console_build_is_missing(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], built: bool
+) -> None:
+    index = tmp_path / "dist" / "index.html"
+    if built:
+        index.parent.mkdir()
+        index.write_text("<!doctype html>", encoding="utf-8")
+    opened: list[str] = []
+
+    with (
+        mock.patch.object(launcher, "WEB_BUILD_INDEX", index),
+        mock.patch.object(launcher, "find_uv", return_value="/usr/bin/uv"),
+    ):
+        code = launcher.run_console(
+            tmp_path,
+            web=True,
+            server_starter=lambda repo, uv: ServerEndpoint(port=4321, token="t"),
+            browser_opener=opened.append,
+        )
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out == "http://127.0.0.1:4321/?token=t\n"
+    assert opened == ["http://127.0.0.1:4321/?token=t"]
+    assert ("make web-build" in captured.err) is not built

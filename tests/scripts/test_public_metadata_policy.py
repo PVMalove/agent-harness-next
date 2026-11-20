@@ -133,3 +133,11 @@ def test_in_github_actions_a_violation_is_an_error_annotation(
     assert out.startswith(
         "::error title=Public Git metadata::PR body: forbidden metadata near "
     )
+
+
+def test_the_runtime_commit_check_uses_the_ci_pattern() -> None:
+    """`coordinator.py worktree commit` and CI refuse the same attributions (#1251)."""
+    from harness.public_metadata import ASSISTANT_ATTRIBUTION
+
+    assert ASSISTANT_ATTRIBUTION.pattern == check_public_metadata.FORBIDDEN.pattern
+    assert ASSISTANT_ATTRIBUTION.flags == check_public_metadata.FORBIDDEN.flags

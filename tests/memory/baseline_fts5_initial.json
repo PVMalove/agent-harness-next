@@ -12,10 +12,10 @@
   "max_noise_ratio": 0.7,
   "dataset_hash": "d2dd5522c6281517f5eea9801c122228c831ca7911409acbc3e0a11e117ba2c5",
   "source_hashes": {
-    "CONTEXT.md": "4cc40d8edeba5f4d6d82d3422833399e93b2788f530907f083038d79f8568b48",
-    "docs/adr/0001-portable-capability-delivery.md": "5254f06b516ee14371422ba9cbca9947ced09067edf167bcef09fc9b446d805b",
+    "CONTEXT.md": "b0d112bc06f92aed0c35e52f87c2cd76307d39d7bd04e8d5c078c1d0029f1bdb",
+    "docs/adr/0001-portable-capability-delivery.md": "7f35b9513f2a9b63ad081ef5ade53b971a39aa94743167b426b6e7be5611c602",
     "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
-    "docs/adr/0003-orchestration-core.md": "eba04529bff1e9899409cba2434c2f423e9e29862e96ed16a334ec9b6dbb09bf",
+    "docs/adr/0003-orchestration-core.md": "c9b631fa959d29ff24ceaee8ffb416a0f4d768588f8e66456720b006e51a44b6",
     "docs/adr/0004-role-assignments.md": "3721543a888daea209f74e3ca92ea920074213b0b758cbc6c1497b53ba782bd0",
     "docs/adr/0005-implement-pipeline.md": "9d3692f8f10b67cf0b9e4b6ed1122c6ddfff3213db83ea23fcc4c7ce6af42453",
     "docs/adr/0006-scratch-artifacts.md": "99f53f8af2a319af5dd90b9e7ac97ef718f17aa63029545636035be8bab7e14b",

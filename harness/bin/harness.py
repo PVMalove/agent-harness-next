@@ -63,7 +63,6 @@ from harness.uninstall import (
     CONFIRM_WORD,
     GITIGNORE_LINES as RUNTIME_GITIGNORE_LINES,
     LEGACY_INSTRUCTIONS_DIR,
-    MANAGED_RULES,
     SEED_FOLDERS,
     seed_sources,
     apply_uninstall,
@@ -93,7 +92,6 @@ from harness.health.checks.hooks import (
 from harness.health.hook_settings import (
     ADAPTERS,
     RuntimeAdapter,
-    canonical_integration_id,
     critical_wiring,
     merge_hooks,
     template_digests,
@@ -102,7 +100,6 @@ from harness.health.hook_settings import (
 from harness.health.model import JsonObject
 from harness.health.project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
-    canonical_capability,
     DISCOVERY_LINKS,
     HOOK_POLICY_REL,
     INTEGRATIONS_REL,
@@ -119,7 +116,6 @@ from harness.health.project_files import (
     TRACKER_TYPES,
     digest,
     fail,
-    file_digest,
     git_command,
     native_link_target,
     project_registry,
@@ -131,12 +127,26 @@ from harness.health.project_files import (
     tracker_field_problems,
 )
 from harness.health.project_tracker import resolve_project_tracker
+from harness.package_snapshot import (
+    HARNESS_CLI as HARNESS_CLI,
+    INSTRUCTIONS_TARGET as INSTRUCTIONS_TARGET,
+    PROJECT_TEMPLATE_DIR as PROJECT_TEMPLATE_DIR,
+    PackageError,
+    capabilities as capabilities,
+    load_lock as load_lock,
+    package_files as package_files,
+    render as render,
+    resolve_capability_skills as resolve_capability_skills,
+    seed_differing as seed_differing,
+    seed_template_files as seed_template_files,
+    seed_template_sources as seed_template_sources,
+    selected_capabilities as selected_capabilities,
+    selected_resources as selected_resources,
+    selected_skills as selected_skills,
+    snapshot_diff as snapshot_diff,
+    version as version,
+)
 
-CAPABILITIES_FILE = PACKAGE / "CAPABILITIES.json"
-VERSION_FILE = PACKAGE / "VERSION"
-# How printed remedies invoke this CLI: the running interpreter and this script, runnable as shown.
-HARNESS_CLI = (sys.executable, str(Path(__file__).resolve()))
-DEFAULT_CAPABILITY = "project-foundation"
 # Bound of each local git probe (`rev-parse`); git that does not answer counts as unavailable.
 GIT_TIMEOUT_SECONDS = 10
 # argparse errors of the --test-* flags; like the tracker rules, they never quote the value.
@@ -166,11 +176,6 @@ def skill_file_hashes(repo: Path, directory: Path) -> dict[str, str]:
     }
 
 
-def version() -> str:
-    """Получить текущую версию пакета harness из файла VERSION."""
-    return VERSION_FILE.read_text(encoding="utf-8").strip()
-
-
 def _run_git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str] | None:
     """Выполнить git в `repo`; None — git не запустился или не ответил за GIT_TIMEOUT_SECONDS."""
     try:
@@ -192,238 +197,6 @@ def source_revision() -> str:
     if result is None or result.returncode != 0:
         return "uncommitted"
     return result.stdout.strip()
-
-
-def capabilities() -> dict[str, JsonObject]:
-    """Загрузить и распарсить каталог возможностей из CAPABILITIES.json."""
-    try:
-        data: object = json.loads(CAPABILITIES_FILE.read_text(encoding="utf-8"))
-    except JSON_READ_ERRORS as exc:
-        fail(f"cannot read {CAPABILITIES_FILE}: {exc}")
-    if not isinstance(data, dict):
-        fail("CAPABILITIES.json must contain an object")
-    return data
-
-
-def selected_capabilities(names: list[str] | None) -> list[str]:
-    """Нормализовать и проверить переданный список возможностей."""
-    selected = [canonical_capability(name) for name in names or [DEFAULT_CAPABILITY]]
-    catalog = capabilities()
-    unknown = [name for name in selected if name not in catalog]
-    if unknown:
-        fail(f"unknown capabilities: {', '.join(unknown)}")
-    return list(dict.fromkeys(selected))
-
-
-def _resolve_skill_source(entry: str) -> Path:
-    """Найти исходный каталог скилла в репозитории harness."""
-    source = ROOT / "skills" / entry
-    if not (source / "SKILL.md").is_file():
-        fail(f"missing skill: skills/{entry}/SKILL.md")
-    return source
-
-
-def _resolve_resource_source(entry: str) -> Path:
-    """Найти исходный путь ресурса возможности в репозитории harness."""
-    source = PACKAGE / entry
-    if not source.is_dir() and not source.is_file():
-        fail(f"missing capability resource: harness/{entry}")
-    return source
-
-
-def resolve_capability_skills(
-    name: str, catalog: dict[str, JsonObject], _stack: tuple[str, ...] = ()
-) -> dict[str, Path]:
-    """Разрешить возможность в словарь {имя_скилла: путь_к_источнику}.
-
-    Обрабатывает наследование `extends`, переопределения `overrides` и дополнения `additions`.
-    """
-    name = canonical_capability(name)
-    if name in _stack:
-        fail(f"capability cycle: {' -> '.join(_stack + (name,))}")
-    definition = catalog[name]
-    resolved: dict[str, Path] = {}
-
-    extends = definition.get("extends")
-    if extends:
-        if extends not in catalog:
-            fail(f"capability {name!r} extends unknown capability {extends!r}")
-        resolved.update(resolve_capability_skills(extends, catalog, _stack + (name,)))
-
-    for entry in definition.get("skills") or []:
-        source = _resolve_skill_source(entry)
-        resolved[source.name] = source
-
-    for skill_name, entry in (definition.get("overrides") or {}).items():
-        if skill_name not in resolved:
-            fail(
-                f"capability {name!r} overrides unknown skill {skill_name!r} (not in {extends!r})"
-            )
-        resolved[skill_name] = _resolve_skill_source(entry)
-
-    for entry in definition.get("additions") or []:
-        source = _resolve_skill_source(entry)
-        if source.name in resolved:
-            fail(
-                f"capability {name!r} addition {source.name!r} collides with an inherited skill"
-            )
-        resolved[source.name] = source
-
-    return resolved
-
-
-def resolve_capability_resources(
-    name: str, catalog: dict[str, JsonObject], _stack: tuple[str, ...] = ()
-) -> dict[str, Path]:
-    """Разрешить управляемые не-скилловые ресурсы для возможности и её родителей.
-
-    Ресурсы сохраняют свой относительный путь при развёртывании в проектной директории `.harness/`.
-    """
-    name = canonical_capability(name)
-    if name in _stack:
-        fail(f"capability cycle: {' -> '.join(_stack + (name,))}")
-    definition = catalog[name]
-    resolved: dict[str, Path] = {}
-
-    extends = definition.get("extends")
-    if extends:
-        if extends not in catalog:
-            fail(f"capability {name!r} extends unknown capability {extends!r}")
-        resolved.update(
-            resolve_capability_resources(extends, catalog, _stack + (name,))
-        )
-
-    for entry in definition.get("resources") or []:
-        resolved[entry] = _resolve_resource_source(entry)
-
-    return resolved
-
-
-def selected_skills(names: list[str]) -> list[Path]:
-    """Получить список путей ко всем скиллам, входящим в выбранные возможности."""
-    catalog = capabilities()
-    paths: list[Path] = []
-    seen_names: dict[str, Path] = {}
-    for capability in names:
-        for skill_name, source in resolve_capability_skills(
-            capability, catalog
-        ).items():
-            if skill_name in seen_names and seen_names[skill_name] != source:
-                fail(
-                    f"duplicate skill name {skill_name!r}: {seen_names[skill_name]} and {source}"
-                )
-            if skill_name not in seen_names:
-                seen_names[skill_name] = source
-                paths.append(source)
-    return paths
-
-
-def selected_resources(names: list[str]) -> list[Path]:
-    """Получить список путей ко всем ресурсам, входящим в выбранные возможности."""
-    catalog = capabilities()
-    paths: list[Path] = []
-    seen_destinations: dict[Path, Path] = {}
-    for capability in names:
-        for source in resolve_capability_resources(capability, catalog).values():
-            destination = source.relative_to(PACKAGE)
-            if (
-                destination in seen_destinations
-                and seen_destinations[destination] != source
-            ):
-                fail(
-                    f"duplicate capability resource {destination}: "
-                    f"{seen_destinations[destination]} and {source}"
-                )
-            if destination not in seen_destinations:
-                seen_destinations[destination] = source
-                paths.append(source)
-    return paths
-
-
-def _packageable(path: Path) -> bool:
-    """Пропустить локальные артефакты сборки, байт-код и кэши при пакетировании."""
-    return path.is_file() and "__pycache__" not in path.parts and path.suffix != ".pyc"
-
-
-# Managed agent instructions: the source in the project templates, the target in `.harness/` (#814).
-INSTRUCTIONS_SOURCE = PACKAGE / "project" / "instructions"
-INSTRUCTIONS_TARGET = ".harness/instructions"
-# Managed language rules: the source next to the seed rules, the target in `.claude/rules/` (#1249).
-RULES_SOURCE = PACKAGE / "project" / "rules"
-RULES_TARGET = ".claude/rules"
-
-
-def _resource_target(source: Path) -> Path:
-    """Where a capability resource file is installed: an instruction into `.harness/instructions/`,
-    any other file at its path below `.harness/`."""
-    if source.parent == INSTRUCTIONS_SOURCE:
-        return Path(INSTRUCTIONS_TARGET) / source.name
-    return Path(".harness") / source.relative_to(PACKAGE)
-
-
-def package_files(
-    names: list[str], explicit: set[str] | None = None
-) -> dict[str, bytes]:
-    """Сформировать словарь относительных целевых путей и байтового содержимого файлов пакета."""
-    # Языковые правила ставятся в любую установку, вне каталога capability: runtime грузит их
-    # из `.claude/rules/`, Codex читает по указателю из `AGENTS.md` (#1249).
-    result: dict[str, bytes] = {
-        f"{RULES_TARGET}/{name}": (RULES_SOURCE / name).read_bytes()
-        for name in sorted(MANAGED_RULES)
-    }
-    for source in selected_skills(names):
-        for path in sorted(source.rglob("*")):
-            if not _packageable(path):
-                continue
-            relative = path.relative_to(source)
-            target = Path(".harness/skills") / source.name / relative
-            result[target.as_posix()] = path.read_bytes()
-        if explicit and source.name in explicit:
-            root = f".harness/skills/{source.name}"
-            skill_path = f"{root}/SKILL.md"
-            codex_path = f"{root}/agents/openai.yaml"
-            try:
-                result[skill_path] = skill_invocation.restrict_frontmatter(
-                    result[skill_path]
-                )
-                result[codex_path] = skill_invocation.restrict_codex(
-                    result.get(codex_path, b"")
-                )
-            except ValueError as exc:
-                fail(f"cannot set explicit invocation for {source.name}: {exc}")
-    for source in selected_resources(names):
-        if source.is_file():
-            if _packageable(source):
-                result[_resource_target(source).as_posix()] = source.read_bytes()
-            continue
-        for path in sorted(source.rglob("*")):
-            if not _packageable(path):
-                continue
-            relative = path.relative_to(source)
-            target = Path(".harness") / source.relative_to(PACKAGE) / relative
-            result[target.as_posix()] = path.read_bytes()
-    return result
-
-
-def render(template: str, values: dict[str, str]) -> str:
-    """Подставить значения плейсхолдеров {{KEY}} в шаблонную строку."""
-    for key, value in values.items():
-        template = template.replace("{{" + key + "}}", value)
-    return template
-
-
-def load_lock(repo: Path) -> JsonObject | None:
-    """Загрузить и распарсить файл блокировки .harness/harness.lock репозитория."""
-    path = repo / LOCK_REL
-    if not path.is_file():
-        return None
-    try:
-        data: object = json.loads(path.read_text(encoding="utf-8"))
-    except JSON_READ_ERRORS as exc:
-        fail(f"cannot read {path}: {exc}")
-    if not isinstance(data, dict):
-        fail(f"cannot read {path}: expected a JSON object")
-    return data
 
 
 def ensure_git_repo(repo: Path) -> None:
@@ -648,7 +421,7 @@ def record_integration(
         for entry in read_integrations(repo)
         if not (
             isinstance(entry, dict)
-            and canonical_integration_id(entry.get("id")) == identifier
+            and entry.get("id") == identifier
         )
     ]
     entry: JsonObject = {
@@ -722,7 +495,7 @@ def record_runtime_events(repo: Path, changed: list[str]) -> None:
     entries: list[object] = []
     for entry in read_integrations(repo):
         if isinstance(entry, dict):
-            if canonical_integration_id(entry.get("id")) in ids:
+            if entry.get("id") in ids:
                 continue
             config = entry.get("config")
             if config in changed and (repo / str(config)).is_file():
@@ -745,73 +518,6 @@ def record_runtime_events(repo: Path, changed: list[str]) -> None:
     write_integrations(repo, entries)
 
 
-def snapshot_diff(repo: Path, override: list[str] | None = None) -> JsonObject:
-    """Сравнить установленный снимок файлов с эталонным пакетом возможностей."""
-    lock = load_lock(repo)
-    if lock is None:
-        return {"state": "missing", "detail": "no .harness/harness.lock"}
-
-    selected = selected_capabilities(override or lock.get("capabilities"))
-    try:
-        explicit = skill_invocation.requested_skills(lock)
-    except ValueError as exc:
-        fail(str(exc))
-    current = package_files(selected, explicit)
-    previous: dict[str, str] = lock.get("files") or {}
-    added: list[str] = []
-    missing: list[str] = []
-    changed: list[str] = []
-    local: list[str] = []
-    conflict: list[str] = []
-    retired: list[str] = []
-
-    for relative, data in current.items():
-        package_hash = digest(data)
-        disk_hash = file_digest(repo / relative)
-        old_hash = previous.get(relative)
-        if is_adapter(relative) and adapter_problem(repo, relative, old_hash):
-            conflict.append(relative)
-        elif old_hash is None:
-            added.append(relative)
-        elif disk_hash is None:
-            missing.append(relative)
-        elif disk_hash == package_hash:
-            continue
-        elif old_hash == package_hash:
-            local.append(relative)
-        elif disk_hash == old_hash:
-            changed.append(relative)
-        else:
-            conflict.append(relative)
-
-    for relative, old_hash in previous.items():
-        if relative in current:
-            continue
-        disk_hash = file_digest(repo / relative)
-        if disk_hash is None:
-            continue
-        if disk_hash == old_hash:
-            retired.append(relative)
-        else:
-            conflict.append(relative)
-
-    state = "clean"
-    if added or missing or changed or local or conflict or retired:
-        state = "drift"
-    return {
-        "state": state,
-        "package_version": version(),
-        "installed_version": lock.get("package_version"),
-        "capabilities": selected,
-        "added": sorted(added),
-        "missing": sorted(missing),
-        "package_changed": sorted(changed),
-        "local_changed": sorted(local),
-        "conflict": sorted(set(conflict)),
-        "retired": sorted(retired),
-    }
-
-
 def print_diff(result: JsonObject) -> None:
     """Вывести текстовый отчёт о различиях снимка файлов в консоль."""
     print(f"state: {result['state']}")
@@ -830,13 +536,6 @@ def print_diff(result: JsonObject) -> None:
 
 
 ENGINEERING_CAPABILITY = "engineering-suite"
-PROJECT_TEMPLATE_DIR = PACKAGE / "project"
-HARNESS_RUNTIME_GITIGNORE = """# Generated harness runtime data
-.sandboxes/
-.venv
-config_versions/
-config-versions/
-"""
 
 
 def missing_runtime_gitignore_lines(content: str) -> list[str]:
@@ -1015,45 +714,6 @@ def _matching_arg(pattern: str, rule: str) -> Callable[[str], str]:
     return parse
 
 
-def seed_template_sources(*, orchestration_enabled: bool) -> dict[str, Path]:
-    sources = {
-        f"{target}/{source.name}": source
-        for folder, target, suffixes in SEED_FOLDERS
-        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes)
-    }
-    sources.update(
-        {
-            adapter.config: PROJECT_TEMPLATE_DIR / adapter.template
-            for adapter in ADAPTERS
-        }
-    )
-    sources[".harness/project.schema.json"] = (
-        PROJECT_TEMPLATE_DIR / "project.schema.json"
-    )
-    if orchestration_enabled:
-        sources[".harness/orchestration.json"] = PACKAGE / "orchestration.example.json"
-    return sources
-
-
-def seed_template_files(repo: Path, *, orchestration_enabled: bool) -> dict[str, bytes]:
-    """Seed-файлы, которые `update` может перезаписать: путь от корня проекта -> эталон из шаблона."""
-    files = {
-        relative: source.read_bytes()
-        for relative, source in seed_template_sources(
-            orchestration_enabled=orchestration_enabled
-        ).items()
-    }
-    scratch = storage_path(repo, "scratch", ".gitignore")
-    # A linked checkout shares scratch with its main checkout. Seeding this worker must not
-    # turn a shared path into a ../ write or fail while relativizing that outside path.
-    if scratch.is_relative_to(repo):
-        files[scratch.relative_to(repo).as_posix()] = (
-            PROJECT_TEMPLATE_DIR / "scratch/.gitignore"
-        ).read_bytes()
-    files[".harness/.gitignore"] = HARNESS_RUNTIME_GITIGNORE.encode("utf-8")
-    return files
-
-
 def hook_template_files() -> dict[str, bytes]:
     """Эталоны hooks проекта для проверки дрейфа: скрипты и настройки runtime."""
     configs = {adapter.config for adapter in ADAPTERS}
@@ -1064,19 +724,6 @@ def hook_template_files() -> dict[str, bytes]:
         ).items()
         if relative in configs or relative.startswith(".claude/hooks/")
     }
-
-
-def seed_differing(repo: Path) -> list[str]:
-    """Существующие seed-файлы проекта, которые отличаются от шаблона."""
-    templates = seed_template_files(
-        repo, orchestration_enabled=(repo / ".harness/orchestration.json").exists()
-    )
-    differing: list[str] = []
-    for relative, content in templates.items():
-        path = repo / relative
-        if path.is_file() and path.read_bytes() != content:
-            differing.append(relative)
-    return sorted(differing)
 
 
 def baselined_seed_files(
@@ -1868,7 +1515,6 @@ def artifact_provenance(repo: Path) -> JsonObject:
     installations_with_seeds = selected & {
         ENGINEERING_CAPABILITY,
         BACKEND_ORCHESTRATION_CAPABILITY,
-        "pvmalove-suite",
     }
     grouped = {
         path: status for status, paths in seed_groups(repo).items() for path in paths
@@ -1939,7 +1585,7 @@ def installed_capabilities(repo: Path) -> set[str]:
     catalog = capabilities()
     available: set[str] = set()
     for selected in lock.get("capabilities", []):
-        name: str | None = canonical_capability(selected)
+        name: str | None = selected
         while name and name not in available:
             if name not in catalog:
                 fail(f"installed capability is unknown: {name}")
@@ -2252,6 +1898,14 @@ def cmd_lock_project_skills(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cli_snapshot_diff(repo: Path) -> JsonObject:
+    """`snapshot_diff` for `harness health`: a package error ends the check through `fail()`."""
+    try:
+        return snapshot_diff(repo)
+    except PackageError as exc:
+        fail(exc.message)
+
+
 def cmd_health(args: argparse.Namespace) -> int:
     """Выполнить все зарегистрированные проверки harness health и вывести отчёт."""
     repo = Path(args.repo).expanduser().resolve()
@@ -2268,7 +1922,7 @@ def cmd_health(args: argparse.Namespace) -> int:
         return 0
     report = health_registry.run(
         repo,
-        snapshot_diff=snapshot_diff,
+        snapshot_diff=_cli_snapshot_diff,
         output_encoding=ORIGINAL_STDOUT_ENCODING,
         fix=getattr(args, "fix", False),
         online=getattr(args, "online", False),
@@ -2864,6 +2518,8 @@ def main() -> int:
     try:
         exit_code: int = args.func(args)
         return exit_code
+    except PackageError as exc:
+        fail(exc.message)
     except HarnessError as exc:
         return print_and_exit(exc)
 

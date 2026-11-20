@@ -19,6 +19,11 @@ const PHASE_TONE: Readonly<Record<string, string>> = {
 export function JobOutput({ job, onCancel }: { job: LocalJob; onCancel: () => void }) {
   const { t } = useI18n();
   const text = job.output.map((fragment) => fragment.text).join("");
+  // The server marks every finished job "completed"; a non-zero exit is still a failure.
+  const phase =
+    job.phase === "completed" && job.returncode !== null && job.returncode !== 0
+      ? "failed"
+      : job.phase;
   return (
     <section className="panel command-output" aria-label={t("Вывод")} data-job={job.id}>
       <div className="panel-head">
@@ -26,8 +31,8 @@ export function JobOutput({ job, onCancel }: { job: LocalJob; onCancel: () => vo
           <code>{job.command_id}</code>
         </h2>
         <span className="command-output-state">
-          <em className={`orch-pill ${PHASE_TONE[job.phase] ?? ""}`} role="status">
-            {t(PHASE_LABELS[job.phase] ?? job.phase)}
+          <em className={`orch-pill ${PHASE_TONE[phase] ?? ""}`} role="status">
+            {t(PHASE_LABELS[phase] ?? phase)}
           </em>
           {job.returncode !== null && (
             <span className="small muted">{t("Код возврата: {code}", { code: job.returncode })}</span>

@@ -111,10 +111,8 @@ def test_update_restores_removed_managed_entries_and_keeps_user_hook(
     assert merged["permissions"] == document["permissions"]
 
 
-@pytest.mark.parametrize("legacy_inventory", [False, True])
 def test_update_replaces_outdated_managed_entry_recorded_in_baseline(
     repo: Path,
-    legacy_inventory: bool,
 ) -> None:
     install(repo)
     document = load(repo)
@@ -131,13 +129,6 @@ def test_update_replaces_outdated_managed_entry_recorded_in_baseline(
     entry["managed_entries"] = sorted(
         [*entry.get("managed_entries", []), entry_digest(event, matcher, outdated)]
     )
-    if legacy_inventory:
-        for item in inventory["integrations"]:
-            item["id"] = item["id"].replace("engineering-suite", "pvmalove-suite")
-        lock_path = repo / ".harness/harness.lock"
-        lock = json.loads(lock_path.read_text(encoding="utf-8"))
-        lock["capabilities"] = ["pvmalove-suite"]
-        lock_path.write_text(json.dumps(lock), encoding="utf-8")
     (repo / INTEGRATIONS).write_text(json.dumps(inventory, indent=2), encoding="utf-8")
 
     result = harness("update", str(repo))
@@ -149,9 +140,6 @@ def test_update_replaces_outdated_managed_entry_recorded_in_baseline(
     identifiers = [item["id"] for item in updated["integrations"]]
     assert identifiers.count("engineering-suite-hooks") == 1
     assert identifiers.count("engineering-suite-codex-hooks") == 1
-    assert not any(
-        identifier.startswith("pvmalove-suite") for identifier in identifiers
-    )
 
 
 CHANGE_IMPACT_SCRIPTS = (

@@ -39,6 +39,9 @@ from .kernel.discovery import ServerEndpoint, read_record
 from .pin import CONSOLE_SERVER_REQUIREMENTS, TEXTUAL_PIN, WEBSOCKETS_PIN
 from .kernel.runner import CommandRunner, default_runner
 
+# The SPA build that the console server mounts at "/" (backend/server.py DEFAULT_STATIC_ROOT).
+WEB_BUILD_INDEX = Path(__file__).resolve().parent / "frontend" / "dist" / "index.html"
+
 # Set on the relaunched `uv run` subprocess's own environment so it knows not to relaunch again.
 RELAUNCH_ENV = "HARNESS_CONSOLE_RELAUNCHED"
 # A marker file the relaunched process creates once it reaches the TUI: a non-zero exit after that
@@ -340,6 +343,13 @@ def run_console(
         return 1
     if web:
         url = f"http://127.0.0.1:{endpoint.port}/?token={endpoint.token}"
+        if not WEB_BUILD_INDEX.is_file():
+            # A source checkout carries no build: the server answers "/" with a plain status line.
+            print(
+                f"harness console: сборки веб-консоли нет ({WEB_BUILD_INDEX.parent}) — "
+                "выполните `make web-build` (нужен Node.js) и перезапустите консоль",
+                file=sys.stderr,
+            )
         print(url)
         if not no_open:
             browser_opener(url)

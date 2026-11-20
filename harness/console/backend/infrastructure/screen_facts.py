@@ -116,7 +116,7 @@ def adapter_facts(repo: Path) -> list[dict[str, object]] | None:
     """The runtime adapter files of the installed capabilities with their status (current,
     outdated, missing) and problem; None when the lock or the package cannot be read."""
     try:
-        from harness.bin.harness import load_lock, package_files
+        from harness.package_snapshot import load_lock, package_files
         from harness.runtime_adapters import adapter_statuses
 
         lock = load_lock(repo)
@@ -126,7 +126,7 @@ def adapter_facts(repo: Path) -> list[dict[str, object]] | None:
         statuses = adapter_statuses(
             repo, package_files(selected), lock.get("files") or {}
         )
-    except (Exception, SystemExit):  # an unreadable adapter set is unknown, never current
+    except Exception:  # an unreadable adapter set is unknown, never current
         return None
     return [dict(status) for status in statuses]
 

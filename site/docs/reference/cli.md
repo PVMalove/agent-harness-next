@@ -11,7 +11,7 @@
 | `init` | Первая установка в проект без harness | да |
 | `adopt` | Установка поверх проекта, где уже есть свои скиллы с теми же именами | да |
 | `diff` | Сверяет проект с залоченным снимком | нет |
-| `update` | Подтягивает новую версию capability | да |
+| `update` | Подтягивает новую версию capability; на ledger версии 3 с `--approved-by`, `--approved-at` и `--reason` выполняет `harness-runtime migrate` ([миграция на 2.0](../guides/upgrade-2-0.md)) | да |
 | `registry` | Пересобирает реестр скиллов проекта | да |
 | `lock-project-skills` | Фиксирует хеши скиллов, которыми владеет сам проект | да |
 | `memory build/search/rebuild/sync/eval` | Локальный индекс памяти и указатели на разрешённые источники | `build`, `rebuild`, `sync`: да; `search`, `eval`: нет |
@@ -70,6 +70,7 @@ Capability задаёт состав снимка. Сборки: `project-founda
 | `story_points` | Шкала оценки и пороги маршрутизации `pipeline::fast` / `pipeline::full` |
 | `memory` | Включение локальной памяти проекта |
 | `memory_policy` | Разрешённые источники, redact-правила, порог и бюджет памяти |
+| `pr_checklist` | До 32 однострочных вопросов проекта, на которые отвечает подготовка PR |
 
 Внутри `tracker` допустимы только `type`, `host` и `project`. Сертификаты, прокси и учётные данные
 сюда не пишут: они остаются в личной конфигурации CLI трекера. Внутри `hook_policy` эскалации только
@@ -167,6 +168,7 @@ python3 harness/bin/harness.py parsers install /path/to/repository --language py
 | `context-package` | Регистрация детерминированного пакета контекста |
 | `report` | Приём отчётов ролей (`report submit`) и шаги политики отчёта (`report complete`) |
 | `recovery` | Статус, перезагрузка, возобновление, исправление и прерывание остановленного batch |
+| `worktree` | Создание и удаление worktree задачи, коммит, rebase и merge in-process writer через runtime, подготовка и проверка доступа сессии |
 
 Порядок гейтов и работа с batch описаны в руководстве [`/implement`](../guides/implement.md).
 

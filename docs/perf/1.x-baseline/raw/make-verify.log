@@ -79,7 +79,7 @@ wrote .harness/skills/REGISTRY.md for <main-checkout>/.harness/.sandboxes/runs/t
 [health] project: PASS ok=29 warn=1 fail=0 skipped=25; log: <main-checkout>/.harness/.sandboxes/logs/clean-room-health-project-3lm7pryd.log
 [health] project: PASS ok=29 warn=1 fail=0 skipped=25; log: <main-checkout>/.harness/.sandboxes/logs/clean-room-health-project-6ufcvjhf.log
 installed agent-harness 1.5.1 in <main-checkout>/.harness/.sandboxes/runs/tests/vxtq_fmou/c/pv_project
-capabilities: pvmalove-suite
+capabilities: engineering-suite
 managed files: 193
 [health] pv_project: PASS ok=28 warn=3 fail=0 skipped=24; log: <main-checkout>/.harness/.sandboxes/logs/clean-room-health-pv_project-wz5ofr91.log
 updated agent-harness to 1.5.1 in <main-checkout>/.harness/.sandboxes/runs/tests/vxtq_fmou/c/pv_project

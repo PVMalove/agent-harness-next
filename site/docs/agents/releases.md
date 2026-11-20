@@ -19,6 +19,7 @@ GitHub Release с двумя Assets:
 Тело Release Notes берётся из секции `[X.Y.Z]` в `CHANGELOG.md`.
 
 Архив содержит `harness/`, `skills/`, `global/`, `global-skills/`, `bin/`, `third_party/`,
+исходники `native/` для сборки `harness-runtime`, собранную веб-консоль `harness/console/frontend/dist/`,
 `README.md` и файлы лицензий. `docs/`, `tests/` и `.github/` в архив не входят.
 
 ## Выпуск

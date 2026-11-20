@@ -111,13 +111,14 @@ class ProjectReader:
         from harness.orchestration.runtime_client import (
             RuntimeClient,
             RuntimeClientError,
+            read_state,
         )
 
         try:
-            reply = RuntimeClient(self.repo).call(
-                "state.read",
+            read = read_state(
+                RuntimeClient(self.repo),
+                {"collections": list(collections), "paths": list(paths)},
                 operation_id=f"console.events-{uuid.uuid4().hex}",
-                payload={"collections": list(collections), "paths": list(paths)},
                 timeout_seconds=STORE_READ_TIMEOUT_SECONDS,
             )
         except RuntimeClientError as exc:
@@ -129,8 +130,7 @@ class ProjectReader:
             raise SourceUnavailable(
                 reason, f"The runtime store did not answer state.read ({exc.code})."
             ) from exc
-        records = reply.result.get("records")
-        return (records if isinstance(records, dict) else {}), reply.revision
+        return read.records, read.revision
 
     def _read_store(self) -> Observation:
         """One probe of the store revision; the collections are read only when it moved."""

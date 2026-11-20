@@ -35,6 +35,11 @@ else:
     from harness.adapters import worker_write_probe
 
 STARTUP_CHECK_SECONDS = 10
+# serve_turn makes this many app-server requests, each bounded by STARTUP_CHECK_SECONDS, before
+# it writes the readiness receipt: the launcher waits for all of them.
+READINESS_REQUESTS = 4
+# A worker that dies this soon after readiness is still a startup failure (as in claude_worker).
+POST_READY_CHECK_SECONDS = 3
 PERMISSION_PROFILE = "harness-worker"
 SHARED_ARTIFACT_DIRS = (
     "runs/qa",
@@ -747,7 +752,7 @@ def start(args: argparse.Namespace) -> int:
         process.stdin.close()
     except BrokenPipeError:
         process.wait(timeout=STARTUP_CHECK_SECONDS)
-    deadline = time.monotonic() + STARTUP_CHECK_SECONDS + 2
+    deadline = time.monotonic() + READINESS_REQUESTS * STARTUP_CHECK_SECONDS + 2
     while time.monotonic() < deadline:
         if receipt.exists():
             try:
@@ -756,7 +761,12 @@ def start(args: argparse.Namespace) -> int:
                 time.sleep(0.02)
                 continue
             if result.get("ready") is True:
-                return 0
+                # The window opens at the verdict, however long the readiness requests took.
+                try:
+                    process.wait(timeout=POST_READY_CHECK_SECONDS)
+                except subprocess.TimeoutExpired:
+                    return 0
+                break
             process.wait(timeout=3)
             print(result.get("error", "worker startup failed"), file=sys.stderr)
             return 1

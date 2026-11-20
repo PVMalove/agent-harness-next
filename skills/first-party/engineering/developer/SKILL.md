@@ -31,7 +31,7 @@ prerequisite.
 
 1. **A task with acceptance criteria.** A named ticket or an explicit scope from the user states
    what is done. When this repository defines an "Issue First" rule (for example in
-   `.harness/instructions/git-workflow.md`), the task must be an existing ticket.
+   `.claude/rules/git-delivery.md`), the task must be an existing ticket.
 2. **Readable project settings.** `.harness/project.json` is readable and gives `branch_pattern`
    and `base_branch`.
 3. **An issue branch.** The current branch matches `branch_pattern` and is neither `base_branch`

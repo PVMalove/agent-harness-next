@@ -123,7 +123,8 @@ def init_command(repo_root: Path) -> str:
 class RuntimeClientError(HarnessError):
     """The runtime refused a request, or did not answer it.
 
-    ``code`` is a member of ``RUNTIME_ERROR_CODES``. The first line of the remedy starts with
+    ``code`` is a member of ``RUNTIME_ERROR_CODES``, or ``invalid_response`` of ``read_state`` for
+    an answer of the wrong shape. The first line of the remedy starts with
     ``[<code>]``, so a script can recognise the code without a change of the CLI error format.
     """
 
@@ -907,6 +908,76 @@ class RuntimeClient:
                 "token": token,
             },
         }
+
+
+class _StateCaller(Protocol):
+    """What ``read_state`` needs of a client: ``RuntimeClient`` or a wrapper of it."""
+
+    def call(
+        self,
+        operation: str,
+        *,
+        operation_id: str,
+        payload: JsonObject | None = None,
+        timeout_seconds: float,
+        requires_minor: int = 0,
+    ) -> RuntimeReply: ...
+
+
+@dataclass(frozen=True)
+class StateRead:
+    """A checked answer to ``state.read``: the records and their revisions by path."""
+
+    records: dict[str, object]
+    revisions: dict[str, object]
+    snapshot: str | None
+    generation_revision: int | None
+    revision: int | None
+
+
+def read_state(
+    client: _StateCaller,
+    payload: JsonObject,
+    *,
+    operation_id: str,
+    timeout_seconds: float,
+    requires_minor: int = 0,
+) -> StateRead:
+    """``state.read`` through ``client``; an answer of another shape is never an empty store.
+
+    ``records`` must be an object; ``revisions`` and ``snapshot``, when present, an object and a
+    string. Any other answer raises ``RuntimeClientError`` with the client-side code
+    ``invalid_response``. An answer with an empty ``records`` object is an empty store.
+    """
+    reply = client.call(
+        "state.read",
+        operation_id=operation_id,
+        payload=payload,
+        timeout_seconds=timeout_seconds,
+        requires_minor=requires_minor,
+    )
+    records = reply.result.get("records")
+    revisions = reply.result.get("revisions", {})
+    snapshot = reply.result.get("snapshot")
+    if (
+        not isinstance(records, dict)
+        or not isinstance(revisions, dict)
+        or (snapshot is not None and not isinstance(snapshot, str))
+    ):
+        raise RuntimeClientError(
+            "invalid_response",
+            "the runtime answered state.read with a malformed result",
+            remedy="update harness and harness-runtime to one release, then read again",
+            domain=FailureDomain.TOOLING,
+        )
+    generation = reply.result.get("generation_revision")
+    return StateRead(
+        records=records,
+        revisions=revisions,
+        snapshot=snapshot,
+        generation_revision=generation if isinstance(generation, int) else None,
+        revision=reply.revision,
+    )
 
 
 def runtime_status(args: argparse.Namespace) -> JsonObject:

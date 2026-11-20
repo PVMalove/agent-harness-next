@@ -62,7 +62,7 @@ same `--writer-role database-migrations` or `--writer-role messaging-integration
 preflight` and `batch create` for specialist work. The default owner is `developer`. If compatible
 slices need different owners, use dependent tickets. Pin the writer's explicit scope with
 `--allowed-path` (repeat it for every path or glob inside the selected role's write ceiling).
-Independent batches use separate worktrees, within the project's concurrency budget. If preflight rejects the ticket, split it with `/to-tickets`; never ask an architect to discover
+Independent batches use separate worktrees, within the project's concurrency budget. If preflight rejects the ticket, stop and offer the developer `/to-tickets` to split it; never ask an architect to discover
 whether an oversized ticket should have been split. When creating the batch with `batch create`,
 specify `--required-gate review --required-gate qa`: the full implement pipeline explicitly sets
 both independent Standards/Spec review and serialized clean-room QA gates. Before dispatching the
@@ -92,7 +92,10 @@ Start these steps only after the ticket pre-flight above (blockers, `status::in-
    `worktree check` before `batch create`. If access is missing, open it for this runtime (Claude
    Code: the `EnterWorktree`/`ExitWorktree` pair above) and repeat the check. Stay in the main
    checkout.
-3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
+3. **Batch scope.** Run `batch preflight` with the same `--ticket`, `--definition-of-done`,
+   `--allowed-path`, `--expected-*`, `--dependency` and `--writer-role` values as `batch create`;
+   preflight takes no `--goal`, `--prohibited-change`, `--branch`, `--worktree`,
+   `--integration-ref` or `--required-gate`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`
    and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:
    each `## Acceptance criteria` item → `--definition-of-done`, each `## Out of scope` item →
@@ -307,7 +310,8 @@ second orchestration manual. Full rules are module-owned guidance:
   evidence, parallelism, and metric rules.
 - `.harness/orchestration/roles/` owns each role's boundary, required proof, and specialist trigger.
 - The `--help` output and the `remedy` of the coordinator CLI own command syntax and operational recovery.
-- `.harness/instructions/git-workflow.md` owns issue-branch, commit, push, and PR boundaries.
+- `.claude/rules/git-delivery.md` owns the mandatory branch, commit, merge, and PR-confirmation
+  rules; `.harness/instructions/git-workflow.md` owns the issue-branch, push, and PR procedure.
 - `references/issue-worktree.md` owns issue worktree creation and its recovery.
 
 Follow those files rather than duplicating or weakening their rules here. In particular, do not

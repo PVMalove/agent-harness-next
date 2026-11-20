@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from ctypes import wintypes
 from pathlib import Path
-from typing import NotRequired, TypedDict
+from typing import NotRequired, TypedDict, cast
 
 from harness.json_types import JsonObject
 from harness.orchestration import container_executor
@@ -28,7 +28,11 @@ from harness.orchestration.core.constants import (
     DispatchState,
 )
 from harness.orchestration.ledger.lifecycle import store_is_authority
-from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+from harness.orchestration.runtime_client import (
+    RuntimeClient,
+    RuntimeClientError,
+    read_state,
+)
 from harness.repo_map.bundle_install import INSTALL_DIR_HASH_PREFIX
 from harness.repo_map.bundle_lock import LOCK_FILENAME, BundleFormatError, parse_lock
 from harness.storage import LEGACY_STORAGE_DIRS, sandboxes_root, storage_root
@@ -427,18 +431,18 @@ def _read_batches(root: Path) -> dict[str, JsonObject] | _Unread:
         return {}
     if store_is_authority(state):
         try:
-            reply = RuntimeClient(root.parent).call(
-                "state.read",
+            stored = read_state(
+                RuntimeClient(root.parent),
+                {"collections": ["batches"], "paths": []},
                 operation_id=f"cleanup.read-{uuid.uuid4().hex}",
-                payload={"collections": ["batches"], "paths": []},
                 timeout_seconds=5,
-            )
-            records = reply.result.get("records")
-            if not isinstance(records, dict):
+            ).records
+            if any(not isinstance(batch, dict) for batch in stored.values()):
                 return _Unread(LEDGER_UNAVAILABLE)
-            if any(not isinstance(batch, dict) for batch in records.values()):
-                return _Unread(LEDGER_UNAVAILABLE)
-            return {Path(str(key)).stem: batch for key, batch in records.items()}
+            return {
+                Path(str(key)).stem: cast(JsonObject, batch)
+                for key, batch in stored.items()
+            }
         except RuntimeClientError as error:
             if error.code == "runtime_unavailable":
                 return _Unread(RUNTIME_UNAVAILABLE)

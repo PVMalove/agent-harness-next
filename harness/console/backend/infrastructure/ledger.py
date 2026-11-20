@@ -26,7 +26,11 @@ from harness.orchestration.ledger.lifecycle import (
     store_is_authority,
 )
 from harness.orchestration.ledger.recovery_chain import active_dispatches
-from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+from harness.orchestration.runtime_client import (
+    RuntimeClient,
+    RuntimeClientError,
+    read_state,
+)
 
 from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS
 from ...kernel.json_fields import text
@@ -100,17 +104,14 @@ def collect_decisions(repo: Path) -> DecisionsSnapshot:
         # One authoritative read of all four collections: never open runtime.db in Python or
         # fall back to the archived file generation, even when the runtime cannot answer.
         try:
-            reply = RuntimeClient(repo).call(
-                "state.read",
+            raw = read_state(
+                RuntimeClient(repo),
+                {"collections": list(_COLLECTIONS), "paths": []},
                 operation_id=f"console.decisions-{uuid.uuid4().hex}",
-                payload={"collections": list(_COLLECTIONS), "paths": []},
                 timeout_seconds=2,
-            )
+            ).records
         except RuntimeClientError as exc:
             return DecisionsSnapshot(unavailable=True, error_code=exc.code)
-        raw = reply.result.get("records")
-        if not isinstance(raw, dict):
-            return DecisionsSnapshot(unavailable=True, error_code="invalid_response")
         collections = {
             directory: [
                 record

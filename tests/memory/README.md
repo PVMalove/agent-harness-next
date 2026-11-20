@@ -92,6 +92,13 @@ additions and owns the epic integration branch; only the source hash changes and
 identical to version 13.
 Version 15 (#1199) re-evaluates `CONTEXT.md` and ADR 0004 after the role and ChangeImpact updates.
 The report, including the per-query rankings, is identical to version 14.
+Version 16 (#1251) re-evaluates `CONTEXT.md` after #1250 points its agent-guide links at
+`harness/project/instructions/`; only the source hash changes and the report is identical to
+version 15.
+#1251 also renames the former suite to `engineering-suite` in the archived sources of
+`fixtures/initial-corpus.json` (`CONTEXT.md`, ADR 0001 and ADR 0003). Their hashes in
+`baseline_fts5_initial.json` are re-pinned; the initial report, measured with its original labels,
+is unchanged and still fails the gate.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 

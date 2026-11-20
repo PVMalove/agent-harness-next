@@ -11,8 +11,8 @@ from pathlib import Path
 from typing import Literal
 
 from harness.configuration_schema import PACKAGE
+from harness.errors import HarnessError
 from harness.health.model import JsonObject
-from harness.health.project_files import canonical_capability
 
 from .catalog import SETUP_COMMANDS, CatalogEntry
 
@@ -39,12 +39,12 @@ LOCK_BROKEN = (
 
 
 def _read_lock(repo: Path) -> JsonObject | None:
-    """The CLI's lock reader, whose `fail()` exits the process: here a broken lock is an error."""
-    from harness.bin.harness import load_lock
+    """The CLI's lock reader: here a broken lock is an error of the target."""
+    from harness.package_snapshot import load_lock
 
     try:
         return load_lock(repo)
-    except SystemExit:
+    except HarnessError:
         raise ValueError(LOCK_BROKEN) from None
 
 
@@ -85,12 +85,10 @@ def inspect_target(value: str) -> ProjectTarget:
                 not isinstance(lock.get("files", {}), dict)
                 or not isinstance(capabilities, list)
                 or not all(isinstance(x, str) for x in capabilities)
-                or any(canonical_capability(name) not in known for name in capabilities)
+                or any(name not in known for name in capabilities)
             ):
                 raise ValueError
-            selected = tuple(
-                dict.fromkeys(canonical_capability(name) for name in capabilities)
-            )
+            selected = tuple(dict.fromkeys(capabilities))
     except (ValueError, KeyError, TypeError):
         raise ValueError(LOCK_BROKEN) from None
     conflicts = tuple(
@@ -179,7 +177,7 @@ def installation_plan(target: ProjectTarget, capability: str) -> list[str]:
 
 def installation_blockers(target: ProjectTarget, capability: str) -> tuple[str, ...]:
     """Use the same snapshot comparison as the CLI, before any installation writes."""
-    from harness.bin.harness import package_files, snapshot_diff
+    from harness.package_snapshot import package_files, snapshot_diff
     from harness.health.project_files import DISCOVERY_LINKS, native_link_target
 
     blocked: set[str] = set()
@@ -207,7 +205,7 @@ def installation_blockers(target: ProjectTarget, capability: str) -> tuple[str, 
     if lock:
         try:
             diff = snapshot_diff(repo, [capability])
-        except SystemExit:
+        except HarnessError:
             raise ValueError(LOCK_BROKEN) from None
         blocked.update(diff.get("local_changed", []))
         blocked.update(diff.get("conflict", []))

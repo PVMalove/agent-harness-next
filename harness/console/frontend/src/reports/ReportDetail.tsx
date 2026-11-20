@@ -72,7 +72,7 @@ function ReportBody({ dispatchId }: { dispatchId: string }) {
   const next = typeof body.data.next_coordinator_action === "string" ? body.data.next_coordinator_action : "";
   const outcome = typeof body.data.outcome === "string" ? body.data.outcome : "";
   const tone = outcome === "completed" ? "passed" : outcome === "blocked" || outcome === "failed" ? "blocked" : "attention";
-  const sections = new Map(reportSectionLines(body.data));
+  const sections = new Map(reportSectionLines(body.data, t));
   const summary = sections.get("Output")?.[0]?.[1] ?? "—";
   const checks = sections.get("Checks") ?? [];
   const review = sections.get("Review");

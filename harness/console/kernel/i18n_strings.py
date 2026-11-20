@@ -2085,6 +2085,16 @@ EN.update(
         "маршрут": "route",
         "Выберите batch, чтобы открыть его хронологию": "Choose a batch to open its timeline",
         "начало: неизвестно": "started: unknown",
+        # The report body, QA log and route texts of reports/format.ts.
+        "проверки не запускались": "no checks were run",
+        "{axis}: {severity}, находок: {count}": "{axis}: {severity}, findings: {count}",
+        "{axis} · находок: {count}": "{axis} · findings: {count}",
+        "попытки qa-lane: {count}": "qa-lane attempts: {count}",
+        "итог: {verdict} — команд {total}, с ошибкой {failed}": "result: {verdict} — {total} commands, {failed} failed",
+        "без отчёта": "no report",
+        "отчёт: {outcome}": "report: {outcome}",
+        "хвост лога (последние {count} из {total} строк):": "log tail (last {count} of {total} lines):",
+        "диспатчей ещё не было": "no dispatches yet",
     }
 )
 

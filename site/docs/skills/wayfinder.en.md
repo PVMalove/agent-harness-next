@@ -27,7 +27,7 @@ The destination varies with the effort, and naming it is the first step of drawi
 
 By default, Wayfinder **plans**. Each ticket defines a decision, and the map is complete when the path is clear: nothing is left to decide before someone goes and does the work. An urge to just do the work is usually a signal that you have reached the edge of the map and it is time to hand off. An effort may override this in its **Notes** (moving execution into the map itself). Otherwise, the output is decisions, not deliverables.
 
-When the map has no open tickets, hand off: run `/to-spec` with the map as its input, then `/publish-epic` and `/to-tickets`. Go straight to an implementation ticket only when the effort turned out small.
+When the map has no open tickets, hand off: offer the developer `/to-spec` with the map as its input, then `/publish-epic` and `/to-tickets`, to run manually; never invoke them. Go straight to an implementation ticket only when the effort turned out small.
 
 #### Address by name
 
