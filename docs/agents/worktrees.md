@@ -101,9 +101,24 @@ python .harness/orchestration/coordinator.py --repo . worktree commit \
 
 The runtime stages every change of the worktree, or only the `--pathspec` paths read literally, and
 commits on the worktree's branch with hooks off. Use `--message-file` for a long message; keep the
-file outside the worktree, or it is committed too. The command refuses a detached HEAD, the base
-branch, and an `integration/*` branch before it asks the runtime. `git rebase`, `git merge`, and
-conflict resolution still need a writable Git admin directory: open it with the session pair above.
+file outside the worktree, or it is committed too.
+
+Rebase and merge go the same way:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . worktree rebase --path <issue-worktree> \
+  --onto <target> --upstream <old base>      # or --continue, --skip, --abort
+python .harness/orchestration/coordinator.py --repo . worktree merge --path <issue-worktree> \
+  --revision <commit> [--message "<title>"]  # or --continue, --abort
+```
+
+A conflict is an answer, not an error: `in_progress` is `true`, `conflicts` lists the unmerged
+paths, and `git_output` holds what Git printed. Edit those files, then send `--continue`, which
+stages every change of the worktree. A rebase never autostashes and never moves other branches; no
+editor opens. `worktree commit` refuses while a rebase or merge is stopped. Each command refuses a
+detached HEAD (a stopped rebase counts as its branch), the base branch, and an `integration/*`
+branch before it asks the runtime. An interactive rebase still needs a writable Git admin
+directory: open it with the session pair above.
 
 **Empty directory after `worktree remove`.** A session that opened write access to a worktree with the `EnterWorktree` `path` and `ExitWorktree` `keep` pair keeps its path in the sandbox configuration until the session ends. Before every command, the sandbox recreates an empty directory at that path as a mount point, so the directory comes back after `worktree remove`, even when git no longer lists the worktree. The sandbox also creates mask entries relative to the session's working directory: after a `cd` into `.harness/.sandboxes/worktrees/` or `.claude/worktrees/`, a `.claude/` directory with `.cc-writes` and empty `settings.json`-like files appears there. Neither is a worktree, and `git worktree prune` does not remove it. `harness health` names such directories apart and does not warn. `harness cleanup --mode hard` removes a directory that holds only directories and empty files; a directory that a live session still mounts stays, with the reason in `skipped`. Run the cleanup after that session ends. A repeated `worktree create` with the same path works over the empty directory.
 
