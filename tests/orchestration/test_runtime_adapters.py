@@ -1360,7 +1360,8 @@ def test_codex_stops_a_stuck_worker_by_group_only_where_posix_groups_exist(
 
 
 @pytest.mark.skipif(
-    os.name == "nt" or os.geteuid() == 0, reason="POSIX permissions that bind the test user"
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="POSIX permissions that bind the test user",
 )
 @pytest.mark.parametrize("shared", ("objects", "refs"))
 def test_writer_probe_refuses_read_only_common_git_storage_of_a_linked_worktree(
@@ -1427,7 +1428,7 @@ def test_claude_detached_waits_for_a_slow_probe_refusal_and_reports_its_path(
         result = invoke(dispatch, "--claude-bin", str(binary))
     finally:
         git_dir.chmod(0o755)
-    if os.geteuid() == 0:
+    if hasattr(os, "geteuid") and os.geteuid() == 0:
         pytest.skip("root ignores directory permissions")
     assert result.returncode == 1
     assert f"write probe refused: {git_dir}" in result.stderr
