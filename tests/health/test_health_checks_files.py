@@ -70,6 +70,94 @@ def test_check_agents_md_ok_when_resolved(tmp_path: Path) -> None:
     assert result.status == "ok"
 
 
+_RULES_LOCK: dict[str, object] = {
+    "capabilities": ["engineering-suite"],
+    "seed_files": {
+        ".claude/rules/git-delivery.md": None,
+        ".claude/rules/karpathy-guidelines.md": None,
+        "docs/agents/git-workflow.md": None,
+    },
+}
+
+
+def _install_rules(repo: Path, *names: str) -> None:
+    rules = repo / ".claude" / "rules"
+    rules.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (rules / name).write_text("# rule\n", encoding="utf-8")
+
+
+def test_check_agents_md_warns_without_codex_rules_pointer(tmp_path: Path) -> None:
+    """Runtime rules are installed but AGENTS.md does not point Codex at them."""
+    (tmp_path / "AGENTS.md").write_text(
+        "# My Project\n\n```\n.claude/rules/ inside an example\n```\n", encoding="utf-8"
+    )
+
+    result = checks.check_agents_md(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.id == "files.agents_md"
+    assert result.status == "warn"
+    assert "Codex" in result.message and "Claude Code" in result.message
+    assert ".claude/rules/" in result.message
+    assert result.fix is not None
+    assert result.fix.command is not None and "diff" in result.fix.command
+    assert str(tmp_path) in result.fix.command
+
+
+def test_check_agents_md_ok_names_both_runtimes_with_rules_pointer(tmp_path: Path) -> None:
+    """With the pointer the ok message separates automatic and explicit rule loading."""
+    (tmp_path / "AGENTS.md").write_text(
+        "# My Project\n\nRead each file in [.claude/rules/](.claude/rules/).\n",
+        encoding="utf-8",
+    )
+
+    result = checks.check_agents_md(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.status == "ok"
+    assert "Claude Code" in result.message and "автоматически" in result.message
+    assert "Codex" in result.message and "явно" in result.message
+
+
+def test_check_agents_md_needs_no_pointer_without_rule_seeds(tmp_path: Path) -> None:
+    """A lock without `.claude/rules/` seed entries installs no rules to point at."""
+    (tmp_path / "AGENTS.md").write_text("# My Project\n", encoding="utf-8")
+    lock: dict[str, object] = {
+        "capabilities": ["engineering-suite"],
+        "seed_files": {"docs/agents/x.md": None},
+    }
+
+    result = checks.check_agents_md(_context(tmp_path, lock=lock))
+
+    assert result.status == "ok"
+
+
+def test_check_seed_baseline_fails_on_missing_rule_file(tmp_path: Path) -> None:
+    """A rule file recorded in the seed baseline is missing from `.claude/rules/`."""
+    _install_rules(tmp_path, "karpathy-guidelines.md")
+
+    result = checks.check_seed_baseline(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.id == "files.seed_baseline"
+    assert result.status == "fail"
+    assert ".claude/rules/git-delivery.md" in result.message
+    assert "karpathy-guidelines.md" not in result.message
+    assert "Claude Code" in result.message and "Codex" in result.message
+    assert result.fix is not None
+    assert result.fix.command is not None and "update" in result.fix.command
+
+
+def test_check_seed_baseline_ok_reports_rule_loading_per_runtime(tmp_path: Path) -> None:
+    """All recorded rules are present: the message separates Claude Code and Codex loading."""
+    _install_rules(tmp_path, "git-delivery.md", "karpathy-guidelines.md")
+
+    result = checks.check_seed_baseline(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.status == "ok"
+    assert "правил .claude/rules/: 2" in result.message
+    assert "Claude Code" in result.message and "автоматически" in result.message
+    assert "Codex" in result.message and "явно" in result.message
+
+
 def test_check_discovery_links_fails_when_absent(tmp_path: Path) -> None:
     """Проверить, что отсутствие discovery-ссылок приводит к ошибке."""
     result = checks.check_discovery_links(_context(tmp_path))

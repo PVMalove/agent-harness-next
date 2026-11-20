@@ -36,6 +36,11 @@ from ..project_files import (
 )
 
 _TEMPLATE_MARKER = re.compile(r"{{[^{}\n]+}}")
+_FENCED_CODE = re.compile(r"```.*?```|~~~.*?~~~", re.DOTALL)
+_RULES_DIR = ".claude/rules/"
+_RULE_LOADING = (
+    "Claude Code грузит их автоматически, Codex читает явно по указателю в AGENTS.md"
+)
 
 _REPO_MAP_POLICY_FIX = Fix(
     text=(
@@ -49,6 +54,21 @@ def _registry_fix(context: HealthContext) -> Fix:
     return Fix(
         text="пересоберите реестр скиллов (или запустите harness health --fix)",
         command=context.harness_command("registry", str(context.repo)),
+    )
+
+
+def _seed_rules(lock: dict[str, object] | None) -> list[str]:
+    """Runtime rules recorded in the lock's seed baseline (paths under `.claude/rules/`).
+
+    Health stays importable standalone, so the rule list comes from the lock, not from the
+    packager's rule templates."""
+    seed_files = (lock or {}).get("seed_files")
+    if not isinstance(seed_files, dict):
+        return []
+    return sorted(
+        path
+        for path in seed_files
+        if isinstance(path, str) and path.startswith(_RULES_DIR) and path.endswith(".md")
     )
 
 
@@ -132,12 +152,26 @@ def check_seed_baseline(context: HealthContext) -> CheckResult:
                 command="git checkout -- .harness/harness.lock",
             ),
         )
-    return CheckResult(
-        id=check_id,
-        group=group,
-        status="ok",
-        message=f"baseline seed-файлов: {len(context.lock['seed_files'])} записей",
-    )
+    rules = _seed_rules(context.lock)
+    missing = [path for path in rules if not (context.repo / path).is_file()]
+    if missing:
+        return CheckResult(
+            id=check_id,
+            group=group,
+            status="fail",
+            message="нет файлов runtime-правил: "
+            + ", ".join(missing)
+            + "; Claude Code не загрузит их автоматически, Codex не прочитает по указателю "
+            "в AGENTS.md",
+            fix=Fix(
+                text="восстановите правила: harness update ставит недостающие seed-файлы",
+                command=context.harness_command("update", str(context.repo)),
+            ),
+        )
+    message = f"baseline seed-файлов: {len(context.lock['seed_files'])} записей"
+    if rules:
+        message += f"; правил .claude/rules/: {len(rules)} — {_RULE_LOADING}"
+    return CheckResult(id=check_id, group=group, status="ok", message=message)
 
 
 def check_agents_md(context: HealthContext) -> CheckResult:
@@ -166,11 +200,32 @@ def check_agents_md(context: HealthContext) -> CheckResult:
                 text="замените плейсхолдеры вида {{...}} в AGENTS.md значениями проекта"
             ),
         )
+    if not _seed_rules(context.lock):
+        return CheckResult(
+            id="files.agents_md",
+            group="files",
+            status="ok",
+            message="AGENTS.md заполнен, нерешённых плейсхолдеров нет",
+        )
+    if _RULES_DIR.rstrip("/") not in _FENCED_CODE.sub("", agents_text):
+        return CheckResult(
+            id="files.agents_md",
+            group="files",
+            status="warn",
+            message="в AGENTS.md нет указателя на runtime-правила .claude/rules/: Claude Code "
+            "грузит их автоматически, а Codex этот каталог не читает и без указателя "
+            "правила не увидит",
+            fix=Fix(
+                text="добавьте указатель для Codex в раздел Runtime: harness diff показывает "
+                "вставку, AGENTS.md CLI не меняет",
+                command=context.harness_command("diff", str(context.repo)),
+            ),
+        )
     return CheckResult(
         id="files.agents_md",
         group="files",
         status="ok",
-        message="AGENTS.md заполнен, нерешённых плейсхолдеров нет",
+        message="AGENTS.md заполнен; runtime-правила .claude/rules/: " + _RULE_LOADING,
     )
 
 
