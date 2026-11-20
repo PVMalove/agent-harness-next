@@ -2,7 +2,7 @@
 
 Изменения выпусков записываются в формате [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/) и версионируются по SemVer.
 
-## [2.0.0]
+## [2.0.0] - 2026-11-20
 
 ### Breaking Changes
 

@@ -11,7 +11,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <div class="ah-releases" markdown="1">
 
-## v2.0.0 {.ah-release-title}
+## v2.0.0 — 20 November 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Breaking: 6 · Added: 82 · Changed: 33 · Fixed: 65</p>
 

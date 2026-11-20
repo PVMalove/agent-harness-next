@@ -11,7 +11,7 @@ toc_depth: 2
 
 <div class="ah-releases" markdown="1">
 
-## v2.0.0 {.ah-release-title}
+## v2.0.0, 20 ноября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Несовместимых: 6 · Добавлено: 82 · Изменено: 33 · Исправлено: 65</p>
 
