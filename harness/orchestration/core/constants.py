@@ -303,6 +303,18 @@ NEXT_ACTION_DISPATCH_ROLE = {
 }
 SPECIALIST_WRITER_ROLES = ("database-migrations", "messaging-integration")
 BATCH_WRITER_ROLES = ("developer", *SPECIALIST_WRITER_ROLES)
+# Role classes, all derived from the writer roles above so that a new writer joins every class
+# at once (#1251; test_role_contracts checks the classes against each other).
+# Roles that write in the issue worktree itself; other roles run in the checkout they select.
+ISSUE_WORKTREE_WRITER_ROLES = frozenset(
+    {"architect", *BATCH_WRITER_ROLES, "conflict-resolver", "rebaser"}
+)
+# Roles whose worker must start in the issue worktree (runtime attestation).
+WORKER_ROLES_REQUIRING_ISSUE_WORKTREE = ISSUE_WORKTREE_WRITER_ROLES | {"code-review"}
+# An accepted report of these roles moves its batch to `risk-assessment` of the reported candidate.
+RISK_ASSESSED_ROLES = frozenset(
+    {*BATCH_WRITER_ROLES, "verification", "conflict-resolver", "rebaser"}
+)
 
 
 def batch_writer_role(batch: Mapping[str, object]) -> str:

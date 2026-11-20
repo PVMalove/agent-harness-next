@@ -11,7 +11,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..errors import HarnessError
-from .core.constants import BATCH_WRITER_ROLES
+from .core.constants import (
+    ISSUE_WORKTREE_WRITER_ROLES as ISSUE_WORKTREE_WRITER_ROLES,
+    WORKER_ROLES_REQUIRING_ISSUE_WORKTREE as WORKER_ROLES_REQUIRING_ISSUE_WORKTREE,
+)
 
 # Local Git plumbing only; a slow disk or a huge repository is the worst expected case.
 GIT_TIMEOUT_SECONDS = 60
@@ -21,21 +24,6 @@ class AttestationError(HarnessError):
     """The runtime did not start in the immutable dispatch's Git context."""
 
 
-WORKER_ROLES_REQUIRING_ISSUE_WORKTREE = frozenset(
-    {
-        "architect",
-        "developer",
-        "conflict-resolver",
-        "rebaser",
-        "database-migrations",
-        "messaging-integration",
-        "code-review",
-    }
-)
-# Roles that write in the issue worktree itself; other roles run in the checkout they select.
-ISSUE_WORKTREE_WRITER_ROLES = frozenset(
-    {"architect", *BATCH_WRITER_ROLES, "conflict-resolver", "rebaser"}
-)
 
 
 def requires_attestation(dispatch: Mapping[str, object]) -> bool:
