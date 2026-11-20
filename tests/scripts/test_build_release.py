@@ -98,3 +98,38 @@ def test_check_release_validates_without_building(tmp_path: Path) -> None:
     ):
         with pytest.raises(ValueError, match=message):
             check_release(repo, tag)
+
+
+def test_release_archive_carries_the_untracked_console_build(tmp_path: Path) -> None:
+    """The SPA build is gitignored, yet the release ships it (ADR 0029 §4, #1251)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    files = {
+        "harness/VERSION": "1.0.0\n",
+        "harness/console/frontend/.gitignore": "dist/\n",
+        "README.md": "# Agent Harness\n",
+        "CHANGELOG.md": "## [1.0.0]\n\n### Added\n\n- First release.\n",
+    }
+    for relative, content in files.items():
+        target = repo / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+
+    with pytest.raises(ValueError, match="index.html is missing"):
+        build_release(repo, "v1.0.0", tmp_path / "none", require_console_build=True)
+
+    build = repo / "harness/console/frontend/dist"
+    (build / "assets").mkdir(parents=True)
+    (build / "index.html").write_text("<!doctype html>\n", encoding="utf-8")
+    (build / "assets/app.js").write_text("void 0;\n", encoding="utf-8")
+    archive, _, _ = build_release(
+        repo, "v1.0.0", tmp_path / "out", require_console_build=True
+    )
+    with tarfile.open(archive, "r:gz") as bundle:
+        names = set(bundle.getnames())
+    assert {
+        "harness/console/frontend/dist/index.html",
+        "harness/console/frontend/dist/assets/app.js",
+    } <= names
