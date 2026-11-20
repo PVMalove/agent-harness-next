@@ -2571,6 +2571,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         (self.repo / ".harness/orchestration.json").write_text(
             json.dumps({"concurrency_budget": 99})
         )
+        self.worktree = self.repo / ".harness/.sandboxes/worktrees" / self.worktree.name
         batch = self._create_batch()
         self._accepted_architect(batch["batch_id"])
         git_metadata = (self.repo / ".git" / "worktrees" / self.worktree.name).resolve()
