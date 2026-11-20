@@ -13,7 +13,7 @@ toc_depth: 2
 
 ## v2.0.0 {.ah-release-title}
 
-<p class="ah-release-meta">Несовместимых: 4 · Добавлено: 63 · Изменено: 26 · Исправлено: 44</p>
+<p class="ah-release-meta">Несовместимых: 6 · Добавлено: 63 · Изменено: 26 · Исправлено: 44</p>
 
 <p class="ah-release-summary">Главное: обязательный Rust runtime и runtime store · ledger версии 4 · migrate и откат по human approval · веб-консоль.</p>
 
@@ -27,6 +27,7 @@ toc_depth: 2
     - **[Файловая эпоха до migrate]:** Coordinator 2.0.0 работает на файловом `ledger.json` версии 3, пока человек не выполнит `harness-runtime migrate`, а ledger версий 1 и 2 сначала нужно перевести командой `coordinator.py ledger migrate`. Контейнерный QA, docker-исполнитель, команды `recovery` и operational hold требуют runtime store и в файловой эпохе завершаются с кодом 2 и remedy `harness-runtime migrate` (#814).
     - **[Новый проект на runtime store]:** Проект без состояния оркестрации получает store командой `harness-runtime init` с approval человека, без файлового ledger и без `migrate`. Coordinator на таком проекте файловый ledger не создаёт: `batch create`, `batch plan` и `ledger reset` завершаются с кодом 2 и называют `harness-runtime init` в remedy. ADR 0036 (#1146).
     - **[Migrate по approval]:** `harness-runtime migrate` и `rollback --to-legacy` требуют `--approved-by`, `--approved-at` и `--reason` и выполняются только человеком (#803, #826).
+    - **[Лицензия BSL 1.1]:** Проект перешёл с MIT на Business Source License 1.1: некоммерческое использование разрешено, коммерческое требует письменного разрешения правообладателя; каждая версия переходит под MIT через четыре года после публикации.
 
 Полный список добавленного, изменённого и исправленного приведён в разделе `[2.0.0]`
 [CHANGELOG.md](https://github.com/PVMalove/agent-harness-next/blob/master/CHANGELOG.md).

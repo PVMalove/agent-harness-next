@@ -7,7 +7,7 @@
   <img src="https://img.shields.io/badge/Runtime-Claude%20Code%20%7C%20Codex-E5A04B?labelColor=34312E" alt="Runtime: Claude Code | Codex">
   <img src="https://img.shields.io/badge/Python-3.12%2B-8FB573?labelColor=34312E" alt="Python 3.12+">
   <a href="https://github.com/PVMalove/agent-harness-next/actions/workflows/verify.yml"><img src="https://github.com/PVMalove/agent-harness-next/actions/workflows/verify.yml/badge.svg" alt="CI"></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-9C958C?labelColor=34312E" alt="License: MIT"></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-BUSL--1.1-9C958C?labelColor=34312E" alt="License: BUSL-1.1"></a>
 </p>
 
 # Agent Harness Next
@@ -86,7 +86,7 @@ coordinator лишь нормализует enum-поля в памяти с п�
 восстанавливают команды `recovery status|reload|resume|fix|abort`; `recovery status`, `reload` и
 `resume` доступны и в разделе Orchestration консоли. Recovery не перезапускает принятые этапы и не восстанавливает потерянный
 контекст модели и незакоммиченные файлы. Подробности:
-[руководство по backend-оркестрации](./site/docs/backend-orchestration.md#удержание-batch-и-команды-recovery).
+[руководство по восстановлению](./site/docs/guides/orchestration/recovery.md#batch-recovery).
 Пока идёт оркестрация, `harness-runtime serve` должен работать. Без него команды coordinator
 `batch`, `dispatch`, `qa` и `recovery` отказывают с `[runtime_unavailable]`, `harness worktree-remove`
 отказывает, а `harness cleanup` оставляет worktree на месте. Как держать процесс запущенным и
@@ -107,5 +107,6 @@ PR требует отдельного подтверждения; измене�
 [правилам Git](./harness/project/instructions/git-workflow.md); полный гейт — `make verify`. Заметки о выпуске — в
 [CHANGELOG.md](./CHANGELOG.md), порядок выпуска — в [releases.md](./site/docs/agents/releases.md).
 
-Проект распространяется по лицензии [MIT](./LICENSE). Лицензия закреплённого upstream-snapshot
+Проект распространяется по лицензии [Business Source License 1.1](./LICENSE): через четыре года
+после публикации версии она меняется на MIT. Лицензия закреплённого upstream-snapshot
 находится в [`third_party/mattpocock-skills/LICENSE`](./third_party/mattpocock-skills/LICENSE).

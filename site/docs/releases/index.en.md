@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.0 {.ah-release-title}
 
-<p class="ah-release-meta">Breaking: 4 · Added: 63 · Changed: 26 · Fixed: 44</p>
+<p class="ah-release-meta">Breaking: 6 · Added: 63 · Changed: 26 · Fixed: 44</p>
 
 <p class="ah-release-summary">Highlights: required Rust runtime and runtime store · ledger version 4 · migrate and rollback with human approval · web console.</p>
 
@@ -27,6 +27,7 @@ supported platforms are on the [Platforms](../project/platforms.md) page.
     - **[File epoch until migrate]:** Coordinator 2.0.0 runs on the file `ledger.json` version 3 until a human runs `harness-runtime migrate`; a version 1 or 2 ledger must first be converted with `coordinator.py ledger migrate`. The container QA, the docker executor, the `recovery` commands and the operational hold need the runtime store, and in the file epoch they exit with code 2 and name `harness-runtime migrate` in the remedy (#814).
     - **[New project on the runtime store]:** A project without orchestration state gets its store from `harness-runtime init` with a human approval, with no file ledger and no `migrate`. The coordinator creates no file ledger on such a project: `batch create`, `batch plan` and `ledger reset` exit with code 2 and name `harness-runtime init` in the remedy. ADR 0036 (#1146).
     - **[Migrate with approval]:** `harness-runtime migrate` and `rollback --to-legacy` require `--approved-by`, `--approved-at`, and `--reason`, and only a human runs them (#803, #826).
+    - **[BSL 1.1 license]:** The project moved from MIT to the Business Source License 1.1: non-commercial use is allowed, commercial use needs the licensor's written permission; each version changes to MIT four years after its publication.
 
 The full list of additions, changes, and fixes is in the `[2.0.0]` section of
 [CHANGELOG.md](https://github.com/PVMalove/agent-harness-next/blob/master/CHANGELOG.md).

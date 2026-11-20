@@ -33,8 +33,13 @@ harness-runtime init --repo <repo> \
 
 ## Перед обновлением
 
-1. Соберите `harness-runtime` (Rust 1.89+):
+1. Возьмите harness 2.0.0 (архив GitHub Release или git-клон с тегом `v2.0.0`) и соберите в нём
+   `harness-runtime` (Rust 1.89+):
    `cargo build --release --manifest-path native/harness-runtime/Cargo.toml`.
+   Добавьте `native/harness-runtime/target/release` в `PATH`: команды ниже вызывают
+   `harness-runtime` по имени. В установке 1.x нет команды `harness`: поставьте её командой
+   `python3 bin/install-global.py --target-home "$HOME" --cli` или вызывайте
+   `python3 <harness>/harness/bin/harness.py`.
 2. Проверьте версию ledger в `.harness/orchestration/state/ledger.json`. `migrate` импортирует
    только версию 3. На версиях 1 и 2 он отказывает с кодом 2 и `protocol_unsupported`: сначала выполните
    `coordinator.py ledger migrate` установки 1.x, затем переходите к 2.0.
@@ -63,7 +68,8 @@ harness-runtime init --repo <repo> \
     ```
 
     Код 0 и `"ready": true` — можно обновлять. Отказ печатает код и строку `REMEDY:` с действием
-    оператора; состояние не меняется.
+    оператора; состояние не меняется. Шаг нужен только проекту с `ledger.json`: без него
+    `migrate --check` отвечает кодом 2 и `nothing_to_migrate`.
 
 2. Обновите установку и переведите state:
 
@@ -75,10 +81,12 @@ harness-runtime init --repo <repo> \
     ```
 
     `harness diff <repo>` заранее покажет изменения управляемых файлов. `harness update` сохраняет
-    локальные правки. До установки первого файла update повторяет проверку предусловий и при отказе
+    правки seed-файлов. Если изменены управляемые файлы, update печатает список дрейфа и
+    останавливается до установки и до migrate: сохраните нужные правки и повторите команду с
+    `--force-managed-files` и теми же тремя флагами approval. До установки первого файла update повторяет проверку предусловий и при отказе
     ничего не устанавливает. Без approval на ledger версии 3 он тоже ничего не устанавливает и
-    печатает команду. Бинарник `harness-runtime` он ищет в release-сборке checkout harness, затем в
-    `PATH`. Проекту без state оркестрации и проекту, уже переведённому на store, approval не нужен.
+    печатает команду. Бинарник `harness-runtime` он ищет в release-сборке целевого репозитория, затем в
+    release-сборке checkout harness, затем в `PATH`. Проекту без state оркестрации и проекту, уже переведённому на store, approval не нужен.
 
 3. Проверьте установку:
 

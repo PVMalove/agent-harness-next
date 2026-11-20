@@ -34,8 +34,13 @@ remedy (ADR 0036).
 
 ## Before the upgrade
 
-1. Build `harness-runtime` (Rust 1.89+):
+1. Get harness 2.0.0 (the GitHub Release archive or a git clone at tag `v2.0.0`) and build
+   `harness-runtime` in it (Rust 1.89+):
    `cargo build --release --manifest-path native/harness-runtime/Cargo.toml`.
+   Add `native/harness-runtime/target/release` to `PATH`: the commands below call
+   `harness-runtime` by name. A 1.x installation has no `harness` command: install it with
+   `python3 bin/install-global.py --target-home "$HOME" --cli`, or call
+   `python3 <harness>/harness/bin/harness.py`.
 2. Check the ledger version in `.harness/orchestration/state/ledger.json`. `migrate` imports only
    version 3. On versions 1 and 2 it refuses with exit code 2 and `protocol_unsupported`: first run
    `coordinator.py ledger migrate` of the 1.x installation, then move on to 2.0.
@@ -64,7 +69,8 @@ approval from its flags (ADR 0020, section 6).
     ```
 
     Exit code 0 and `"ready": true` mean you can update. A refusal prints the code and a `REMEDY:`
-    line with the operator action; the state does not change.
+    line with the operator action; the state does not change. Only a project with `ledger.json`
+    needs this step: without one, `migrate --check` exits 2 with `nothing_to_migrate`.
 
 2. Update the installation and cut the state over:
 
@@ -76,10 +82,13 @@ approval from its flags (ADR 0020, section 6).
     ```
 
     `harness diff <repo>` shows the changes to the managed files beforehand, and `harness update`
-    keeps local edits. Before the first installed file, update checks the preconditions again and
+    keeps edits to seed files. If managed files were changed, update prints the drift and stops
+    before it installs anything and before migrate: keep the edits you need, then repeat the
+    command with `--force-managed-files` and the same three approval flags. Before the first
+    installed file, update checks the preconditions again and
     installs nothing on a refusal. Without the approval on a version-3 ledger it also installs
     nothing and prints the command. It looks for the `harness-runtime` binary in the release build
-    of the harness checkout, then on `PATH`. A project without orchestration state and a project
+    of the target repository, then of the harness checkout, then on `PATH`. A project without orchestration state and a project
     already on the store need no approval.
 
 3. Check the installation:
