@@ -77,7 +77,7 @@ impl Feature {
 /// The features `hello` lists, in this order, before the supervisor's. `Session::handle` serves
 /// the operations of this table and of `supervisor::FEATURES` only; a unit test checks that it
 /// routes each of them.
-const FEATURES: [Feature; 13] = [
+const FEATURES: [Feature; 15] = [
     // The owners of the runtime (ADR 0031): every runtime answers them, a manual one too.
     Feature::always("status"),
     Feature::always("shutdown"),
@@ -95,8 +95,11 @@ const FEATURES: [Feature; 13] = [
     // (issue #1180).
     Feature::of_store("worktree.create"),
     Feature::of_store("worktree.remove"),
-    // A commit in a managed worktree whose git metadata the sandbox mounts read-only (#1246).
+    // A commit, a rebase and a merge in a managed worktree whose git metadata the sandbox mounts
+    // read-only (#1246).
     Feature::of_store("worktree.commit"),
+    Feature::of_store("worktree.rebase"),
+    Feature::of_store("worktree.merge"),
 ];
 
 /// The answer to one frame.
@@ -258,8 +261,22 @@ impl Session {
                 shared,
                 &request,
                 negotiated.minor,
-                WORKTREE_COMMIT_SINCE_MINOR,
+                WORKTREE_CHANGE_SINCE_MINOR,
                 crate::worktree::commit,
+            ),
+            "worktree.rebase" => worktree_operation(
+                shared,
+                &request,
+                negotiated.minor,
+                WORKTREE_CHANGE_SINCE_MINOR,
+                crate::worktree::rebase,
+            ),
+            "worktree.merge" => worktree_operation(
+                shared,
+                &request,
+                negotiated.minor,
+                WORKTREE_CHANGE_SINCE_MINOR,
+                crate::worktree::merge,
             ),
             "execution.launch" => answer(&request, shared.supervisor.launch(&request)),
             "execution.observe" => answer(&request, shared.supervisor.observe(&request)),
@@ -752,13 +769,14 @@ fn state_validate(shared: &Shared, request: &Request) -> Reply {
 /// introduced the operations, not `PROTOCOL_VERSION.minor`: a later minor keeps it.
 const WORKTREE_SINCE_MINOR: u32 = 8;
 const _: () = assert!(WORKTREE_SINCE_MINOR <= PROTOCOL_VERSION.minor);
-/// The protocol minor of `worktree.commit`: version 9 added it (issue #1246).
-const WORKTREE_COMMIT_SINCE_MINOR: u32 = 9;
-const _: () = assert!(WORKTREE_COMMIT_SINCE_MINOR <= PROTOCOL_VERSION.minor);
+/// The protocol minor of `worktree.commit`, `worktree.rebase` and `worktree.merge`: version 9
+/// added them (issue #1246).
+const WORKTREE_CHANGE_SINCE_MINOR: u32 = 9;
+const _: () = assert!(WORKTREE_CHANGE_SINCE_MINOR <= PROTOCOL_VERSION.minor);
 
-/// `worktree.create`, `worktree.remove` or `worktree.commit`: a managed issue worktree that a
-/// sandboxed coordinator cannot create, remove or commit in itself, because its sandbox mounts
-/// `.git/worktrees` read-only (issues #1180 and #1246). `since` is the protocol minor that added
+/// A `worktree.*` operation: a managed issue worktree that a sandboxed coordinator cannot create,
+/// remove, commit, rebase or merge in itself, because its sandbox mounts `.git/worktrees`
+/// read-only (issues #1180 and #1246). `since` is the protocol minor that added
 /// the operation; `serve` is the operation of `crate::worktree`.
 fn worktree_operation(
     shared: &Shared,
@@ -1280,6 +1298,8 @@ mod tests {
             "worktree.create",
             "worktree.remove",
             "worktree.commit",
+            "worktree.rebase",
+            "worktree.merge",
         ];
         // The supervisor serves its operations where the platform supervises processes.
         if supervisor::Supervisor::supported() {
@@ -1482,17 +1502,19 @@ mod tests {
     }
 
     #[test]
-    fn a_worktree_commit_from_protocol_minor_8_is_protocol_unsupported() {
+    fn a_worktree_change_from_protocol_minor_8_is_protocol_unsupported() {
         let (mut shared, root) = setup();
         shared.state_dir = Some(root.join(state::migrate::STATE_REL));
         let mut session = authenticated_at(&shared, &root, 8);
 
-        let reply = session.handle(&shared, &worktree_body("worktree.commit", json!({})), NOW);
+        for operation in ["worktree.commit", "worktree.rebase", "worktree.merge"] {
+            let reply = session.handle(&shared, &worktree_body(operation, json!({})), NOW);
 
-        assert_eq!(code(&reply), ErrorCode::ProtocolUnsupported);
-        let facts = reply.response.error.unwrap().facts;
-        assert_eq!(facts["negotiated_minor"], 8);
-        assert_eq!(facts["required_minor"], 9);
+            assert_eq!(code(&reply), ErrorCode::ProtocolUnsupported, "{operation}");
+            let facts = reply.response.error.unwrap().facts;
+            assert_eq!(facts["negotiated_minor"], 8);
+            assert_eq!(facts["required_minor"], 9);
+        }
     }
 
     #[test]
@@ -1512,6 +1534,11 @@ mod tests {
         assert_eq!(code(&unknown_field), ErrorCode::MalformedRequest);
         assert_eq!(code(&denied), ErrorCode::PolicyDenied);
         assert!(!denied.close);
+        for operation in ["worktree.rebase", "worktree.merge"] {
+            let payload = json!({"path": root.join("elsewhere"), "action": "abort"});
+            let denied = session.handle(&shared, &worktree_body(operation, payload), NOW);
+            assert_eq!(code(&denied), ErrorCode::PolicyDenied, "{operation}");
+        }
     }
 
     #[test]
