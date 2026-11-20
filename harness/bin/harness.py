@@ -1088,6 +1088,32 @@ def baselined_seed_files(
     }
 
 
+# Seed guides whose mandatory rules moved to runtime rules (ADR 0039): the old section is a
+# pointer now, so a project-edited copy keeps rule text that no runtime loads as a rule.
+SEED_MOVED_SECTIONS: dict[str, tuple[str, str]] = {
+    "docs/agents/git-workflow.md": (
+        "раздел 1 (Fundamental Constraints & Tooling)",
+        ".claude/rules/git-delivery.md",
+    ),
+    "docs/agents/worktrees.md": (
+        "правила Conventions",
+        ".claude/rules/worktree-conventions.md",
+    ),
+}
+
+
+def moved_section_notice(relative: str) -> str | None:
+    """Строка о переезде источника правил для seed-файла или None."""
+    moved = SEED_MOVED_SECTIONS.get(relative)
+    if moved is None:
+        return None
+    section, target = moved
+    return (
+        f"Источник правил переехал: {section} → {target} — локальный текст старого раздела "
+        "больше не грузится как правило; сверьте правку с новым файлом"
+    )
+
+
 FORCED_REASON = "перезаписан по флагу"
 OUTDATED_REASON = "устарел по версии"
 SEED_BACKUP_REL = Path(".harness/.sandboxes/seed-backups")
@@ -1187,6 +1213,7 @@ class SeedInstall:
             for relative in self.modified:
                 print(f"  - {relative}")
                 print(f"    После просмотра: --force-seed-file {relative}")
+                self._report_moved(relative)
         if self.unbaselined:
             print(
                 "\n[WARNING] Seed-файлы без baseline в .harness/harness.lock "
@@ -1194,9 +1221,16 @@ class SeedInstall:
             )
             for relative in self.unbaselined:
                 print(f"  - {relative}")
+                self._report_moved(relative)
             print(
                 f"  Записать baseline: harness update {self.repo} --record-seed-baseline"
             )
+
+    @staticmethod
+    def _report_moved(relative: str) -> None:
+        notice = moved_section_notice(relative)
+        if notice is not None:
+            print(f"    {notice}")
 
     def forced(self, relative: str) -> bool:
         """Перезаписывать ли файл: все seed-файлы разом или только выбранные по пути."""
@@ -1621,6 +1655,9 @@ def cmd_diff(args: argparse.Namespace) -> int:
             name = group_of[relative]
             print(f"  seed_differing: {relative} ({SEED_GROUP_LABELS[name]})")
             print(f"    {hints[name].replace('{path}', relative)}")
+            notice = moved_section_notice(relative)
+            if notice is not None and name != "outdated":
+                print(f"    {notice}")
         print_contract_proposals(proposals)
     return 0 if result["state"] == "clean" else 1
 

@@ -364,3 +364,46 @@ def test_managed_skill_drift_names_the_force_backup_promise(repo: Path) -> None:
     assert f"harness update {repo} --force" in result.stdout
     assert ".harness/.sandboxes/seed-backups/" in result.stdout
     assert "бэкапа нет" in result.stdout
+
+
+GUIDE = "docs/agents/git-workflow.md"
+MOVED = "Источник правил переехал: раздел 1 (Fundamental Constraints & Tooling) → .claude/rules/git-delivery.md"
+
+
+def test_update_warns_that_the_rule_source_of_a_modified_guide_moved(repo: Path) -> None:
+    edited = (repo / GUIDE).read_bytes() + b"\n* **Local rule:** keep it.\n"
+    (repo / GUIDE).write_bytes(edited)
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert (repo / GUIDE).read_bytes() == edited
+    assert MOVED in result.stdout
+    assert "больше не грузится как правило" in result.stdout
+    assert "Источник правил переехал" not in result.stdout.split(GUIDE, 1)[0]
+
+
+def test_update_warns_about_the_move_for_an_unbaselined_guide(repo: Path) -> None:
+    lock = load_lock(repo)
+    del lock["seed_files"]["docs/agents/worktrees.md"]
+    save_lock(repo, lock)
+    (repo / "docs/agents/worktrees.md").write_bytes(b"# 1.x worktrees\n")
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    assert "правила Conventions → .claude/rules/worktree-conventions.md" in result.stdout
+
+
+def test_diff_hints_the_moved_rule_source_without_changing_its_json(repo: Path) -> None:
+    (repo / GUIDE).write_bytes(b"# local guide\n")
+    make_outdated(repo)
+
+    text = harness("diff", str(repo)).stdout
+    data = json.loads(harness("diff", str(repo), "--json").stdout)
+
+    assert f"seed_differing: {GUIDE} (изменён локально)" in text
+    assert MOVED in text
+    assert text.count("Источник правил переехал") == 1
+    assert data["seed_modified"] == [GUIDE]
+    assert not any("переехал" in json.dumps(value) for value in data.values())
