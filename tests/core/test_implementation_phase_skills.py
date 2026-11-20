@@ -116,10 +116,26 @@ IMPLEMENT_REFERENCES = (
     "auto-path",
     "claude-code-runtime",
     "commit-plan",
+    "issue-worktree",
     "recovery",
     "test-author",
     "workers",
 )
+
+
+def test_issue_worktree_procedure_lives_in_the_implement_reference() -> None:
+    reference = _text(ENGINEERING / "implement/references/issue-worktree.md")
+    for marker in (
+        "coordinator.py worktree create --repo .",
+        "harness worktree-venv",
+        "**Session write access.**",
+        "**Recovery after a partial failure.**",
+        "`docs/agents/git-workflow.md`",
+    ):
+        assert marker in reference, marker
+    core = _text(_skill("implement"))
+    assert "`docs/agents/worktrees.md` → Coordinator issue worktree" not in core
+    assert "`docs/agents/worktrees.md` → Session write access" not in core
 
 
 def test_implement_core_names_each_reference_with_its_condition() -> None:

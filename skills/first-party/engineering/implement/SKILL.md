@@ -37,7 +37,7 @@ Do not infer or repair an opt-in capability. Process one ticket to a terminal ba
 beginning another.
 
 Before any tracker write, confirm this session is rooted in the main checkout. For an existing
-issue worktree, follow `docs/agents/worktrees.md` → Session write access for this runtime (Claude
+issue worktree, follow `references/issue-worktree.md` → Session write access for this runtime (Claude
 Code: `EnterWorktree` with `path=<issue-worktree>`, then `ExitWorktree` with `action: keep`, no
 coordinator command between them) and run `worktree check --worktree <issue-worktree>` inside the
 session sandbox. Continue on
@@ -88,7 +88,7 @@ Start these steps only after the ticket pre-flight above (blockers, `status::in-
    checkout or from memory. A ticket without a parent epic uses `base_branch`: omit `--integration-ref`.
 2. **Issue worktree.** Create it before `batch create`. `batch create` refuses a worktree that
    `git worktree list` does not show. Use `worktree create` and the exact commands in
-   `docs/agents/worktrees.md` → Coordinator issue worktree. Confirm `"writable": true` from
+   `references/issue-worktree.md`. Confirm `"writable": true` from
    `worktree check` before `batch create`. If access is missing, open it for this runtime (Claude
    Code: the `EnterWorktree`/`ExitWorktree` pair above) and repeat the check. Stay in the main
    checkout.
@@ -304,7 +304,7 @@ second orchestration manual. Full rules are module-owned guidance:
 - `.harness/orchestration/roles/` owns each role's boundary, required proof, and specialist trigger.
 - The `--help` output and the `remedy` of the coordinator CLI own command syntax and operational recovery.
 - `docs/agents/git-workflow.md` owns issue-branch, commit, push, and PR boundaries.
-- `docs/agents/worktrees.md` owns issue worktree creation and its recovery.
+- `references/issue-worktree.md` owns issue worktree creation and its recovery.
 
 Follow those files rather than duplicating or weakening their rules here. In particular, do not
 invent token metrics: use only provider- or runtime-observed telemetry and preserve missing-data

@@ -58,6 +58,29 @@ def test_worktree_rules_live_in_the_runtime_rule_and_conventions_point_there() -
         assert kept in guide, kept
 
 
+ISSUE_WORKTREE = ".harness/skills/implement/references/issue-worktree.md"
+
+
+def _h2(text: str, heading: str) -> str:
+    start = text.index(heading)
+    end = text.find("\n## ", start + len(heading))
+    return text[start:] if end < 0 else text[start:end]
+
+
+def test_coordinator_issue_worktree_is_owned_by_the_implement_skill() -> None:
+    guide = _text(INSTRUCTIONS / "worktrees.md")
+    pointer = _h2(guide, "## Coordinator issue worktree")
+    assert ISSUE_WORKTREE in pointer
+    assert "worktree create --repo" not in guide
+    assert "Session write access" not in guide.split("## Coordinator issue worktree")[0]
+    assert "issue worktree that a coordinator" not in guide
+    worker = _h2(guide, "## Worker checkout environment")
+    assert "harness worktree-venv" in worker and "PLAYWRIGHT_BROWSERS_PATH" in worker
+    rule = _text(RULES / "worktree-conventions.md")
+    assert ISSUE_WORKTREE in rule
+    assert "#coordinator-issue-worktree" not in rule
+
+
 def test_runtime_rules_have_no_path_scope() -> None:
     for name in ("git-delivery.md", "worktree-conventions.md"):
         assert not _text(RULES / name).startswith("---"), name
