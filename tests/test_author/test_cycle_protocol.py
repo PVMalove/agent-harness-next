@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -58,13 +59,14 @@ FULL_ROUTE_MARKERS = (
     "ordinary TDD",
     "never creates a blocker",
 )
-FULL_ROUTE_GUIDE_MARKERS = (
-    "full `/implement` route",
-    "test-author-preflight.sh --worktree",
-    "`checkout_mismatch`",
-    "`agent_tool_unavailable`",
-    "usual TDD",
-    "without a blocker",
+# The /implement route has one editable source: the developer role reference.
+ROLE_ROUTE = ".harness/orchestration/roles/references/developer-test-author.md"
+ROUTE_RESTATEMENT_MARKERS = (
+    "checkout_mismatch",
+    "agent_tool_unavailable",
+    "test_author.py run --repo <worker_worktree>",
+    "test_author.py run --repo <send.worker_worktree>",
+    "test_author.py preflight --repo <worker_worktree>",
 )
 FULL_ROUTE_DESCRIPTION_MARKERS = (
     "--worktree",
@@ -122,8 +124,6 @@ def _text(path: Path) -> str:
     [
         (DEVELOPER_AUTHOR, DEVELOPER_MARKERS),
         (DEVELOPER_AUTHOR, FULL_ROUTE_MARKERS),
-        (IMPLEMENT, FULL_ROUTE_MARKERS),
-        (GUIDE, FULL_ROUTE_GUIDE_MARKERS),
         (TDD, SHORT_ROUTE_MARKERS),
         (FAST_IMPLEMENT, FAST_MARKERS),
         (TDD_AUTHOR, AUTHOR_PROTOCOL_MARKERS),
@@ -137,6 +137,30 @@ def test_protocol_markers(path: Path, markers: tuple[str, ...]) -> None:
     text = " ".join(_text(path).split())
     missing = [marker for marker in markers if marker not in text]
     assert not missing, f"{path.name} lost cycle markers: {missing}"
+
+
+def _section(text: str, heading: str) -> str:
+    start = text.index(heading)
+    end = text.find("\n## ", start + len(heading))
+    return text[start:] if end < 0 else text[start:end]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        pytest.param(
+            lambda: _section(_text(GUIDE), "## 7. The full `/implement` route"),
+            id="guide-section-7",
+        ),
+        pytest.param(lambda: _text(IMPLEMENT), id="implement-reference"),
+        pytest.param(lambda: _text(TDD_AUTHOR), id="tdd-reference"),
+    ],
+)
+def test_full_route_points_to_the_developer_role(text: Callable[[], str]) -> None:
+    body = " ".join(text().split())
+    assert ROLE_ROUTE in body
+    restated = [marker for marker in ROUTE_RESTATEMENT_MARKERS if marker in body]
+    assert not restated, f"the /implement route is restated: {restated}"
 
 
 def test_changelog_records_the_full_route_worktree_fix() -> None:

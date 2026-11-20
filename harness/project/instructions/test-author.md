@@ -225,40 +225,10 @@ does not change the ledger.
 
 ## 7. The full `/implement` route
 
-The author works beside an external developer in its worker
-worktree, with the runtime, model and effort of the developer brief. The supported adapter starts
-the developer in that checkout, so the runtime, the scoped hook and the runner refer to the same
-code. Install the harness in the worker checkout and enable `test_paths` and `test_runner` there; do
-not copy the orchestration state of the main checkout. A worktree of a trusted repository needs no
-trust dialog of its own; if the main checkout is not trusted, open it in Claude Code and accept the
-dialog. Neither the installer, the developer nor a headless launch makes that trust decision for
-you.
-
-The external developer runs the common preflight with `--repo <worker_worktree> --brief <brief
-path>`. For the protected Claude adapter this is `.claude/hooks/test-author-preflight.sh --worktree
-<worker_worktree> --brief <brief path>`. Only the exact `{"status":"ok"}` enables the next step. The
-approved brief must also allow `Agent(test-author)` or `Agent`; otherwise the reason of the
-developer is `agent_tool_unavailable`. The new orchestration template gives the named permission
-only to the developer. Existing projects with a tool policy enable it explicitly in
-`tool_policy.roles.developer` and keep the other tools. Explicit restrictions are never widened
-automatically; the tool list is bound to the digest before the approval (ADR 0024).
-
-The author writes in the `test_paths` of the worker and uses its runner. The developer passes one
-specific test path in the brief scope and the log root from the adapter prompt:
-`<main>/.harness/.sandboxes/runs/`. Linked worktrees share these logs; `run_id` points to
-`isolated-test-<run_id>/log.txt` under that root. The adapter gives access to the evidence, and the
-scoped guard keeps its write and Bash limits. The code, the tests and the Git status of the main
-checkout stay unchanged; the shared runtime logs stay in its ignored sandbox.
-
-A preflight of the main checkout with the `--worktree` of a separate worker answers
-`checkout_mismatch`: its guard and runner serve only the main checkout. An in-process developer
-therefore calls the author through the launcher of its worktree:
-`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <brief path> --prompt-file <file>`.
-The launcher checks the preflight of the worker and starts the author with the guard and the runner
-of that worktree; the brief permission rule is the same. Any preflight refusal or an unavailable
-tool to call the author keeps the usual TDD in the worker, with the reason, without a blocker and
-without new ledger records. The runtime selection comes from the developer; a missing protected
-adapter for it keeps the usual TDD, without a substitute executor.
+The developer role owns this route: preflight in the worker checkout, the executor, the brief
+permission, the log root and the in-process launcher. Read
+`.harness/orchestration/roles/references/developer-test-author.md` (installed with
+`backend-orchestration`); this guide does not restate it.
 
 This release verifies Python tests through unittest and pytest. Rust tests in
 `native/harness-runtime/crates/*/tests` are not supported by this solution: no write zones and no
