@@ -4,8 +4,11 @@
    (`Status`) and harness/console/tui/stats.py (`reports_kpi_tiles`). The figures are the
    server's; these functions only word, filter and order them. tests/web/fixtures/reports-facts.json
    pins every text to the one the TUI shows for the same snapshot. */
-import type { Language } from "../i18n";
+import type { I18n, Language } from "../i18n";
 import type { BatchSummary, BatchTimeline, Figures, Ledger, ReportBody, ReportHead, StageHead } from "../ws/ledger";
+
+/** The `t` of `useI18n`: the report texts below are Russian keys of the translation catalog. */
+export type Translate = I18n["t"];
 
 export type StatusKind = "accepted" | "running" | "paused" | "not_started" | "error" | "warning";
 
@@ -219,21 +222,22 @@ const REVIEW_SEVERITIES: Readonly<Record<string, StatusKind>> = {
 };
 const CHECK_RESULTS: Readonly<Record<string, StatusKind>> = { pass: "accepted", fail: "error", not_run: "not_started" };
 
-function checksText(report: ReportBody): string {
+function checksText(report: ReportBody, t: Translate): string {
   const checks = objects(report.checks_run);
-  if (!checks.length) return "проверки не запускались";
+  if (!checks.length) return t("проверки не запускались");
   return checks
     .map((check) => `• ${text(check.command, "?")} — ${text(check.result, "?")}: ${text(check.evidence)}`)
     .join("\n");
 }
 
-function reviewText(review: Record<string, unknown>): string {
+function reviewText(review: Record<string, unknown>, t: Translate): string {
   const lines = [`candidate: ${text(review.candidate_commit, "?")}`];
   for (const axis of ["standards", "spec"]) {
     const evidence = review[axis];
     if (!isRecord(evidence)) continue;
     const findings = objects(evidence.findings);
-    lines.push(`${axis}: ${text(evidence.severity, "?")}, находок: ${findings.length}`);
+    // The report's severity is filled last, so its text is never scanned for another placeholder.
+    lines.push(t("{axis}: {severity}, находок: {count}", { count: findings.length, axis, severity: text(evidence.severity, "?") }));
     for (const item of findings) {
       lines.push(`  [${text(item.severity, "?")}] ${text(item.summary)}: ${text(item.evidence)}`);
     }
@@ -250,12 +254,12 @@ function evidenceSummary(value: unknown): string {
 }
 
 /** `report_sections`: the named sections of a report body in reading order. */
-export function reportSections(report: ReportBody): [string, string][] {
+export function reportSections(report: ReportBody, t: Translate): [string, string][] {
   const sections: [string, string][] = [
     ["Output", text(report.output)],
-    ["Checks", checksText(report)],
+    ["Checks", checksText(report, t)],
   ];
-  if (isRecord(report.review)) sections.push(["Review", reviewText(report.review)]);
+  if (isRecord(report.review)) sections.push(["Review", reviewText(report.review, t)]);
   sections.push(
     ["Risks", evidenceSummary(report.risks)],
     ["Blockers", evidenceSummary(report.blockers)],
@@ -264,7 +268,7 @@ export function reportSections(report: ReportBody): [string, string][] {
   return sections;
 }
 
-function checkLines(report: ReportBody): ReportLine[] {
+function checkLines(report: ReportBody, t: Translate): ReportLine[] {
   const lines: ReportLine[] = objects(report.checks_run).map((check) => {
     const result = text(check.result, "?");
     const evidence = text(check.evidence);
@@ -274,10 +278,10 @@ function checkLines(report: ReportBody): ReportLine[] {
       evidence ? `${command} — ${evidence}` : command,
     ];
   });
-  return lines.length ? lines : [[null, checksText(report)]];
+  return lines.length ? lines : [[null, checksText(report, t)]];
 }
 
-function reviewLines(review: Record<string, unknown>): ReportLine[] {
+function reviewLines(review: Record<string, unknown>, t: Translate): ReportLine[] {
   const lines: ReportLine[] = [[null, `candidate: ${text(review.candidate_commit, "?")}`]];
   for (const axis of ["standards", "spec"]) {
     const evidence = review[axis];
@@ -286,7 +290,7 @@ function reviewLines(review: Record<string, unknown>): ReportLine[] {
     const severity = text(evidence.severity, "?");
     lines.push([
       { kind: REVIEW_SEVERITIES[severity] ?? "warning", ru: severity, en: severity },
-      `${axis} · находок: ${findings.length}`,
+      t("{axis} · находок: {count}", { axis, count: findings.length }),
     ]);
     for (const item of findings) {
       lines.push([null, `  [${text(item.severity, "?")}] ${text(item.summary)}: ${text(item.evidence)}`]);
@@ -303,10 +307,10 @@ function evidenceLine(body: string): ReportLine {
 
 /** `report_section_lines`: every section as lines; a check, a review axis, a risk and a blocker
     line carry a status. */
-export function reportSectionLines(report: ReportBody): [string, ReportLine[]][] {
-  return reportSections(report).map(([title, body]) => {
-    if (title === "Checks") return [title, checkLines(report)];
-    if (title === "Review" && isRecord(report.review)) return [title, reviewLines(report.review)];
+export function reportSectionLines(report: ReportBody, t: Translate): [string, ReportLine[]][] {
+  return reportSections(report, t).map(([title, body]) => {
+    if (title === "Checks") return [title, checkLines(report, t)];
+    if (title === "Review" && isRecord(report.review)) return [title, reviewLines(report.review, t)];
     if (title === "Risks" || title === "Blockers") return [title, [evidenceLine(body)]];
     return [title, [[null, body || "—"]]];
   });
@@ -315,32 +319,37 @@ export function reportSectionLines(report: ReportBody): [string, ReportLine[]][]
 /* -- QA log and chronology -------------------------------------------------------------------- */
 
 /** `qa_log_text`: the failed qa-lane attempts and every QA gate run of a dispatch, or "". */
-export function qaLogText(ledger: Ledger, dispatchId: string): string {
+export function qaLogText(ledger: Ledger, dispatchId: string, t: Translate): string {
   const runs = ledger.qa_runs.filter((run) => run.dispatch_id === dispatchId);
   const attempts = ledger.qa_attempts.filter((item) => item.dispatch_id === dispatchId);
   if (!runs.length && !attempts.length) return "";
   const attemptsText = [
-    `попытки qa-lane: ${attempts.length}`,
+    t("попытки qa-lane: {count}", { count: attempts.length }),
     ...attempts.map(
-      (attempt) => `  ${attempt.failed_at || "время ?"} · ${attempt.dispatch_id} · ${attempt.stage}: ${attempt.message}`,
+      (attempt) => `  ${attempt.failed_at || t("время ?")} · ${attempt.dispatch_id} · ${attempt.stage}: ${attempt.message}`,
     ),
   ].join("\n");
   const runTexts = runs.map((run) => {
     const failed = run.commands.filter(([, code]) => code !== 0);
-    let summary = `итог: ${failed.length ? "failed" : "passed"} — команд ${run.commands.length}, с ошибкой ${failed.length}`;
+    let summary = t("итог: {verdict} — команд {total}, с ошибкой {failed}", {
+      verdict: failed.length ? "failed" : "passed",
+      total: run.commands.length,
+      failed: failed.length,
+    });
     if (failed.length) summary += ` (${failed.map(([command, code]) => `${command}: exit ${code}`).join(", ")})`;
+    // One placeholder per template: a ledger value is never scanned for another placeholder.
     return [
-      `${run.artifact} · ${run.logged_at || "время ?"} · ${run.dispatch_id || "без отчёта"} · ${run.ticket} · отчёт: ${run.outcome}`,
+      `${run.artifact} · ${run.logged_at || t("время ?")} · ${run.dispatch_id || t("без отчёта")} · ${run.ticket} · ${t("отчёт: {outcome}", { outcome: run.outcome })}`,
       summary,
-      `хвост лога (последние ${run.tail.length} из ${run.total_lines} строк):`,
+      t("хвост лога (последние {count} из {total} строк):", { count: run.tail.length, total: run.total_lines }),
       ...run.tail.map((line) => `  ${line}`),
     ].join("\n");
   });
   return [attemptsText, ...runTexts].join("\n\n");
 }
 
-export const roleFlowText = (timeline: BatchTimeline): string =>
-  timeline.role_flow.join(" → ") || "диспатчей ещё не было";
+export const roleFlowText = (timeline: BatchTimeline, t: Translate): string =>
+  timeline.role_flow.join(" → ") || t("диспатчей ещё не было");
 
 /* -- KPI tiles -------------------------------------------------------------------------------- */
 

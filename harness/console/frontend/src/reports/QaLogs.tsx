@@ -7,7 +7,7 @@ import { qaLogText } from "./format";
 
 export function QaLogs({ ledger, dispatchId }: { ledger: Ledger; dispatchId: string }) {
   const { t } = useI18n();
-  const log = qaLogText(ledger, dispatchId);
+  const log = qaLogText(ledger, dispatchId, t);
   if (!log) return null;
   return (
     <details className="report-qa-log" id="report-qa-log">

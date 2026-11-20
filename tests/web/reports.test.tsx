@@ -1,10 +1,19 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, test } from "vitest";
 import { App } from "../../harness/console/frontend/src/App";
-import { LanguageProvider } from "../../harness/console/frontend/src/i18n";
-import { NO_FILTERS, reportsById, selectStages } from "../../harness/console/frontend/src/reports/format";
+import { LanguageProvider, translate } from "../../harness/console/frontend/src/i18n";
+import {
+  NO_FILTERS,
+  qaLogText,
+  reportSectionLines,
+  reportSections,
+  reportsById,
+  roleFlowText,
+  selectStages,
+} from "../../harness/console/frontend/src/reports/format";
+import type { Translate } from "../../harness/console/frontend/src/reports/format";
 import { createConsoleClient } from "../../harness/console/frontend/src/ws/client";
-import { parseReports } from "../../harness/console/frontend/src/ws/ledger";
+import { parseReports, parseTimeline } from "../../harness/console/frontend/src/ws/ledger";
 import { FakeSocket, ManualClock, screenPage } from "./fake-socket";
 import FACTS from "./fixtures/reports-facts.json";
 import REPORT from "./fixtures/reports-report.json";
@@ -27,7 +36,7 @@ function answer(socket: FakeSocket, type: string, value: unknown, cached = true)
   }
 }
 
-function renderReports(language = "", snapshot: unknown = REPORTS) {
+function renderReports(language = "", snapshot: unknown = REPORTS, report: unknown = REPORT) {
   window.location.hash = `#/reports${language}`;
   const client = createConsoleClient({
     url: "ws://127.0.0.1:1/ws",
@@ -43,7 +52,7 @@ function renderReports(language = "", snapshot: unknown = REPORTS) {
   const socket = FakeSocket.last;
   act(() => socket.open());
   answer(socket, "reports.snapshot", snapshot);
-  answer(socket, "reports.report", REPORT);
+  answer(socket, "reports.report", report);
   return socket;
 }
 
@@ -302,5 +311,89 @@ describe("the Reports route", () => {
     expect([...document.querySelectorAll("#reports-tabs .ds-pipe-label")].map((tab) => tab.textContent)).toEqual(["Reports", "Evidence", "Quality", "Readiness"]);
     expect(content()).toContain("report received · failed");
     expect(content()).toContain("Evidence complete");
+  });
+});
+
+describe("the report body, QA log and route follow the language", () => {
+  const ru: Translate = (text, values) => translate("ru", text, values);
+  const en: Translate = (text, values) => translate("en", text, values);
+  const ledger = parseReports(REPORTS)!;
+  /** A report without checks and with a review: the texts a check list does not show. */
+  const REVIEWED = {
+    checks_run: [],
+    review: {
+      candidate_commit: "c0ffee1",
+      standards: { severity: "warning", findings: [{ severity: "warning", summary: "s", evidence: "e" }] },
+      spec: { severity: "clean", findings: [] },
+    },
+  };
+  const lines = (log: string) =>
+    log
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+  const qaLines = (shown: string) => lines(shown).filter((line) => !line.startsWith("2026-11-08T11:40") && !/^(E |FAILED)/.test(line));
+
+  beforeEach(() => {
+    FakeSocket.reset();
+    answered.clear();
+  });
+
+  test("the QA log keeps the TUI's Russian and is English in en", () => {
+    const tui = (FACTS as string[]).slice(
+      (FACTS as string[]).indexOf("попытки qa-lane: 1"),
+      (FACTS as string[]).indexOf("FAILED tests/console/test_reports.py::test_kpi") + 1,
+    );
+    expect(lines(qaLogText(ledger, "d-qa", ru))).toEqual(tui);
+    expect(lines(qaLogText(ledger, "d-qa", en))).toEqual([
+      "qa-lane attempts: 1",
+      "2026-11-08T11:40:00+00:00 · d-qa · collect: лог QA не найден",
+      "qa-run-1.log · 2026-11-08T11:58:00+00:00 · d-qa · #887 · report: failed",
+      "result: failed — 2 commands, 1 failed (pytest -q tests/console: exit 1)",
+      "log tail (last 2 of 42 lines):",
+      "E   assert 3 == 2",
+      "FAILED tests/console/test_reports.py::test_kpi",
+    ]);
+    const bare = { ...ledger, qa_attempts: [], qa_runs: [{ ...ledger.qa_runs[0]!, dispatch_id: "", logged_at: "" }] };
+    expect(qaLogText(bare, "", ru)).toContain("qa-run-1.log · время ? · без отчёта · #887 · отчёт: failed");
+    expect(qaLogText(bare, "", en)).toContain("qa-run-1.log · time ? · no report · #887 · report: failed");
+  });
+
+  test("the report sections and the route keep Russian and are English in en", () => {
+    const section = (translate: Translate, title: string) =>
+      new Map(reportSectionLines(REVIEWED, translate)).get(title)!.map(([, line]) => line);
+    expect(section(ru, "Checks")).toEqual(["проверки не запускались"]);
+    expect(section(en, "Checks")).toEqual(["no checks were run"]);
+    expect(section(ru, "Review")).toEqual(["candidate: c0ffee1", "standards · находок: 1", "  [warning] s: e", "spec · находок: 0"]);
+    expect(section(en, "Review")).toEqual(["candidate: c0ffee1", "standards · findings: 1", "  [warning] s: e", "spec · findings: 0"]);
+    const review = (translate: Translate) => new Map(reportSections(REVIEWED, translate)).get("Review");
+    expect(review(ru)).toBe("candidate: c0ffee1\nstandards: warning, находок: 1\n  [warning] s: e\nspec: clean, находок: 0");
+    expect(review(en)).toBe("candidate: c0ffee1\nstandards: warning, findings: 1\n  [warning] s: e\nspec: clean, findings: 0");
+    const timeline = parseTimeline(TIMELINE)!;
+    expect(roleFlowText(timeline, en)).toBe("developer → review → qa → developer");
+    expect(roleFlowText({ ...timeline, role_flow: [] }, ru)).toBe("диспатчей ещё не было");
+    expect(roleFlowText({ ...timeline, role_flow: [] }, en)).toBe("no dispatches yet");
+  });
+
+  test("with ?lang=en the rendered report and QA log carry no Russian of their own", () => {
+    renderReports("?lang=en", REPORTS, REVIEWED);
+    const log = document.querySelector("#report-qa-log pre")!.textContent!;
+    expect(qaLines(log).filter((line) => /[а-яё]/i.test(line))).toEqual([]);
+    expect(log).toContain("log tail (last 2 of 42 lines):");
+    const detail = document.querySelector("#report-detail")!.textContent!;
+    expect(detail).toContain("no checks were run");
+    expect(detail).toContain("standards · findings: 1");
+    expect(detail).not.toContain("находок");
+  });
+
+  test("in Russian the rendered report and QA log are unchanged", () => {
+    renderReports("", REPORTS, REVIEWED);
+    const log = document.querySelector("#report-qa-log pre")!.textContent!;
+    expect(log).toContain("попытки qa-lane: 1");
+    expect(log).toContain("итог: failed — команд 2, с ошибкой 1 (pytest -q tests/console: exit 1)");
+    expect(log).toContain("хвост лога (последние 2 из 42 строк):");
+    const detail = document.querySelector("#report-detail")!.textContent!;
+    expect(detail).toContain("проверки не запускались");
+    expect(detail).toContain("standards · находок: 1");
   });
 });
