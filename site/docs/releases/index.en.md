@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.0 {.ah-release-title}
 
-<p class="ah-release-meta">Breaking: 6 · Added: 63 · Changed: 26 · Fixed: 44</p>
+<p class="ah-release-meta">Breaking: 6 · Added: 82 · Changed: 33 · Fixed: 65</p>
 
 <p class="ah-release-summary">Highlights: required Rust runtime and runtime store · ledger version 4 · migrate and rollback with human approval · web console.</p>
 

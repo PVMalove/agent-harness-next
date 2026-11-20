@@ -13,7 +13,7 @@ toc_depth: 2
 
 ## v2.0.0 {.ah-release-title}
 
-<p class="ah-release-meta">Несовместимых: 6 · Добавлено: 63 · Изменено: 26 · Исправлено: 44</p>
+<p class="ah-release-meta">Несовместимых: 6 · Добавлено: 82 · Изменено: 33 · Исправлено: 65</p>
 
 <p class="ah-release-summary">Главное: обязательный Rust runtime и runtime store · ledger версии 4 · migrate и откат по human approval · веб-консоль.</p>
 
