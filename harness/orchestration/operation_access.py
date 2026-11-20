@@ -236,7 +236,13 @@ def _probe_ledger_lock(root: Path) -> tuple[AccessCheckState, str]:
     )
 
     if store_is_authority(root):
-        return _probe_runtime(root)
+        # The store answers only for the state directory of its own repository; a
+        # non-standard --state-dir would otherwise ask the runtime of another repository.
+        try:
+            repository = LifecycleLedger(root).repository()
+        except LedgerError as exc:
+            return AccessCheckState.DENIED, f"{exc.message} {exc.remedy}"
+        return _probe_runtime(repository)
     try:
         with LifecycleLedger(root).lock():
             return AccessCheckState.VERIFIED, "lock taken and released"
@@ -250,13 +256,13 @@ def _probe_ledger_lock(root: Path) -> tuple[AccessCheckState, str]:
         return _refusal(exc)
 
 
-def _probe_runtime(root: Path) -> tuple[AccessCheckState, str]:
+def _probe_runtime(repository: Path) -> tuple[AccessCheckState, str]:
     """In the runtime-store epoch every write goes through the runtime, so the access that a
     worker needs is an answer of the runtime of this repository; there is no lock to take."""
     from .runtime_client import RuntimeClient, RuntimeClientError
 
     try:
-        RuntimeClient(root.parents[2]).call(
+        RuntimeClient(repository).call(
             "status", operation_id=f"probe-{uuid.uuid4().hex}", timeout_seconds=5.0
         )
     except RuntimeClientError as exc:
