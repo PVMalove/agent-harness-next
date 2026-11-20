@@ -111,6 +111,13 @@ def test_explicit_invocation_preserves_unmanaged_codex_metadata(tmp_path: Path) 
     )
     skill = tmp_path / ".harness/skills/qa-gate"
     metadata = skill / "agents/openai.yaml"
+
+    # Simulate an installation from before qa-gate shipped Codex metadata.
+    lock = tmp_path / ".harness/harness.lock"
+    installed = json.loads(lock.read_text(encoding="utf-8"))
+    installed["files"].pop(metadata.relative_to(tmp_path).as_posix(), None)
+    lock.write_text(json.dumps(installed), encoding="utf-8")
+
     metadata.parent.mkdir(exist_ok=True)
     local = b'interface:\n  display_name: "Local QA"\n'
     metadata.write_bytes(local)
