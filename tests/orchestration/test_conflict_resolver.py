@@ -541,6 +541,24 @@ class ReportContractTests(ResolverFixture):
         with self.assertRaises(CoordinatorError):
             self.submit(brief, self.report(brief, self.published["candidate"]))
 
+    def test_a_resolver_report_never_carries_rebase_check_and_keeps_its_route(
+        self,
+    ) -> None:
+        brief, resolved = self.reported()
+        report = self.report(brief, resolved)
+        carrying = {**report, "rebase_check": {"rebased": []}}
+
+        with self.assertRaisesRegex(CoordinatorError, "only a rebaser report"):
+            self.submit(brief, carrying)
+        self.assertEqual(self.events(), [])
+
+        result = self.submit(brief, report)
+        self.assertEqual(result["state"], "reported")
+        [spent] = self.events()
+        self.assertEqual(
+            (spent["kind"], spent["dispatch_id"]), ("cycle-spent", brief["dispatch_id"])
+        )
+
     def test_another_role_may_not_carry_the_block(self) -> None:
         brief, resolved = self.reported()
         report = self.report(brief, resolved)
