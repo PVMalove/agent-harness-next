@@ -674,9 +674,11 @@ def start(args: argparse.Namespace) -> int:
                 time.sleep(0.02)
                 continue
             if isinstance(result, dict) and result.get("ready") is True:
-                # A worker that dies right after the task is still a startup failure.
-                time.sleep(max(0.0, started + STARTUP_CHECK_SECONDS - time.monotonic()))
-                if process.poll() is None:
+                # A worker that dies right after the task is still a startup failure. The window
+                # opens at the verdict: a probe longer than the window would leave none of it.
+                try:
+                    process.wait(timeout=STARTUP_CHECK_SECONDS)
+                except subprocess.TimeoutExpired:
                     return 0
                 break
             process.wait(timeout=STARTUP_CHECK_SECONDS)

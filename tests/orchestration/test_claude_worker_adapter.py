@@ -90,11 +90,13 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.prompt_dump = root / "prompt.txt"
         self.cwd_dump = root / "cwd.txt"
 
-    def fake_claude(self, exit_code: int) -> None:
+    def fake_claude(self, exit_code: int, probe_seconds: float = 0.0) -> None:
         script = self.bin / "claude"
         script.write_text(
             f"#!{sys.executable}\n"
-            + CLAUDE_PROBE
+            + CLAUDE_PROBE.replace(
+                "emit({'type': 'result'", f"time.sleep({probe_seconds})\nemit({{'type': 'result'"
+            )
             + f"Path({str(self.cwd_dump)!r}).write_text(os.getcwd())\n"
             + f"Path({str(self.prompt_dump)!r}).write_text(prompt, encoding='utf-8')\n"
             + f"sys.exit({exit_code})\n"
@@ -528,6 +530,12 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
     @POSIX_ONLY
     def test_worker_that_dies_at_startup_is_rejected(self) -> None:
         self.fake_claude(3)
+        self.assertEqual(self.run_adapter(), 1)
+
+    @POSIX_ONLY
+    def test_worker_that_dies_after_a_slow_probe_is_rejected(self) -> None:
+        # run_adapter() sets the startup window to 0.5 s; the probe alone outlasts it.
+        self.fake_claude(3, probe_seconds=1.0)
         self.assertEqual(self.run_adapter(), 1)
 
 
