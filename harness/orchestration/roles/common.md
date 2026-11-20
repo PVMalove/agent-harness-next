@@ -118,6 +118,13 @@ allowed paths. Protected branches and `integration/*` are never direct write tar
 active writer; role handoffs are sequential. A commit is evidence only after the required checks pass and its
 SHA is included in the completion report.
 
+When `git add` or `git commit` fails because the worktree's Git admin directory is read-only
+(`Unable to create '.../.git/worktrees/<name>/index.lock': Read-only file system`), commit with
+`python .harness/orchestration/coordinator.py --repo <main checkout> worktree commit --path <worktree> --message "<title>"`
+instead, adding `--pathspec <path>` for each file of a partial commit. This is the commit route the
+coordinator's preflight accepted, not a workaround. If that command refuses too, stop with a
+`tooling_blocker` for it.
+
 Never work around a hook, the safety classifier, the ledger or another tool that blocks a legitimate
 action: do not repeat the blocked action in another command form, through another tool, a script
 file, `eval` or another interpreter, or by splitting the command. Following the remedy the tool

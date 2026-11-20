@@ -45,6 +45,7 @@ from harness.orchestration import (
     operation_access,
     operational_guards,
     qa_lane,
+    worktree_lifecycle,
 )
 from harness.orchestration.core import config, constants, git_utils, utils, workspace
 from harness.orchestration.core.utils import JsonObject
@@ -2489,6 +2490,10 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertIn("single-session route", refused.remedy)
         self.assertNotIn("allowWrite", refused.remedy)
 
+    # The runtime of the test commits for a writer: these refusals hold where it does not.
+    @mock.patch.object(
+        worktree_lifecycle, "runtime_commits", mock.Mock(return_value=False)
+    )
     def test_batch_create_refuses_a_worktree_the_session_cannot_write(self) -> None:
         _git(
             self.repo,
@@ -2512,6 +2517,9 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(batch["state"], "planned")
         self.assertEqual(sorted(os.listdir(self.worktree)), before)
 
+    @mock.patch.object(
+        worktree_lifecycle, "runtime_commits", mock.Mock(return_value=False)
+    )
     def test_writer_preflight_and_send_refuse_a_read_only_git_metadata_directory(
         self,
     ) -> None:
@@ -2556,6 +2564,34 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         )
         self.assertEqual(status["dispatches"][0]["state"], "approved")
         self._start(brief["dispatch_id"])
+
+    def test_writer_preflight_passes_read_only_git_metadata_when_the_runtime_commits(
+        self,
+    ) -> None:
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps({"concurrency_budget": 99})
+        )
+        batch = self._create_batch()
+        self._accepted_architect(batch["batch_id"])
+        git_metadata = (self.repo / ".git" / "worktrees" / self.worktree.name).resolve()
+        args = self._args(
+            batch=batch["batch_id"],
+            role="developer",
+            purpose="work",
+            runtime="claude",
+            candidate_commit=None,
+        )
+
+        with (
+            self._read_only(git_metadata),
+            mock.patch.object(
+                worktree_lifecycle, "runtime_commits", return_value=True
+            ) as probe,
+        ):
+            prepared = coordinator.preflight_dispatch(args)
+
+        self.assertEqual(prepared["role"], "developer")
+        probe.assert_called_once()
 
     def test_in_process_send_refuses_a_read_only_artifact_directory(self) -> None:
         batch = self._create_batch()

@@ -67,7 +67,6 @@ from harness.orchestration.core.utils import (
 from harness.orchestration.core.workspace import (
     _agent_inbox,
     _prepare_agent_inbox,
-    _require_writable_worktree,
 )
 from harness.orchestration.ledger.ledger_ops import (
     read_state,
@@ -119,6 +118,7 @@ from harness.orchestration.workflow.publication import (
 )
 from harness.orchestration.workflow.recovery import verified_checkout
 from harness.orchestration.worktree_session import require_in_process_artifacts
+from harness.orchestration.worktree_lifecycle import require_committable_worktree
 
 
 def _worker_brief_path(repo: Path, root: Path, dispatch: JsonObject) -> Path:
@@ -502,7 +502,7 @@ def _reserve_handoff(
     entry = _unsent_entry(batch, dispatch, status, relaunch=relaunch)
     # The worktree may have become unwritable since preflight: refuse before the launch.
     if dispatch.get("access") == "write":
-        _require_writable_worktree(dispatch["worktree"])
+        require_committable_worktree(repo, dispatch["worktree"])
     # A developer is told to read the installed skill: refuse before anything is recorded.
     skill = developer_skill(repo) if dispatch.get("role") == "developer" else None
     if transport == "in-process":

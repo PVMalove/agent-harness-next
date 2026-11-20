@@ -181,7 +181,24 @@ def build_parser(
     )
     worktree_remove.add_argument("--path", required=True, help="worktree directory")
     worktree_remove.set_defaults(handler=handlers.remove_worktree)
-    for worktree_command in (worktree_create, worktree_remove):
+    worktree_commit = worktree_commands.add_parser(
+        "commit",
+        help="Stage and commit the changes of a managed worktree through the runtime",
+    )
+    worktree_commit.add_argument("--path", required=True, help="worktree directory")
+    message = worktree_commit.add_mutually_exclusive_group(required=True)
+    message.add_argument("--message", help="the commit message")
+    message.add_argument(
+        "--message-file", help="a UTF-8 file outside the worktree with the commit message"
+    )
+    worktree_commit.add_argument(
+        "--pathspec",
+        action="append",
+        help="a path to stage, relative to the worktree root and read literally; repeatable. "
+        "Default: every change of the worktree",
+    )
+    worktree_commit.set_defaults(handler=handlers.commit_worktree)
+    for worktree_command in (worktree_create, worktree_remove, worktree_commit):
         # The runtime serves one repository and reads no coordinator state: no `--state-dir` here.
         worktree_command.add_argument(
             "--repo", default=argparse.SUPPRESS, help="target project root"

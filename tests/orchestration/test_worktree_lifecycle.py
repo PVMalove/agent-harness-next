@@ -18,7 +18,11 @@ import pytest
 
 from harness.orchestration import coordinator, worktree_lifecycle
 from harness.orchestration.core.utils import CoordinatorError
-from harness.orchestration.runtime_client import RuntimeClientError, RuntimeReply
+from harness.orchestration.runtime_client import (
+    RuntimeClient,
+    RuntimeClientError,
+    RuntimeReply,
+)
 from tests.orchestration import runtime_store_support as support
 
 
@@ -77,6 +81,17 @@ class FakeRuntime:
                 "branch": branch,
                 "head": _git(self.repo, "rev-parse", "HEAD"),
                 "created": True,
+            }
+        elif operation == "worktree.commit":
+            pathspecs = payload.get("pathspecs")
+            literal = [f":(literal){spec}" for spec in pathspecs or []]
+            _git(Path(path), "add", "--all", "--", *literal)
+            _git(Path(path), "commit", "--quiet", "-m", str(payload["message"]))
+            result = {
+                "path": path,
+                "branch": _git(Path(path), "rev-parse", "--abbrev-ref", "HEAD"),
+                "head": _git(Path(path), "rev-parse", "HEAD"),
+                "committed": True,
             }
         else:
             _git(self.repo, "worktree", "remove", path)
@@ -452,6 +467,191 @@ def test_a_refusal_of_the_runtime_exits_2_with_its_code_in_the_remedy(
     assert lines[1].startswith("REMEDY: [policy_denied] ")
 
 
+def _issue_worktree(repo: Path, branch: str) -> Path:
+    tree = repo / ".harness" / ".sandboxes" / "worktrees" / branch.rsplit("/", 1)[-1]
+    _git(repo, "worktree", "add", "--quiet", "-b", branch, str(tree))
+    return tree
+
+
+def test_commit_asks_the_runtime_to_commit_the_named_paths(
+    repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-13-thirteen")
+    (tree / "kept.txt").write_text("one\n", encoding="utf-8")
+    (tree / "left.txt").write_text("two\n", encoding="utf-8")
+    message = tmp_path / "message.txt"
+    message.write_text("feat: kept\n\nbody line\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message-file",
+        str(message),
+        "--pathspec",
+        "kept.txt",
+    )
+
+    assert code == 0, err
+    report = json.loads(out)
+    assert report["committed"] is True
+    assert report["branch"] == "feature/issue-13-thirteen"
+    assert report["head"] == _git(tree, "rev-parse", "HEAD")
+    call = runtime.calls[0]
+    assert call["operation"] == "worktree.commit"
+    assert call["payload"] == {
+        "path": str(tree),
+        "message": "feat: kept\n\nbody line\n",
+        "pathspecs": ["kept.txt"],
+    }
+    assert call["requires_minor"] == worktree_lifecycle.WORKTREE_COMMIT_PROTOCOL_MINOR
+    assert _git(tree, "status", "--porcelain") == "?? left.txt"
+
+
+@pytest.mark.parametrize("branch", ["integration/team", "release-notes"])
+def test_commit_refuses_a_worktree_off_an_issue_branch_before_asking(
+    repo: Path,
+    branch: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, branch)
+    (tree / "added.txt").write_text("new\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message",
+        "feat: protected",
+    )
+
+    assert code == 2
+    assert out == ""
+    assert "issue branch" in err
+    assert runtime.calls == []
+    assert _git(tree, "status", "--porcelain") == "?? added.txt"
+
+
+def test_commit_refuses_a_detached_worktree_before_asking(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness" / ".sandboxes" / "worktrees" / "detached"
+    _git(repo, "worktree", "add", "--quiet", "--detach", str(tree))
+    runtime = FakeRuntime(repo)
+
+    code, _, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message",
+        "feat: detached",
+    )
+
+    assert code == 2
+    assert "detached HEAD" in err
+    assert runtime.calls == []
+
+
+def test_a_writable_worktree_commits_through_git(repo: Path) -> None:
+    tree = _issue_worktree(repo, "feature/issue-14-fourteen")
+    probe = mock.Mock(return_value=True)
+
+    with mock.patch.object(worktree_lifecycle, "runtime_commits", probe):
+        route = worktree_lifecycle.require_committable_worktree(repo, str(tree))
+
+    assert route == "git"
+    probe.assert_not_called()
+
+
+@pytest.mark.parametrize(("serves", "route"), [(True, "runtime"), (False, None)])
+def test_read_only_git_metadata_commits_through_a_runtime_that_serves_it(
+    repo: Path, serves: bool, route: str | None
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-15-fifteen")
+    refusal = CoordinatorError(
+        "the session cannot write to the git metadata directory /x: Read-only file system",
+        remedy="open write access",
+    )
+
+    with (
+        mock.patch.object(
+            worktree_lifecycle,
+            "_require_writable_worktree",
+            mock.Mock(side_effect=refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle, "runtime_commits", mock.Mock(return_value=serves)
+        ),
+    ):
+        if route is None:
+            with pytest.raises(CoordinatorError) as refused:
+                worktree_lifecycle.require_committable_worktree(repo, str(tree))
+            assert refused.value is refusal
+        else:
+            assert (
+                worktree_lifecycle.require_committable_worktree(repo, str(tree)) == route
+            )
+
+
+def test_an_unwritable_worktree_directory_is_refused_even_with_the_runtime(
+    repo: Path,
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-16-sixteen")
+    git_refusal = CoordinatorError("git metadata", remedy="open write access")
+    directory_refusal = CoordinatorError("issue worktree", remedy="open write access")
+
+    with (
+        mock.patch.object(
+            worktree_lifecycle,
+            "_require_writable_worktree",
+            mock.Mock(side_effect=git_refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle,
+            "_probe_writable_directory",
+            mock.Mock(side_effect=directory_refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle, "runtime_commits", mock.Mock(return_value=True)
+        ),
+        pytest.raises(CoordinatorError) as refused,
+    ):
+        worktree_lifecycle.require_committable_worktree(repo, str(tree))
+
+    assert refused.value is directory_refusal
+
+
+def test_a_runtime_that_never_started_serves_no_commit(repo: Path) -> None:
+    client = mock.Mock(wraps=RuntimeClient(repo))
+    client.paths.token = repo / "no-such-token"
+
+    with mock.patch.object(worktree_lifecycle, "RuntimeClient", return_value=client):
+        assert worktree_lifecycle.runtime_commits(repo) is False
+
+    client.call.assert_not_called()
+
+
 def test_the_real_runtime_creates_and_removes_a_managed_worktree(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -495,6 +695,22 @@ def test_the_real_runtime_creates_and_removes_a_managed_worktree(
         assert outside.returncode == 2
         assert "[policy_denied]" in outside.stderr
         assert not (tmp_path / "elsewhere").exists()
+
+        (tree / "added.txt").write_text("new\n", encoding="utf-8")
+        committed = support.coordinator(
+            project,
+            "worktree",
+            "commit",
+            "--path",
+            str(tree),
+            "--message",
+            "feat: commit through the runtime",
+        )
+
+        assert committed.returncode == 0, committed.stderr
+        assert json.loads(committed.stdout)["head"] == _git(tree, "rev-parse", "HEAD")
+        assert _git(tree, "log", "-1", "--format=%s") == "feat: commit through the runtime"
+        assert _git(tree, "status", "--porcelain") == ""
 
         removed = support.coordinator(
             project, "worktree", "remove", "--path", str(tree)
