@@ -18,6 +18,7 @@ from harness.configuration import (
 )
 from harness.configuration_schema import PACKAGE
 from harness.configuration_store import json_bytes
+from harness.errors import HarnessError
 from harness.health.project_files import validate_project_data
 from harness.json_types import JsonObject
 
@@ -35,7 +36,7 @@ def default_document(repo: Path, name: str) -> JsonObject:
         if not path.is_file():
             path = PACKAGE / "orchestration.example.json"
         return parse_object(path.read_bytes(), name)
-    from harness.bin.harness import render
+    from harness.package_snapshot import render
     from harness.health.project_tracker import resolve_project_tracker
 
     tracker = resolve_project_tracker(repo).effective
@@ -329,7 +330,7 @@ class RuntimeAdapterPreview:
 def preview_runtime_adapters(repo: Path) -> RuntimeAdapterPreview:
     """Preview adapter installation through update without changing capability selection."""
     import hashlib
-    from harness.bin.harness import (
+    from harness.package_snapshot import (
         load_lock,
         package_files,
         snapshot_diff,
@@ -341,7 +342,7 @@ def preview_runtime_adapters(repo: Path) -> RuntimeAdapterPreview:
 
     try:
         lock = load_lock(repo)
-    except SystemExit as exc:
+    except HarnessError as exc:
         raise ValueError("Не удалось прочитать snapshot харнесса") from exc
     if lock is None:
         raise ValueError("Сначала установите харнесс проекта")
@@ -417,7 +418,7 @@ def apply_runtime_adapters(
 ) -> str:
     """Apply only a confirmed fresh preview through the existing CLI update implementation."""
     import subprocess
-    from harness.bin.harness import HARNESS_CLI
+    from harness.package_snapshot import HARNESS_CLI
 
     if not confirmed:
         raise ValueError("Требуется явное подтверждение просмотра")

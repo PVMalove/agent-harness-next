@@ -1162,8 +1162,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
             result: Report | str
             try:
                 result = run()
-            except (Exception, SystemExit):
-                # `SystemExit`: the CLI helpers the checks use exit the process on a broken file.
+            except Exception:
                 result = "Операция не выполнена; проверьте окружение и доступы"
 
             def done() -> None:
