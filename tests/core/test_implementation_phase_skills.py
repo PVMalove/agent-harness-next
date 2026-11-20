@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from harness.bin.harness import package_files, seed_template_files
+from scripts.clean_room.install_and_update import check_workflow_procedures
 from tests.core.test_developer_skill import _frontmatter, _section
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -229,3 +230,8 @@ def test_named_installed_paths_are_delivered() -> None:
         if "<" not in match and match not in shipped
     }
     assert not missing, sorted(missing)
+
+
+def test_clean_room_checks_the_procedure_routes(tmp_path: Path) -> None:
+    """Fresh install and update keep the Claude Code and Codex procedure routes (#1162)."""
+    check_workflow_procedures(tmp_path)
