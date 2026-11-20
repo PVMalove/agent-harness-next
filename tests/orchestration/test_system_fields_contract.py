@@ -965,7 +965,7 @@ SUBSET_BINDINGS: dict[str, tuple[str, Iterable[str]]] = {
     ),
     "NO_GATE_WORK_ROLES": ("pipeline.role", contract.NO_GATE_WORK_ROLES),
     "REPO_MAP_POLICY_ROLES": ("pipeline.role", contract.REPO_MAP_POLICY_ROLES),
-    "RISK_ASSESSED_ROLES": ("pipeline.role", completion.RISK_ASSESSED_ROLES),
+    "RISK_ASSESSED_ROLES": ("pipeline.role", constants.RISK_ASSESSED_ROLES),
     "WORKER_ROLES_REQUIRING_ISSUE_WORKTREE": (
         "pipeline.role",
         runtime_attestation.WORKER_ROLES_REQUIRING_ISSUE_WORKTREE,
