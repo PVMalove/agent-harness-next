@@ -208,7 +208,7 @@ const HOME={
   ]}
 };
 const UPDATE={
-  current:'1.5.1',target:'2.0.0',channel:'pre-release',published:'04.11.2026',package:'pvmalove-suite',
+  current:'1.5.1',target:'2.0.0',channel:'pre-release',published:'04.11.2026',package:'engineering-suite',
   managed:259,skills:32,updateCount:12,createCount:1,conflictCount:1,keepCount:2,
   migration:{from:3,to:6,authority:'runtime-store',generation:36,audit:306,cutover:'27.10.2026'},
   changes:[
@@ -1080,7 +1080,7 @@ function updateDiag(){
 function installPath(){return projectPath||projectCurrent().path}
 function installProjectName(){const p=installPath();const cur=projectCurrent();return p===cur.path?cur.name:(p.split('/').filter(Boolean).at(-1)||cur.name)}
 function installCapability(){return CAPABILITIES.find(c=>c.id===projectCapability)||CAPABILITIES[0]}
-function installCommand(){return `harness update ${installPath()} --capability pvmalove-suite`}
+function installCommand(){return `harness update ${installPath()} --capability engineering-suite`}
 function installSteps(){
   const steps=[
     ['Выбор проекта','done'],['Предварительные проверки','active'],['Установка / внедрение','pending'],['Настройка','pending'],['Итоговая диагностика','pending']
@@ -1105,8 +1105,8 @@ function installProjectPage(){
   const h=healthTotals();
   return `<div class="install-wrap"><h1 class="sr-only">Проект</h1>${installSteps()}
   <div class="install-top-grid">
-    <section class="panel install-project"><div class="panel-head"><h2>Проект</h2><span class="small muted">Локальный Git</span></div><div class="install-project-body"><label class="field">Путь к локальному Git-проекту<input id="install-path" value="${esc(path)}"></label><div class="install-actions"><button class="btn" type="button" data-install-browse>${icon('folder')} Обзор папок</button><button class="btn" type="button" data-install-check>${icon('check')} Проверить путь</button><button class="btn primary" type="button" data-install-open>Открыть проект ${icon('chevron')}</button></div><div id="install-path-status" class="install-path-status ok">${icon('check')} ${esc(status)}</div><small>harness.lock есть · установлено: pvmalove-suite</small></div></section>
-    <section class="panel install-plan"><div class="panel-head"><h2>План установки</h2><span class="update-pill warn">обновление</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Проект</dt><dd id="install-project-name">${esc(installProjectName())}</dd></div><div><dt>Состав</dt><dd id="install-composition">${esc(cap.label)} (pvmalove-suite)</dd></div><div><dt>Конфликты</dt><dd><span class="install-ok">${icon('check')} Нет</span></dd></div></dl><div class="install-command-label">Команда</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Установить</button><span>Потребуется подтверждение</span></div></div></section>
+    <section class="panel install-project"><div class="panel-head"><h2>Проект</h2><span class="small muted">Локальный Git</span></div><div class="install-project-body"><label class="field">Путь к локальному Git-проекту<input id="install-path" value="${esc(path)}"></label><div class="install-actions"><button class="btn" type="button" data-install-browse>${icon('folder')} Обзор папок</button><button class="btn" type="button" data-install-check>${icon('check')} Проверить путь</button><button class="btn primary" type="button" data-install-open>Открыть проект ${icon('chevron')}</button></div><div id="install-path-status" class="install-path-status ok">${icon('check')} ${esc(status)}</div><small>harness.lock есть · установлено: engineering-suite</small></div></section>
+    <section class="panel install-plan"><div class="panel-head"><h2>План установки</h2><span class="update-pill warn">обновление</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Проект</dt><dd id="install-project-name">${esc(installProjectName())}</dd></div><div><dt>Состав</dt><dd id="install-composition">${esc(cap.label)} (engineering-suite)</dd></div><div><dt>Конфликты</dt><dd><span class="install-ok">${icon('check')} Нет</span></dd></div></dl><div class="install-command-label">Команда</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Установить</button><span>Потребуется подтверждение</span></div></div></section>
   </div>
   ${installFlow()}
   <div class="install-lower-grid">
@@ -1139,7 +1139,7 @@ function refreshInstallCapability(){
     const input=row.querySelector('[data-capability]');
     row.classList.toggle('on',input?.dataset.capability===projectCapability);
   });
-  const comp=$('#install-composition');if(comp)comp.textContent=`${cap.label} (pvmalove-suite)`;
+  const comp=$('#install-composition');if(comp)comp.textContent=`${cap.label} (engineering-suite)`;
   const foot=$('#install-cap-footer');if(foot)foot.textContent=cap.footer;
   const flowCap=document.querySelector('[data-flow-cap]');if(flowCap)flowCap.textContent=cap.label;
   const flowDesc=document.querySelector('[data-flow-cap-desc]');if(flowDesc)flowDesc.textContent=cap.desc;
@@ -1147,7 +1147,7 @@ function refreshInstallCapability(){
 
 function installConfirm(){
   if(!installPath().startsWith('/')){toast('Укажите корректный путь проекта');return}
-  reader('Подтверждение установки',`DEMO · INSTALL CONFIRM\n\nПроект: ${installProjectName()}\nПуть: ${installPath()}\nСостав: ${installCapability().label} (pvmalove-suite)\n\nКоманда:\n${installCommand()}\n\nБудут изменены только управляемые файлы Harness. Потребуется подтверждение. В макете установка не выполняется.`);
+  reader('Подтверждение установки',`DEMO · INSTALL CONFIRM\n\nПроект: ${installProjectName()}\nПуть: ${installPath()}\nСостав: ${installCapability().label} (engineering-suite)\n\nКоманда:\n${installCommand()}\n\nБудут изменены только управляемые файлы Harness. Потребуется подтверждение. В макете установка не выполняется.`);
   toast('Подтверждение открыто; установка не выполняется');
 }
 function projectHubPage(){
@@ -1161,7 +1161,7 @@ function projectHubPage(){
   <div class="project-grid"><div class="project-left"><section class="panel projects-panel"><div class="panel-head"><h2>Проекты</h2><span class="small muted">${projectListAll().length} найдено</span></div><div class="project-list">${projectList()}</div><div class="project-list-foot">Выберите проект, чтобы увидеть проверки справа.</div></section><section class="panel project-path-panel"><div class="panel-head"><h2>Путь к другому проекту</h2><span class="small muted">демо-проверка</span></div><div class="project-path-body"><label class="field">Путь к локальному Git-проекту<input id="project-path" value="${esc(projectPath)}" placeholder="/home/…/project"></label><button class="btn" type="button" data-project-check>${icon('check')} Проверить путь</button></div><div class="project-path-info"><span id="project-path-status">${esc(projectPathStatus)}</span><span class="project-hint">В макете путь проверяется без чтения Git, branch и .harness.</span></div></section></div><div id="project-detail">${projectDetail()}</div></div>
   ${installFlow()}
   <div class="install-bottom-grid">
-    <section class="panel install-plan"><div class="panel-head"><h2>План установки</h2><span class="update-pill warn">обновление</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Проект</dt><dd>${esc(installProjectName())}</dd></div><div><dt>Состав</dt><dd id="install-composition">${esc(installCapability().label)} (pvmalove-suite)</dd></div><div><dt>Конфликты</dt><dd><span class="install-ok">${icon('check')} Нет</span></dd></div></dl><div class="install-command-label">Команда</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Установить</button><span>Потребуется подтверждение</span></div></div></section>
+    <section class="panel install-plan"><div class="panel-head"><h2>План установки</h2><span class="update-pill warn">обновление</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Проект</dt><dd>${esc(installProjectName())}</dd></div><div><dt>Состав</dt><dd id="install-composition">${esc(installCapability().label)} (engineering-suite)</dd></div><div><dt>Конфликты</dt><dd><span class="install-ok">${icon('check')} Нет</span></dd></div></dl><div class="install-command-label">Команда</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Установить</button><span>Потребуется подтверждение</span></div></div></section>
     <section class="panel install-capabilities"><div class="panel-head"><h2>Состав Harness</h2><span class="small muted">что будет установлено</span></div><div class="cap-list">${CAPABILITIES.map(c=>`<label class="cap-row ${c.id===projectCapability?'on':''}"><input type="radio" name="install-capability" data-capability="${c.id}" ${c.id===projectCapability?'checked':''}><span class="cap-copy"><b>${c.label}</b>${c.status?`<span class="cap-status">${c.status}</span>`:''}<small>${c.desc}</small></span></label>`).join('')}</div><p id="install-cap-footer" class="cap-footer">${esc(installCapability().footer)}</p></section>
     <section class="panel install-checks"><div class="panel-head"><h2>Проверки</h2><span class="small muted">${hh.run} из ${hh.total} проверено</span></div><div class="install-checks-body"><div class="install-check-actions"><button class="chip ${healthMode==='offline'?'on':''}" type="button" data-health-mode="offline">Офлайн</button><button class="chip ${healthMode==='online'?'on':''}" type="button" data-health-mode="online">Онлайн</button><a class="btn" href="#diagnostics">${icon('pulse')} Исправить</a><a class="btn" href="#configuration">${icon('settings')} Настройка</a></div><div class="install-health"><span class="ok">${icon('check')} ${hh.ok} пройдено</span><span class="warn">${icon('warning')} ${hh.warn} внимание</span><span class="err">${icon('x')} ${hh.fail} ошибки</span><span class="skip">${icon('clock')} ${hh.skipped} не проверено</span></div><div class="install-health-bar" role="img" aria-label="Проверено ${hh.run} из ${hh.total}"><span class="ok" style="width:${hh.ok/hh.total*100}%"></span><span class="warn" style="width:${hh.warn/hh.total*100}%"></span><span class="fail" style="width:${hh.fail/hh.total*100}%"></span><span class="skip" style="width:${hh.skipped/hh.total*100}%"></span></div><p id="install-mode-note" class="install-checks-note">Онлайн — отдельная проверка GitHub/GitLab и прав доступа. Проверки песочницы анализируют настройки; фактические доступы могут остаться непроверенными.</p></div></section>
   </div>`;

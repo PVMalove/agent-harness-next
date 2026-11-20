@@ -208,7 +208,7 @@ const HOME={
   ]}
 };
 const UPDATE={
-  current:'1.5.1',target:'2.0.0',channel:'pre-release',published:'04.11.2026',package:'pvmalove-suite',
+  current:'1.5.1',target:'2.0.0',channel:'pre-release',published:'04.11.2026',package:'engineering-suite',
   managed:259,skills:32,updateCount:12,createCount:1,conflictCount:1,keepCount:2,
   migration:{from:3,to:6,authority:'runtime-store',generation:36,audit:306,cutover:'27.10.2026'},
   changes:[
@@ -1080,7 +1080,7 @@ function updateDiag(){
 function installPath(){return projectPath||projectCurrent().path}
 function installProjectName(){const p=installPath();const cur=projectCurrent();return p===cur.path?cur.name:(p.split('/').filter(Boolean).at(-1)||cur.name)}
 function installCapability(){return CAPABILITIES.find(c=>c.id===projectCapability)||CAPABILITIES[0]}
-function installCommand(){return `harness update ${installPath()} --capability pvmalove-suite`}
+function installCommand(){return `harness update ${installPath()} --capability engineering-suite`}
 function installSteps(){
   const steps=[
     ['Project selection','done'],['Pre-checks','active'],['Install / integrate','pending'],['Setup','pending'],['Final diagnostics','pending']
@@ -1105,8 +1105,8 @@ function installProjectPage(){
   const h=healthTotals();
   return `<div class="install-wrap"><h1 class="sr-only">Project</h1>${installSteps()}
   <div class="install-top-grid">
-    <section class="panel install-project"><div class="panel-head"><h2>Project</h2><span class="small muted">Local Git</span></div><div class="install-project-body"><label class="field">Path to the local Git project<input id="install-path" value="${esc(path)}"></label><div class="install-actions"><button class="btn" type="button" data-install-browse>${icon('folder')} Browse folders</button><button class="btn" type="button" data-install-check>${icon('check')} Check path</button><button class="btn primary" type="button" data-install-open>Open project ${icon('chevron')}</button></div><div id="install-path-status" class="install-path-status ok">${icon('check')} ${esc(status)}</div><small>harness.lock exists · installed: pvmalove-suite</small></div></section>
-    <section class="panel install-plan"><div class="panel-head"><h2>Install plan</h2><span class="update-pill warn">update</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Project</dt><dd id="install-project-name">${esc(installProjectName())}</dd></div><div><dt>Contents</dt><dd id="install-composition">${esc(cap.label)} (pvmalove-suite)</dd></div><div><dt>Conflicts</dt><dd><span class="install-ok">${icon('check')} None</span></dd></div></dl><div class="install-command-label">Command</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Install</button><span>Confirmation required</span></div></div></section>
+    <section class="panel install-project"><div class="panel-head"><h2>Project</h2><span class="small muted">Local Git</span></div><div class="install-project-body"><label class="field">Path to the local Git project<input id="install-path" value="${esc(path)}"></label><div class="install-actions"><button class="btn" type="button" data-install-browse>${icon('folder')} Browse folders</button><button class="btn" type="button" data-install-check>${icon('check')} Check path</button><button class="btn primary" type="button" data-install-open>Open project ${icon('chevron')}</button></div><div id="install-path-status" class="install-path-status ok">${icon('check')} ${esc(status)}</div><small>harness.lock exists · installed: engineering-suite</small></div></section>
+    <section class="panel install-plan"><div class="panel-head"><h2>Install plan</h2><span class="update-pill warn">update</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Project</dt><dd id="install-project-name">${esc(installProjectName())}</dd></div><div><dt>Contents</dt><dd id="install-composition">${esc(cap.label)} (engineering-suite)</dd></div><div><dt>Conflicts</dt><dd><span class="install-ok">${icon('check')} None</span></dd></div></dl><div class="install-command-label">Command</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Install</button><span>Confirmation required</span></div></div></section>
   </div>
   ${installFlow()}
   <div class="install-lower-grid">
@@ -1139,7 +1139,7 @@ function refreshInstallCapability(){
     const input=row.querySelector('[data-capability]');
     row.classList.toggle('on',input?.dataset.capability===projectCapability);
   });
-  const comp=$('#install-composition');if(comp)comp.textContent=`${cap.label} (pvmalove-suite)`;
+  const comp=$('#install-composition');if(comp)comp.textContent=`${cap.label} (engineering-suite)`;
   const foot=$('#install-cap-footer');if(foot)foot.textContent=cap.footer;
   const flowCap=document.querySelector('[data-flow-cap]');if(flowCap)flowCap.textContent=cap.label;
   const flowDesc=document.querySelector('[data-flow-cap-desc]');if(flowDesc)flowDesc.textContent=cap.desc;
@@ -1147,7 +1147,7 @@ function refreshInstallCapability(){
 
 function installConfirm(){
   if(!installPath().startsWith('/')){toast('Enter a valid project path');return}
-  reader('Install confirmation',`DEMO · INSTALL CONFIRM\n\nProject: ${installProjectName()}\nPath: ${installPath()}\nContents: ${installCapability().label} (pvmalove-suite)\n\nCommand:\n${installCommand()}\n\nOnly managed Harness files will change. Confirmation is required. The mockup does not run the install.`);
+  reader('Install confirmation',`DEMO · INSTALL CONFIRM\n\nProject: ${installProjectName()}\nPath: ${installPath()}\nContents: ${installCapability().label} (engineering-suite)\n\nCommand:\n${installCommand()}\n\nOnly managed Harness files will change. Confirmation is required. The mockup does not run the install.`);
   toast('Confirmation opened; installation does not run');
 }
 function projectHubPage(){
@@ -1161,7 +1161,7 @@ function projectHubPage(){
   <div class="project-grid"><div class="project-left"><section class="panel projects-panel"><div class="panel-head"><h2>Projects</h2><span class="small muted">${projectListAll().length} found</span></div><div class="project-list">${projectList()}</div><div class="project-list-foot">Select a project to see the checks on the right.</div></section><section class="panel project-path-panel"><div class="panel-head"><h2>Path to another project</h2><span class="small muted">demo check</span></div><div class="project-path-body"><label class="field">Path to the local Git project<input id="project-path" value="${esc(projectPath)}" placeholder="/home/…/project"></label><button class="btn" type="button" data-project-check>${icon('check')} Check path</button></div><div class="project-path-info"><span id="project-path-status">${esc(projectPathStatus)}</span><span class="project-hint">In the mockup, the path is checked without reading Git, branch, or .harness.</span></div></section></div><div id="project-detail">${projectDetail()}</div></div>
   ${installFlow()}
   <div class="install-bottom-grid">
-    <section class="panel install-plan"><div class="panel-head"><h2>Install plan</h2><span class="update-pill warn">update</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Project</dt><dd>${esc(installProjectName())}</dd></div><div><dt>Contents</dt><dd id="install-composition">${esc(installCapability().label)} (pvmalove-suite)</dd></div><div><dt>Conflicts</dt><dd><span class="install-ok">${icon('check')} None</span></dd></div></dl><div class="install-command-label">Command</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Install</button><span>Confirmation required</span></div></div></section>
+    <section class="panel install-plan"><div class="panel-head"><h2>Install plan</h2><span class="update-pill warn">update</span></div><div class="install-plan-body"><dl class="install-plan-facts"><div><dt>Project</dt><dd>${esc(installProjectName())}</dd></div><div><dt>Contents</dt><dd id="install-composition">${esc(installCapability().label)} (engineering-suite)</dd></div><div><dt>Conflicts</dt><dd><span class="install-ok">${icon('check')} None</span></dd></div></dl><div class="install-command-label">Command</div><pre id="install-command" class="install-command">${esc(installCommand())}</pre><div class="install-plan-actions"><button class="btn primary" type="button" data-install-apply>${icon('download')} Install</button><span>Confirmation required</span></div></div></section>
     <section class="panel install-capabilities"><div class="panel-head"><h2>Harness contents</h2><span class="small muted">what will be installed</span></div><div class="cap-list">${CAPABILITIES.map(c=>`<label class="cap-row ${c.id===projectCapability?'on':''}"><input type="radio" name="install-capability" data-capability="${c.id}" ${c.id===projectCapability?'checked':''}><span class="cap-copy"><b>${c.label}</b>${c.status?`<span class="cap-status">${c.status}</span>`:''}<small>${c.desc}</small></span></label>`).join('')}</div><p id="install-cap-footer" class="cap-footer">${esc(installCapability().footer)}</p></section>
     <section class="panel install-checks"><div class="panel-head"><h2>Checks</h2><span class="small muted">${hh.run} of ${hh.total} checked</span></div><div class="install-checks-body"><div class="install-check-actions"><button class="chip ${healthMode==='offline'?'on':''}" type="button" data-health-mode="offline">Offline</button><button class="chip ${healthMode==='online'?'on':''}" type="button" data-health-mode="online">Online</button><a class="btn" href="#diagnostics">${icon('pulse')} Fix</a><a class="btn" href="#configuration">${icon('settings')} Settings</a></div><div class="install-health"><span class="ok">${icon('check')} ${hh.ok} passed</span><span class="warn">${icon('warning')} ${hh.warn} warnings</span><span class="err">${icon('x')} ${hh.fail} errors</span><span class="skip">${icon('clock')} ${hh.skipped} not checked</span></div><div class="install-health-bar" role="img" aria-label="Checked ${hh.run} of ${hh.total}"><span class="ok" style="width:${hh.ok/hh.total*100}%"></span><span class="warn" style="width:${hh.warn/hh.total*100}%"></span><span class="fail" style="width:${hh.fail/hh.total*100}%"></span><span class="skip" style="width:${hh.skipped/hh.total*100}%"></span></div><p id="install-mode-note" class="install-checks-note">Online — a separate check of GitHub/GitLab and access rights. Sandbox checks analyze settings; actual access may stay unverified.</p></div></section>
   </div>`;
