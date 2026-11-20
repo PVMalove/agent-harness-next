@@ -3,10 +3,12 @@
 from pathlib import Path
 
 from harness.orchestration.core.constants import (
-    NEXT_ACTION_DISPATCH_ROLE,
     REPORT_FIELDS,
+    SPECIALIST_WRITER_ROLES,
+    dispatch_role_for_action,
 )
 from harness.orchestration.runtime_attestation import (
+    ISSUE_WORKTREE_WRITER_ROLES,
     WORKER_ROLES_REQUIRING_ISSUE_WORKTREE,
 )
 
@@ -32,12 +34,11 @@ def test_qa_role_is_the_qa_run_lane_without_a_model_worker() -> None:
     assert "incomplete_items" not in qa
 
 
-def test_specialist_roles_without_a_route_say_so() -> None:
-    for name in ("database-migrations", "messaging-integration"):
-        assert name not in NEXT_ACTION_DISPATCH_ROLE.values()
-        assert "no dispatch route" in _role(name)
-        assert "#1159" in _role(name)
-    assert "belong to their respective roles" not in _role("developer")
+def test_specialist_manifests_describe_how_to_select_their_writer_route() -> None:
+    for role in SPECIALIST_WRITER_ROLES:
+        assert f"`--writer-role {role}`" in _role(role)
+        assert role in ISSUE_WORKTREE_WRITER_ROLES
+        assert dispatch_role_for_action({"writer_role": role}, "developer") == role
 
 
 def test_common_contract_names_every_attested_role_once() -> None:

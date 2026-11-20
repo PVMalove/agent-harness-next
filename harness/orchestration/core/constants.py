@@ -9,8 +9,10 @@ depend on it.
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from enum import StrEnum
 from pathlib import Path
+from typing import cast
 
 STATE_REL = Path(".harness/orchestration/state")
 SENSITIVE_KEY = re.compile(
@@ -285,7 +287,8 @@ RETRY_REASON_CATEGORIES = tuple(RetryReason)
 # forced abandon it resumes from the abandoned batch's ``last_accepted`` record instead of
 # repeating the architect stage and cherry-picking the accepted commits by hand.
 RECOVERY_ROUTES = tuple(RecoveryRoute)
-# The role a next-action dispatch runs as: ``publish`` is a purpose of the developer role.
+# Dispatch actions and their default roles. An explicit batch owner replaces the developer
+# default for implementation, retry and publication.
 NEXT_ACTION_DISPATCH_ROLE = {
     "architect": "architect",
     "developer-retry": "developer",
@@ -298,6 +301,38 @@ NEXT_ACTION_DISPATCH_ROLE = {
     # Issue #1010: a moved integration base is carried by the narrow rebaser writer (ADR 0034).
     "rebase": "rebaser",
 }
+SPECIALIST_WRITER_ROLES = ("database-migrations", "messaging-integration")
+BATCH_WRITER_ROLES = ("developer", *SPECIALIST_WRITER_ROLES)
+
+
+def batch_writer_role(batch: Mapping[str, object]) -> str:
+    """Return the implementation role pinned to a batch.
+
+    Args:
+        batch: Batch record or immutable plan with an optional ``writer_role``.
+
+    Returns:
+        The selected role, or ``developer`` for records without an explicit owner.
+    """
+    return cast(str, batch.get("writer_role", "developer"))
+
+
+def dispatch_role_for_action(batch: Mapping[str, object], action: str) -> str | None:
+    """Resolve the dispatch role for the batch's next action.
+
+    Args:
+        batch: Batch record with the pinned implementation owner.
+        action: Lifecycle action, such as ``developer-retry`` or ``publish``.
+
+    Returns:
+        The pinned owner for implementation, retry, and publish, the assigned role for another
+        dispatch action, or ``None`` when the action has no associated dispatch.
+    """
+    if action in {"developer", "developer-retry", "publish"}:
+        return batch_writer_role(batch)
+    return NEXT_ACTION_DISPATCH_ROLE.get(action)
+
+
 DISPATCH_PURPOSES = {"work", "verification", "publish"}
 # The gates `batch create --required-gate` may name; a batch that names none records `none`.
 REQUIRED_GATES = ("none", "review", "qa")
@@ -532,7 +567,9 @@ REPORT_OPTIONAL_FIELDS = {
 QA_STAGES_FIELDS = frozenset({"stages", "failed_stage", "code_checks_started"})
 QA_STAGES_OPTIONAL_FIELDS = frozenset({"diagnosis"})
 QA_STAGE_ENTRY_FIELDS = frozenset({"stage", "command", "result", "exit_code"})
-QA_STAGE_ENTRY_OPTIONAL_FIELDS = frozenset({"executed_command", "diagnostics", "domain"})
+QA_STAGE_ENTRY_OPTIONAL_FIELDS = frozenset(
+    {"executed_command", "diagnostics", "domain"}
+)
 # The failure domains harness-runtime classifies the ending of a containerised QA command as
 # (ADR 0022, section 3); a stage entry names one only when its exit code is not its own result.
 QA_STAGE_DOMAINS = ("infrastructure", "tooling", "timeout", "cancelled", "unknown")

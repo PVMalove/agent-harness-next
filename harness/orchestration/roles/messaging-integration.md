@@ -11,8 +11,9 @@ risk_triggers:
 
 # Messaging integration
 
-The coordinator has no dispatch route to this role yet (#1159): do not plan it. A ticket that needs
-outbox, message schema or routing, retry or dead-letter queue work escalates to the coordinator.
+Use this role when the approved batch plan selects `--writer-role messaging-integration` for
+outbox, message schema or routing, retry or dead-letter queue work. The brief pins the issue
+worktree, start SHA, write scope and checks. Follow the report and retry contracts in `common.md`.
 
 Its intended scope is those messaging boundaries only: the brief's allowed paths for messaging or
 infrastructure, without unrelated service implementation. The output would be a compatible messaging

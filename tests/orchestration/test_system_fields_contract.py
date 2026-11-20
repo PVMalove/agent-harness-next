@@ -929,6 +929,8 @@ CLI_BINDINGS: dict[CommandOption, tuple[str, str]] = {
         EQUAL,
     ),
     (("batch", "create"), "--required-gate"): ("batch.required_gate", EQUAL),
+    (("batch", "create"), "--writer-role"): ("pipeline.role", SUBSET),
+    (("batch", "preflight"), "--writer-role"): ("pipeline.role", SUBSET),
     (("batch", "list"), "--state"): ("batch.state", EQUAL),
     (("batch", "rewind"), "--to"): ("pipeline.rewind_stage", EQUAL),
     (("batch", "decide"), "--decision"): ("batch.decision", EQUAL),
@@ -1643,6 +1645,7 @@ REQUIRED_ARGS: dict[tuple[str, ...], list[str]] = {
         *("--ticket", "#1", "--branch", "feature/x", "--worktree", "w"),
         *("--definition-of-done", "done", "--prohibited-change", "none"),
     ],
+    ("batch", "preflight"): ["--ticket", "#1", "--definition-of-done", "done"],
     ("batch", "list"): [],
     ("batch", "rewind"): [
         *("--batch", "b", "--approved-by", "a", "--approved-at", "t", "--note", "n")

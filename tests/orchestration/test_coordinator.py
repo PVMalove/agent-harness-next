@@ -3981,15 +3981,272 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             code = coordinator.main()
         return code, out.getvalue(), err.getvalue()
 
-    def _batch_create_cli(self) -> tuple[int, str, str]:
+    def _batch_create_cli(
+        self, *extra: str, allowed_path: str = "**"
+    ) -> tuple[int, str, str]:
         return self._coordinator_cli(
             "batch", "create", "--ticket", "#244", "--branch", self.branch,
-            "--worktree", str(self.worktree), "--allowed-path", "**",
+            "--worktree", str(self.worktree), "--allowed-path", allowed_path,
             "--integration-ref", "master",
             "--definition-of-done", "route retries by cause",
             "--prohibited-change", "secrets", "--expected-file", "services/x.py",
             "--expected-service", "core", "--expected-changed-lines", "10",
+            *extra,
         )  # fmt: skip
+
+    def _configure_specialist_writers(
+        self, write_paths: dict[str, list[str]] | None = None
+    ) -> None:
+        """Install real role manifests and a test assignment configuration.
+
+        Args:
+            write_paths: Optional scope ceilings by role. Other roles use the shipped example.
+        """
+        roles = self.repo / ".harness" / "orchestration" / "roles"
+        for manifest in (ORCHESTRATION_ROOT / "roles").glob("*.md"):
+            shutil.copyfile(manifest, roles / manifest.name)
+        config = json.loads(
+            (ORCHESTRATION_ROOT.parent / "orchestration.example.json").read_text()
+        )
+        config.update(
+            approval_policy="manual_all",
+            verification_commands=["true"],
+            developer_verification_commands=["true"],
+            review_verification_commands=["true"],
+        )
+        config.pop("approval_ttl_seconds", None)
+        for plan in config["assignment_plans"].values():
+            plan["runtimes"]["claude"]["model"] = "sonnet"
+        for role, paths in (write_paths or {}).items():
+            config["assignment_plans"][role]["write_paths"] = paths
+        (self.repo / ".harness" / "orchestration.json").write_text(
+            json.dumps(config), encoding="utf-8"
+        )
+
+    def test_only_the_planned_specialist_can_propose_work_after_architect_acceptance(
+        self,
+    ) -> None:
+        self._configure_specialist_writers()
+        _git(
+            self.repo,
+            "worktree",
+            "add",
+            "-b",
+            self.branch,
+            str(self.worktree),
+            "master",
+        )
+        code, out, err = self._batch_create_cli("--writer-role", "database-migrations")
+        self.assertEqual(code, 0, err)
+        plan = json.loads(out)
+        self.assertEqual(plan["writer_role"], "database-migrations")
+        batch_id = plan["batch_id"]
+        coordinator.approve_batch(self._args(batch=batch_id, **self._approval()))
+
+        with self.assertRaisesRegex(
+            coordinator.CoordinatorError, "accepted architect report"
+        ):
+            self._propose(batch_id, "database-migrations")
+
+        self._accepted_architect(batch_id)
+
+        with self.assertRaisesRegex(
+            coordinator.CoordinatorError, "coordinator-prepared next action"
+        ):
+            self._propose(batch_id, "developer")
+        spare = self.tmp / "unrelated-checkout"
+        _git(self.repo, "worktree", "add", "--detach", str(spare), "master")
+        preflight = (
+            "dispatch",
+            "preflight",
+            "--batch",
+            batch_id,
+            "--role",
+            "database-migrations",
+        )
+        code, _, err = self._coordinator_cli(*preflight, "--worktree", str(spare))
+        self.assertEqual(code, 2)
+        self.assertIn("does not match the expected worker checkout", err)
+        code, _, err = self._coordinator_cli(
+            *preflight, "--worktree", str(self.worktree)
+        )
+        self.assertEqual(code, 0, err)
+
+        brief = self._dispatch(batch_id, "database-migrations")["brief"]
+        self.assertEqual(brief["role"], "database-migrations")
+        self.assertEqual(brief["write_paths"], ["**"])
+        self.assertEqual(
+            brief["snapshot_commit"], _git(self.worktree, "rev-parse", "HEAD")
+        )
+        with self.assertRaisesRegex(
+            coordinator.CoordinatorError, "awaiting explicit approval"
+        ):
+            self._propose(batch_id, "database-migrations")
+
+    def test_a_specialist_batch_uses_the_selected_roles_write_ceiling(self) -> None:
+        self._configure_specialist_writers(
+            {"developer": ["services/**"], "database-migrations": ["migrations/**"]}
+        )
+        _git(self.repo, "worktree", "add", "-b", self.branch, str(self.worktree), "master")
+        owner = ("--writer-role", "database-migrations")
+
+        code, _, err = self._batch_create_cli(*owner, allowed_path="services/**")
+        self.assertEqual(code, 2)
+        self.assertIn("exceed the database-migrations write ceiling", err)
+
+        code, out, err = self._batch_create_cli(*owner, allowed_path="migrations/**")
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads(out)["allowed_paths"], ["migrations/**"])
+
+    def test_specialist_candidate_reaches_publish_through_independent_review_and_qa(
+        self,
+    ) -> None:
+        for role, trigger in (
+            ("database-migrations", "schema-change"),
+            ("messaging-integration", "outbox"),
+        ):
+            with self.subTest(role=role):
+                self._reset()
+                self._configure_specialist_writers()
+                _git(
+                    self.repo,
+                    "worktree",
+                    "add",
+                    "-b",
+                    self.branch,
+                    str(self.worktree),
+                    "master",
+                )
+                code, out, err = self._batch_create_cli("--writer-role", role)
+                self.assertEqual(code, 0, err)
+                self.batch_id = batch_id = json.loads(out)["batch_id"]
+                coordinator.approve_batch(
+                    self._args(batch=batch_id, **self._approval())
+                )
+                self._accepted_architect(batch_id)
+
+                brief = self._dispatch(batch_id, role)["brief"]
+                self._start(brief["dispatch_id"])
+                candidate, _ = self._developer_commit("specialist")
+                changed = ["services/specialist.py"]
+                self._submit(
+                    brief["dispatch_id"],
+                    self._base_report(
+                        brief,
+                        role,
+                        commit_sha=candidate,
+                        changed_files=changed,
+                        risk_triggers=[trigger],
+                    ),
+                )
+                self._decide(batch_id, "accept")
+                risk = coordinator.assess_risk(
+                    self._args(
+                        batch=batch_id,
+                        candidate_commit=candidate,
+                        base_commit=None,
+                        changed_file=changed,
+                        developer_trigger=[],
+                    )
+                )
+                self.assertIn(trigger, risk["matched_triggers"])
+                with self.assertRaises(coordinator.CoordinatorError):
+                    self._propose(
+                        batch_id, role, purpose="publish", candidate=candidate
+                    )
+
+                self._reported_review(batch_id, candidate)
+                self._decide(batch_id, "accept")
+                qa = self._dispatch(batch_id, "qa", candidate=candidate)["brief"]
+                coordinator.run_qa(
+                    argparse.Namespace(
+                        repo=str(self.repo),
+                        dispatch=qa["dispatch_id"],
+                        lease_seconds=None,
+                    )
+                )
+                self._decide(batch_id, "accept")
+                qa_proof = coordinator.qa_evidence(
+                    argparse.Namespace(
+                        repo=str(self.repo),
+                        ticket="#244",
+                        branch=self.branch,
+                        candidate_commit=candidate,
+                    )
+                )
+                self.assertEqual(qa_proof["candidate_commit"], candidate)
+                publish = self._dispatch(
+                    batch_id, role, purpose="publish", candidate=candidate
+                )["brief"]
+                result = coordinator.publish_dispatch(
+                    self._args(dispatch=publish["dispatch_id"], remote="origin")
+                )
+
+                self.assertEqual(result["candidate_commit"], candidate)
+                self.assertEqual(
+                    _git(self.repo, "ls-remote", "origin", self.branch).split()[0],
+                    candidate,
+                )
+                self.assertEqual(self._decide(batch_id, "accept")["state"], "completed")
+
+    def test_blocked_specialist_resumes_at_its_pinned_sha_and_cannot_report_outside_scope(
+        self,
+    ) -> None:
+        self._configure_specialist_writers()
+        _git(
+            self.repo,
+            "worktree",
+            "add",
+            "-b",
+            self.branch,
+            str(self.worktree),
+            "master",
+        )
+        role = "messaging-integration"
+        code, out, err = self._batch_create_cli(
+            "--writer-role", role, allowed_path="services/messages/**"
+        )
+        self.assertEqual(code, 0, err)
+        self.batch_id = batch_id = json.loads(out)["batch_id"]
+        coordinator.approve_batch(self._args(batch=batch_id, **self._approval()))
+        self._accepted_architect(batch_id)
+        initial = self._dispatch(batch_id, role)["brief"]
+        self._start(initial["dispatch_id"])
+        snapshot = _git(self.worktree, "rev-parse", "HEAD")
+        self._submit(
+            initial["dispatch_id"],
+            self._base_report(
+                initial,
+                role,
+                commit_sha=snapshot,
+                outcome="blocked",
+                blockers={"status": "present", "details": "worker transport failed"},
+            ),
+        )
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "planned writer messaging-integration"):
+            self._decide(batch_id, "retry", retry_role="developer")
+        self._decide(batch_id, "retry", reason_category="transport")
+
+        code, out, err = self._coordinator_cli(
+            "recovery", "resume", "--batch", batch_id
+        )
+        self.assertEqual(code, 0, err)
+        self.assertIn(f"--role {role}", json.loads(out)["next"]["command"])
+        retry = self._dispatch(batch_id, role)["brief"]
+        self.assertEqual(retry["snapshot_commit"], snapshot)
+        self.assertEqual(retry["write_paths"], ["services/messages/**"])
+        self._start(retry["dispatch_id"])
+        outside, _ = self._developer_commit("outside")
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "approved scope"):
+            self._submit(
+                retry["dispatch_id"],
+                self._base_report(
+                    retry,
+                    role,
+                    commit_sha=outside,
+                    changed_files=["services/outside.py"],
+                ),
+            )
 
     def test_batch_create_refuses_a_branch_that_starts_below_the_integration_tip(
         self,

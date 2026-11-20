@@ -35,6 +35,8 @@ TRANSITION_FIELDS = (
 # digests a docker dispatch pinned (issue #704), so every transition without one keeps the digest
 # it always had.
 OPTIONAL_TRANSITION_FIELDS = (
+    "writer_role",
+    "allowed_paths",
     "retry_reason_sha256",
     "configuration_sha256",
     "recovery_event_sha256",
@@ -166,6 +168,7 @@ def transition_digest(transition: Mapping[str, object]) -> str:
         raise GuardError(
             "a transition must carry exactly the fields an approval binds",
             remedy=f"provide exactly: {', '.join(TRANSITION_FIELDS)}, plus "
+            "writer_role and allowed_paths when the batch explicitly selects a writer, "
             "retry_reason_sha256 only when the brief carries an architect retry reason, "
             "configuration_sha256 for a new brief's pinned config, "
             "recovery_event_sha256 only after an audited recovery, "

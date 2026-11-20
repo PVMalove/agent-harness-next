@@ -9,6 +9,10 @@ from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 from typing import NoReturn, cast
 
+from harness.orchestration.core.constants import (
+    batch_writer_role,
+    dispatch_role_for_action,
+)
 from harness.orchestration.core.git_utils import _run_git, git_environment, git_failure
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger.ledger_ops import (
@@ -165,9 +169,7 @@ def capture(
 
     entries = active_dispatches(batch)
     entry = entries[-1] if entries else {}
-    role = {"developer": "developer", "resolve-conflict": "conflict-resolver"}.get(
-        target
-    )
+    role = dispatch_role_for_action(batch, target)
     if (
         role is None
         or entry.get("role") != role
@@ -298,10 +300,7 @@ def validate_event(root: Path, batch: JsonObject, event: JsonObject) -> None:
         or event["next_action"] not in {"developer", "resolve-conflict"}
         or source not in event["evidence"].get("superseded_dispatches", [])
         or brief.get("batch_id") != batch["batch_id"]
-        or brief.get("role")
-        != {"developer": "developer", "resolve-conflict": "conflict-resolver"}.get(
-            event["next_action"]
-        )
+        or brief.get("role") != dispatch_role_for_action(batch, event["next_action"])
         or brief.get("purpose") != "work"
         or not _source_matches(
             root,
@@ -342,6 +341,6 @@ def validate_dispatch(batch: JsonObject, dispatch: JsonObject) -> None:
         progress != event.get("evidence", {}).get("preserved_progress")
         or dispatch.get("snapshot_commit") != progress.get("head_commit")
         or dispatch.get("purpose") != "work"
-        or dispatch.get("role") not in {"developer", "conflict-resolver"}
+        or dispatch.get("role") not in {batch_writer_role(batch), "conflict-resolver"}
     ):
         _refuse("dispatch diverged from the approved preserved writer handoff")

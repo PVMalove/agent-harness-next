@@ -15,6 +15,11 @@ import shlex
 from enum import StrEnum
 from pathlib import Path
 
+from harness.orchestration.core.constants import (
+    BATCH_WRITER_ROLES,
+    SPECIALIST_WRITER_ROLES,
+    batch_writer_role,
+)
 from harness.orchestration.core.git_utils import _candidate_commit
 from harness.orchestration.core.utils import (
     CoordinatorError,
@@ -44,7 +49,12 @@ from harness.orchestration.workflow.risk import _candidate_changed_files, assess
 POLICY_CHAIN_STEPS = ("policy-decide", "risk-assess", "next-dispatch")
 COMPLETION_ROUTE = "report-completion"
 # An accepted report of these roles moves its batch to `risk-assessment` of the reported candidate.
-RISK_ASSESSED_ROLES = {"developer", "verification", "conflict-resolver", "rebaser"}
+RISK_ASSESSED_ROLES = {
+    *BATCH_WRITER_ROLES,
+    "verification",
+    "conflict-resolver",
+    "rebaser",
+}
 
 
 # What `report complete` did with one step of the policy chain.
@@ -331,13 +341,14 @@ def _run_policy_chain(
             and _clean_assessment(repo, state["batch"], _assessed_candidate(state))
         ):
             dispatch = state["dispatch"]
+            role = batch_writer_role(state["batch"]) if next_action == "developer" else next_action
             prepared = create_dispatch(
                 argparse.Namespace(
                     repo=str(repo),
                     state_dir=state_dir,
                     batch=batch_id,
-                    role=next_action,
-                    runtime=dispatch.get("resolved_runtime"),
+                    role=role,
+                    runtime=None if role in SPECIALIST_WRITER_ROLES else dispatch.get("resolved_runtime"),
                     purpose="work",
                     candidate_commit=_assessed_candidate(state)
                     if next_action == "qa"

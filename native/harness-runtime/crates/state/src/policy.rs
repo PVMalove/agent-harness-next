@@ -351,7 +351,7 @@ fn preserved_progress(
     };
     let next_action = field(event, "next_action").as_str().unwrap_or_default();
     let role = match next_action {
-        "developer" => Some("developer"),
+        "developer" => Some(field(batch, "writer_role").as_str().unwrap_or("developer")),
         "resolve-conflict" => Some("conflict-resolver"),
         _ => None,
     };
@@ -850,6 +850,13 @@ fn same_fields(batch: &Object, plan: &Object, fields: &[&str]) -> Option<bool> {
     .then(|| fields.iter().all(|key| batch.get(*key) == plan.get(*key)))
 }
 
+/// Verifies that `batch` matches its immutable plan in `records`.
+///
+/// An explicit writer role must appear in both records. Older records may omit it.
+///
+/// # Errors
+///
+/// Returns an error when the plan is missing, the role is unsupported, or immutable fields differ.
 fn immutable_plan(records: &Records<'_>, batch: &Object) -> Check {
     let id = field(batch, "batch_id");
     if !is_safe_id(id) {
@@ -865,12 +872,25 @@ fn immutable_plan(records: &Records<'_>, batch: &Object) -> Check {
     if field(batch, "supersedes") != field(plan, "supersedes") {
         return fail("batch supersedes link does not match its immutable plan");
     }
-    for key in ["approval_policy", "communication_policy", "allowed_paths"] {
+    for key in [
+        "approval_policy",
+        "communication_policy",
+        "allowed_paths",
+        "writer_role",
+    ] {
         if batch.contains_key(key) != plan.contains_key(key) {
             return fail("batch record is incomplete");
         }
     }
-    if field(batch, "allowed_paths") != field(plan, "allowed_paths") {
+    if field(batch, "allowed_paths") != field(plan, "allowed_paths")
+        || field(batch, "writer_role") != field(plan, "writer_role")
+        || batch.get("writer_role").is_some_and(|role| {
+            !matches!(
+                role.as_str(),
+                Some("developer" | "database-migrations" | "messaging-integration")
+            )
+        })
+    {
         return fail("batch record does not match its immutable plan");
     }
     let current: Vec<&str> = PLAN_FIELDS.to_vec();

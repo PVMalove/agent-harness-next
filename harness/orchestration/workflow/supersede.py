@@ -20,7 +20,7 @@ from typing import TypedDict
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY
 from harness.orchestration.core import utils
-from harness.orchestration.core.constants import ACCEPTED_DECISIONS
+from harness.orchestration.core.constants import ACCEPTED_DECISIONS, batch_writer_role
 from harness.orchestration.core.git_utils import _candidate_commit, _git_is_ancestor
 from harness.orchestration.core import state_view
 from harness.orchestration.core.utils import (
@@ -405,7 +405,7 @@ def developer_next_action(batch: JsonObject) -> str:
     link = batch.get("supersedes")
     target = link.get("rebase_target_commit") if isinstance(link, dict) else None
     decided = any(
-        item.get("role") == "developer" and isinstance(item.get("decision"), dict)
+        item.get("role") == batch_writer_role(batch) and isinstance(item.get("decision"), dict)
         for item in batch.get("dispatches", [])
     )
     return "developer-retry" if isinstance(target, str) and not decided else "developer"
@@ -432,7 +432,7 @@ def rebase_target(
     if (
         not isinstance(target, str)
         or next_action != "developer-retry"
-        or (role, purpose) != ("developer", "work")
+        or (role, purpose) != (batch_writer_role(batch), "work")
     ):
         return None
     snapshot = candidate or _current_developer_candidate(repo, root, batch)
@@ -495,6 +495,11 @@ def attach(
         source["abandoned"]["last_accepted"] = _last_accepted(repo, root, source)
     _require_abandoned(source)
     _require_same_work(source, record)
+    if batch_writer_role(source) != batch_writer_role(record):
+        raise CoordinatorError(
+            "a superseding batch must keep the writer of the work it carries",
+            remedy=f"pass --writer-role {batch_writer_role(source)} or plan separate work without carrying the abandoned batch",
+        )
     same_done = source.get("definition_of_done") == record["definition_of_done"]
     last_accepted: JsonObject | None = None
     previous_role: object = "architect"
@@ -537,7 +542,7 @@ def attach(
         "route": _require_route(ROUTE),
         "previous_role": previous_role,
         "reason_category": None,
-        "next_role": "developer" if architect is not None else "architect",
+        "next_role": batch_writer_role(record) if architect is not None else "architect",
         "next_action": record.get("next_action"),
         "candidate_commit": start,
         "rebase_target_commit": target,

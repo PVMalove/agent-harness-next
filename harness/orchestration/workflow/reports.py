@@ -32,6 +32,7 @@ from harness.orchestration.core.config import (
     _reject_sensitive,
 )
 from harness.orchestration.core.constants import (
+    BATCH_WRITER_ROLES,
     CHECKPOINT_INPUT_FIELDS,
     CHECKPOINT_NO_CONTEXT_PACKAGE,
     CONTINUATION_DECISIONS,
@@ -162,7 +163,7 @@ def _bind_reassessment(
     The report escalates the triggers it names (a retry inherits the batch's earlier ones); the new
     state is decided by ``risk.next_after_writer_report`` and checked before anything is written."""
     triggers: list[str] = []
-    if dispatch["role"] == "developer" and "risk_triggers" in report:
+    if dispatch["role"] in BATCH_WRITER_ROLES and "risk_triggers" in report:
         triggers = _validate_trigger_names(
             report["risk_triggers"],
             "completion report risk_triggers",
@@ -2035,7 +2036,7 @@ def _record_report(
     retry_candidate: str | None = None
     was_retry = False
     if (
-        role["name"] == "developer"
+        role["name"] in BATCH_WRITER_ROLES
         and report.get("outcome") == "completed"
         and batch.get("retry_candidate_required")
     ):
@@ -2058,13 +2059,11 @@ def _record_report(
     # binds too: it carries the commit that `accept-conditional` or an infrastructure retry
     # then makes the batch's candidate, and no later step would bind it.
     if (
-        role["name"] in {"developer", "conflict-resolver", rebaser.REBASER_ROLE}
+        role["name"] in {*BATCH_WRITER_ROLES, "conflict-resolver", rebaser.REBASER_ROLE}
         and report.get("outcome") in {"completed", "blocked"}
         and dispatch.get("purpose", "work") == "work"
     ):
-        _bind_reassessment(
-            repo, batch, dispatch, report, was_retry, retry_candidate
-        )
+        _bind_reassessment(repo, batch, dispatch, report, was_retry, retry_candidate)
     report_json = _persist_report(
         ledger,
         root,

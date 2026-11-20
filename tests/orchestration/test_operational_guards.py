@@ -120,6 +120,8 @@ class TransitionDigestTests(unittest.TestCase):
         self.assertEqual(
             guards.OPTIONAL_TRANSITION_FIELDS,
             (
+                "writer_role",
+                "allowed_paths",
                 "retry_reason_sha256",
                 "configuration_sha256",
                 "recovery_event_sha256",
@@ -436,6 +438,15 @@ def test_the_transition_field_remedy_names_every_optional_field() -> None:
 
     for field in (*guards.OPTIONAL_TRANSITION_FIELDS, guards.ACCESS_TRANSITION_FIELD):
         assert field in caught.value.remedy
+
+
+def test_an_approval_digest_binds_the_planned_writer_and_scope() -> None:
+    planned = _transition(writer_role="database-migrations", allowed_paths=["migrations/**"])
+    digest = guards.transition_digest(planned)
+
+    assert guards.transition_digest({**planned, "writer_role": "developer"}) != digest
+    assert guards.transition_digest({**planned, "allowed_paths": ["**"]}) != digest
+    assert guards.transition_digest(_transition()) != digest
 
 
 if __name__ == "__main__":

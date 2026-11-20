@@ -335,6 +335,13 @@ coordinator проверяет план на своём процессе: реж
 
 ## Частые команды
 
+Для миграций схемы или данных укажите `--writer-role database-migrations` в `batch preflight` и
+`batch create`. Для outbox, схем сообщений, маршрутизации, retry и DLQ используйте
+`--writer-role messaging-integration`. При пропуске флага владельцем batch становится `developer`.
+Координатор проверяет потолок `write_paths` выбранной роли и использует ту же роль для работы,
+retry и `--purpose publish`. Publish выполняет сам координатор после независимого review и QA
+точного SHA. Совместимые срезы, которым нужны разные владельцы, оформляйте зависимыми тикетами.
+
 ```bash
 python .harness/orchestration/coordinator.py --repo . ledger status
 python .harness/orchestration/coordinator.py --repo . batch preflight --ticket '#123' --allowed-path 'src/**' ...

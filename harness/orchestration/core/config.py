@@ -39,6 +39,7 @@ from harness.orchestration.contract import (
     verification_profile_for,
 )
 from harness.orchestration.core.constants import (
+    SPECIALIST_WRITER_ROLES,
     AUTO_RETRY_SEVERITIES,
     DEFAULT_ADAPTIVE_CONTINUATION_POLICY,
     DEFAULT_ATTENTION_POLICY,
@@ -578,6 +579,11 @@ def _resolve_assignment(
     """
     role = role_manifest if role_manifest is not None else _role(repo, role_name)
     if not config.get("assignment_plans"):
+        if role_name in SPECIALIST_WRITER_ROLES:
+            raise CoordinatorError(
+                f"role {role_name!r} has no assignment plan",
+                remedy=f"configure assignment_plans[{role_name!r}] in this project",
+            )
         if not _non_empty(session_model) or not _non_empty(session_effort):
             raise CoordinatorError(
                 "without .harness/orchestration.json the invoking session must supply --model and --effort",

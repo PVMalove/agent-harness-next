@@ -295,7 +295,7 @@ def _record_publication(
     report = {
         "dispatch_id": dispatch["dispatch_id"],
         "ticket": dispatch["ticket"],
-        "role": "developer",
+        "role": dispatch["role"],
         "outcome": "completed",
         "output": f"published accepted QA candidate {candidate} to {remote}/{dispatch['branch']}",
         "commit_sha": candidate,
