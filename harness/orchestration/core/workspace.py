@@ -8,8 +8,10 @@ are facts about the checkout, not about the lifecycle, so every layer above may 
 from __future__ import annotations
 
 import hashlib
+import os
 import re
 import shutil
+import tempfile
 import uuid
 from pathlib import Path
 
@@ -35,7 +37,9 @@ from harness.orchestration.core.utils import (
 MODULE_ROOT = Path(__file__).resolve().parents[1]
 # Under the coordinator state root: one immutable runtime snapshot per pinned hash.
 RUNTIMES_DIR = "runtimes"
-RUNTIME_VOLATILE_PARTS = frozenset({"state", "__pycache__"})
+# ``state-snapshots`` is the copy of the state directory that the cutover to the runtime store
+# takes (ADR 0020, section 5): state, like ``state``, so it never changes a pinned runtime hash.
+RUNTIME_VOLATILE_PARTS = frozenset({"state", "state-snapshots", "__pycache__"})
 
 
 def _agent_inbox(repo: Path) -> Path:
@@ -82,6 +86,50 @@ def _registered_worktrees(repo: Path) -> set[Path]:
         for line in listing.splitlines()
         if line.startswith("worktree ")
     }
+
+
+WORKTREE_WRITE_REMEDY = (
+    "the session cannot write to that directory; run the coordinator from a session rooted in the "
+    "main checkout that can write to the issue worktree and its git metadata. A sandboxed session "
+    "cannot write a worktree it did not create until it opens that access: in Claude Code call "
+    "EnterWorktree with path=<issue worktree>, then ExitWorktree with action=keep, and repeat the "
+    "command from the main checkout. For Codex, use 'worktree prepare --runtime codex "
+    "--worktree <issue worktree> --launch' from the operator's terminal. "
+    "When only the git metadata is read-only, start harness-runtime with protocol 1.9 or later: "
+    "the writer then commits with 'worktree commit'. "
+    "Otherwise use the single-session route (/fast-implement)"
+)
+
+
+def _require_writable_worktree(worktree: str) -> None:
+    """Refuse an issue worktree whose directory or git metadata this session cannot write.
+
+    A sandboxed session can edit the files of a worktree another session created, while its
+    ``.git/worktrees/<name>`` stays read-only, so the writer's first ``git commit`` fails.  One
+    temporary file is created and removed in each of the two directories, and nowhere else.
+    """
+    path = Path(worktree).resolve()
+    git_metadata = Path(_git(path, "rev-parse", "--absolute-git-dir")).resolve()
+    for label, directory in (
+        ("issue worktree", path),
+        ("git metadata directory", git_metadata),
+    ):
+        _probe_writable_directory(directory, label, remedy=WORKTREE_WRITE_REMEDY)
+
+
+def _probe_writable_directory(directory: Path, label: str, *, remedy: str) -> None:
+    """Test the actual write and unlink permissions of the calling session."""
+    try:
+        descriptor, probe = tempfile.mkstemp(
+            prefix=".harness-write-probe-", dir=directory
+        )
+        os.close(descriptor)
+        os.unlink(probe)
+    except OSError as exc:
+        raise CoordinatorError(
+            f"the session cannot write to the {label} {directory}: {exc.strerror or exc}",
+            remedy=remedy,
+        ) from exc
 
 
 def _worktree_roots(repo: Path) -> set[Path]:
@@ -335,5 +383,7 @@ def _validate_worktree(repo: Path, worktree: str) -> None:
     if resolved not in _registered_worktrees(repo):
         raise CoordinatorError(
             f"worktree {worktree!r} is not registered by git worktree",
-            remedy=f"run 'git worktree add' for {worktree}, or pass a worktree already registered by git worktree",
+            remedy=f"create {worktree} with 'worktree create' (harness-runtime runs git outside the "
+            "agent sandbox) or with 'git worktree add', or pass a worktree already registered by "
+            "git worktree",
         )

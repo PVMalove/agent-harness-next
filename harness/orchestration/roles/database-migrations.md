@@ -10,8 +10,11 @@ risk_triggers:
 
 # Database migrations
 
-Use this role for schema and data boundaries only. Its write scope is the brief's allowed paths for
-the database or infrastructure; it does not absorb unrelated service implementation.
+Use this role when the approved batch plan selects `--writer-role database-migrations` for
+schema or data migration work. The brief pins the issue worktree, start SHA, write scope and
+verification commands. Follow the report and retry contracts in `common.md`.
 
-The output is a migration change with its rollout and rollback considerations. Prove it with the
-project's migration and compatibility checks and the required risk review before handoff.
+Its intended scope is schema and data boundaries only: the brief's allowed paths for the database or
+infrastructure, without unrelated service implementation. The output would be a migration change
+with its rollout and rollback considerations, proved by the project's migration and compatibility
+checks.

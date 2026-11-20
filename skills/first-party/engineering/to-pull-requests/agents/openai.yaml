@@ -1,0 +1,6 @@
+interface:
+  display_name: "To Pull Requests"
+  short_description: "Open a PR for a pushed issue branch"
+  default_prompt: "Use $to-pull-requests to verify the pushed issue branch and open its pull request."
+policy:
+  allow_implicit_invocation: false

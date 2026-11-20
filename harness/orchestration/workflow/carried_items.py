@@ -32,6 +32,7 @@ from harness.orchestration.core import utils
 from harness.orchestration.core.config import _reject_sensitive
 from harness.orchestration.core.constants import (
     ACCEPTED_DECISIONS,
+    BATCH_WRITER_ROLES,
     CARRIED_ITEM_ACCOUNTING_FIELDS,
     CARRIED_ITEM_CLOSED_FIELDS,
     CARRIED_ITEM_FIELDS,
@@ -39,6 +40,7 @@ from harness.orchestration.core.constants import (
     CARRIED_ITEM_SOURCES,
     CARRIED_ITEM_STATUSES,
     TOOLING_REASON_CATEGORY,
+    batch_writer_role,
 )
 from harness.orchestration.core.git_utils import _candidate_commit
 from harness.orchestration.core.utils import (
@@ -480,7 +482,7 @@ def retry_section(root: Path, batch: JsonObject, entry: JsonObject) -> JsonObjec
     retry decision and the brief, so the decision records their ids and the brief carries the same
     list.
     """
-    if entry.get("role") == "developer":
+    if entry.get("role") == batch_writer_role(batch):
         dispatch = _load_dispatch(root, entry["dispatch_id"])
         if dispatch.get("purpose", "work") == "work":
             carried = dispatch.get("carried_items") or {}
@@ -557,12 +559,12 @@ def brief_section(root: Path, batch: JsonObject, role: str, purpose: str) -> Jso
     """
     if purpose != "work":
         return {}
-    if role == "developer":
+    if role == batch_writer_role(batch):
         retried = _developer_retry_section(root, batch)
         if retried is not None:
             return retried
     section: JsonObject = {}
-    if role in {"developer", "code-review"}:
+    if role in {batch_writer_role(batch), "code-review"}:
         findings = [
             _brief_item(record) for record in open_coordinator_findings(root, batch)
         ]
@@ -570,7 +572,9 @@ def brief_section(root: Path, batch: JsonObject, role: str, purpose: str) -> Jso
             section[COORDINATOR_FINDING] = findings
     incomplete = [
         *_narrowed_items(root, batch, role),
-        *open_incomplete_items(root, batch, role),
+        *open_incomplete_items(
+            root, batch, "developer" if role in BATCH_WRITER_ROLES else role
+        ),
     ]
     if incomplete:
         section[INCOMPLETE_ITEM] = incomplete
@@ -628,7 +632,7 @@ def _closure(report: JsonObject | None) -> dict[str, JsonObject]:
     """A developer report's carried_item_closure records by item id; ``{}`` without one."""
     records = (
         report.get(CLOSURE_FIELD)
-        if report is not None and report.get("role") == "developer"
+        if report is not None and report.get("role") in BATCH_WRITER_ROLES
         else None
     )
     return {
@@ -643,7 +647,7 @@ def _omits_closure(report: JsonObject | None, dispatch: JsonObject) -> bool:
     before issue #503, since ``report submit`` refuses such a report now (``require_closure``)."""
     return (
         report is not None
-        and report.get("role") == "developer"
+        and report.get("role") in BATCH_WRITER_ROLES
         and report.get("outcome") == "completed"
         and CLOSURE_FIELD not in report
         and owes_closure(dispatch)
@@ -707,7 +711,7 @@ def carried_gap(report: JsonObject, dispatch: JsonObject) -> list[str]:
 def owes_closure(dispatch: JsonObject) -> bool:
     """Whether a brief is a developer-retry that carried items, so its report maps their closure."""
     return (
-        dispatch.get("role") == "developer"
+        dispatch.get("role") in BATCH_WRITER_ROLES
         and plan_rules.is_developer_retry(dispatch)
         and bool(_carried(dispatch))
     )
@@ -842,7 +846,7 @@ def section_sha256(section: JsonObject) -> str | None:
 
 def _accepted_developer_work(root: Path, entry: JsonObject) -> bool:
     return (
-        entry.get("role") == "developer"
+        entry.get("role") in BATCH_WRITER_ROLES
         and entry.get("state") == "reported"
         and _accepted(entry)
         and _load_dispatch(root, entry["dispatch_id"]).get("purpose") == "work"

@@ -36,8 +36,10 @@ from harness.orchestration.core.constants import (
     BatchState,
     DispatchState,
     CONTEXT_PACKAGE_FIELDS,
+    DISPATCH_FIELDS,
     LEGACY_CONTEXT_PACKAGE_FIELDS,
     LEGACY_CONTEXT_PACKAGE_FIELDS_NO_TOKENS,
+    POLICY_BRIEF_FIELDS,
 )
 from harness.orchestration.core.utils import CoordinatorError
 from harness.orchestration.ledger.lifecycle import (
@@ -46,6 +48,7 @@ from harness.orchestration.ledger.lifecycle import (
     LedgerLockBusy,
 )
 from harness.orchestration.workflow import history
+from tests.orchestration.legacy_state import seed_file_ledger
 
 
 class ValueObjectRoundTripTests(unittest.TestCase):
@@ -78,7 +81,7 @@ class ValueObjectRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             original = BatchRecord(
@@ -121,7 +124,7 @@ class ValueObjectRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             original = DispatchRecord(
@@ -187,7 +190,7 @@ class ValueObjectRoundTripTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             for original, relative in cases:
@@ -268,7 +271,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             record = DispatchStatusRecord(
                 dispatch_id="dispatch-1", state=DispatchState.APPROVED
@@ -286,7 +289,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             ledger.write_record(
                 DispatchStatusRecord(
@@ -308,7 +311,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             ledger.write_record(PlanRecord(batch_id="batch-1"))
             ledger.write_record(
@@ -335,7 +338,7 @@ class RecordApiTests(unittest.TestCase):
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             ledger.write_record(PlanRecord(batch_id="batch-1"))
 
             def batch(state: str) -> BatchRecord:
@@ -388,7 +391,7 @@ class RecordApiTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             for bad_id in ("../evil", "a/b", "a\\b", "", "."):
                 with self.assertRaises(LedgerError):
@@ -623,7 +626,7 @@ class StructuralValidationCharacterizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
 
             batch: JsonObject = {
@@ -646,7 +649,7 @@ class StructuralValidationCharacterizationTests(unittest.TestCase):
     def test_abandoned_requires_operator_refusal_and_is_terminal(self) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
             batch: JsonObject = {
                 "batch_id": "batch-1",
@@ -698,13 +701,13 @@ class RecordsRootLenientTests(unittest.TestCase):
 
             self.assertIsNone(ledger.records_root_lenient())
 
-    def test_returns_same_path_as_records_root_once_ensure_selected_a_generation(
+    def test_returns_same_path_as_records_root_once_a_generation_is_selected(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
 
             self.assertEqual(ledger.records_root_lenient(), ledger.records_root())
 
@@ -714,7 +717,7 @@ class RecordsRootLenientTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             ledger.pointer_path.write_text("not json {{{", encoding="utf-8")
 
             self.assertIsNone(ledger.records_root_lenient())
@@ -727,7 +730,7 @@ class RecordsRootLenientTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             pointer = json.loads(ledger.pointer_path.read_text(encoding="utf-8"))
             pointer["generation"] = "generation-deadbeef"
             ledger.pointer_path.write_text(json.dumps(pointer), encoding="utf-8")
@@ -740,7 +743,7 @@ class RecordsRootLenientTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             state_root = Path(temporary) / "state"
             ledger = LifecycleLedger(state_root)
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             generation = ledger.records_root()
             pointer = json.loads(ledger.pointer_path.read_text(encoding="utf-8"))
             pointer["version"] = 1
@@ -976,7 +979,7 @@ class RecoveryRouteVersioningTests(unittest.TestCase):
         )
         with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
             ledger = LifecycleLedger(Path(temporary) / "state")
-            ledger.ensure()
+            seed_file_ledger(ledger.root)
             ledger.write_record(PlanRecord(batch_id="batch-1"))
             ledger.write_record(BatchRecord.from_dict(batch))
 
@@ -1036,7 +1039,7 @@ class ContextPackageSchemaCompatibilityTests(unittest.TestCase):
         package.update(extra_package_fields or {})
         root = Path(temporary) / "state"
         ledger = LifecycleLedger(root)
-        ledger.ensure()
+        seed_file_ledger(ledger.root)
         generation = ledger.records_root()
         ledger.write_immutable(
             generation
@@ -1097,6 +1100,81 @@ class ContextPackageSchemaCompatibilityTests(unittest.TestCase):
             with self.assertRaises(CoordinatorError) as raised:
                 history._validate_context_package(root, batch, package)
             self.assertIn("schema mismatch", raised.exception.message)
+
+
+class DispatchFieldShapeTests(unittest.TestCase):
+    """`_dispatch_fields_accepted` admits every historical brief shape and nothing else."""
+
+    LEGACY = DISPATCH_FIELDS - {
+        "context_package_summary",
+        "worker_attestation_required",
+        "snapshot_commit",
+        "communication_policy",
+        "commit_plan",
+        "liveness",
+    }
+
+    def accepted(self, fields: frozenset[str]) -> bool:
+        return history._dispatch_fields_accepted(fields)
+
+    def test_the_current_and_the_historical_base_shapes_are_accepted(self) -> None:
+        for fields in (
+            DISPATCH_FIELDS,
+            DISPATCH_FIELDS - {"context_package_summary"},
+            self.LEGACY,
+        ):
+            self.assertTrue(self.accepted(frozenset(fields)))
+
+    def test_each_later_group_may_be_absent_as_a_whole(self) -> None:
+        groups = (
+            {"report_staging_path"},
+            {"retry_reason"},
+            {"allowed_tools", "context_budget"},
+            set(POLICY_BRIEF_FIELDS),
+            {"commit_plan_divergence"},
+            {"carried_items"},
+            {"rebase_target_commit"},
+            {"runtime_access"},
+            {"delta_review_scope"},
+            {"allowed_paths"},
+            {"accepted_design"},
+        )
+        for group in groups:
+            self.assertTrue(self.accepted(frozenset(DISPATCH_FIELDS - group)), group)
+        every = set().union(*groups)
+        self.assertTrue(self.accepted(frozenset(self.LEGACY - every)))
+
+    def test_half_of_a_group_is_rejected(self) -> None:
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS - {"allowed_tools"})))
+        some_policy = set(sorted(POLICY_BRIEF_FIELDS)[:1])
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS - some_policy)))
+
+    def test_a_missing_base_field_or_an_unknown_field_is_rejected(self) -> None:
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS - {"role"})))
+        self.assertFalse(
+            self.accepted(frozenset(DISPATCH_FIELDS - {"snapshot_commit"}))
+        )
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS | {"unexpected"})))
+
+    def test_optional_fields_may_be_added(self) -> None:
+        added = {
+            "resolver",
+            "preserved_progress",
+            "verification_plan",
+            "hook_policy_sha256",
+            "execution",
+        }
+        self.assertTrue(self.accepted(frozenset(DISPATCH_FIELDS | added)))
+        self.assertTrue(self.accepted(frozenset(self.LEGACY | {"resolver"})))
+
+    def test_image_digests_need_an_access_plan_and_carry_the_qa_execution(
+        self,
+    ) -> None:
+        images = DISPATCH_FIELDS | {"runtime_images"}
+        self.assertTrue(self.accepted(frozenset(images)))
+        self.assertTrue(self.accepted(frozenset(images | {"qa_execution"})))
+        self.assertFalse(self.accepted(frozenset(images - {"runtime_access"})))
+        self.assertFalse(self.accepted(frozenset(DISPATCH_FIELDS | {"qa_execution"})))
 
 
 if __name__ == "__main__":

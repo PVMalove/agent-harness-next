@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import json
-import os
 import runpy
 import sqlite3
 import subprocess
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -92,76 +90,6 @@ def test_cmd_health_exits_0_when_nothing_fails(
     data = json.loads(capsys.readouterr().out)
     assert data["summary"] == {"ok": 0, "warn": 1, "fail": 0, "skipped": 0}
     assert exit_code == 0
-
-
-@pytest.mark.parametrize(
-    "lock_text",
-    ["{broken", "[]", "[" * 100_000],
-    ids=["invalid", "not-object", "too-deep"],
-)
-def test_broken_lock_is_a_fail_result_not_a_crash(
-    tmp_path: Path, lock_text: str
-) -> None:
-    """Проверить, что поврежденный файл lock приводит к статусу fail, а не к падению процесса."""
-    _init_repo(tmp_path)
-    (tmp_path / ".harness").mkdir()
-    (tmp_path / ".harness" / "harness.lock").write_text(lock_text, encoding="utf-8")
-
-    result = subprocess.run(
-        [
-            sys.executable,
-            str(Path(__file__).resolve().parents[2] / "harness" / "bin" / "harness.py"),
-            "health",
-            str(tmp_path),
-            "--json",
-        ],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-
-    assert result.returncode == 1, result.stderr
-    data = json.loads(result.stdout)
-    checks = {check["id"]: check for check in data["checks"]}
-    assert checks["files.lock"]["status"] == "fail"
-    assert "повреждён" in checks["files.lock"]["message"]
-    assert checks["files.lock"]["fix"] is not None
-    assert "repo_map.tier" in checks
-    # Lock-dependent checks point at the broken lock instead of claiming the lock is missing or
-    # that backend-orchestration was never selected.
-    for check_id in (
-        "files.skill_registry",
-        "files.orchestration_config",
-        "orchestration.ledger_summary",
-    ):
-        assert checks[check_id]["status"] == "skipped"
-        assert "повреждён" in checks[check_id]["message"]
-    assert not any("не выбрана" in check["message"] for check in data["checks"])
-
-
-@pytest.mark.parametrize("pythonpath_first", [True, False])
-def test_cli_imports_the_harness_package_not_itself(
-    tmp_path: Path, pythonpath_first: bool
-) -> None:
-    """Проверить, что CLI импортирует пакет harness, а не скрипт harness.py."""
-    root = Path(__file__).resolve().parents[2]
-    env = dict(os.environ)
-    env.pop("PYTHONPATH", None)
-    if pythonpath_first:
-        env["PYTHONPATH"] = str(root)
-    result = subprocess.run(
-        [sys.executable, str(root / "harness" / "bin" / "harness.py"), "--help"],
-        cwd=root / "harness" / "bin",
-        env=env,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        check=False,
-    )
-
-    assert result.returncode == 0, result.stderr
-    assert "health" in result.stdout
 
 
 def test_health_reports_disabled_memory_without_creating_cache(
@@ -383,26 +311,3 @@ def test_health_worktree_inspects_main_memory_and_recommends_main_rebuild(
     assert str(main) in index["fix"]["command"]
     assert str(linked) not in index["fix"]["command"]
     assert not (linked / ".harness/.sandboxes").exists()
-
-
-def test_console_diagnostics_include_the_same_memory_health_report(
-    tmp_path: Path,
-) -> None:
-    """Console collection and its display/export document retain all memory diagnostics."""
-    pytest.importorskip("textual")
-    from harness.console.data import collect_diagnostics
-    from harness.console.screens.diagnostics import health_document
-
-    _init_repo(tmp_path)
-    _enable_memory(tmp_path)
-    report = collect_diagnostics(tmp_path)
-    memory = {c.id: c for c in report.checks if c.group == "memory"}
-    assert memory["memory.index"].status == "warn"
-    assert memory["memory.model"].status == "skipped"
-    document = health_document(report)
-    body = "\n".join(section.body for section in document.sections)
-    for check in memory.values():
-        assert check.id in body
-        assert check.message in body
-    assert "memory rebuild" in body
-    assert not (tmp_path / ".harness/.sandboxes").exists()

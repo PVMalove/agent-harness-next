@@ -125,7 +125,8 @@ def test_public_metadata_rejects_a_missing_pr_body_file(
 
 
 @pytest.mark.parametrize(
-    ("body", "expected"), [("Fix parser.\n", 0), ("Co-Authored-By: bot\n", 1)]
+    ("body", "expected"),
+    [("Fix parser.\n", 0), ("Co-Authored-By: Codex <bot@example.invalid>\n", 1)],
 )
 def test_public_metadata_checks_an_existing_pr_body_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, body: str, expected: int
@@ -162,7 +163,7 @@ def test_public_metadata_skips_commits_the_default_branch_already_has(
     for key, value in (("user.name", "dev"), ("user.email", "dev@example.invalid")):
         subprocess.run(["git", "-C", str(repo), "config", key, value], check=True)
     base = _commit(repo, "feat: integration base")
-    _commit(repo, "feat: squash merge\n\nCo-authored-by: someone")
+    _commit(repo, "feat: squash merge\n\nCo-authored-by: Codex <bot@example.invalid>")
     subprocess.run(["git", "-C", str(repo), "branch", "published"], check=True)
     head = _commit(repo, "fix: sync")
     monkeypatch.chdir(repo)
@@ -174,7 +175,7 @@ def test_public_metadata_skips_commits_the_default_branch_already_has(
         monkeypatch.setattr(sys, "argv", argv)
         assert check_public_metadata.main() == expected
 
-    _commit(repo, "fix: new\n\nCo-authored-by: someone")
+    _commit(repo, "fix: new\n\nCo-authored-by: Codex <bot@example.invalid>")
     monkeypatch.setattr(
         sys,
         "argv",

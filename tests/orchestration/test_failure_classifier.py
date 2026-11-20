@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from harness.orchestration.workflow import failure_classifier
@@ -105,3 +107,69 @@ def test_http_statuses_are_classified(text: str, category: str) -> None:
     result = failure_classifier.classify(text)
     assert result is not None
     assert result["category"] == category
+
+
+REPO = Path("/work/repo")
+READ_ONLY_TAIL = """\
+FAILED tests/health/test_isolated_runner_session.py::test_run_success - OSError: [Errno 30] Read-only file system: '/tmp/harness-db-ab12'
+FAILED tests/health/test_isolated_runner_session.py::test_run_fails_on_os_error - OSError: [Errno 30] Read-only file system: '/tmp/harness-db-cd34'
+4 failed, 3553 passed in 210.52s
+[verify] pytest: failed in 212.10s
+make: *** [Makefile:41: verify] Error 1"""
+MISSING_LINKER = """\
+   Compiling harness-runtime v0.1.0 (/work/repo/native/harness-runtime)
+error: linker `cc` not found
+  |
+  = note: No such file or directory (os error 2)
+
+error: could not compile `harness-runtime` (bin "harness-runtime") due to 1 previous error"""
+SOCKET_PATH = "/work/repo/.harness/.sandboxes/run/" + "x" * 80 + "/0123abcd.sock"
+
+
+@pytest.mark.parametrize(
+    ("text", "category"),
+    [
+        (READ_ONLY_TAIL, "read-only-filesystem"),
+        (
+            "FAILED tests/x.py::t - PermissionError: [Errno 13] Permission denied: '/var/cache/x'",
+            "permission-denied",
+        ),
+        (MISSING_LINKER, "missing-linker"),
+        (
+            f"runtime_unavailable: the socket path {SOCKET_PATH} is longer than 100 bytes",
+            "socket-path-too-long",
+        ),
+        (
+            f"the socket path {SOCKET_PATH} is 133 bytes long; the limit is 100",
+            "socket-path-too-long",
+        ),
+    ],
+)
+def test_an_environment_refusal_is_classified(text: str, category: str) -> None:
+    result = failure_classifier.classify_environment(text, REPO)
+    assert result is not None
+    assert result["method"] == "heuristic" and result["category"] == category
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        None,
+        # Inside the repository the code itself may have made the path unwritable.
+        "FAILED tests/x.py::t - PermissionError: [Errno 13] Permission denied: '/work/repo/out'",
+        "FAILED tests/x.py::t - PermissionError: [Errno 13] Permission denied: 'out/data'",
+        # A real failure next to the environment one keeps the developer retry.
+        READ_ONLY_TAIL + "\nE   AssertionError: expected 2",
+        READ_ONLY_TAIL.replace(
+            "OSError: [Errno 30] Read-only file system: '/tmp/harness-db-cd34'",
+            "ValueError: bad input",
+        ),
+        "1 failed, 10 passed in 2.00s",
+        # An ordinary compile error is the candidate's code.
+        "error[E0308]: mismatched types\n --> src/main.rs:3:5\n"
+        'error: could not compile `harness-runtime` (bin "harness-runtime") due to 1 previous error',
+    ],
+)
+def test_a_possible_code_failure_is_not_an_environment_one(text: object) -> None:
+    assert failure_classifier.classify_environment(text, REPO) is None

@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from dataclasses import dataclass
@@ -46,6 +47,8 @@ def run_git(
             capture_output=True,
             check=False,
             timeout=timeout_seconds,
+            # Partial clones otherwise fetch a missing object even during a Git read.
+            env={**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_ALLOW_PROTOCOL": ""},
         )
     except subprocess.TimeoutExpired as exc:
         raise RepoMapGitError(

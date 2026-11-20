@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import hashlib
 import json
 import os
 import re
@@ -11,11 +12,27 @@ import stat
 import subprocess
 import sys
 import time
+import uuid
 from collections.abc import Callable
+from dataclasses import dataclass
 from ctypes import wintypes
 from pathlib import Path
-from typing import NotRequired, TypedDict
+from typing import NotRequired, TypedDict, cast
 
+from harness.json_types import JsonObject
+from harness.orchestration import container_executor
+from harness.orchestration.core.constants import (
+    AGENT_INBOX_REL,
+    CONTAINER_ENGINES,
+    REVIEW_CONTEXT_PREFIX,
+    DispatchState,
+)
+from harness.orchestration.ledger.lifecycle import store_is_authority
+from harness.orchestration.runtime_client import (
+    RuntimeClient,
+    RuntimeClientError,
+    read_state,
+)
 from harness.repo_map.bundle_install import INSTALL_DIR_HASH_PREFIX
 from harness.repo_map.bundle_lock import LOCK_FILENAME, BundleFormatError, parse_lock
 from harness.storage import LEGACY_STORAGE_DIRS, sandboxes_root, storage_root
@@ -27,14 +44,38 @@ _INSTALL_DIR_RE = re.compile(
 )
 # Bound of each local git call; generous because `git worktree remove` deletes a whole checkout.
 GIT_TIMEOUT_SECONDS = 300
+# Where the agent application keeps the worktrees it creates itself (Claude Code `EnterWorktree`).
+# `git worktree move` cannot bring one into `.sandboxes/worktrees` inside the agent sandbox (#1180).
+AGENT_WORKTREES = Path(".claude") / "worktrees"
+# The protocol minor of `worktree.remove`, and the answers of a runtime that does not serve it.
+WORKTREE_PROTOCOL_MINOR = 8
+_NO_WORKTREE_OPERATION = frozenset({"protocol_unsupported", "unknown_operation"})
+# Why the worktrees stay when the batches that own them were not read: the general reason, and the
+# runtime-store one that names the process to start. Each is a key of the console's REASONS_RU.
+LEDGER_UNAVAILABLE = "Git or ledger state unavailable"
+RUNTIME_UNAVAILABLE = (
+    "runtime does not answer: start `harness-runtime serve --repo <repo>`"
+)
+
+
+@dataclass(frozen=True)
+class _Unread:
+    """The batches of the worktrees were not read; `reason` is LEDGER_ or RUNTIME_UNAVAILABLE."""
+
+    reason: str
 
 
 class CleanupItem(TypedDict):
-    """Элемент плана очистки (файл, директория или worktree)."""
+    """Элемент плана очистки (файл, директория, worktree, контейнер или сеть)."""
 
     kind: str
     path: str
     branch: NotRequired[str | None]
+    batch_id: NotRequired[str]
+    state: NotRequired[str]
+    dispatch: NotRequired[str]
+    engine: NotRequired[str]
+    engine_id: NotRequired[str]
 
 
 class CleanupPlan(TypedDict):
@@ -51,8 +92,192 @@ class CleanupResult(TypedDict):
     """Результат выполнения очистки с перечнем удалённых, ошибочных и пропущенных элементов."""
 
     removed: list[str]
+    worktrees: list[CleanupItem]
     failed: list[dict[str, str]]
     skipped: list[dict[str, str]]
+
+
+def plan_digest(plan: CleanupPlan) -> str:
+    """Bind confirmation to the exact set of deletions, including mode and storage owner."""
+    payload = {
+        "mode": plan["mode"],
+        "root": plan["root"],
+        "min_age_hours": plan["min_age_hours"],
+        "remove": plan["remove"],
+    }
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
+
+
+@dataclass(frozen=True)
+class WorktreeFact:
+    path: Path
+    branch: str | None
+    dirty: int | None
+    reason: str
+
+    @property
+    def removable(self) -> bool:
+        return not self.reason
+
+
+def _worktree_fact(
+    checkout: Path,
+    root: Path,
+    path: Path,
+    branch: str | None,
+    active: set[Path] | _Unread,
+    min_age_hours: float,
+) -> WorktreeFact:
+    status = _git(path, "status", "--porcelain", "-z", "--untracked-files=all")
+    # Rename/copy entries carry a second NUL-separated pathname, not a second file.
+    records = iter(status.stdout.split("\0"))
+    dirty = 0
+    for record in records:
+        if record:
+            dirty += 1
+            if record[0] in "RC" or record[1:2] in ("R", "C"):
+                next(records, None)
+    reason = ""
+    if path == checkout:
+        reason = "current checkout"
+    elif not _managed_worktree(checkout, root, path):
+        reason = "not a direct managed worktree"
+    elif isinstance(active, _Unread):
+        reason = active.reason
+    elif path in active:
+        reason = "referenced by an active batch"
+    elif branch is not None and not _branch_allowed(root, branch):
+        reason = "unowned local branch"
+    elif not _old_enough(path, min_age_hours):
+        reason = "worktree newer than minimum age"
+    elif status.returncode != 0:
+        reason = "worktree status unavailable"
+    elif dirty:
+        reason = "worktree has uncommitted changes"
+    elif _locked(path):
+        reason = "worktree is locked"
+    elif not _worktree_preserved(checkout, path, branch):
+        reason = "local commits are not preserved on origin"
+    return WorktreeFact(path, branch, dirty if status.returncode == 0 else None, reason)
+
+
+def worktree_facts(repo: Path, *, min_age_hours: float = 24) -> list[WorktreeFact]:
+    """Read real registered trees; unknown Git state never becomes an empty success."""
+    checkout = repo.expanduser().resolve()
+    if storage_root(checkout).is_symlink() or sandboxes_root(checkout).is_symlink():
+        raise ValueError("storage root must not be a symlink")
+    registered = _registered_worktrees(checkout)
+    if registered is None:
+        raise ValueError("Git unavailable")
+    root = storage_root(checkout)
+    active = _active_paths(_worktree_batches(root))
+    return [
+        _worktree_fact(checkout, root, path, branch, active, min_age_hours)
+        for path, branch in registered.items()
+    ]
+
+
+def _managed_worktree_parents(checkout: Path, root: Path) -> tuple[Path, ...]:
+    """The directories whose direct children the cleanup may remove as worktrees."""
+    return (
+        sandboxes_root(checkout) / "worktrees",
+        root / "worktrees",
+        checkout / AGENT_WORKTREES,
+    )
+
+
+def _managed_worktree(checkout: Path, root: Path, path: Path) -> bool:
+    """A real directory that is a direct child of a managed parent that is no symlink."""
+    return not path.is_symlink() and any(
+        not parent.is_symlink() and path.parent == parent.resolve()
+        for parent in _managed_worktree_parents(checkout, root)
+    )
+
+
+SANDBOX_MOUNT = "mount point of a live sandbox session; it goes away when that session ends"
+
+
+def sandbox_residue(path: Path) -> bool:
+    """An unregistered directory that holds only directories and empty files, no symlink.
+
+    The Claude Code sandbox recreates such a directory before every command of a session that
+    once had a write grant or its cwd there: the removed worktree path itself, or masks like
+    `.claude/.cc-writes` and empty `settings.json` under a `cd` target (#1194).
+    """
+    try:
+        for current, directories, files in os.walk(path, onerror=_raise):
+            for name in (*directories, *files):
+                entry = Path(current, name)
+                if entry.is_symlink() or (
+                    name in files and (not entry.is_file() or entry.stat().st_size)
+                ):
+                    return False
+    except OSError:
+        return False
+    return path.is_dir() and not path.is_symlink()
+
+
+def _raise(error: OSError) -> None:
+    raise error
+
+
+def holds_mount(path: Path) -> bool:
+    """Whether the path or anything below it is a mount point (a live sandbox binds it)."""
+    try:
+        return os.path.ismount(path) or any(
+            os.path.ismount(Path(current, name))
+            for current, directories, files in os.walk(path)
+            for name in (*directories, *files)
+        )
+    except OSError:
+        return True
+
+
+def _locked(worktree: Path) -> bool:
+    """Whether `git worktree lock` protects the worktree; a live agent session locks its own."""
+    git_dir = _git(worktree, "rev-parse", "--absolute-git-dir")
+    return git_dir.returncode == 0 and (Path(git_dir.stdout.strip()) / "locked").exists()
+
+
+def _remove_registered_worktree(checkout: Path, root: Path, path: Path) -> None:
+    """Remove one registered worktree, keeping its branch; OSError names why it stays.
+
+    With the runtime store the runtime removes it: it works outside the agent sandbox, where
+    `.git/worktrees` is read-only (#1180). A runtime that does not serve the operation, and the
+    file-ledger epoch, leave the removal to the local git.
+    """
+    if store_is_authority(root / "orchestration" / "state"):
+        try:
+            RuntimeClient(checkout).call(
+                "worktree.remove",
+                operation_id=f"cleanup.worktree-remove-{uuid.uuid4().hex}",
+                payload={"path": str(path)},
+                timeout_seconds=120,
+                requires_minor=WORKTREE_PROTOCOL_MINOR,
+            )
+            return
+        except RuntimeClientError as exc:
+            if exc.code not in _NO_WORKTREE_OPERATION:
+                raise OSError(
+                    f"harness-runtime did not remove it: [{exc.code}] {exc.message}"
+                ) from exc
+    result = _git(checkout, "worktree", "remove", str(path))
+    if result.returncode != 0:
+        raise OSError(result.stderr.strip() or "git worktree remove failed")
+
+
+def remove_worktree(repo: Path, path: Path) -> None:
+    """Recheck every protection at execution; remove only the checkout, keeping its branch."""
+    target = path.expanduser()
+    target = (target if target.is_absolute() else repo / target).resolve()
+    fact = next((item for item in worktree_facts(repo) if item.path == target), None)
+    if fact is None or not fact.removable:
+        raise ValueError(fact.reason if fact else "worktree is not registered")
+    checkout = repo.expanduser().resolve()
+    try:
+        _remove_registered_worktree(checkout, storage_root(checkout), target)
+    except OSError as exc:
+        raise ValueError(str(exc)) from exc
 
 
 def _git(repo: Path, *arguments: str) -> subprocess.CompletedProcess[str]:
@@ -169,9 +394,61 @@ def _registered_worktrees(repo: Path) -> dict[Path, str | None] | None:
 
 def _active_worktrees(root: Path) -> set[Path] | None:
     """Получить множество путей worktree, занятых активными батчами оркестрации."""
+    active = _active_paths(_worktree_batches(root))
+    return None if isinstance(active, _Unread) else active
+
+
+def _active_paths(
+    batches: dict[Path, tuple[str, str]] | _Unread,
+) -> set[Path] | _Unread:
+    """Оставить worktree нетерминальных batch; _Unread сохраняет причину, по которой ledger не прочитан."""
+    if isinstance(batches, _Unread):
+        return batches
+    return {
+        path
+        for path, (_, state) in batches.items()
+        if state not in TERMINAL_BATCH_STATES
+    }
+
+
+def _remember_batch(
+    batches: dict[Path, tuple[str, str]], path: Path, batch_id: str, state: str
+) -> None:
+    """Запомнить batch его worktree; терминальный batch не затирает нетерминальный."""
+    known = batches.get(path)
+    if (
+        known is None
+        or known[1] in TERMINAL_BATCH_STATES
+        or state not in TERMINAL_BATCH_STATES
+    ):
+        batches[path] = (batch_id, state)
+
+
+def _read_batches(root: Path) -> dict[str, JsonObject] | _Unread:
+    """Read batch records from the authoritative store, or the legacy snapshot."""
     state = root / "orchestration" / "state"
     if not state.exists():
-        return set()
+        return {}
+    if store_is_authority(state):
+        try:
+            stored = read_state(
+                RuntimeClient(root.parent),
+                {"collections": ["batches"], "paths": []},
+                operation_id=f"cleanup.read-{uuid.uuid4().hex}",
+                timeout_seconds=5,
+            ).records
+            if any(not isinstance(batch, dict) for batch in stored.values()):
+                return _Unread(LEDGER_UNAVAILABLE)
+            return {
+                Path(str(key)).stem: cast(JsonObject, batch)
+                for key, batch in stored.items()
+            }
+        except RuntimeClientError as error:
+            if error.code == "runtime_unavailable":
+                return _Unread(RUNTIME_UNAVAILABLE)
+            return _Unread(LEDGER_UNAVAILABLE)
+        except (OSError, ValueError):
+            return _Unread(LEDGER_UNAVAILABLE)
     pointer = state / "ledger.json"
     try:
         if pointer.exists():
@@ -179,25 +456,215 @@ def _active_worktrees(root: Path) -> set[Path] | None:
             if not isinstance(generation, str) or not re.fullmatch(
                 r"generation-[A-Za-z0-9-]+", generation
             ):
-                return None
+                return _Unread(LEDGER_UNAVAILABLE)
             records = state / "generations" / generation / "batches"
         else:
             records = state / "batches"
         if not records.exists():
-            return None if pointer.exists() else set()
-        active: set[Path] = set()
-        for record in records.glob("batch-*.json"):
-            batch = json.loads(record.read_text(encoding="utf-8"))
-            if batch["state"] not in TERMINAL_BATCH_STATES:
-                worktree = Path(batch["worktree"])
-                active.add(
-                    (
-                        worktree if worktree.is_absolute() else root.parent / worktree
-                    ).resolve()
-                )
-        return active
+            return _Unread(LEDGER_UNAVAILABLE) if pointer.exists() else {}
+        batches = {
+            record.stem: json.loads(record.read_text(encoding="utf-8"))
+            for record in records.glob("batch-*.json")
+        }
+        if any(not isinstance(batch, dict) for batch in batches.values()):
+            return _Unread(LEDGER_UNAVAILABLE)
+        return batches
     except (OSError, ValueError, KeyError, TypeError):
-        return None
+        return _Unread(LEDGER_UNAVAILABLE)
+
+
+def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
+    records = _read_batches(root)
+    if isinstance(records, _Unread):
+        return records
+    batches: dict[Path, tuple[str, str]] = {}
+    for key, record in records.items():
+        state = record.get("state")
+        if not isinstance(state, str):
+            return _Unread(LEDGER_UNAVAILABLE)
+        value = record.get("worktree")
+        if not isinstance(value, str) or not value:
+            if state in TERMINAL_BATCH_STATES:
+                continue
+            return _Unread(LEDGER_UNAVAILABLE)
+        path = Path(value)
+        _remember_batch(
+            batches,
+            (root.parent / path).resolve(),
+            str(record.get("batch_id", key)),
+            state,
+        )
+    return batches
+
+
+def _pending_dispatches(root: Path) -> set[str] | _Unread:
+    records = _read_batches(root)
+    if isinstance(records, _Unread):
+        return records
+    pending: set[str] = set()
+    for record in records.values():
+        state = record.get("state")
+        if not isinstance(state, str):
+            return _Unread(LEDGER_UNAVAILABLE)
+        if state in TERMINAL_BATCH_STATES:
+            continue
+        entries = record.get("dispatches", [])
+        if not isinstance(entries, list):
+            return _Unread(LEDGER_UNAVAILABLE)
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(
+                entry.get("dispatch_id"), str
+            ):
+                return _Unread(LEDGER_UNAVAILABLE)
+            if not entry.get("report") and entry.get("state") not in (
+                DispatchState.REPORTED,
+                DispatchState.ABANDONED,
+                DispatchState.CANCELLED,
+            ):
+                pending.add(entry["dispatch_id"])
+    return pending
+
+
+def _docker_selected(root: Path) -> bool:
+    """Проверить, что проект выбрал встроенный docker-исполнитель; иначе runtime не опрашивается."""
+    try:
+        config = json.loads((root / "orchestration.json").read_text(encoding="utf-8"))
+        selected = config["extensions"]["runtime_access"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+    return bool(selected == container_executor.EXTENSION_NAME)
+
+
+def _container_engines(root: Path) -> list[str]:
+    """Движки, которые называет access_policy проекта (defaults, roles.*, operations.*)."""
+    try:
+        config = json.loads((root / "orchestration.json").read_text(encoding="utf-8"))
+        policy = config.get("access_policy") or {}
+        layers = [policy.get("defaults") or {}]
+        for section in ("roles", "operations"):
+            layers.extend((policy.get(section) or {}).values())
+    except (OSError, ValueError, AttributeError, TypeError):
+        return [CONTAINER_ENGINES[0]]
+    engines = {
+        str(layer["container"].get("engine", CONTAINER_ENGINES[0]))
+        for layer in layers
+        if isinstance(layer, dict) and isinstance(layer.get("container"), dict)
+    }
+    return sorted(engines & set(CONTAINER_ENGINES)) or [CONTAINER_ENGINES[0]]
+
+
+def _container_group_reason(group: list[dict[str, object]]) -> str | None:
+    """Причина, по которой ресурсы dispatch нельзя удалять, или `None`, если можно."""
+    worker = next((item for item in group if item["role"] == "worker"), None)
+    if worker is not None and worker["state"] not in {"exited", "dead"}:
+        return (
+            "worker is not stopped; harness never stops it: stop it explicitly "
+            f"({worker['engine']} stop {worker['name']}) first"
+        )
+    live = sorted(
+        {
+            str(item["execution_state"])
+            for item in group
+            if item.get("execution_state") not in (None, "exited", "lost")
+        }
+    )
+    if live:
+        return f"its execution is {', '.join(live)} in the runtime"
+    return None
+
+
+def _plan_containers(
+    checkout: Path,
+    root: Path,
+    remove: list[CleanupItem],
+    skipped: list[dict[str, str]],
+) -> None:
+    """Добавить в план ресурсы контейнеров этого репозитория, у которых нет живого владельца.
+
+    Объекты перечисляет только harness-runtime (`container.objects`): он фильтрует их по
+    собственной метке репозитория и знает состояние исполнения каждого объекта.
+    """
+    if not _docker_selected(root):
+        return
+    try:
+        reply = RuntimeClient(checkout).call(
+            "container.objects",
+            operation_id=f"cleanup.container-objects-{uuid.uuid4().hex}",
+            payload={"engines": _container_engines(root)},
+            timeout_seconds=60,
+        )
+        objects = reply.result["objects"]
+        if not isinstance(objects, list):
+            raise ValueError("objects is not a list")
+    except RuntimeClientError as exc:
+        skipped.append(
+            {
+                "path": "container resources",
+                "reason": f"harness-runtime did not list them: [{exc.code}] {exc.message}",
+            }
+        )
+        return
+    except (KeyError, TypeError, ValueError):
+        skipped.append(
+            {"path": "container resources", "reason": "harness-runtime answer unreadable"}
+        )
+        return
+    groups: dict[str, list[dict[str, object]]] = {}
+    for item in objects:
+        groups.setdefault(str(item["dispatch"]), []).append(dict(item))
+    order = ("worker", "proxy", "network")
+    for dispatch_id in sorted(groups):
+        group = sorted(
+            groups[dispatch_id], key=lambda item: order.index(str(item["role"]))
+        )
+        reason = _container_group_reason(group)
+        if reason is not None:
+            skipped.append({"path": f"harness-{dispatch_id}", "reason": reason})
+            continue
+        remove.extend(
+            {
+                "kind": str(item["kind"]),
+                "path": str(item["name"]),
+                "dispatch": dispatch_id,
+                "engine": str(item["engine"]),
+                "engine_id": str(item["id"]),
+            }
+            for item in group
+        )
+
+
+def _remove_containers(
+    checkout: Path, items: list[CleanupItem]
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Удалить ресурсы контейнеров через `container.remove`; отсутствующий считается удалённым."""
+    by_id = {item["engine_id"]: item["path"] for item in items}
+    by_label = {f"{item['kind']} {item['path']}": item["path"] for item in items}
+    try:
+        reply = RuntimeClient(checkout).call(
+            "container.remove",
+            operation_id=f"cleanup.container-remove-{uuid.uuid4().hex}",
+            payload={
+                "objects": [
+                    {"engine": item["engine"], "id": item["engine_id"]} for item in items
+                ]
+            },
+            timeout_seconds=120,
+        )
+        result = reply.result
+    except RuntimeClientError as exc:
+        reason = f"harness-runtime did not remove them: [{exc.code}] {exc.message}"
+        return [], [{"path": item["path"], "reason": reason} for item in items]
+
+    def path(named: object) -> str:
+        text = str(named)
+        return by_label.get(text) or by_id.get(text) or text
+
+    removed = [path(label) for label in (*result["removed"], *result["missing"])]
+    failed = [
+        {"path": path(item["object"]), "reason": str(item["reason"])}
+        for item in result["failed"]
+    ]
+    return removed, failed
 
 
 def _origin_ref_current(repo: Path, upstream_ref: str) -> bool:
@@ -313,6 +780,20 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
     remove: list[CleanupItem] = []
     skipped: list[dict[str, str]] = []
     registered = _registered_worktrees(checkout)
+    pending_dispatches: set[str] | _Unread | None = None
+
+    def keep_dispatch_input(path: Path, dispatch_id: str, description: str) -> bool:
+        nonlocal pending_dispatches
+        if pending_dispatches is None:
+            pending_dispatches = _pending_dispatches(root)
+        if isinstance(pending_dispatches, _Unread):
+            reason = pending_dispatches.reason
+        elif dispatch_id in pending_dispatches:
+            reason = f"{description} is pending for dispatch {dispatch_id}"
+        else:
+            return False
+        skipped.append({"path": str(path), "reason": reason})
+        return True
 
     # 1. Runs: .sandboxes/runs
     runs_dir = sandboxes / "runs"
@@ -324,6 +805,17 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                 skipped.append({"path": str(path), "reason": "not a local directory"})
             elif path.is_file():
                 if _old_enough(path, min_age_hours):
+                    if (
+                        path.parent == runs_dir
+                        and path.name.startswith(f"{REVIEW_CONTEXT_PREFIX}dispatch-")
+                        and path.suffix == ".json"
+                        and keep_dispatch_input(
+                            path,
+                            path.stem.removeprefix(REVIEW_CONTEXT_PREFIX),
+                            "review context",
+                        )
+                    ):
+                        return
                     remove.append({"kind": "file", "path": str(path)})
                 else:
                     skipped.append(
@@ -366,6 +858,7 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                 _process_run_entry(entry, is_qa=False)
 
     # 2. Transit files in scratch, PR bodies, and logs.
+    inbox = root.parent / AGENT_INBOX_REL
     for category in ("scratch", "pr_body", "logs"):
         parent = sandboxes / category
         if parent.is_dir() and not parent.is_symlink():
@@ -375,7 +868,21 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                     and _inside(root, path)
                     and _old_enough(path, min_age_hours)
                 ):
+                    if (
+                        path.parent == inbox
+                        and path.name.startswith("dispatch-")
+                        and path.suffix == ".json"
+                        and keep_dispatch_input(path, path.stem, "staged report")
+                    ):
+                        continue
                     remove.append({"kind": "file", "path": str(path)})
+                elif path.is_file() and _inside(root, path):
+                    skipped.append(
+                        {
+                            "path": str(path),
+                            "reason": "active or newer than minimum age",
+                        }
+                    )
 
     # 3. Legacy top-level folders outside .sandboxes: (.cache, test-logs, tmp, reports)
     for name in LEGACY_TOP_LEVEL_DIRS:
@@ -443,47 +950,59 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
         worktree_roots = [sandboxes / "worktrees"]
         if (root / "worktrees").resolve() != (sandboxes / "worktrees").resolve():
             worktree_roots.append(root / "worktrees")
+        worktree_roots.append(checkout / AGENT_WORKTREES)
 
-        active = _active_worktrees(root)
+        batches = _worktree_batches(root)
+        active = _active_paths(batches)
         for worktrees in worktree_roots:
             if not worktrees.is_dir() or worktrees.is_symlink():
                 continue
-            if registered is None or active is None:
+            if registered is None or isinstance(active, _Unread):
                 skipped.append(
                     {
                         "path": str(worktrees),
-                        "reason": "Git or ledger state unavailable",
+                        "reason": (
+                            LEDGER_UNAVAILABLE
+                            if registered is None or not isinstance(active, _Unread)
+                            else active.reason
+                        ),
                     }
                 )
             else:
                 for path, branch in registered.items():
                     if path == checkout or not path.is_relative_to(worktrees.resolve()):
                         continue
-                    reason = None
-                    if not _inside(root, path) or path.parent != worktrees.resolve():
-                        reason = "not a direct managed worktree"
-                    elif path in active:
-                        reason = "referenced by an active batch"
-                    elif branch is not None and not _branch_allowed(root, branch):
-                        reason = "unowned local branch"
-                    elif not _old_enough(path, min_age_hours):
-                        reason = "worktree newer than minimum age"
-                    elif (
-                        status := _git(
-                            path, "status", "--porcelain", "--untracked-files=all"
-                        )
-                    ).returncode != 0:
-                        reason = "worktree status unavailable"
-                    elif status.stdout.strip():
-                        reason = "worktree has uncommitted changes"
-                    elif not _worktree_preserved(checkout, path, branch):
-                        reason = "local commits are not preserved on origin"
+                    reason = _worktree_fact(
+                        checkout, root, path, branch, active, min_age_hours
+                    ).reason
+                    batch = None if isinstance(batches, _Unread) else batches.get(path)
                     if reason:
-                        skipped.append({"path": str(path), "reason": reason})
+                        kept = {"path": str(path), "reason": reason}
+                        if batch is not None:
+                            kept.update(batch_id=batch[0], state=batch[1])
+                        skipped.append(kept)
                     else:
-                        remove.append(
-                            {"kind": "worktree", "path": str(path), "branch": branch}
-                        )
+                        item: CleanupItem = {
+                            "kind": "worktree",
+                            "path": str(path),
+                            "branch": branch,
+                        }
+                        if batch is not None:
+                            item["batch_id"], item["state"] = batch
+                        remove.append(item)
+                for entry in sorted(worktrees.iterdir()):
+                    resolved = entry.resolve()
+                    if (
+                        resolved in registered
+                        or resolved in active
+                        or not sandbox_residue(entry)
+                    ):
+                        continue
+                    if holds_mount(entry):
+                        skipped.append({"path": str(entry), "reason": SANDBOX_MOUNT})
+                    else:
+                        remove.append({"kind": "residue", "path": str(entry)})
+    _plan_containers(checkout, root, remove, skipped)
     return {
         "mode": mode,
         "root": str(root),
@@ -516,10 +1035,19 @@ def apply_cleanup(
         raise ValueError("cleanup plan changed; preview again before applying")
     root = Path(fresh["root"])
     removed: list[str] = []
+    worktrees: list[CleanupItem] = []
     failed: list[dict[str, str]] = []
+    containers: list[CleanupItem] = []
     for item in fresh["remove"]:
+        if item["kind"] in {"container", "network"}:
+            containers.append(item)
+            continue
         path = Path(item["path"])
-        if not _inside(root, path):
+        if not (
+            _managed_worktree(checkout, root, path)
+            if item["kind"] in ("worktree", "residue")
+            else _inside(root, path)
+        ):
             failed.append({"path": str(path), "reason": "path escaped storage root"})
             continue
         try:
@@ -529,15 +1057,20 @@ def apply_cleanup(
                 branch = item["branch"]
                 if not _worktree_preserved(checkout, path, branch):
                     raise OSError("worktree is no longer preserved on origin")
-                result = _git(checkout, "worktree", "remove", str(path))
-                if result.returncode != 0:
-                    raise OSError(result.stderr.strip() or "git worktree remove failed")
+                _remove_registered_worktree(checkout, root, path)
                 if branch is not None:
                     result = _git(checkout, "branch", "-D", branch)
                     if result.returncode != 0:
                         raise OSError(
                             result.stderr.strip() or "local branch removal failed"
                         )
+                worktrees.append(item)
+            elif item["kind"] == "residue":
+                if not sandbox_residue(path):
+                    raise OSError("directory is no longer empty sandbox residue")
+                if holds_mount(path):
+                    raise OSError(SANDBOX_MOUNT)
+                shutil.rmtree(path, onexc=_clear_read_only)
             elif item["kind"] == "directory":
                 # Windows needs an extended-length path for nested test fixtures.
                 target = (
@@ -551,4 +1084,13 @@ def apply_cleanup(
             removed.append(str(path))
         except OSError as exc:
             failed.append({"path": str(path), "reason": str(exc)})
-    return {"removed": removed, "failed": failed, "skipped": fresh["skipped"]}
+    if containers:
+        container_removed, container_failed = _remove_containers(checkout, containers)
+        removed.extend(container_removed)
+        failed.extend(container_failed)
+    return {
+        "removed": removed,
+        "worktrees": worktrees,
+        "failed": failed,
+        "skipped": fresh["skipped"],
+    }

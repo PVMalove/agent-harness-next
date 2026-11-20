@@ -1,5 +1,9 @@
 name: verify
 
+run-name: >-
+  verify: ${{ github.event.pull_request.number && format('PR #{0} ({1} -> {2})', github.event.pull_request.number, github.head_ref, github.base_ref) || format('push ({0})', github.ref_name) }}
+  [${{ (github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')) && 'light' || 'full' }}]
+
 on:
   workflow_call:
   pull_request:
@@ -16,206 +20,23 @@ concurrency:
   group: verify-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Two paths (#937, ADR 0016 and ADR 0023). A pull request into an `integration/**` branch runs the
+# light job `verify-light` and the Linux/Windows Python unit and integration groups. A pull request
+# into any other branch, a push to `master` and a call from another workflow run the full jobs. The
+# legacy full suites keep the full-path condition; `console-spa` and `docs` run on
+# both paths; `private-terms` and `parser-bundle` run tests of nothing and keep their own
+# condition. The check name `verify-light` ends in `-light`: the coordinator never lets such a
+# check confirm a pair that requires the full selection. The job ids are the check names that
+# `ci_required_checks` and `integration collect-ci` know, so no job renames its check.
+#
+# The full path runs in stages: the fast gate `lint` (and `docs`) first, the suites that take a
+# runner for up to three hours only after it passed, and `dashboard` last. A formatting slip or a
+# broken link fails in minutes and never starts a Linux or Windows suite. Lint, Clippy, failed tests,
+# uncovered changed lines and metadata findings are annotations on their lines in "Files changed".
 jobs:
-  verify:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          cache-local-path: ${{ runner.temp }}/setup-uv-cache
-      - name: Keep the uv cache where setup-uv restores it
-        shell: bash
-        run: echo "UV_CACHE_DIR=$RUNNER_TEMP/setup-uv-cache" >> "$GITHUB_ENV"
-      - name: Bootstrap harness environment
-        run: make bootstrap
-      - name: Make script executable
-        run: chmod +x scripts/verify.py
-      # The isolated test runner needs bubblewrap and unprivileged user namespaces, which Ubuntu
-      # 24.04 restricts through AppArmor; without them the clean-room scenario proves only refusal.
-      - name: Install bubblewrap for the isolated test runner
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bubblewrap
-          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
-            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          fi
-      - name: Restore the pytest cache (tests that failed last time run first)
-        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-        with:
-          path: .harness/.sandboxes/pytest-cache
-          key: pytest-${{ runner.os }}-verify-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
-          restore-keys: |
-            pytest-${{ runner.os }}-verify-${{ github.head_ref || github.ref_name }}-
-      - name: Verify harness and clean-room install
-        env:
-          HARNESS_REQUIRE_TEST_SANDBOX: "1"
-          # A pull request stops at the first failing test; `master` and releases run everything.
-          VERIFY_ARGS: >-
-            --junit-xml .harness/.sandboxes/logs/junit-verify.xml
-            --failed-first .harness/.sandboxes/pytest-cache
-            ${{ github.event_name == 'pull_request' && '--fail-fast' || '' }}
-        run: |
-          mkdir -p .harness/.sandboxes/logs
-          make verify
-      - name: Save the pytest cache
-        if: always()
-        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-        with:
-          path: .harness/.sandboxes/pytest-cache
-          key: pytest-${{ runner.os }}-verify-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
-      - name: Test summary
-        if: always()
-        env:
-          PYTHONUTF8: "1"
-        run: |
-          python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-verify.xml --title "Linux: тесты" >> "$GITHUB_STEP_SUMMARY"
-      - name: Keep the test report for the dashboard
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: junit-verify
-          path: .harness/.sandboxes/logs/junit-verify.xml
-          if-no-files-found: ignore
-          retention-days: 3
-      - name: Check public Git metadata
-        if: github.event_name == 'pull_request'
-        env:
-          PR_BODY: ${{ github.event.pull_request.body }}
-          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
-          DEFAULT_BRANCH: origin/${{ github.event.repository.default_branch }}
-        run: |
-          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
-          .harness/.venv/bin/python scripts/check_public_metadata.py --commit-range "$COMMIT_RANGE" --exclude-reachable-from "$DEFAULT_BRANCH" --pr-body-file "$RUNNER_TEMP/pr-body.md"
-
-  diff-coverage:
-    # Measures its own pytest run under coverage, so it runs beside `verify` instead of after it:
-    # the suite no longer executes twice in one job.
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-        with:
-          python-version: "3.12"
-      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-        with:
-          cache-local-path: ${{ runner.temp }}/setup-uv-cache
-      - name: Keep the uv cache where setup-uv restores it
-        shell: bash
-        run: echo "UV_CACHE_DIR=$RUNNER_TEMP/setup-uv-cache" >> "$GITHUB_ENV"
-      - name: Bootstrap harness environment
-        run: make bootstrap
-      - name: Diff coverage of changed Python lines
-        env:
-          DIFF_COVERAGE_BASE: ${{ github.event.pull_request.base.sha }}
-        run: .harness/.venv/bin/python scripts/diff_coverage.py
-
-  # Windows checks are switched off (#753): the job below is kept commented out so it can be
-  # switched back on. To re-enable it, uncomment the job and add `verify-windows` to the `needs`
-  # list of `dashboard`.
-  # verify-windows:
-  #   # Two parallel parts so a slow pytest run cannot starve the clean-room install run of its time
-  #   # budget. A pull request runs the platform subset of the tests; `master` runs all of them (ADR 0018).
-  #   name: verify-windows (${{ matrix.part }})
-  #   runs-on: windows-latest
-  #   timeout-minutes: ${{ matrix.timeout }}
-  #   strategy:
-  #     fail-fast: false
-  #     matrix:
-  #       include:
-  #         - part: tests
-  #           timeout: 60
-  #           verify_args: >-
-  #             --only tests
-  #             --junit-xml .harness/.sandboxes/logs/junit-windows-tests.xml
-  #             --failed-first .harness/.sandboxes/pytest-cache
-  #         - part: clean-room
-  #           timeout: 30
-  #           verify_args: --only clean-room
-  #   defaults:
-  #     run:
-  #       shell: bash
-  #   steps:
-  #     # Before checkout: the runner's autocrlf=true makes every repository the clean-room scenarios
-  #     # create print "LF will be replaced by CRLF" warnings. fscache and preloadindex speed up the
-  #     # thousands of short git.exe runs on NTFS.
-  #     - name: Configure Git for the test run
-  #       run: |
-  #         git config --global core.autocrlf false
-  #         git config --global core.fscache true
-  #         git config --global core.preloadindex true
-  #     - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-  #     - name: Disable Windows Defender for workspace and temp
-  #       shell: powershell
-  #       run: |
-  #         Set-MpPreference -DisableRealtimeMonitoring $true
-  #         Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:TEMP
-  #     - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
-  #       with:
-  #         python-version: "3.12"
-  #     - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-  #       with:
-  #         cache-local-path: ${{ runner.temp }}/setup-uv-cache
-  #     - name: Keep the uv cache where setup-uv restores it
-  #       shell: bash
-  #       run: echo "UV_CACHE_DIR=$RUNNER_TEMP/setup-uv-cache" >> "$GITHUB_ENV"
-  #     - name: Bootstrap harness environment
-  #       run: make bootstrap
-  #     - name: Restore the pytest cache (tests that failed last time run first)
-  #       uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-  #       with:
-  #         path: .harness/.sandboxes/pytest-cache
-  #         key: pytest-${{ runner.os }}-${{ matrix.part }}-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
-  #         restore-keys: |
-  #           pytest-${{ runner.os }}-${{ matrix.part }}-${{ github.head_ref || github.ref_name }}-
-  #     - name: Verify harness and clean-room install
-  #       env:
-  #         PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
-  #         PYTHONUNBUFFERED: "1"
-  #         # A pull request stops at the first failing test (the failed ones run first); `master` runs all.
-  #         VERIFY_ARGS: ${{ matrix.verify_args }} ${{ github.event_name == 'pull_request' && '--platform-subset --fail-fast' || '' }}
-  #       run: |
-  #         set -o pipefail
-  #         mkdir -p .harness/.sandboxes/logs
-  #         make verify 2>&1 | tee .harness/.sandboxes/logs/verify-windows-${{ matrix.part }}.log
-  #     - name: Save the pytest cache
-  #       if: always()
-  #       uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-  #       with:
-  #         path: .harness/.sandboxes/pytest-cache
-  #         key: pytest-${{ runner.os }}-${{ matrix.part }}-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
-  #     - name: Test summary
-  #       if: always() && matrix.part == 'tests'
-  #       env:
-  #         PYTHONUTF8: "1"
-  #       run: |
-  #         python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-windows-tests.xml --title "Windows: тесты" >> "$GITHUB_STEP_SUMMARY"
-  #     - name: Keep the test report for the dashboard
-  #       if: always() && matrix.part == 'tests'
-  #       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-  #       with:
-  #         name: junit-windows-tests
-  #         path: .harness/.sandboxes/logs/junit-windows-tests.xml
-  #         if-no-files-found: ignore
-  #         retention-days: 3
-  #     - name: Preserve Windows verification diagnostics
-  #       if: always()
-  #       uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-  #       with:
-  #         name: verify-windows-${{ matrix.part }}-log
-  #         path: .harness/.sandboxes/logs/verify-windows-${{ matrix.part }}.log
-  #         if-no-files-found: ignore
-  #         retention-days: 7
+  # ============================================================================
+  # STAGE 1: Fast gates, static analysis and shared artifacts
+  # ============================================================================
 
   private-terms:
     # Maintainer-only check (#438): every commit of the PR (message and added lines), the head branch,
@@ -224,6 +45,7 @@ jobs:
     # only this step's env; the output names locations and term numbers, never a term.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -251,6 +73,139 @@ jobs:
             --branch="$(cat "$RUNNER_TEMP/head-ref.txt")" \
             --body-file "$RUNNER_TEMP/pr-title.txt" --body-file "$RUNNER_TEMP/pr-body.md"
 
+  docs:
+    # The public site (site/): a strict MkDocs build validates internal Markdown links, anchors
+    # and (with validation.nav.omitted_files) orphan pages, so a broken page fails the pull request.
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: "site/requirements.txt"
+      - name: Build the public site (strict)
+        run: uvx --with-requirements site/requirements.txt mkdocs build --strict -f site/mkdocs.yml
+
+  lint:
+    # The fast gate of the full path: ruff and mypy (`make lint`), the Rust format and Clippy, and on a
+    # pull request the public Git metadata. Every suite below needs it. Ruff writes annotations itself,
+    # a problem matcher turns mypy errors into annotations, and `ci_summary.py clippy` turns the JSON
+    # of Clippy into the log cargo prints plus an annotation per diagnostic.
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.9.1
+        with:
+          workspaces: "native/harness-runtime -> target"
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      # mypy rechecks only the modules whose source or dependencies changed since the cached run and
+      # validates every cache entry itself, so a stale cache costs time, never a finding.
+      # verify-light reuses this step through its anchor.
+      - &mypy-cache
+        name: Cache mypy results
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}-${{ hashFiles('harness/**/*.py', 'scripts/**/*.py', 'tests/**/*.py', 'skills/**/*.py') }}
+          restore-keys: |
+            mypy-${{ runner.os }}-${{ hashFiles('uv.lock', 'pyproject.toml') }}-
+      - name: Python lint (ruff and mypy)
+        env:
+          RUFF_OUTPUT_FORMAT: github
+        run: |
+          echo "::add-matcher::.github/problem-matchers/mypy.json"
+          make lint
+      - name: Rust format
+        working-directory: native/harness-runtime
+        run: cargo fmt --check
+      # `shell: bash` runs with pipefail: the step fails with Clippy, not with the converter.
+      - name: Rust clippy
+        working-directory: native/harness-runtime
+        shell: bash
+        run: |
+          cargo clippy --locked --all-targets --message-format=json -- -D warnings \
+            | python ../../scripts/ci_summary.py clippy --prefix native/harness-runtime
+      - name: Check public Git metadata
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: origin/${{ github.event.repository.default_branch }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          .harness/.venv/bin/python scripts/check_public_metadata.py --commit-range "$COMMIT_RANGE" --exclude-reachable-from "$DEFAULT_BRANCH" --pr-body-file "$RUNNER_TEMP/pr-body.md"
+
+  rust:
+    # Rust workspace of the runtime process (ADR 0019, ADR 0021): the tests; `lint` checked its
+    # format and Clippy, `runtime-build` builds the binary. `rust-toolchain.toml` pins the toolchain.
+    needs: lint
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Line tables keep the file and line of a panic backtrace; full debug info only makes the build,
+    # the Rust cache and the uploaded binary bigger. Local builds keep the profile of Cargo.toml.
+    # runtime-build, verify-light and runtime-ipc-windows reuse this env through its anchor.
+    env: &rust-line-tables
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    defaults:
+      run:
+        working-directory: native/harness-runtime
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.9.1
+        with:
+          workspaces: "native/harness-runtime -> target"
+      - name: Test
+        run: cargo test --locked
+
+  runtime-build:
+    # The one debug build of native/harness-runtime that the Linux suites below download instead of
+    # building it again. It waits for nothing and runs beside `lint`; every job that downloads it
+    # also waits for `lint`. The light path builds its own binary in `verify-light`.
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env: *rust-line-tables
+    defaults:
+      run:
+        working-directory: native/harness-runtime
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.9.1
+        with:
+          workspaces: "native/harness-runtime -> target"
+      - name: Build the debug harness-runtime binary (with test hooks)
+        run: cargo build --locked --bin harness-runtime
+      - name: Upload harness-runtime for the Linux suites
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: harness-runtime-linux-debug
+          path: native/harness-runtime/target/debug/harness-runtime
+          if-no-files-found: error
+          retention-days: 1
+
   parser-bundle:
     # Real tree-sitter bundle path (ADR 0008): pinned wheels -> sha256 check -> offline bundle. It is
     # assembled once here and handed to every `repo-map-bundle` leg as one artifact, so all legs test
@@ -264,6 +219,7 @@ jobs:
           python-version: "3.12"
       - name: Download pinned parser wheels and verify sha256
         run: |
+          echo "::group::Download and verify the wheels"
           mkdir -p "$RUNNER_TEMP/wheels"
           grep -v '^#' .github/parser-bundle-wheels.txt | while read -r sha url; do
             [ -n "$sha" ] || continue
@@ -271,6 +227,7 @@ jobs:
             curl --fail --silent --show-error --location --output "$file" "$url"
             echo "$sha  $file" | sha256sum --check --strict
           done
+          echo "::endgroup::"
       - name: Assemble offline parser bundle
         run: python scripts/build_parser_bundle.py --wheelhouse "$RUNNER_TEMP/wheels" --out "$RUNNER_TEMP/parser-bundle"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -282,12 +239,527 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  # ============================================================================
+  # STAGE 2A: Light path (pull requests into `integration/**`)
+  # ============================================================================
+
+  verify-light:
+    # Keep the exact check name `verify-light`: the coordinator refuses `-light` checks for a pair
+    # that requires the full selection. Lint, the Rust format and lint checks, the tests of the pull
+    # request's own diff and the metadata check. The tests come from `scripts/ci_light_tests.py` (the
+    # diff selection of #935); nothing here widens them to related tests or to the whole suite. Its
+    # one addition: a change to the memory corpus (`CONTEXT.md`, `docs/adr/*.md`) also runs the FTS5
+    # baseline test (#1061).
+    if: github.event_name == 'pull_request' && startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env: *rust-line-tables
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.9.1
+        with:
+          workspaces: "native/harness-runtime -> target"
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      - *mypy-cache
+      - name: Lint
+        run: make lint
+      - name: Rust format
+        working-directory: native/harness-runtime
+        run: cargo fmt --check
+      - name: Rust clippy
+        working-directory: native/harness-runtime
+        run: cargo clippy --locked --all-targets -- -D warnings
+      # A selected IPC seam test starts this binary; a missing binary fails it here, it never skips it.
+      - name: Build harness-runtime for the selected tests
+        working-directory: native/harness-runtime
+        run: cargo build --locked
+      - name: Upload the debug harness-runtime for Linux test groups
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: harness-runtime-linux-debug
+          path: native/harness-runtime/target/debug/harness-runtime
+          if-no-files-found: error
+          retention-days: 1
+      - name: Tests of the pull request's own diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime
+          HARNESS_REQUIRE_RUNTIME: "1"
+        run: .harness/.venv/bin/python scripts/ci_light_tests.py --base "$BASE_SHA" --head "$HEAD_SHA"
+      - name: Check public Git metadata
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          COMMIT_RANGE: ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}
+          DEFAULT_BRANCH: origin/${{ github.event.repository.default_branch }}
+        run: |
+          printf '%s' "$PR_BODY" > "$RUNNER_TEMP/pr-body.md"
+          .harness/.venv/bin/python scripts/check_public_metadata.py --commit-range "$COMMIT_RANGE" --exclude-reachable-from "$DEFAULT_BRANCH" --pr-body-file "$RUNNER_TEMP/pr-body.md"
+
+  verify-linux-unit:
+    name: Linux / Unit
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.runtime-build.result == 'success'))
+    needs: [docs, lint, verify-light, runtime-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/verify-test-group
+        with:
+          group: unit
+          # verify-windows-unit runs the same targets through this anchor.
+          targets: &unit-targets >-
+            --pytest-target tests/core --pytest-target tests/health
+            --pytest-target tests/console --pytest-target tests/reporting
+            --pytest-target tests/test_author
+          junit: .harness/.sandboxes/logs/junit-Linux-unit.xml
+          requires-runtime: "true"
+
+  verify-linux-integration:
+    name: Linux / Integration
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success' && needs.runtime-build.result == 'success'))
+    needs: [docs, lint, verify-light, runtime-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/verify-test-group
+        with:
+          group: integration
+          # verify-windows-integration runs the same targets through this anchor.
+          targets: &integration-targets >-
+            --pytest-target tests/memory --pytest-target tests/orchestration
+            --pytest-target tests/repo_map --pytest-target tests/scripts
+            --pytest-target tests/web
+          junit: .harness/.sandboxes/logs/junit-Linux-integration.xml
+          requires-runtime: "true"
+
+  verify-windows-unit:
+    name: Windows / Unit
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success'))
+    needs: [docs, lint, verify-light]
+    runs-on: windows-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # verify-windows-integration and verify-windows reuse these two steps through their anchors.
+      - &windows-git-config
+        name: Configure Git for the test run
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.longpaths true
+          git config --global core.fscache true
+          git config --global core.preloadindex true
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - &windows-defender-off
+        name: Disable Windows Defender for workspace and temp
+        shell: powershell
+        run: |
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, $env:TEMP
+      - uses: ./.github/actions/verify-test-group
+        with:
+          group: unit
+          targets: *unit-targets
+          junit: .harness/.sandboxes/logs/junit-Windows-unit.xml
+
+  verify-windows-integration:
+    name: Windows / Integration
+    if: >-
+      always() && github.event_name == 'pull_request' && needs.docs.result == 'success' &&
+      ((startsWith(github.base_ref, 'integration/') && needs.verify-light.result == 'success') ||
+      (!startsWith(github.base_ref, 'integration/') && needs.lint.result == 'success'))
+    needs: [docs, lint, verify-light]
+    runs-on: windows-latest
+    timeout-minutes: 180
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - *windows-git-config
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - *windows-defender-off
+      - uses: ./.github/actions/verify-test-group
+        with:
+          group: integration
+          targets: *integration-targets
+          junit: .harness/.sandboxes/logs/junit-Windows-integration.xml
+
+  verify-test-groups:
+    # One visible roll-up node for the four platform/type test jobs.
+    if: always() && github.event_name == 'pull_request'
+    needs:
+      [verify-linux-unit, verify-linux-integration, verify-windows-unit, verify-windows-integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm all four test groups passed
+        env:
+          GROUP_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["GROUP_RESULTS"])
+          failed = [name for name, result in results.items() if result["result"] != "success"]
+          if failed:
+              print("Test groups not successful: " + ", ".join(sorted(failed)))
+              sys.exit(1)
+          print("Linux/Windows unit and integration groups passed.")
+          PY
+  # ============================================================================
+  # STAGE 2B: Web suite (both paths)
+  # ============================================================================
+
+  console-spa:
+    # The console SPA (ADR 0029): Node typechecks and builds it, then runs Vitest and the
+    # Playwright scenarios in tests/web against the real console server. Playwright checks
+    # behaviour only: CI never compares screenshots.
+    # It runs on both paths: a pull request into `integration/**` runs it next to `verify-light`.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22.14.0"
+          cache: npm
+          cache-dependency-path: harness/console/frontend/package-lock.json
+      - name: Build the console SPA
+        working-directory: harness/console/frontend
+        run: |
+          echo "::group::npm ci"
+          npm ci
+          echo "::endgroup::"
+          npm run typecheck
+          npm run build
+      - name: Test the console SPA (Vitest)
+        working-directory: harness/console/frontend
+        run: npm test
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('harness/console/frontend/package-lock.json') }}
+      - name: Install Chromium for Playwright
+        working-directory: harness/console/frontend
+        env:
+          CACHED: ${{ steps.playwright-cache.outputs.cache-hit }}
+        run: |
+          echo "::group::Playwright setup"
+          if [ "$CACHED" = "true" ]; then
+            npx playwright install-deps chromium
+          else
+            npx playwright install --with-deps chromium
+          fi
+          echo "::endgroup::"
+      - name: Test the console SPA in Chromium (Playwright)
+        working-directory: harness/console/frontend
+        env:
+          HARNESS_PYTHON: ${{ github.workspace }}/.harness/.venv/bin/python
+        run: npm run test:e2e
+      - name: Keep the Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: playwright-report
+          path: |
+            harness/console/frontend/playwright-report
+            harness/console/frontend/test-results
+          if-no-files-found: ignore
+          retention-days: 3
+
+  # ============================================================================
+  # STAGE 2C: Full suites (Linux, Windows, Repo Map, containers)
+  # ============================================================================
+
+  verify:
+    # It never waits for the Linux test groups: on a pull request it runs only the clean-room
+    # scenarios, beside the groups, and `verify-test-groups` confirms the four groups.
+    needs: [docs, lint, runtime-build]
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    # The complete suite reached 81% after almost an hour on a hosted runner (#943).
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      - name: Make script executable
+        run: chmod +x scripts/verify.py
+      # The IPC seam tests (tests/orchestration/test_runtime_client.py) start this binary through
+      # the coordinator CLI; a missing binary fails them here, it never skips them.
+      - name: Download the debug harness-runtime of the runtime-build job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: harness-runtime-linux-debug
+          path: native/harness-runtime/target/debug
+      - name: Make harness-runtime executable
+        run: chmod +x native/harness-runtime/target/debug/harness-runtime
+      # The isolated test runner needs bubblewrap and unprivileged user namespaces, which Ubuntu
+      # 24.04 restricts through AppArmor; without them the clean-room scenario proves only refusal.
+      - name: Install bubblewrap for the isolated test runner
+        run: |
+          echo "::group::Install bubblewrap and configure AppArmor"
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          if [ -e /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]; then
+            sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          fi
+          echo "::endgroup::"
+      - name: Restore the pytest cache (tests that failed last time run first)
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .harness/.sandboxes/pytest-cache
+          key: pytest-${{ runner.os }}-verify-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            pytest-${{ runner.os }}-verify-${{ github.head_ref || github.ref_name }}-
+      - name: Verify harness and clean-room install
+        env:
+          HARNESS_REQUIRE_TEST_SANDBOX: "1"
+          HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime
+          HARNESS_REQUIRE_RUNTIME: "1"
+          # Pull requests run Python tests in named platform/type jobs; keep their clean-room gate
+          # here. Pushes run the complete legacy selection.
+          VERIFY_ARGS: ${{ github.event_name == 'pull_request' && '--only clean-room' || '--junit-xml .harness/.sandboxes/logs/junit-verify.xml --failed-first .harness/.sandboxes/pytest-cache' }}
+        run: |
+          mkdir -p .harness/.sandboxes/logs
+          make verify
+      - name: Save the pytest cache
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .harness/.sandboxes/pytest-cache
+          key: pytest-${{ runner.os }}-verify-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
+      - name: Test summary and annotations of the failed tests
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-verify.xml --title "Linux: тесты" >> "$GITHUB_STEP_SUMMARY"
+          python scripts/ci_summary.py annotate .harness/.sandboxes/logs/junit-verify.xml
+      - name: Keep the test report for the dashboard
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: junit-verify
+          path: .harness/.sandboxes/logs/junit-verify.xml
+          if-no-files-found: ignore
+          retention-days: 3
+
+  diff-coverage:
+    # Measures its own pytest run under coverage, so it runs beside `verify` instead of after it:
+    # the suite no longer executes twice in one job.
+    needs: [lint, docs]
+    if: github.event_name == 'pull_request' && !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    # The full measured suite exceeded 60 minutes at 67% on a hosted runner (#943).
+    # Keep every test and the coverage threshold; allow for instrumentation overhead.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      - name: Diff coverage of changed Python lines
+        env:
+          DIFF_COVERAGE_BASE: ${{ github.event.pull_request.base.sha }}
+        run: .harness/.venv/bin/python scripts/diff_coverage.py
+
+  docker-smoke:
+    # Real rootful Docker smoke of the container executor (#710): the coordinator CLI, the real
+    # harness-runtime, real Git worktrees and the store run a worker dispatch and a QA run in
+    # containers of the images built below. pyproject.toml deselects the docker_smoke marker in
+    # every other pytest run; this job selects it explicitly, and its require flags turn a missing
+    # engine, image or runtime into a failure instead of a skip. Podman and rootless Docker are
+    # not covered by this job.
+    needs: [lint, runtime-build]
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      - name: Download the debug harness-runtime of the runtime-build job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: harness-runtime-linux-debug
+          path: native/harness-runtime/target/debug
+      - name: Make harness-runtime executable
+        run: chmod +x native/harness-runtime/target/debug/harness-runtime
+      # The harness never builds an image; these commands are the ones the shipped guide gives the
+      # user: the base image, a project worker image FROM it, and the egress proxy.
+      - name: Build the smoke images
+        run: |
+          echo "::group::Build the Docker smoke images"
+          docker build -f harness/container/Dockerfile.sandbox -t harness-sandbox:smoke harness/container
+          printf 'FROM harness-sandbox:smoke\nLABEL org.opencontainers.image.title=harness-smoke-worker\n' \
+            | docker build -t harness-worker:smoke -
+          docker build -f harness/container/Dockerfile.proxy -t harness-proxy:smoke harness/container
+          echo "::endgroup::"
+      - name: Docker smoke of the worker and QA paths
+        env:
+          HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime
+          HARNESS_REQUIRE_RUNTIME: "1"
+          HARNESS_REQUIRE_DOCKER_SMOKE: "1"
+        run: |
+          mkdir -p .harness/.sandboxes/logs
+          .harness/.venv/bin/python -m pytest -m docker_smoke -v \
+            --junitxml=.harness/.sandboxes/logs/junit-docker-smoke.xml -o junit_family=xunit2 \
+            tests/orchestration/test_docker_smoke.py
+      - name: Keep the test report for the dashboard
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: junit-docker-smoke
+          path: .harness/.sandboxes/logs/junit-docker-smoke.xml
+          if-no-files-found: ignore
+          retention-days: 3
+
+  fault-injection:
+    # The fault-injection and security matrix at seam 1 (#813): the coordinator CLI against the real
+    # harness-runtime, one marked test per scenario of tests/orchestration/fault_injection_matrix.py.
+    # Only a debug build has the test hooks of the runtime. The require flags turn a missing runtime,
+    # an unselected scenario or a skipped one into a failure, and nothing repeats a failed scenario.
+    needs: [lint, runtime-build]
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      - name: Download the debug harness-runtime of the runtime-build job
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: harness-runtime-linux-debug
+          path: native/harness-runtime/target/debug
+      - name: Make harness-runtime executable
+        run: chmod +x native/harness-runtime/target/debug/harness-runtime
+      - name: Fault-injection and security matrix at seam 1
+        env:
+          HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime
+          HARNESS_REQUIRE_RUNTIME: "1"
+          HARNESS_REQUIRE_FAULT_INJECTION: "1"
+        run: |
+          mkdir -p .harness/.sandboxes/logs
+          .harness/.venv/bin/python -m pytest -m fault_injection -v \
+            --junitxml=.harness/.sandboxes/logs/junit-fault-injection.xml -o junit_family=xunit2 \
+            tests/orchestration
+      - name: Keep the test report for the dashboard
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: junit-fault-injection
+          path: .harness/.sandboxes/logs/junit-fault-injection.xml
+          if-no-files-found: ignore
+          retention-days: 3
+
   repo-map-bundle:
     # Bundle tests (never skipped here, never a `pytest -k` filter) and the separate mypy run of the
     # tree-sitter worker against the bundle from `parser-bundle`. Go, Java and C# each get their own
     # isolated matrix leg and test file (#279): an unavailable bundle or an empty collection fails
     # that leg hard, never a silent skip.
-    needs: parser-bundle
+    needs: [parser-bundle, lint]
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     strategy:
@@ -311,12 +783,15 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
-          cache-local-path: ${{ runner.temp }}/setup-uv-cache
-      - name: Keep the uv cache where setup-uv restores it
-        shell: bash
-        run: echo "UV_CACHE_DIR=$RUNNER_TEMP/setup-uv-cache" >> "$GITHUB_ENV"
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
       - name: Bootstrap harness environment
-        run: make bootstrap
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: parser-bundle
@@ -339,11 +814,212 @@ jobs:
             --python-executable "$RUNNER_TEMP/worker-typecheck/bin/python" \
             harness/repo_map/tree_sitter_worker.py
 
+  # Windows checks (#753) are switched on again with the policy of #934: they run the full test suite,
+  # so they belong to the full path and are skipped for a pull request into `integration/**`.
+  verify-windows:
+    # Two parallel parts so a slow pytest run cannot starve the clean-room install run of its time
+    # budget. A pull request into a branch other than `integration/**` runs the full suite of the tests
+    # too, so the job gets a long timeout (ADR 0018).
+    needs: [lint, docs, verify-windows-unit, verify-windows-integration]
+    if: >-
+      always() && (github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')) &&
+      needs.docs.result == 'success' &&
+      (github.event_name != 'pull_request' || needs.lint.result == 'success')
+    name: verify-windows (${{ matrix.part }})
+    runs-on: windows-latest
+    timeout-minutes: ${{ matrix.timeout }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: tests
+            timeout: 180
+            verify_args: >-
+              --only tests
+              --junit-xml .harness/.sandboxes/logs/junit-windows-tests.xml
+              --failed-first .harness/.sandboxes/pytest-cache
+          - part: clean-room
+            timeout: 30
+            verify_args: --only clean-room
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Before checkout: the runner's autocrlf=true makes every repository the clean-room scenarios
+      # create print "LF will be replaced by CRLF" warnings. fscache and preloadindex speed up the
+      # thousands of short git.exe runs on NTFS. Both steps are defined in verify-windows-unit.
+      - *windows-git-config
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - *windows-defender-off
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      - name: Restore the pytest cache (tests that failed last time run first)
+        uses: actions/cache/restore@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .harness/.sandboxes/pytest-cache
+          key: pytest-${{ runner.os }}-${{ matrix.part }}-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            pytest-${{ runner.os }}-${{ matrix.part }}-${{ github.head_ref || github.ref_name }}-
+      - name: Git Bash before the WSL launcher
+        # A bare `bash` on the runner resolves to C:\Windows\System32\bash.exe, the WSL launcher
+        # without a distribution, so every hook test ran it instead of Git Bash. This is the setup
+        # `harness health` (check hook_bash) asks of a Windows machine: Git's bin ahead of System32.
+        shell: bash
+        run: |
+          git_bash='C:\Program Files\Git\bin'
+          test -f "$(cygpath -u "$git_bash")/bash.exe"
+          echo "$git_bash" >> "$GITHUB_PATH"
+          # What a hook sees from Git Bash: shown here because a failing hook reports only a verdict.
+          PATH="$(cygpath -u "$git_bash"):$PATH" bash -c 'command -v bash python3 python; python3 --version || true'
+      - name: Verify harness and clean-room install
+        if: ${{ github.event_name != 'pull_request' || matrix.part == 'clean-room' }}
+        env:
+          PYTHONUTF8: "1"
+          PYTEST_ADDOPTS: "-vv -o faulthandler_timeout=120 -o faulthandler_exit_on_timeout=true --max-worker-restart=0"
+          PYTHONUNBUFFERED: "1"
+          # The clean-room part of a pull request stops at the first failing scenario. The tests part
+          # does not: one run lists every Windows failure, so a fix does not cost a run per failure.
+          # Both parts run the full suite: no --platform-subset (ADR 0018).
+          VERIFY_ARGS: ${{ matrix.verify_args }} ${{ (github.event_name == 'pull_request' && matrix.part != 'tests') && '--fail-fast' || '' }}
+        run: |
+          set -o pipefail
+          mkdir -p .harness/.sandboxes/logs
+          make verify 2>&1 | tee .harness/.sandboxes/logs/verify-windows-${{ matrix.part }}.log
+      - name: Check Windows test groups
+        if: ${{ github.event_name == 'pull_request' && matrix.part == 'tests' }}
+        env:
+          GROUP_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          results = json.loads(os.environ["GROUP_RESULTS"])
+          required = ("verify-windows-unit", "verify-windows-integration")
+          failed = [name for name in required if results[name]["result"] != "success"]
+          if failed:
+              print("Windows test groups not successful: " + ", ".join(failed))
+              sys.exit(1)
+          print("Windows unit and integration groups passed.")
+          PY
+      - name: Save the pytest cache
+        if: ${{ !cancelled() && github.event_name != 'pull_request' }}
+        uses: actions/cache/save@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
+        with:
+          path: .harness/.sandboxes/pytest-cache
+          key: pytest-${{ runner.os }}-${{ matrix.part }}-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
+      - name: Test summary
+        if: ${{ !cancelled() && github.event_name != 'pull_request' && matrix.part == 'tests' }}
+        env:
+          PYTHONUTF8: "1"
+        run: |
+          python scripts/ci_summary.py tests .harness/.sandboxes/logs/junit-windows-tests.xml --title "Windows: тесты" >> "$GITHUB_STEP_SUMMARY"
+          python scripts/ci_summary.py annotate .harness/.sandboxes/logs/junit-windows-tests.xml
+      - name: Keep the test report for the dashboard
+        if: ${{ !cancelled() && github.event_name != 'pull_request' && matrix.part == 'tests' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: junit-windows-tests
+          path: .harness/.sandboxes/logs/junit-windows-tests.xml
+          if-no-files-found: ignore
+          retention-days: 3
+      - name: Preserve Windows verification diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: verify-windows-${{ matrix.part }}-log
+          path: .harness/.sandboxes/logs/verify-windows-${{ matrix.part }}.log
+          if-no-files-found: ignore
+          retention-days: 7
+
+  runtime-ipc-windows:
+    # Light Windows job for the named pipe of the runtime (ADR 0021, section 2) and its job object
+    # supervisor (ADR 0022, sections 2, 3 and 5): it builds harness-runtime and runs only the IPC
+    # contract tests of both languages over the pipe and the Rust contract tests of the job
+    # objects. The full `verify-windows` job above runs the whole verification; no step here does.
+    needs: lint
+    if: github.event_name != 'pull_request' || !startsWith(github.base_ref, 'integration/')
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env: *rust-line-tables
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: |
+            **/pyproject.toml
+            **/uv.lock
+      - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.9.1
+        with:
+          workspaces: "native/harness-runtime -> target"
+      - name: Bootstrap harness environment
+        run: |
+          echo "::group::make bootstrap"
+          make bootstrap
+          echo "::endgroup::"
+      # The Windows-only code (`platform-ffi`, the named pipe server) is compiled and linted here.
+      - name: Clippy
+        working-directory: native/harness-runtime
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Build harness-runtime for the IPC seam tests
+        id: build
+        working-directory: native/harness-runtime
+        run: cargo build --locked
+      # One run reports every Windows failure: `--no-fail-fast` runs every test binary, and the
+      # Python step below runs after a successful build even when this step failed.
+      - name: Rust IPC contract tests
+        working-directory: native/harness-runtime
+        run: cargo test --locked --no-fail-fast -p ipc -p platform-ffi
+      # The job objects of the supervisor: launch, identity, deadline stop with CTRL_BREAK and
+      # TerminateJobObject, and reconcile after a killed runtime. The executions are Python scripts
+      # of the `python` set up above. Each step runs after a successful build, whatever failed.
+      - name: Rust supervisor job object contract tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: native/harness-runtime
+        run: cargo test --locked --no-fail-fast -p supervisor
+      - name: Rust runtime restart, stop and deadline stop tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: native/harness-runtime
+        run: >-
+          cargo test --locked --no-fail-fast -p harness-runtime
+          --test windows_supervisor --test stop_restart
+      - name: Python IPC contract tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        env:
+          HARNESS_RUNTIME_BIN: ${{ github.workspace }}/native/harness-runtime/target/debug/harness-runtime.exe
+          HARNESS_REQUIRE_RUNTIME: "1"
+        run: .harness/.venv/Scripts/python -m pytest -q tests/orchestration/test_runtime_client.py
+
+  # ============================================================================
+  # STAGE 3: Summary
+  # ============================================================================
+
   dashboard:
     # One page for the whole run: which jobs passed, which failed, which tests and why. It runs
     # after every other job, whatever their results, and only reads what they leave.
     if: always()
-    needs: [verify, diff-coverage, private-terms, parser-bundle, repo-map-bundle]
+    needs:
+      [private-terms, docs, lint, rust, runtime-build, parser-bundle, verify-light, verify-test-groups, console-spa, verify, diff-coverage, docker-smoke, fault-injection, repo-map-bundle, verify-windows, runtime-ipc-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

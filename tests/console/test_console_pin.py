@@ -17,3 +17,31 @@ def test_dev_dependency_group_pins_the_same_textual_version_as_console_pin() -> 
     pinned = [entry for entry in dev_group if entry.startswith("textual==")]
 
     assert pinned == [f"textual=={TEXTUAL_PIN}"]
+
+
+def test_dev_dependency_group_pins_every_console_server_requirement() -> None:
+    from harness.console import pin
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dev_group = pyproject["dependency-groups"]["dev"]
+
+    assert pin.CONSOLE_SERVER_REQUIREMENTS == (
+        "fastapi==0.162.0",
+        "starlette==1.10.0",
+        "uvicorn==0.54.0",
+        "pydantic==2.14.3",
+        "websockets==17.3",
+    )
+    names = ("fastapi==", "starlette==", "uvicorn==", "pydantic==", "websockets==")
+    pinned = [entry for entry in dev_group if entry.startswith(names)]
+    assert sorted(pinned) == sorted(pin.CONSOLE_SERVER_REQUIREMENTS)
+
+
+def test_retired_transport_pins_are_gone() -> None:
+    from harness.console import pin
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    dev_group = pyproject["dependency-groups"]["dev"]
+
+    assert not hasattr(pin, "H11_PIN") and not hasattr(pin, "JINJA2_PIN")
+    assert not [entry for entry in dev_group if entry.startswith(("h11", "jinja2"))]

@@ -8,14 +8,19 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from harness.orchestration import coordinator
 from harness.orchestration.core import ci_source
 from harness.orchestration.core.ci_source import CheckRun, CiObservation
-from harness.orchestration.core.utils import CoordinatorError, JsonObject
-from harness.orchestration.workflow import integration
+from harness.orchestration.core.utils import CoordinatorError, JsonObject, _canonical
+from harness.orchestration.workflow import integration, release_gate
+from tests.orchestration import runtime_store_support as support
+from tests.orchestration import test_verification_plan_dispatch as plan_dispatch
+from tests.orchestration.legacy_state import seed_file_ledger
 from tests.orchestration.test_integration_record import PublishedBranch
 
 REPO = "owner/repo"
@@ -198,6 +203,7 @@ class CollectCiTests(unittest.TestCase):
                     "wrong_repository",
                     "wrong_pull_request",
                     "wrong_base",
+                    "light_check",
                 )
             },
         }
@@ -265,6 +271,20 @@ class CollectCiTests(unittest.TestCase):
                 self.collect(self.observation()), "not_configured"
             )
 
+    def test_a_light_check_never_confirms_a_pair_that_requires_full(self) -> None:
+        light = tuple(
+            CheckRun(name, MERGE, "completed", "success", str(index), None)
+            for index, name in enumerate(("lint-light", "verify-light"), start=10)
+        )
+        write_project(self.branch.repo, GITHUB, ["lint-light", "verify-light"])
+
+        result = self.collect(self.observation(checks=light))
+
+        self.assert_nothing_recorded(result, "light_check")
+        self.assertEqual(
+            result["next"], {"action": "local-qa", "ci_condition": "unusable"}
+        )
+
     def test_collect_changes_nothing_but_the_evidence_record(self) -> None:
         before = self.branch.snapshot()
         self.collect(self.observation())
@@ -308,6 +328,199 @@ class CollectCiTests(unittest.TestCase):
             "protection",
         ):
             self.assertNotIn(forbidden, text.replace("branch protection", ""))
+
+
+def _light_observation(
+    candidate: str, target: str, base_ref: str, names: tuple[str, ...]
+) -> CiObservation:
+    runs = tuple(
+        CheckRun(name, MERGE, "completed", "success", str(index), None)
+        for index, name in enumerate(names, start=10)
+    )
+    return CiObservation(
+        repository=REPO,
+        pull_request=PR,
+        base_ref=base_ref,
+        candidate_sha=candidate,
+        checkout="combined",
+        merge_commit_sha=MERGE,
+        merge_parents=(candidate, target),
+        checks=runs,
+    )
+
+
+class _FileLedgerPair(plan_dispatch.TicketDiffFixture):
+    """The pair fixture on a ledger in the repository."""
+
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    file_ledger = True
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.fx.state_dir = self.fx.repo / ".harness/orchestration/state"
+        seed_file_ledger(self.fx.state_dir)
+
+
+class _LightPair(_FileLedgerPair):
+    """A published and prepared pair into ``integration/it`` whose flag stored ``ticket-diff``."""
+
+    required = ["lint-light", "verify-light"]
+
+    def setUp(self) -> None:
+        super().setUp()
+        self._configure(self._on())
+        self.branch = PublishedBranch(self.fx, self.integration_ref)
+        self.branch.publish()
+        self.prepared = self.branch.prepare()
+        write_project(self.fx.repo, GITHUB, self.required)
+
+    def collect(self, names: tuple[str, ...] | None = None) -> JsonObject:
+        observation = _light_observation(
+            self.prepared["candidate_sha"],
+            self.prepared["target_sha"],
+            self.integration_ref,
+            names or tuple(self.required),
+        )
+        return coordinator.integration_collect_ci(
+            self.branch.args(
+                record=self.prepared["integration_record_id"],
+                ticket=None,
+                branch=None,
+                batch=None,
+                pull_request=PR,
+                ci_source=FakeSource(observation),
+            )
+        )
+
+    def pair_name(self) -> str:
+        pair = release_gate.pair_id(
+            self.prepared["candidate_sha"], self.prepared["target_sha"]
+        )
+        return f"reports/integration-pair/{pair}.json"
+
+    def pair_path(self) -> Path:
+        return self.branch.records() / self.pair_name()
+
+
+class LightCiTests(_LightPair):
+    """The light check of a pull request into ``integration/*`` (issue #937) confirms a pair only
+    when the pair stored the QA selection ``ticket-diff``; anything else requires ``full``."""
+
+    def test_the_pair_of_a_ticket_diff_selection_accepts_the_light_check(self) -> None:
+        stored = json.loads(self.pair_path().read_text(encoding="utf-8"))
+        self.assertEqual(stored["selection"], "ticket-diff")
+
+        result = self.collect()
+
+        self.assertEqual(result["outcome"], "accepted")
+        self.assertTrue(result["recorded"])
+        self.assertFalse(result["local_qa_required"])
+        self.assertEqual(
+            [c["name"] for c in result["verified"]["checks"]], self.required
+        )
+
+    def test_a_pair_of_the_first_contract_requires_full(self) -> None:
+        stored = json.loads(self.pair_path().read_text(encoding="utf-8"))
+        old = {k: v for k, v in stored.items() if k != "selection"}
+        old["contract"] = 1
+        self.pair_path().write_text(_canonical(old), encoding="utf-8")
+
+        result = self.collect()
+
+        self.assertEqual(
+            (result["outcome"], result["reason"]), ("fallback", "light_check")
+        )
+        self.assertFalse(result["recorded"])
+
+    def test_a_pair_that_is_not_recorded_requires_full(self) -> None:
+        self.pair_path().unlink()
+
+        result = self.collect()
+
+        self.assertEqual(
+            (result["outcome"], result["reason"]), ("fallback", "light_check")
+        )
+        self.assertFalse(result["recorded"])
+
+    def test_a_forged_selection_requires_full(self) -> None:
+        stored = json.loads(self.pair_path().read_text(encoding="utf-8"))
+        self.pair_path().write_text(
+            _canonical({**stored, "selection": "focused"}), encoding="utf-8"
+        )
+
+        result = self.collect()
+
+        self.assertEqual(
+            (result["outcome"], result["reason"]), ("fallback", "light_check")
+        )
+
+    def test_the_full_check_names_still_confirm_a_ticket_diff_pair(self) -> None:
+        write_project(self.fx.repo, GITHUB, ["verify", "rust"])
+
+        result = self.collect(("verify", "rust"))
+
+        self.assertEqual(result["outcome"], "accepted")
+
+
+class LightCiStoreEpochTests(_LightPair):
+    """In the runtime-store epoch the pair record lives in the store, not in a file: the reader
+    sees it only inside the ledger lock, where the store view is bound."""
+
+    def setUp(self) -> None:
+        support.runtime_binary()
+        super().setUp()
+        migrated = support.migrate(self.fx.repo)
+        assert migrated.returncode == 0, migrated.stderr
+        self.runtime = support.ServingRuntime(self.fx.repo)
+        self.addCleanup(self.runtime.stop)
+        environment = mock.patch.dict(
+            os.environ, {"XDG_RUNTIME_DIR": str(self.runtime.xdg)}
+        )
+        environment.start()
+        self.addCleanup(environment.stop)
+
+    def test_the_stored_ticket_diff_pair_accepts_the_light_check(self) -> None:
+        name = self.pair_name()
+        stored = support.store_records(self.fx.repo, self.runtime, name)[name]
+        self.assertEqual(stored["selection"], "ticket-diff")
+
+        result = self.collect()
+
+        self.assertEqual(result["outcome"], "accepted")
+        self.assertTrue(result["recorded"])
+
+
+class FullPairLightCiTests(_FileLedgerPair):
+    """A pair into the default branch requires ``full``; the flag decides, not the check name."""
+
+    def test_the_flag_off_pair_into_an_integration_ref_requires_full(self) -> None:
+        self._configure(self._on(ticket_diff_selection=False))
+        branch = PublishedBranch(self.fx, self.integration_ref)
+        branch.publish()
+        prepared = branch.prepare()
+        write_project(self.fx.repo, GITHUB, ["verify-light"])
+        observation = _light_observation(
+            prepared["candidate_sha"],
+            prepared["target_sha"],
+            self.integration_ref,
+            ("verify-light",),
+        )
+
+        result = coordinator.integration_collect_ci(
+            branch.args(
+                record=prepared["integration_record_id"],
+                ticket=None,
+                branch=None,
+                batch=None,
+                pull_request=PR,
+                ci_source=FakeSource(observation),
+            )
+        )
+
+        self.assertEqual(
+            (result["outcome"], result["reason"]), ("fallback", "light_check")
+        )
+        self.assertFalse(result["recorded"])
 
 
 if __name__ == "__main__":

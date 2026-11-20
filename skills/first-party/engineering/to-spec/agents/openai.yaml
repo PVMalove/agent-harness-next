@@ -1,0 +1,6 @@
+interface:
+  display_name: "To Spec"
+  short_description: "Write a spec from approved Discovery Context"
+  default_prompt: "Use $to-spec to turn the grilling handoff and approved Discovery Context into a verifiable specification."
+policy:
+  allow_implicit_invocation: false

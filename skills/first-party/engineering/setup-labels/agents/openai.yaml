@@ -1,0 +1,6 @@
+interface:
+  display_name: "Setup Labels"
+  short_description: "Create the repository's triage labels"
+  default_prompt: "Use $setup-labels to create or update this repository's tracker labels to match .harness/instructions/triage-labels.md."
+policy:
+  allow_implicit_invocation: false

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -21,6 +23,7 @@ def run(ctx: SimpleNamespace) -> None:
     sync_origin_base = ctx.sync_origin_base
     test_root = ctx.test_root
     state = test_root / "parallel-batches-state"
+    seed_file_ledger(state)
 
     def plan(ticket, slug, *scope):
         branch = f"feature/issue-{ticket.lstrip('#')}-{slug}"

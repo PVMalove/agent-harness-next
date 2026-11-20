@@ -1,0 +1,6 @@
+interface:
+  display_name: "Publish Epic"
+  short_description: "Publish an approved spec as an epic"
+  default_prompt: "Use $publish-epic to publish the approved specification as an epic and set up its integration branch."
+policy:
+  allow_implicit_invocation: false

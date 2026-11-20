@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from harness.orchestration.core.utils import CoordinatorError
@@ -112,7 +112,27 @@ def git_environment() -> dict[str, str]:
 
     The classifier reads Git's English messages; a localized Git would hide a refusal from it.
     """
-    return {**os.environ, "LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0"}
+    return without_auto_gc({**os.environ, "LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0"})
+
+
+def without_auto_gc(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`env` (default: this process's) plus `gc.auto=0` as one more `GIT_CONFIG_*` entry.
+
+    `git commit` and `git fetch` start an auto-gc that expires the reflogs of every worktree.
+    Under the agent sandbox `.git/worktrees` is read-only, and the gc fails with `cannot lock ref
+    'worktrees/<name>/HEAD'` after a command that succeeded (#1189). The entry is appended, so a
+    `GIT_CONFIG_COUNT` the caller already sets keeps its entries.
+    """
+    result = dict(os.environ if env is None else env)
+    try:
+        count = int(result.get("GIT_CONFIG_COUNT", "0"))
+    except ValueError:
+        count = 0
+    count = max(count, 0)
+    result[f"GIT_CONFIG_KEY_{count}"] = "gc.auto"
+    result[f"GIT_CONFIG_VALUE_{count}"] = "0"
+    result["GIT_CONFIG_COUNT"] = str(count + 1)
+    return result
 
 
 def _run_git(
@@ -130,7 +150,7 @@ def _run_git(
             capture_output=True,
             check=False,
             timeout=GIT_TIMEOUT_SECONDS,
-            env=env,
+            env=env if env is not None else without_auto_gc(),
         )
     except subprocess.TimeoutExpired as exc:
         raise CoordinatorError(
@@ -279,13 +299,17 @@ def _merge_base(repo: Path, first: str, second: str) -> str:
     return _git(repo, "merge-base", "--", first, second)
 
 
-def _patch_id(repo: Path, commit: str) -> str | None:
+def _patch_id(repo: Path, commit: str, path: str | None = None) -> str | None:
     """The stable ``git patch-id`` of one commit's own diff, or ``None`` when it has no textual
     diff (an empty commit or any merge). Equal ids mean the same change, whatever its parent.
+    With ``path``, only that file's part of the diff is compared.
 
     The diff comes from plumbing ``git diff-tree``, which ignores the user's diff and log
     configuration and prints nothing for a merge."""
-    diff = _run_git(repo, ("diff-tree", "-p", "--root", "--no-commit-id", commit, "--"))
+    paths = (path,) if path is not None else ()
+    diff = _run_git(
+        repo, ("diff-tree", "-p", "--root", "--no-commit-id", commit, "--", *paths)
+    )
     if diff.returncode != 0:
         raise CoordinatorError(
             f"git diff-tree failed for {commit}: "

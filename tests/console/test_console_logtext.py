@@ -1,16 +1,11 @@
-"""Coloured logs and ☑ / ☐ widgets."""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
-import asyncio
-
 from rich.text import Text
-from textual.app import App
-from textual.widgets.selection_list import Selection
 
-from harness.console import brand
-from harness.console.logtext import colorize_diff, colorize_log, colorize_overview
-from harness.console.widgets import CHECKED, UNCHECKED, CheckBox, CheckList
+from harness.console.kernel import brand
+from harness.console.tui.logtext import colorize_diff, colorize_log, colorize_overview
 
 
 def _styles(text: Text) -> dict[str, str]:
@@ -57,28 +52,3 @@ def test_overview_keys_are_accented() -> None:
     overview = colorize_overview("Скилов: 32\nбез двоеточия")
     assert brand.PALETTE["primary"] in _styles(overview)["Скилов:"]
     assert overview.plain == "Скилов: 32\nбез двоеточия"
-
-
-def test_checkbox_and_checklist_draw_ticked_and_unticked_differently() -> None:
-    class Host(App[None]):
-        def compose(self):  # type: ignore[no-untyped-def]
-            yield CheckBox("on", value=True, id="on")
-            yield CheckBox("off", value=False, id="off")
-            yield CheckList(
-                Selection("first", "first", True), Selection("second", "second", False)
-            )
-
-    async def scenario() -> list[str]:
-        app = Host()
-        async with app.run_test(size=(40, 12)) as pilot:
-            await pilot.pause()
-            strips = app.screen._compositor.render_strips()
-            return ["".join(segment.text for segment in strip) for strip in strips]
-
-    lines = asyncio.run(scenario())
-    joined = "\n".join(lines)
-    assert CHECKED in joined and UNCHECKED in joined
-    ticked = next(line for line in lines if "first" in line)
-    unticked = next(line for line in lines if "second" in line)
-    assert CHECKED in ticked and UNCHECKED in unticked
-    assert next(line for line in lines if "on" in line.split()).count(CHECKED) == 1

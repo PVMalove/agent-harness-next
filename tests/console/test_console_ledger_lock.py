@@ -1,25 +1,10 @@
-"""The ledger lock in the Orchestration section (issue #759).
-
-The panel reads the same read-only state as `coordinator.py ledger lock-status`, shows how long
-the lock has been held and how much is left until the timeout release, and refreshes on the live
-screen. The forced release is a terminal coordinator command that asks for confirmation. Pilot
-scenarios run on a narrow and a wide terminal with a recording runner.
-"""
+"""Unit tests of console logic; no application startup or external processes."""
 
 from __future__ import annotations
 
-import asyncio
-import json
-import os
-import socket
-import subprocess
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Mapping, Sequence
 
-import pytest
-
-from harness.console import ledger_lock
+from harness.console.tui import ledger_lock
 from harness.json_types import JsonObject
 from harness.orchestration.core.constants import LEDGER_LOCK_STALE_SECONDS
 
@@ -42,6 +27,36 @@ def _status(**overrides: object) -> JsonObject:
 
 def test_a_free_lock_says_so() -> None:
     assert ledger_lock.lock_text({"locked": False}) == "Lock ledger свободен."
+
+
+def test_the_store_epoch_shows_the_qa_lease_with_its_verdict() -> None:
+    lease = {
+        "owner": {"owner_kind": "dispatch", "owner_id": "dispatch-1"},
+        "fencing_token": 7,
+        "expires_at": "2026-10-28T00:05:00+00:00",
+        "stale_heartbeat": True,
+        "verdict": "owner-dead",
+        "release_available": True,
+    }
+
+    free = ledger_lock.lock_text({"locked": False, "qa_lease": None})
+    held = ledger_lock.lock_text({"locked": False, "qa_lease": lease})
+    english = ledger_lock.lock_text({"locked": False, "qa_lease": lease}, "en")
+    reused = ledger_lock.lock_text(
+        {"locked": False, "qa_lease": {**lease, "verdict": "owner-pid-reused"}}
+    )
+    broken = ledger_lock.lock_text({"locked": False, "qa_lease": {"error": "x: y"}})
+
+    assert free == "Lock ledger свободен.\nLease QA-lane свободен."
+    assert "Lease QA-lane: dispatch dispatch-1 · fencing 7" in held
+    assert "heartbeat пропущен" in held
+    assert "owner-dead" in held
+    assert "QA lease: dispatch dispatch-1 · fencing 7" in english
+    assert "heartbeat missed" in english
+    assert "не доказывает смерть" in reused
+    assert "состояние недоступно: x: y" in broken
+    # A file-lock panel of the file epoch has no lease line.
+    assert "Lease" not in ledger_lock.lock_text(_status())
 
 
 def test_the_panel_names_the_holder_its_age_and_the_time_left() -> None:
@@ -95,29 +110,6 @@ def test_durations_read_in_hours_minutes_and_seconds() -> None:
     assert ledger_lock.duration(-3) == "0 с"
 
 
-def test_the_real_loader_shows_an_orphaned_worker_lock(tmp_path: Path) -> None:
-    lock = tmp_path / ".harness/orchestration/state/.coordinator.lock"
-    lock.mkdir(parents=True)
-    (lock / "owner.json").write_text(
-        json.dumps(
-            {
-                "pid": os.getpid(),
-                "host": socket.gethostname(),
-                "acquired_at": datetime.now(UTC).isoformat(),
-                "pid_namespace": "pid:[1]",
-                "boot_id": "boot-of-another-sandbox",
-                "operation": "dispatch heartbeat",
-            }
-        ),
-        encoding="utf-8",
-    )
-
-    text = ledger_lock.current_lock_text(tmp_path)
-
-    assert "Lock ledger занят: dispatch heartbeat" in text
-    assert "owner-in-other-environment" in text
-
-
 def test_an_unreadable_state_is_shown_not_raised(tmp_path: Path) -> None:
     def broken(_repo: Path) -> JsonObject:
         raise OSError("state is unreadable")
@@ -127,137 +119,46 @@ def test_an_unreadable_state_is_shown_not_raised(tmp_path: Path) -> None:
     assert text == "Lock ledger: состояние недоступно: state is unreadable"
 
 
-textual = pytest.importorskip("textual")
+def test_a_console_server_failure_is_shown_as_the_unavailable_text() -> None:
+    from harness.console.tui.client import LockUnavailable, ServerUnavailable
 
-from textual.app import App  # noqa: E402
-from textual.widgets import Checkbox, ListItem, ListView, Static  # noqa: E402
+    def refused(repo: Path) -> JsonObject:
+        raise LockUnavailable("ledger занят")
 
-from harness.console.coordinator_catalog import (  # noqa: E402
-    COORDINATOR_COMMANDS,
-    process_argv,
-)
-from harness.console.screens.orchestration import (  # noqa: E402
-    CoordinatorCommandFormScreen,
-    OrchestrationScreen,
-)
+    def down(repo: Path) -> JsonObject:
+        raise ServerUnavailable("нет сервера")
 
-
-class _RecordingRunner:
-    def __init__(self) -> None:
-        self.calls: list[list[str]] = []
-
-    def __call__(
-        self,
-        argv: Sequence[str],
-        *,
-        env: Mapping[str, str] | None = None,
-        cwd: Path | None = None,
-    ) -> "subprocess.CompletedProcess[str]":
-        self.calls.append(list(argv))
-        return subprocess.CompletedProcess(list(argv), 0, "done\n", "")
+    assert ledger_lock.current_lock_text(Path("."), refused) == (
+        "Lock ledger: состояние недоступно: ledger занят"
+    )
+    assert "нет сервера" in ledger_lock.current_lock_text(Path("."), down)
 
 
-class _HostApp(App[None]):
-    def __init__(self, screen: OrchestrationScreen) -> None:
-        super().__init__()
-        self._orchestration_screen = screen
+def test_the_orchestration_screen_reads_its_lock_and_ledger_through_the_client() -> None:
+    import pytest
 
-    def on_mount(self) -> None:
-        self.push_screen(self._orchestration_screen)
+    from harness.console.tui.client import LockUnavailable
+    from harness.console.tui.screens import orchestration
 
+    from ._home_client import FakeHomeClient
+    from ._screen_facts import ledger
 
-class _Ticking:
-    """A lock whose age grows by one second on every read, like a lock still held."""
+    client = FakeHomeClient(Path("."), load_ledger=lambda repo: ledger())
+    found = orchestration.read_orchestration(client)
+    assert found.ledger.batches[0].batch_id == "b-1"
+    assert orchestration.first_lock(found) == {"locked": False}
+    client.lock = "занят"
+    with pytest.raises(LockUnavailable, match="занят"):
+        orchestration.first_lock(orchestration.read_orchestration(client))
+    with pytest.raises(LockUnavailable):
+        client.ledger_lock()
 
-    def __init__(self) -> None:
-        self.held = 200
-        self.served: list[int] = []
+    def down(*, force: bool = False) -> object:
+        from harness.console.tui.client import ServerUnavailable
 
-    def __call__(self, _repo: Path) -> JsonObject:
-        self.held += 1
-        self.served.append(self.held)
-        return _status(held_seconds=self.held, remaining_seconds=STALE - self.held)
+        raise ServerUnavailable("нет сервера")
 
-    def held_shown_in(self, text: str) -> int:
-        """The age a panel text shows, among the ages this loader served."""
-        shown = [
-            held
-            for held in self.served
-            if f"Держится: {ledger_lock.duration(held)} · до снятия по таймауту: "
-            f"{ledger_lock.duration(STALE - held)}" in text
-        ]
-        assert shown, text
-        return shown[-1]
-
-
-@pytest.mark.parametrize("size", [(64, 30), (160, 50)], ids=["narrow", "wide"])
-def test_the_lock_panel_counts_on_the_live_screen(
-    tmp_path: Path, size: tuple[int, int]
-) -> None:
-    ticking = _Ticking()
-
-    async def scenario() -> tuple[str, str]:
-        screen = OrchestrationScreen(
-            tmp_path,
-            command_runner=_RecordingRunner(),
-            load_lock=ticking,
-            lock_refresh_seconds=0.05,
-        )
-        app = _HostApp(screen)
-        async with app.run_test(size=size) as pilot:
-            await pilot.pause()
-            first = str(app.screen.query_one("#ledger-lock", Static).content)
-            await pilot.pause(0.3)
-            later = str(app.screen.query_one("#ledger-lock", Static).content)
-        return first, later
-
-    first, later = asyncio.run(scenario())
-    assert "Lock ledger занят: report submit" in first
-    # The timer may read the lock again after a snapshot, so each text is matched against the
-    # ages the loader actually served rather than its latest one.
-    assert ticking.held_shown_in(later) > ticking.held_shown_in(first)
-
-
-@pytest.mark.parametrize("size", [(64, 40), (160, 50)], ids=["narrow", "wide"])
-def test_the_forced_release_asks_and_runs_with_the_exact_argv(
-    tmp_path: Path, size: tuple[int, int]
-) -> None:
-    runner = _RecordingRunner()
-    values = {
-        "force": "1",
-        "approved_by": "dev",
-        "approved_at": "2026-10-18T00:00:00Z",
-        "reason": "orphaned worker",
-    }
-
-    async def scenario() -> bool:
-        screen = OrchestrationScreen(
-            tmp_path,
-            command_runner=runner,
-            load_lock=lambda _repo: _status(),
-            lock_refresh_seconds=60,
-        )
-        app = _HostApp(screen)
-        async with app.run_test(size=size) as pilot:
-            menu = app.screen.query_one("#command-menu", ListView)
-            menu.index = [item.name for item in menu.query(ListItem)].index(
-                "ledger-release-lock"
-            )
-            await pilot.press("enter")
-            await pilot.pause()
-            asked = isinstance(app.screen, CoordinatorCommandFormScreen) and bool(
-                app.screen.query("#confirmation-reason")
-            )
-            app.screen.query_one("#input-force", Checkbox).value = True
-            for dest in ("approved_by", "approved_at", "reason"):
-                app.screen.query_one(f"#input-{dest}").value = values[dest]  # type: ignore[attr-defined]
-            app.screen.query_one("#run").press()  # type: ignore[attr-defined]
-            await pilot.pause()
-            await app.workers.wait_for_complete()
-            await pilot.pause()
-        return asked
-
-    asked = asyncio.run(scenario())
-    entry = next(e for e in COORDINATOR_COMMANDS if e.key == "ledger-release-lock")
-    assert asked
-    assert runner.calls == [process_argv(entry.cli_argv(tmp_path, values))]
+    client.orchestration = down  # type: ignore[method-assign,assignment]
+    failed = orchestration.read_orchestration(client)
+    assert failed.ledger.unavailable is not None and "нет сервера" in failed.ledger.unavailable
+    assert failed.lock is None and failed.lock_error == "нет сервера"

@@ -12,7 +12,7 @@ ALWAYS_SENT_INSTRUCTION_FILES = [
     ROOT / "CLAUDE.md",
     ROOT / "AGENTS.md",
     ROOT / "harness" / "orchestration" / "playbook.md",
-] + sorted((ROOT / "harness" / "orchestration" / "roles").glob("*.md"))
+] + sorted((ROOT / "harness" / "orchestration" / "roles").glob("**/*.md"))
 _TIMESTAMP_RE = re.compile(
     r"\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:?\d{2})?\b"
 )

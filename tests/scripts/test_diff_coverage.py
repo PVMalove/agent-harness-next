@@ -133,7 +133,7 @@ class SourceDirsTests(unittest.TestCase):
         changed = {
             "harness/a.py": {1},
             "harness/b.py": {1},
-            "skills/first-party/pvmalove/qa-gate/scripts/test_summary.py": {1},
+            "skills/first-party/engineering/qa-gate/scripts/test_summary.py": {1},
         }
 
         sources = diff_coverage.source_dirs(changed)
@@ -145,7 +145,7 @@ class SourceDirsTests(unittest.TestCase):
                     str(diff_coverage.ROOT / "harness"),
                     str(
                         diff_coverage.ROOT
-                        / "skills/first-party/pvmalove/qa-gate/scripts"
+                        / "skills/first-party/engineering/qa-gate/scripts"
                     ),
                 }
             ),
@@ -258,6 +258,25 @@ class ChangedLinesTests(unittest.TestCase):
 
         self.assertEqual(changed, {"tool.py": {2}})
 
+    def test_a_changed_file_that_is_not_utf8_does_not_stop_the_gate(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._git(root, "init", "-q")
+            (root / "tool.py").write_text("a = 1\n", encoding="utf-8")
+            self._git(root, "add", "-A")
+            self._git(root, "commit", "-q", "-m", "base")
+            base = self._git(root, "rev-parse", "HEAD")
+            (root / "tool.py").write_text("a = 1\nb = 2\n", encoding="utf-8")
+            # Text to Git (no NUL byte), but not UTF-8: a fixture kept byte for byte.
+            (root / "artifact.log").write_bytes(b"line one\n\xff\xfe not utf-8\n")
+            self._git(root, "add", "-A")
+            self._git(root, "commit", "-q", "-m", "fixture")
+
+            with mock.patch.object(diff_coverage, "ROOT", root):
+                changed = diff_coverage._changed_lines(base)
+
+        self.assertEqual(changed, {"tool.py": {2}})
+
     def test_clean_room_verified_files_are_not_gated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -306,6 +325,95 @@ class ChangedLinesTests(unittest.TestCase):
         self.assertEqual(changed, {"модуль.py": {1}})
 
 
+class OwnTestsSelectionTests(unittest.TestCase):
+    """The diff's own test modules run first; the rest of the suite only when a line stays uncovered."""
+
+    CHANGED = {
+        "harness/a.py": {1, 2},
+        "tests/core/test_a.py": {5},
+        "tests/core/helpers.py": {1},
+        "skills/x/scripts/test_tool.py": {1},
+    }
+    OWN = str(diff_coverage.ROOT / "tests/core/test_a.py")
+
+    def _measure(
+        self,
+        pytest_codes: list[int],
+        reports: list[dict[str, dict[str, list[int]]]],
+    ) -> tuple[object, list[list[str]]]:
+        runs = [types.SimpleNamespace(returncode=code) for code in pytest_codes]
+        with (
+            tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary,
+            mock.patch.object(
+                diff_coverage, "COVERAGE_DATA_FILE", Path(temporary) / ".coverage"
+            ),
+            mock.patch.object(diff_coverage, "_coverage_files", side_effect=reports),
+            mock.patch.object(diff_coverage.subprocess, "run", side_effect=runs) as run,
+        ):
+            result = diff_coverage.measure(self.CHANGED)
+        return result, [call.args[0] for call in run.call_args_list]
+
+    def test_only_test_modules_under_tests_are_the_diffs_own_tests(self) -> None:
+        self.assertEqual(
+            diff_coverage.own_tests(self.CHANGED), ["tests/core/test_a.py"]
+        )
+
+    def test_own_tests_covering_every_changed_line_skip_the_rest_of_the_suite(
+        self,
+    ) -> None:
+        report = {
+            "harness/a.py": _file([1, 2], []),
+            "tests/core/test_a.py": _file([5], []),
+            "tests/core/helpers.py": _file([1], []),
+            "skills/x/scripts/test_tool.py": _file([1], []),
+        }
+
+        result, commands = self._measure([0], [report])
+
+        self.assertEqual(result, report)
+        self.assertEqual(len(commands), 1)
+        self.assertEqual(commands[0][-1], self.OWN)
+        self.assertNotIn("--cov-append", commands[0])
+
+    def test_an_uncovered_line_appends_the_rest_of_the_suite_to_the_same_data(
+        self,
+    ) -> None:
+        partial = {
+            "harness/a.py": _file([1], [2]),
+            "tests/core/test_a.py": _file([5], []),
+        }
+        full = {"harness/a.py": _file([1, 2], [])}
+
+        result, commands = self._measure([0, 0], [partial, full])
+
+        self.assertEqual(result, full)
+        self.assertEqual(len(commands), 2)
+        rest = commands[1]
+        self.assertEqual(rest[-1], str(diff_coverage.ROOT / "tests"))
+        self.assertIn("--cov-append", rest)
+        self.assertIn(f"--ignore={self.OWN}", rest)
+
+    def test_own_tests_that_collect_nothing_fall_back_to_the_rest_of_the_suite(
+        self,
+    ) -> None:
+        full = {"harness/a.py": _file([1, 2], [])}
+
+        result, commands = self._measure(
+            [diff_coverage.PYTEST_NO_TESTS_COLLECTED, 0], [full]
+        )
+
+        self.assertEqual(result, full)
+        self.assertEqual(commands[1][-1], str(diff_coverage.ROOT / "tests"))
+
+    def test_a_failing_own_test_fails_the_gate_without_the_rest_of_the_suite(
+        self,
+    ) -> None:
+        result, commands = self._measure([1], [])
+
+        self.assertEqual(result, 1)
+        self.assertEqual(len(commands), 1)
+
+
 class GitFailureTests(unittest.TestCase):
     def test_a_hung_git_diff_stops_the_gate_with_a_message(self) -> None:
         with (
@@ -345,6 +453,63 @@ class GitFailureTests(unittest.TestCase):
             (root / ".harness" / "project.json").write_text("[]", encoding="utf-8")
             with mock.patch.object(diff_coverage, "ROOT", root):
                 self.assertEqual(diff_coverage._base_branch(), "master")
+
+
+class StepSummaryTests(unittest.TestCase):
+    CHANGED = {"pkg/a.py": {1, 2, 3, 4}, "pkg/b.py": {1, 2}}
+    FILES = {
+        "pkg/a.py": _file(executed=[1, 2, 3, 4], missing=[]),
+        "pkg/b.py": _file(executed=[], missing=[1, 2]),
+    }
+
+    def test_the_summary_groups_by_directory_and_collapses_file_details(self) -> None:
+        text = diff_coverage.render_summary(self.CHANGED, self.FILES)
+
+        self.assertIn("| `pkg/` | 4/6 (66.7%) | 2 | 2 |", text)
+        self.assertIn("<details>", text)
+        self.assertIn("<summary>Разбивка по файлам (2)</summary>", text)
+        self.assertIn("| `pkg/a.py` | 4/4 | `██████████` 100% | — |", text)
+        self.assertIn("| `pkg/b.py` | 0/2 | `░░░░░░░░░░` 0% | 1-2 |", text)
+        self.assertIn("**4/6** изменённых строк покрыто (66.7%)", text)
+
+    def test_the_verdict_is_an_alert_of_its_own_kind(self) -> None:
+        below = diff_coverage.render_summary(self.CHANGED, self.FILES)
+        self.assertIn("> [!WARNING]", below)
+        full = diff_coverage.render_summary(
+            {"pkg/a.py": {1, 2}}, {"pkg/a.py": _file(executed=[1, 2], missing=[])}
+        )
+        self.assertIn("> [!TIP]", full)
+        self.assertNotIn("[!WARNING]", full)
+
+    def test_a_bar_rounds_to_tenths(self) -> None:
+        self.assertEqual(diff_coverage.bar(84.0), "`████████░░` 84%")
+
+    def test_each_uncovered_range_is_a_warning_on_its_lines(self) -> None:
+        commands = diff_coverage.uncovered_annotations(
+            ["pkg/b.py:1", "pkg/b.py:2", "pkg/b.py:9"]
+        )
+
+        self.assertEqual(
+            commands,
+            [
+                "::warning file=pkg/b.py,line=1,endLine=2,title=diff-coverage"
+                "::Изменённые строки 1-2 не покрыты тестами",
+                "::warning file=pkg/b.py,line=9,endLine=9,title=diff-coverage"
+                "::Изменённая строка 9 не покрыта тестами",
+            ],
+        )
+
+    def test_the_summary_is_appended_where_github_reads_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            summary = Path(tmp) / "summary.md"
+            summary.write_text("before\n", encoding="utf-8")
+            with mock.patch.dict(
+                diff_coverage.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}
+            ):
+                diff_coverage.publish(self.CHANGED, self.FILES)
+            text = summary.read_text(encoding="utf-8")
+
+        self.assertTrue(text.startswith("before\n## diff-coverage"))
 
 
 if __name__ == "__main__":

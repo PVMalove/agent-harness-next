@@ -1,0 +1,18 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "mypy",
+      "pattern": [
+        {
+          "regexp": "^(.+\\.pyi?):(\\d+):(?:(\\d+):)? (error|warning): (.+?)(?:  \\[([a-z0-9-]+)\\])?$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5,
+          "code": 6
+        }
+      ]
+    }
+  ]
+}

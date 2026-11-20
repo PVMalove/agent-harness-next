@@ -4,13 +4,14 @@
 `python direct_commits.py < payload.json` печатает `allow` и завершается с кодом 0, если ни один
 вызов commit/push не идёт из защищённой ветки (`master`, `main`, `base_branch`, `integration/*`)
 и ни один push не обновляет защищённый реф. Иначе причина выводится в stderr, код — 2.
-Исключения для /to-spec: push, который только создаёт отсутствующие на remote `integration/*`,
+Исключения для /publish-epic: push, который только создаёт отсутствующие на remote `integration/*`,
 и отдельный коммит документов прожарки в ещё не опубликованную `integration/*`.
 
 Вызовы находит разбор `pr_commands.parse`: упоминание commit/push в аргументах печатающих
 команд, в кавычках и в теле heredoc вызовом не считается. Checkout вызова — каталог запуска
-(`cd` раньше в команде, иначе `cwd` из payload, иначе `CLAUDE_PROJECT_DIR`) вместе с опциями
-git `-C`, `--git-dir`, `--work-tree`, `--bare`: ветку спрашивает git с теми же опциями.
+(`cd` раньше в команде, иначе `workdir` вызова `exec_command`, иначе `cwd` из payload, иначе
+`CLAUDE_PROJECT_DIR`) вместе с опциями git `-C`, `--git-dir`, `--work-tree`, `--bare`: ветку
+спрашивает git с теми же опциями. Относительный `workdir` разрешается от `cwd` payload.
 `cd` учитывается только в простой цепочке строгого лексера (`pr_commands.strict_steps`).
 Commit/push в тексте, который не разобрать, checkout, который не определить, git, который не
 ответил, и push, способный обновить все ветки (`--all`, `--mirror`, refspec с `*`), блокируются.
@@ -35,7 +36,7 @@ else:
     sys.dont_write_bytecode = True
     import pr_commands  # sibling in the installed hooks directory (sys.path[0])
 
-GUIDE = "(docs/agents/git-workflow.md)"
+GUIDE = "(.harness/instructions/git-workflow.md)"
 ISSUE_BRANCH = f"работай на issue-ветке {GUIDE}."
 CALL_TEXT = re.compile(r"\bgit\b[\s\S]*\b(?:commit|push)\b")
 # `commit`/`push` as a whole token: not a part of an option (`--commit-plan-file`) or a name.
@@ -54,7 +55,7 @@ LOCATION_OPTIONS = frozenset({"-C", "--git-dir", "--work-tree"})
 VALUE_OPTIONS = frozenset(
     {"-c", "--config-env", "--namespace", "--super-prefix", "--attr-source"}
 )
-# The only `git commit` options of the /to-spec grill docs commit: a message and output flags.
+# The only `git commit` options of the /publish-epic grill docs commit: a message and output flags.
 # Paths, `-a`, `--amend` and every other option commit more than the staged index.
 COMMIT_MESSAGE_OPTIONS = frozenset({"-m", "--message", "-F", "--file"})
 COMMIT_FLAGS = frozenset({"-q", "--quiet", "-s", "--signoff"})
@@ -73,8 +74,12 @@ UNRESOLVED = (
     "обратных кавычек, скобок, | и ||; путь должен существовать; GIT_DIR, GIT_WORK_TREE и env "
     f"-C не поддерживаются. Укажи путь явно: git -C <path> commit {GUIDE}."
 )
+WORKDIR_UNRESOLVED = (
+    "Zero Direct Commits: workdir вызова exec_command должен быть строкой — фактический "
+    f"checkout неизвестен, команда заблокирована (fail closed). Укажи workdir строкой {GUIDE}."
+)
 GIT_NO_ANSWER = (
-    "Zero Direct Commits: git не запустился или не ответил за "
+    "Zero Direct Commits: git завершился с ошибкой, не запустился или не ответил за "
     f"{GIT_TIMEOUT_SECONDS} с — ветку checkout не определить, команда заблокирована (fail "
     f"closed). Проверь git в этом checkout и повтори {GUIDE}."
 )
@@ -118,7 +123,7 @@ def calls(command: str, start: Path) -> list[Call] | None:
     parsed = pr_commands.parse(command)
     if any(CALL_TEXT.search(fragment) for fragment in parsed.opaque):
         return None
-    if _unparsed_computed(command, parsed.commands):
+    if _unparsed_computed(pr_commands.computed_analysis_text(command), parsed.commands):
         return None
     found = _calls_in(parsed.commands, start)
     if GIT_ENV.search(command):
@@ -348,7 +353,7 @@ def _push_block_reason(call: Call, base_branch: str) -> str:
 
 
 def _creates_integration_only(call: Call) -> bool:
-    """Push только создаёт `integration/*`: его можно выполнить из защищённой ветки (/to-spec).
+    """Push только создаёт `integration/*`: его можно выполнить из защищённой ветки (/publish-epic).
 
     Отсутствие этих веток на remote проверяет `_push_block_reason`, вызванный раньше.
     """
@@ -392,7 +397,7 @@ def _message_only(args: tuple[str, ...]) -> bool:
 
 
 def _grill_docs_commit(command: str, call: Call, branch: str) -> bool:
-    """Коммит документов прожарки в новую `integration/*` до её публикации (/to-spec).
+    """Коммит документов прожарки в новую `integration/*` до её публикации (/publish-epic).
 
     Разрешён, только если команда — один простой `git commit` с сообщением, индекс содержит
     только пути документации прожарки, а ветки нет на `origin`. Другая команда в том же вызове
@@ -433,10 +438,8 @@ def block_reason(command: str, start: Path, project: Path) -> str:
         result = _git(call, "rev-parse", "--abbrev-ref", "HEAD")
         if result is None:
             return GIT_NO_ANSWER
-        # Outside a repository git fails as the command would; an explicit path that does not
-        # resolve yet (`git -C {} commit` from xargs) cannot be checked.
-        if result.returncode and call.location:
-            return UNRESOLVED
+        if result.returncode:
+            return UNRESOLVED if call.location else GIT_NO_ANSWER
         branch = result.stdout.strip()
         if _protected(branch, base_branch) and not _grill_docs_commit(
             command, call, branch
@@ -460,6 +463,26 @@ def _base_branch(project: Path) -> str:
     return branch if isinstance(branch, str) else ""
 
 
+def command_start(data: object, project: Path) -> Path | None:
+    """Каталог запуска команды из payload: `exec_command.workdir`, `cwd` payload, проект.
+
+    `exec_command` второго runtime может выполнить команду не в `cwd` payload, поэтому явный
+    `workdir` важнее. Относительный `workdir` разрешается от `cwd` payload; пустой — как
+    отсутствующий. None — `workdir` есть, но он не строка: фактический checkout неизвестен.
+    """
+    payload = data if isinstance(data, dict) else {}
+    tool_input = payload.get("tool_input")
+    workdir = tool_input.get("workdir") if isinstance(tool_input, dict) else None
+    cwd = payload.get("cwd")
+    base = Path(cwd) if isinstance(cwd, str) and cwd else project
+    if workdir is None or workdir == "":
+        return base
+    if not isinstance(workdir, str):
+        return None
+    path = Path(workdir)
+    return path if path.is_absolute() else base / path
+
+
 def main() -> int:
     """CLI для shell-хука: `direct_commits.py < payload.json`.
 
@@ -475,9 +498,12 @@ def main() -> int:
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     project = Path(os.environ.get("CLAUDE_PROJECT_DIR", "."))
     if isinstance(command, str):
-        cwd = data.get("cwd") if isinstance(data, dict) else None
-        start = Path(cwd) if isinstance(cwd, str) else project
-        reason = block_reason(command, start, project)
+        start = command_start(data, project)
+        reason = (
+            WORKDIR_UNRESOLVED
+            if start is None
+            else block_reason(command, start, project)
+        )
     else:
         # A payload without a string command is checked by its raw text (fail closed).
         reason = UNPARSED if CALL_TEXT.search(raw) else ""

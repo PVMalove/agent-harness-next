@@ -33,13 +33,17 @@ from harness.orchestration.core.constants import (
     INTEGRATION_RECORD_ID_PATTERN,
     INTEGRATION_REFERENCE_MAX_CHARS,
     INTEGRATION_SHA_PATTERN,
+    EvidenceVerification,
     IntegrationCheckResult,
+    IntegrationTargetState,
+    ReleaseGateRefusal,
 )
 from harness.orchestration.core.git_utils import (
     _candidate_commit,
     _git,
     _remote_branch_tip,
 )
+from harness.orchestration.core import state_view
 from harness.orchestration.core.utils import (
     CoordinatorError,
     JsonObject,
@@ -63,7 +67,7 @@ from harness.orchestration.ledger.lifecycle import (
     IntegrationRecord,
     LifecycleLedger,
 )
-from harness.orchestration.workflow import history, pr_refresh
+from harness.orchestration.workflow import history, pr_refresh, release_gate
 
 INTEGRATION_RECORD_CONTRACT = 1
 # A refreshed candidate is confirmed only by a passed CI or local-QA check of its own pair: resolver
@@ -96,7 +100,7 @@ def _qa_replacement(
         if link["kind"] == "ci" and link.get("verification") == INTEGRATION_CI_COLLECTED
     ]
     current = [link for link in collected if _satisfies(link, pair)]
-    if current and state == "current":
+    if current and state == IntegrationTargetState.CURRENT:
         verified = current[-1]["collector"]
         return {
             "applies": True,
@@ -117,7 +121,11 @@ def _qa_replacement(
             },
         }
     if current:
-        reason = "integration_moved" if state == "stale" else "integration_unreadable"
+        reason = (
+            "integration_moved"
+            if state == IntegrationTargetState.STALE
+            else "integration_unreadable"
+        )
         verified = current[-1]["collector"]
         return {
             "applies": False,
@@ -293,14 +301,22 @@ def _observe(repo: Path, identity: JsonObject) -> JsonObject:
     try:
         tip = _remote_branch_tip(repo, identity["remote"], identity["integration_ref"])
     except CoordinatorError as exc:
-        return {"state": "unavailable", "integration_tip": None, "reason": exc.message}
+        return {
+            "state": IntegrationTargetState.UNAVAILABLE,
+            "integration_tip": None,
+            "reason": exc.message,
+        }
     if tip is None:
         return {
-            "state": "unavailable",
+            "state": IntegrationTargetState.UNAVAILABLE,
             "integration_tip": None,
             "reason": f"{identity['integration_ref']!r} is not a branch of remote {identity['remote']!r}",
         }
-    state = "current" if tip == identity["target_sha"] else "stale"
+    state = (
+        IntegrationTargetState.CURRENT
+        if tip == identity["target_sha"]
+        else IntegrationTargetState.STALE
+    )
     return {"state": state, "integration_tip": tip}
 
 
@@ -338,7 +354,7 @@ def _verify_unmoved(repo: Path, identity: JsonObject) -> JsonObject:
 def _evidence_links(root: Path, record_id: str) -> list[JsonObject]:
     directory = _records_root(root) / IntegrationEvidenceRecord.directory
     links = []
-    for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+    for path in state_view.glob(directory, "*.json"):
         link = _read_object(path, "integration evidence record")
         if link.get("integration_record_id") == record_id:
             link["result"] = _integration_result(link.get("result"))
@@ -347,7 +363,12 @@ def _evidence_links(root: Path, record_id: str) -> list[JsonObject]:
 
 
 def _prepared(
-    record: JsonObject, links: list[JsonObject], observed: JsonObject, *, created: bool
+    record: JsonObject,
+    links: list[JsonObject],
+    observed: JsonObject,
+    *,
+    created: bool,
+    tree: str,
 ) -> JsonObject:
     identity = record["identity"]
     return {
@@ -359,6 +380,7 @@ def _prepared(
         "candidate_sha": identity["candidate_sha"],
         "published_sha": identity["published_sha"],
         "target_sha": identity["target_sha"],
+        "candidate_tree_sha": tree,
         "integration_ref": identity["integration_ref"],
         "source_evidence": record["source"],
         "evidence_links": [link["evidence_id"] for link in links],
@@ -404,7 +426,7 @@ def integration_prepare(args: argparse.Namespace) -> JsonObject:
         }
         record_id = IntegrationRecord.derive_id(identity)
         path = _record_path(root, record_id)
-        if path.is_file():
+        if state_view.is_file(path):
             record = _read_object(path, "integration record")
             if record.get("source_sha256") != _sha256(facts):
                 raise CoordinatorError(
@@ -427,12 +449,25 @@ def integration_prepare(args: argparse.Namespace) -> JsonObject:
             }
             _write_record(ledger, IntegrationRecord.from_dict(record))
             links, created = [], True
+        # A record prepared before the pair record existed gets its pair here as well.
+        pair = release_gate.record_pair(
+            ledger,
+            repo,
+            publish["candidate"],
+            target,
+            release_gate.required_selection(repo, batch),
+        )
     state = (
-        {"state": "current", "integration_tip": record["identity"]["target_sha"]}
+        {
+            "state": IntegrationTargetState.CURRENT,
+            "integration_tip": record["identity"]["target_sha"],
+        }
         if created
         else _observe(repo, record["identity"])
     )
-    return _prepared(record, links, state, created=created)
+    return _prepared(
+        record, links, state, created=created, tree=pair["candidate_tree_sha"]
+    )
 
 
 def _load_record(root: Path, record_id: object) -> JsonObject:
@@ -447,7 +482,7 @@ def _load_record(root: Path, record_id: object) -> JsonObject:
             remedy="pass the integration_record_id that 'integration prepare' returned",
         )
     path = _record_path(root, record_id)
-    if not path.is_file():
+    if not state_view.is_file(path):
         raise CoordinatorError(
             f"no integration record {record_id}",
             remedy="run 'integration prepare' for the ticket branch to create the record",
@@ -534,7 +569,9 @@ def integration_link_evidence(args: argparse.Namespace) -> JsonObject:
             "reference": reference,
             "artifact_sha256": artifact,
         }
-        return _store_evidence(root, ledger, members, "unverified", {})
+        return _store_evidence(
+            root, ledger, members, EvidenceVerification.UNVERIFIED, {}
+        )
 
 
 def _store_evidence(
@@ -553,7 +590,7 @@ def _store_evidence(
         / IntegrationEvidenceRecord.directory
         / f"{evidence_id}.json"
     )
-    if path.is_file():
+    if state_view.is_file(path):
         existing = _read_object(path, "integration evidence record")
         existing["result"] = _integration_result(existing.get("result"))
         return {
@@ -593,7 +630,7 @@ def _resolve_record(root: Path, args: argparse.Namespace) -> JsonObject:
     directory = _records_root(root) / IntegrationRecord.directory
     requested = getattr(args, "batch", None)
     matches = []
-    for path in sorted(directory.glob("*.json")) if directory.is_dir() else []:
+    for path in state_view.glob(directory, "*.json"):
         identity = _read_object(path, "integration record").get("identity") or {}
         if (
             identity.get("ticket") == ticket
@@ -649,7 +686,7 @@ def _notice(
 ) -> str:
     target = pair["target_sha"]
     if (
-        state == "current"
+        state == IntegrationTargetState.CURRENT
         and pair["candidate_sha"] != record["identity"]["candidate_sha"]
     ):
         if verified:
@@ -663,9 +700,9 @@ def _notice(
             "integration QA (register it with 'integration link-evidence') of the new pair is required. No re-review is "
             "required because of the refresh alone."
         )
-    if state == "current":
+    if state == IntegrationTargetState.CURRENT:
         return f"The integration ref still points at the recorded target {target}."
-    if state == "stale":
+    if state == IntegrationTargetState.STALE:
         return (
             f"The integration ref moved from {target} to {observed['integration_tip']}. The initial "
             "evidence covers only the recorded pair; a new check of the new candidate/target pair "
@@ -686,7 +723,10 @@ def _local_pair_current(
 ) -> bool:
     """Whether the remote issue branch still is the candidate of the pair: only then does a local
     QA of that candidate say anything about what a pull request carries."""
-    if not any(link["kind"] == "local-qa" for link in links) or state != "current":
+    if (
+        not any(link["kind"] == "local-qa" for link in links)
+        or state != IntegrationTargetState.CURRENT
+    ):
         return False
     try:
         return bool(
@@ -722,9 +762,9 @@ def _pair_checks(
                 or local_pair_current
                 and link["candidate_sha"] == pair["candidate_sha"]
             ),
-            "verification": "verified"
+            "verification": EvidenceVerification.VERIFIED
             if link["kind"] == "local-qa" and verified_evidence(root, link)
-            else "unverified"
+            else EvidenceVerification.UNVERIFIED
             if link["kind"] == "local-qa"
             else link["verification"],
         }
@@ -749,6 +789,7 @@ def integration_status(args: argparse.Namespace) -> JsonObject:
         links = _evidence_links(root, record["integration_record_id"])
         pair = pr_refresh.current_pair(root, record)
         refreshes = pr_refresh.refresh_records(root, record["integration_record_id"])
+        tree = release_gate.stored_tree(ledger, pair)
     identity = record["identity"]
     observed = _observe(repo, {**identity, "target_sha": pair["target_sha"]})
     state = observed["state"]
@@ -775,12 +816,14 @@ def integration_status(args: argparse.Namespace) -> JsonObject:
         "integration_ref": identity["integration_ref"],
         "target_sha": pair["target_sha"],
         "original_target_sha": identity["target_sha"],
+        "candidate_tree_sha": tree,
         "state": state,
         "integration_tip": tip,
-        "refresh_required": state != "current",
+        "refresh_required": state != IntegrationTargetState.CURRENT,
         "source_evidence": {
             "pair": record["source"]["pair"],
-            "applies_to_current_pair": state == "current" and not refreshes,
+            "applies_to_current_pair": state == IntegrationTargetState.CURRENT
+            and not refreshes,
             "qa": record["source"]["qa"],
             "publish": record["source"]["publish"],
         },
@@ -865,7 +908,9 @@ def integration_collect_ci(args: argparse.Namespace) -> JsonObject:
     Read-only towards the tracker: it never opens or merges a pull request and never touches branch
     protection.  Only a verdict of ``accepted`` or ``failed`` is recorded; every ``fallback``
     (unsupported tracker, unavailable or unusable CI, unknown checkout, stale or foreign pair,
-    missing or pending check) records nothing and says that local QA is still needed.
+    missing or pending check) records nothing and says that local QA is still needed.  A required
+    ``*-light`` check confirms only a pair whose stored QA selection is ``ticket-diff``; for any
+    other pair it is the fallback ``light_check`` (issue #937).
     """
     repo = _repo(args)
     root = _state_root(args, repo)
@@ -879,6 +924,10 @@ def integration_collect_ci(args: argparse.Namespace) -> JsonObject:
     with _ledger_lock(ledger):
         record = _resolve_record(root, args)
         pair = pr_refresh.current_pair(root, record)
+        # Read inside the lock: in the runtime-store epoch the pair record lives in the store view.
+        selection = release_gate.pair_selection(
+            ledger, pair["candidate_sha"], pair["target_sha"]
+        )
     tracker = resolve_project_tracker(repo).effective
     if tracker.type != "github" or not tracker.host or not tracker.project:
         return _collected(
@@ -900,6 +949,7 @@ def integration_collect_ci(args: argparse.Namespace) -> JsonObject:
         target_sha=pair["target_sha"],
         required_checks=required,
         base_ref=record["identity"]["integration_ref"],
+        allow_light=selection == release_gate.SELECTION_TICKET_DIFF,
     )
     result = _collected(
         verdict.outcome,
@@ -1006,7 +1056,7 @@ def _verified_source(status: JsonObject) -> tuple[str, JsonObject]:
         if check["kind"] == "local-qa"
         and check["result"] == IntegrationCheckResult.PASSED
         and check["applies_to_current_pair"]
-        and check["verification"] == "verified"
+        and check["verification"] == EvidenceVerification.VERIFIED
     ]
     return "local-qa", {"evidence_id": local[-1]["evidence_id"]}
 
@@ -1020,7 +1070,8 @@ def _has_passed_check(
     usable = {
         check["evidence_id"]
         for check in pair_checks
-        if check["applies_to_current_pair"] and check["verification"] != "unverified"
+        if check["applies_to_current_pair"]
+        and check["verification"] != EvidenceVerification.UNVERIFIED
     }
     return any(
         link["evidence_id"] in usable and _satisfies(link, pair) for link in links
@@ -1107,12 +1158,24 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
     (a resolver batch is open: wait, no cycle is spent), ``refresh``, ``route-failure`` /
     ``human-decision`` (a failed check of the current pair), ``confirm-pr`` (before a pull
     request exists), ``verify`` (a refreshed pair of an opened pull request still needs CI or
-    local QA) and ``handoff`` (the pair is current and verified: the facts for a manual merge)."""
+    local QA) and ``handoff`` (the pair is current and verified: the facts for a manual merge).
+
+    The Release Gate (ADR 0026, section 4) refuses the handoff as ``release-gate-refused`` when the
+    remote issue branch is not the candidate, the target is not in its history, or -- in the
+    runtime-store epoch -- ``qa_evidence_verify`` does not answer ``ok``. After a merge,
+    ``--merge-commit`` compares the tree of the commit the merge created with the pair's
+    ``candidate_tree_sha``: ``merged`` or ``merge-tree-mismatch``."""
     from harness.orchestration.workflow import resolver
 
     repo = _repo(args)
     root = _state_root(args, repo)
     number = _pull_request_number(args)
+    merge_commit = _text(args, "merge_commit")
+    if merge_commit and number is None:
+        raise CoordinatorError(
+            "--merge-commit checks the merge of a pull request",
+            remedy="pass --pull-request with the number of the merged pull request",
+        )
     status = integration_status(args)
     record_id = status["integration_record_id"]
     refreshed = bool(status["refreshes"])
@@ -1125,8 +1188,13 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
         "integration_tip": status["integration_tip"],
         "state": status["state"],
         "refreshed": refreshed,
+        "candidate_tree_sha": status["candidate_tree_sha"],
     }
-    if status["state"] == "unavailable":
+    if merge_commit:
+        # After the merge the integration ref points to the merge commit: the pair is stale by
+        # construction, so only the tree decides.
+        return {**result, **_merged(repo, root, record_id, status, merge_commit)}
+    if status["state"] == IntegrationTargetState.UNAVAILABLE:
         return {
             **result,
             "step": "unavailable",
@@ -1137,6 +1205,7 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
     with _ledger_lock(LifecycleLedger(root)):
         open_batch = resolver.open_resolver_batch(root, record_id)
         links = _evidence_links(root, record_id)
+        identity = _load_record(root, record_id)["identity"]
     if open_batch is not None:
         return {
             **result,
@@ -1148,7 +1217,7 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
                 "the coordinator workflow continues the open resolver batch; wait"
             ],
         }
-    if status["state"] != "current":
+    if status["state"] != IntegrationTargetState.CURRENT:
         return {
             **result,
             "step": "refresh",
@@ -1186,6 +1255,30 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
                 "--reason <reason>; then repeat 'integration next'",
             ],
         }
+    pair = {
+        "candidate_sha": status["candidate_sha"],
+        "target_sha": status["target_sha"],
+    }
+    if status["candidate_tree_sha"] is None:
+        raise CoordinatorError(
+            "the Release Gate pair of the current candidate is not recorded",
+            remedy=_PAIR_REMEDY,
+        )
+    refusals, verdict = release_gate.handoff_gate(
+        repo, root, identity["remote"], identity["branch"], pair
+    )
+    if refusals:
+        return {
+            **result,
+            "step": "release-gate-refused",
+            "refusals": refusals,
+            "qa_evidence": verdict,
+            "next": [
+                "no merge: the Release Gate refuses this pair; a moved issue branch needs the "
+                "accepted candidate published again, and refused QA evidence a new full QA of "
+                "exactly this pair"
+            ],
+        }
     source, reference = _verified_source(status)
     return {
         **result,
@@ -1193,9 +1286,56 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
         "handoff": {
             "candidate_sha": status["candidate_sha"],
             "target_sha": status["target_sha"],
+            "candidate_tree_sha": status["candidate_tree_sha"],
             "qa_source": source,
             "reference": reference,
             "refreshed": refreshed,
+            "qa_evidence": None if verdict is None else verdict["confirmed_by"],
         },
-        "next": ["repeat 'integration next' just before a manual merge"],
+        "next": [
+            "repeat 'integration next' just before a manual merge; after it, check the tree with "
+            "'integration next --pull-request <number> --merge-commit <sha>'"
+        ],
+    }
+
+
+_PAIR_REMEDY = (
+    "repeat 'integration prepare' with the ticket and branch: it records the pair of a prepared "
+    "record; a refreshed pair is recorded by its refresh"
+)
+
+
+def _merged(
+    repo: Path, root: Path, record_id: str, status: JsonObject, merge_commit: str
+) -> JsonObject:
+    """Compare the tree of the commit a merge created with the ``candidate_tree_sha`` of the
+    current pair; read-only, like the rest of ``integration next``."""
+    with _ledger_lock(LifecycleLedger(root)):
+        identity = _load_record(root, record_id)["identity"]
+    expected = status["candidate_tree_sha"]
+    if expected is None:
+        raise CoordinatorError(
+            "the Release Gate pair of the merged candidate is not recorded",
+            remedy=_PAIR_REMEDY,
+        )
+    tree = release_gate.merged_tree(
+        repo, identity["remote"], identity["integration_ref"], merge_commit
+    )
+    checked = {"merge_commit": merge_commit, "merged_tree_sha": tree}
+    if tree == expected:
+        return {
+            **checked,
+            "step": "merged",
+            "next": [
+                "the merged tree is the candidate tree; close the ticket as usual"
+            ],
+        }
+    return {
+        **checked,
+        "step": "merge-tree-mismatch",
+        "refusals": [ReleaseGateRefusal.MERGED_TREE_MISMATCH],
+        "next": [
+            f"blocker: the tree of {merge_commit} is not the candidate tree that QA checked; "
+            f"the next merge from {identity['integration_ref']} needs a new full QA of its head"
+        ],
     }

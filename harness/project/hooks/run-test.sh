@@ -1,5 +1,5 @@
 #!/bin/bash
-# Isolated runner of one selected test (docs/hooks/run-test.md): run-test.sh <test-id> | --probe.
+# Isolated runner of one selected test (site/docs/hooks/run-test.md): run-test.sh <test-id> | --probe.
 # Not an event hook: the runner lives in .harness/health/isolated_runner.py, and this entry point
 # only finds Python and the repository (two levels above .claude/hooks/). It never runs a test
 # itself; protected build and database lifecycle stay inside the runner sandbox. Without Python or the runner module it prints a runner_unavailable refusal and exits 3.

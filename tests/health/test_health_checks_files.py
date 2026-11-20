@@ -70,6 +70,94 @@ def test_check_agents_md_ok_when_resolved(tmp_path: Path) -> None:
     assert result.status == "ok"
 
 
+_RULES_LOCK: dict[str, object] = {
+    "capabilities": ["engineering-suite"],
+    "seed_files": {
+        ".claude/rules/git-delivery.md": None,
+        ".claude/rules/karpathy-guidelines.md": None,
+        ".harness/instructions/git-workflow.md": None,
+    },
+}
+
+
+def _install_rules(repo: Path, *names: str) -> None:
+    rules = repo / ".claude" / "rules"
+    rules.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (rules / name).write_text("# rule\n", encoding="utf-8")
+
+
+def test_check_agents_md_warns_without_codex_rules_pointer(tmp_path: Path) -> None:
+    """Runtime rules are installed but AGENTS.md does not point Codex at them."""
+    (tmp_path / "AGENTS.md").write_text(
+        "# My Project\n\n```\n.claude/rules/ inside an example\n```\n", encoding="utf-8"
+    )
+
+    result = checks.check_agents_md(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.id == "files.agents_md"
+    assert result.status == "warn"
+    assert "Codex" in result.message and "Claude Code" in result.message
+    assert ".claude/rules/" in result.message
+    assert result.fix is not None
+    assert result.fix.command is not None and "diff" in result.fix.command
+    assert str(tmp_path) in result.fix.command
+
+
+def test_check_agents_md_ok_names_both_runtimes_with_rules_pointer(tmp_path: Path) -> None:
+    """With the pointer the ok message separates automatic and explicit rule loading."""
+    (tmp_path / "AGENTS.md").write_text(
+        "# My Project\n\nRead each file in [.claude/rules/](.claude/rules/).\n",
+        encoding="utf-8",
+    )
+
+    result = checks.check_agents_md(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.status == "ok"
+    assert "Claude Code" in result.message and "автоматически" in result.message
+    assert "Codex" in result.message and "явно" in result.message
+
+
+def test_check_agents_md_needs_no_pointer_without_rule_seeds(tmp_path: Path) -> None:
+    """A lock without `.claude/rules/` seed entries installs no rules to point at."""
+    (tmp_path / "AGENTS.md").write_text("# My Project\n", encoding="utf-8")
+    lock: dict[str, object] = {
+        "capabilities": ["engineering-suite"],
+        "seed_files": {".harness/instructions/x.md": None},
+    }
+
+    result = checks.check_agents_md(_context(tmp_path, lock=lock))
+
+    assert result.status == "ok"
+
+
+def test_check_seed_baseline_fails_on_missing_rule_file(tmp_path: Path) -> None:
+    """A rule file recorded in the seed baseline is missing from `.claude/rules/`."""
+    _install_rules(tmp_path, "karpathy-guidelines.md")
+
+    result = checks.check_seed_baseline(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.id == "files.seed_baseline"
+    assert result.status == "fail"
+    assert ".claude/rules/git-delivery.md" in result.message
+    assert "karpathy-guidelines.md" not in result.message
+    assert "Claude Code" in result.message and "Codex" in result.message
+    assert result.fix is not None
+    assert result.fix.command is not None and "update" in result.fix.command
+
+
+def test_check_seed_baseline_ok_reports_rule_loading_per_runtime(tmp_path: Path) -> None:
+    """All recorded rules are present: the message separates Claude Code and Codex loading."""
+    _install_rules(tmp_path, "git-delivery.md", "karpathy-guidelines.md")
+
+    result = checks.check_seed_baseline(_context(tmp_path, lock=_RULES_LOCK))
+
+    assert result.status == "ok"
+    assert "правил .claude/rules/: 2" in result.message
+    assert "Claude Code" in result.message and "автоматически" in result.message
+    assert "Codex" in result.message and "явно" in result.message
+
+
 def test_check_discovery_links_fails_when_absent(tmp_path: Path) -> None:
     """Проверить, что отсутствие discovery-ссылок приводит к ошибке."""
     result = checks.check_discovery_links(_context(tmp_path))
@@ -273,6 +361,53 @@ def test_project_schema_tracker_matches_the_validator_contract() -> None:
     )
     assert tracker["then"] == {"required": ["host", "project"]}
     assert set(schema["properties"]) == project_files.PROJECT_JSON_ALLOWED_FIELDS
+
+
+_STORY_POINTS: dict[str, object] = {
+    "scale": [1, 2, 3, 5],
+    "fast_threshold": 3,
+    "full_threshold": 5,
+    "gray_zone": 4,
+}
+
+
+@pytest.mark.parametrize(
+    ("hours", "valid"),
+    [
+        (None, True),
+        ({"1": 1, "3": 4.5, "5": 8}, True),
+        ({}, False),
+        ({"4": 6}, False),
+        ({"3": 0}, False),
+        ({"3": True}, False),
+        ([1, 2], False),
+    ],
+)
+def test_story_point_hours_map_scale_values_to_positive_hours(
+    tmp_path: Path, hours: object, valid: bool
+) -> None:
+    """`story_points.hours` необязателен; ключи — значения шкалы, значения — часы больше нуля."""
+    story_points = dict(_STORY_POINTS)
+    if hours is not None:
+        story_points["hours"] = hours
+    project_json = tmp_path / ".harness" / "project.json"
+    project_json.parent.mkdir(parents=True)
+    project_json.write_text(
+        json.dumps({**_REQUIRED_PROJECT_FIELDS, "story_points": story_points}),
+        encoding="utf-8",
+    )
+    problems: list[str] = []
+
+    project_files.validate_project_json(tmp_path, problems)
+
+    expected = (
+        []
+        if valid
+        else [
+            ".harness/project.json story_points.hours must map values from scale to positive hours"
+        ]
+    )
+    assert problems == expected
 
 
 def _render_project_template(values: dict[str, str]) -> str:

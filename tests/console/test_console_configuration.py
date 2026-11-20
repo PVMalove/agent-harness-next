@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from harness.console.configuration import ConfigurationDraft
+import pytest
+
+from harness.console.kernel.configuration import ConfigurationDraft
 
 
 def test_editing_and_validating_a_draft_preserves_the_active_file(
@@ -31,12 +33,289 @@ def test_editing_and_validating_a_draft_preserves_the_active_file(
     assert path.read_bytes() == before
 
 
-def test_a_missing_project_file_starts_from_a_valid_default(tmp_path: Path) -> None:
-    # The template gained test-field placeholders; the default fills them as `harness init`
-    # does without test flags, so no placeholder text breaks the JSON.
-    draft = ConfigurationDraft.load(tmp_path, ("project.json",))
+def test_a_missing_project_file_starts_from_a_valid_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.health import project_tracker
 
+    monkeypatch.setattr(project_tracker, "_origin_url", lambda _repo: None)
+    draft = ConfigurationDraft.load(tmp_path, ("project.json",))
     document = draft.documents["project.json"]
     assert document["qa_gate_commands"] == []
     assert "test_paths" not in document
     assert not (tmp_path / ".harness/project.json").exists()
+
+
+_SECRET_VALUES: list[object] = [
+    {"token": "abc"},
+    {"tracker": {"type": "github", "api_key": "k"}},
+    {"url": "https://user:pass@example.com/repo"},
+    {"command": "run --token=abc123"},
+    {"header": "Bearer abcdef"},
+    ["ok", "sk-abcdefghijklmnop"],
+    {"list": [{"password": 1}]},
+    {"authorization": True},
+    {"items": ["ghp_abcdefghijklmnop"]},
+    {1: "non-string key"},
+]
+_PLAIN_VALUES: list[object] = [
+    {"language": "ru", "tracker": {"type": "local"}},
+    {"url": "https://example.com/repo"},
+    {"command": "run --token=$TOKEN"},
+    ["pytest", "ruff check"],
+    "plain text",
+    7,
+    None,
+    {"flag": True},
+    {"tokenizer": "x", "token_limit": 5},
+]
+
+
+def test_mask_secrets_changes_a_value_exactly_when_reject_secrets_refuses_it() -> None:
+    import copy
+
+    import pytest
+
+    from harness.configuration import SECRET_MASK, mask_secrets, reject_secrets
+
+    for value in _SECRET_VALUES:
+        before = copy.deepcopy(value)
+        with pytest.raises(ValueError):
+            reject_secrets(value)
+        assert mask_secrets(value) != value
+        assert value == before
+    for value in _PLAIN_VALUES:
+        before = copy.deepcopy(value)
+        reject_secrets(value)
+        assert mask_secrets(value) == value
+        assert value == before
+    assert mask_secrets({"token": "abc", "name": "x"}) == {
+        "token": SECRET_MASK,
+        "name": "x",
+    }
+    assert mask_secrets({"tracker": {"url": "https://u:p@h/x", "type": "g"}}) == {
+        "tracker": {"url": SECRET_MASK, "type": "g"}
+    }
+    assert mask_secrets("abc", "token") == SECRET_MASK
+    assert mask_secrets({"a": "b"}, "token") == SECRET_MASK
+    assert mask_secrets("abc", "name") == "abc"
+    # The mask is never taken for a secret text, but under a secret key it is still refused.
+    reject_secrets(SECRET_MASK)
+    with pytest.raises(ValueError):
+        reject_secrets({"token": SECRET_MASK})
+
+
+def _bundle(**files: object) -> dict[str, bytes | None]:
+    return {
+        name: None if value is None else json.dumps(value, indent=2).encode()
+        for name, value in files.items()
+    }
+
+
+def test_bundle_diff_is_unchanged_without_secrets_and_masks_a_stored_secret() -> None:
+    from harness.configuration import SECRET_MASK
+    from harness.console.kernel.configuration import bundle_diff
+
+    plain_old = {"project.json": b'{"a": 1}\n', "orchestration.json": None}
+    plain_new = {"project.json": b'{"a": 2}\n', "orchestration.json": None}
+    assert bundle_diff(plain_old, plain_new, "old", "new") == (
+        "--- old/project.json\n+++ new/project.json\n@@ -1 +1 @@\n"
+        '-{"a": 1}\n+{"a": 2}\n'
+    )
+    old = _bundle(**{"project.json": {"tracker": {"type": "a", "token": "S3CRET"}}})
+    new = _bundle(**{"project.json": {"tracker": {"type": "b", "token": "S3CRET"}}})
+    old["orchestration.json"] = new["orchestration.json"] = None
+    diff = bundle_diff(old, new, "old", "new")
+    assert "S3CRET" not in diff and SECRET_MASK in diff
+    assert '-    "type": "a"' in diff and '+    "type": "b"' in diff
+    assert diff.count("изменены только скрытые значения") == 0
+
+
+def test_bundle_diff_says_when_only_hidden_values_changed_and_hides_unparsed_files() -> (
+    None
+):
+    from harness.console.kernel.configuration import bundle_diff
+
+    old = _bundle(**{"project.json": {"token": "ONE"}})
+    new = _bundle(**{"project.json": {"token": "TWO"}})
+    old["orchestration.json"] = new["orchestration.json"] = None
+    diff = bundle_diff(old, new, "old", "new")
+    assert "ONE" not in diff and "TWO" not in diff
+    assert "project.json: изменены только скрытые значения или форматирование" in diff
+    english = bundle_diff(old, new, "old", "new", language="en")
+    assert "project.json: only hidden values or formatting changed" in english
+    broken = {"project.json": b"{token: SECRET", "orchestration.json": None}
+    fixed = {"project.json": b'{"a": 1}\n', "orchestration.json": None}
+    hidden = bundle_diff(broken, fixed, "old", "new")
+    assert "SECRET" not in hidden
+    assert "содержимое скрыто: файл не разобран как JSON" in hidden
+    assert "file is not valid JSON" in bundle_diff(
+        broken, fixed, "old", "new", language="en"
+    )
+
+
+def test_bundle_diff_masks_a_secret_under_an_overridden_duplicate_key() -> None:
+    from harness.console.kernel.configuration import bundle_diff
+
+    duplicate = b'{"url": "https://user:pass@host", "url": "https://host"}\n'
+    nested = b'{"a": {"token": "HUNTER2", "token": "x"}, "b": 1}\n'
+    clean = b'{"url": "https://host"}\n'
+    for raw, secret in ((duplicate, "user:pass"), (nested, "HUNTER2")):
+        old = {"project.json": raw, "orchestration.json": None}
+        new = {"project.json": clean, "orchestration.json": None}
+        for diff in (
+            bundle_diff(old, new, "old", "new"),
+            bundle_diff(new, old, "old", "new"),
+        ):
+            assert secret not in diff
+    plain = b'{"url": "https://host", "url": "https://other"}\n'
+    shown = bundle_diff(
+        {"project.json": plain, "orchestration.json": None},
+        {"project.json": clean, "orchestration.json": None},
+        "old",
+        "new",
+    )
+    assert '-{"url": "https://host", "url": "https://other"}' in shown
+
+
+def test_a_draft_from_the_snapshot_starts_unchanged_from_its_masked_documents(
+    tmp_path: Path,
+) -> None:
+    from harness.configuration import SECRET_MASK
+    from harness.configuration_store import json_bytes
+    from harness.console.kernel.configuration_snapshot import collect_configuration
+
+    root = tmp_path / ".harness"
+    (root / "orchestration/roles").mkdir(parents=True)
+    (root / "project.json").write_text(
+        json.dumps({"language": "ru", "tracker": {"type": "local", "token": "abc"}}),
+        encoding="utf-8",
+    )
+    facts = collect_configuration(tmp_path)
+
+    draft = ConfigurationDraft.from_snapshot(
+        tmp_path, facts, ("project.json", "orchestration.json")
+    )
+
+    assert draft.documents["project.json"]["tracker"] == {
+        "type": "local",
+        "token": SECRET_MASK,
+    }
+    assert draft.original == {
+        "project.json": json_bytes(facts.files["project.json"].document),
+        "orchestration.json": None,
+    }
+    assert draft.digests == {
+        name: facts.files[name].digest for name in ("project.json", "orchestration.json")
+    }
+    # A missing file counts as changed, as in `ConfigurationDraft.load`; a present one does not.
+    assert draft.changed()
+    project = ConfigurationDraft.from_snapshot(tmp_path, facts, ("project.json",))
+    assert not project.changed()
+    project.set_value("project.json", ("language",), "en")
+    assert project.changed()
+    draft.documents["project.json"]["language"] = "ru"
+    facts.files["project.json"].document["language"] = "x"
+    assert draft.documents["project.json"]["language"] == "ru"
+
+
+class _Gateway:
+    """A configuration gateway over fixed facts that records every call."""
+
+    def __init__(self, facts: object) -> None:
+        self.facts = facts
+        self.calls: list[tuple[object, ...]] = []
+
+    def snapshot(self, *, force: bool = False) -> object:
+        self.calls.append(("snapshot", force))
+        return self.facts
+
+    def recover(self) -> str:
+        self.calls.append(("recover",))
+        return "ok"
+
+
+def test_the_wizard_draft_comes_from_the_snapshot_after_recovering_a_pending_write(
+    tmp_path: Path,
+) -> None:
+    from dataclasses import replace
+
+    from harness.console.kernel.configuration_snapshot import collect_configuration
+    from harness.console.tui.screens.configuration import ConfigurationScreen
+
+    from ._configuration_fixture import installed_project
+
+    installed_project(tmp_path)
+    facts = replace(collect_configuration(tmp_path), transaction_pending=True)
+    gateway = _Gateway(facts)
+    screen = ConfigurationScreen(tmp_path)
+    screen._gateway = gateway  # type: ignore[assignment]
+
+    draft = screen._load_draft(("project.json",))
+
+    assert gateway.calls == [("snapshot", False), ("recover",), ("snapshot", True)]
+    assert draft.documents["project.json"]["language"] == "ru"
+    assert draft.digests["project.json"] == facts.files["project.json"].digest
+    gateway.facts = replace(facts, schema_installed=False, transaction_pending=False)
+    with pytest.raises(ValueError, match="Сначала установите"):
+        screen._load_draft(("project.json",))
+
+
+def test_the_wizard_writes_through_the_server_when_it_has_a_client(tmp_path: Path) -> None:
+    from harness.console.tui.client import JobResult
+    from harness.console.tui.configuration_gateway import (
+        LocalConfiguration,
+        ServerConfiguration,
+    )
+    from harness.console.tui.screens.configuration import ConfigurationScreen
+
+    from ._home_client import FakeHomeClient
+    from ._configuration_fixture import installed_project
+
+    installed_project(tmp_path)
+    client = FakeHomeClient(tmp_path)
+    client.job_result = JobResult("completed", 0, "Текущая конфигурация сохранена\n", "", False, None)
+    served = ConfigurationScreen(tmp_path, client=client)
+
+    assert isinstance(served._gateway, ServerConfiguration)
+    assert isinstance(ConfigurationScreen(tmp_path)._gateway, LocalConfiguration)
+    assert served._save_current("описание") == "Текущая конфигурация сохранена"
+    assert client.screen_requests == [
+        (
+            "job",
+            "configuration-save-current",
+            {"request": json.dumps({"description": "описание"}, ensure_ascii=False, separators=(",", ":"))},
+            False,
+        )
+    ]
+    assert not (tmp_path / ".harness/config_versions").exists()
+
+
+def test_the_wizard_and_its_versions_screen_write_no_configuration_themselves() -> None:
+    """Saving, applying, the adapters and the restore go through the configuration gateway; the
+    wizard reads its files from the snapshot, never from disk."""
+    import ast
+
+    from harness.console.tui.screens import configuration, configuration_versions
+
+    def called(module: object) -> set[str]:
+        tree = ast.parse(Path(str(getattr(module, "__file__"))).read_text(encoding="utf-8"))
+        return {
+            node.func.attr
+            if isinstance(node.func, ast.Attribute)
+            else getattr(node.func, "id", "")
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+        }
+
+    wizard, versions = called(configuration), called(configuration_versions)
+    local = {
+        "read_config_bundle",
+        "preview_runtime_adapters",
+        "apply_runtime_adapters",
+        "ConfigurationStore",
+        "load",
+    }
+    assert not local & wizard
+    assert {"snapshot", "from_snapshot", "save_draft", "apply", "apply_adapters"} <= wizard
+    assert "restore" in versions and "apply" not in versions

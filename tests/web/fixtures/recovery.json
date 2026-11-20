@@ -1,0 +1,456 @@
+{
+  "entry": {
+    "batch_id": "b-887",
+    "enabled": true,
+    "mark": "⚠ внимание",
+    "reason": "runtime удерживает batch после сбоя worker",
+    "state": "warn"
+  },
+  "history": [
+    {
+      "batch_id": "b-887",
+      "label": "#887 · active · b-887 · 1 открытых"
+    },
+    {
+      "batch_id": "b-886",
+      "label": "#886 · completed · b-886"
+    }
+  ],
+  "history_unavailable": "",
+  "resume_plan": {
+    "approval_required": true,
+    "checks": [
+      [
+        "config",
+        "passed"
+      ],
+      [
+        "store",
+        "passed"
+      ],
+      [
+        "ledger",
+        "passed"
+      ],
+      [
+        "batch",
+        "passed"
+      ],
+      [
+        "lifecycle",
+        "passed"
+      ],
+      [
+        "runtime",
+        "passed"
+      ],
+      [
+        "snapshot",
+        "passed"
+      ],
+      [
+        "context",
+        "passed"
+      ],
+      [
+        "compatibility",
+        "passed"
+      ],
+      [
+        "operation",
+        "passed"
+      ],
+      [
+        "liveness",
+        "passed"
+      ],
+      [
+        "attention",
+        "passed"
+      ],
+      [
+        "approval",
+        "passed"
+      ]
+    ],
+    "command": "coordinator.py recovery resume --batch b-887 --json --approved-by '<имя>' --approved-at '<время>' --note '<заметка>'",
+    "next_step": "recovery resume --batch b-887"
+  },
+  "view": {
+    "actions": [
+      {
+        "effect": "observe",
+        "enabled": true,
+        "key": "status",
+        "label": "Проверить состояние",
+        "needs_confirmation": false,
+        "reason": ""
+      },
+      {
+        "effect": "record",
+        "enabled": true,
+        "key": "fix",
+        "label": "Fix",
+        "needs_confirmation": false,
+        "reason": "core reason for fix"
+      },
+      {
+        "effect": "record",
+        "enabled": true,
+        "key": "reload",
+        "label": "Reload",
+        "needs_confirmation": false,
+        "reason": "core reason for reload"
+      },
+      {
+        "effect": "run",
+        "enabled": false,
+        "key": "resume",
+        "label": "Resume",
+        "needs_confirmation": true,
+        "reason": "ядро: проверка не пройдена"
+      },
+      {
+        "effect": "read",
+        "enabled": true,
+        "key": "skip",
+        "label": "Скрыть advisory",
+        "needs_confirmation": false,
+        "reason": ""
+      },
+      {
+        "effect": "record",
+        "enabled": true,
+        "key": "abort",
+        "label": "Выйти с сохранением",
+        "needs_confirmation": false,
+        "reason": "core reason for abort"
+      }
+    ],
+    "batch": "b-887",
+    "blockers": [
+      "edit .harness/orchestration.json at the pointer, then run 'recovery reload'"
+    ],
+    "notes": [
+      "Resume, Fix и Reload — отдельные действия ядра; выход с сохранением не отменяет batch и не останавливает worker."
+    ],
+    "rows": [
+      {
+        "group": "Причина и граница",
+        "label": "Причина",
+        "mark": "✖ заблокировано",
+        "state": "blocked",
+        "value": "runtime удерживает batch после сбоя worker"
+      },
+      {
+        "group": "Причина и граница",
+        "label": "Последняя подтверждённая граница",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "approval"
+      },
+      {
+        "group": "Причина и граница",
+        "label": "Можно продолжить",
+        "mark": "✖ заблокировано",
+        "state": "blocked",
+        "value": "нет"
+      },
+      {
+        "group": "Удержание runtime (не жизненный цикл batch)",
+        "label": "Причина",
+        "mark": "✖ заблокировано",
+        "state": "blocked",
+        "value": "runtime"
+      },
+      {
+        "group": "Удержание runtime (не жизненный цикл batch)",
+        "label": "Код",
+        "mark": "",
+        "state": null,
+        "value": "не сообщается"
+      },
+      {
+        "group": "Удержание runtime (не жизненный цикл batch)",
+        "label": "Шаг",
+        "mark": "",
+        "state": null,
+        "value": "не сообщается"
+      },
+      {
+        "group": "Удержание runtime (не жизненный цикл batch)",
+        "label": "Сообщение",
+        "mark": "",
+        "state": null,
+        "value": "runtime удерживает batch после сбоя worker"
+      },
+      {
+        "group": "Удержание runtime (не жизненный цикл batch)",
+        "label": "Ревизия",
+        "mark": "",
+        "state": null,
+        "value": "не сообщается"
+      },
+      {
+        "group": "Удержание runtime (не жизненный цикл batch)",
+        "label": "Можно снять через resume",
+        "mark": "·",
+        "state": "info",
+        "value": "нет"
+      },
+      {
+        "group": "Удержание runtime (не жизненный цикл batch)",
+        "label": "Исправление",
+        "mark": "",
+        "state": null,
+        "value": "не сообщается"
+      },
+      {
+        "group": "Жизненный цикл batch (запись ядра, recovery её не меняет)",
+        "label": "Состояние",
+        "mark": "",
+        "state": null,
+        "value": "active"
+      },
+      {
+        "group": "Жизненный цикл batch (запись ядра, recovery её не меняет)",
+        "label": "Следующее действие",
+        "mark": "",
+        "state": null,
+        "value": "developer"
+      },
+      {
+        "group": "Жизненный цикл batch (запись ядра, recovery её не меняет)",
+        "label": "Терминальный",
+        "mark": "",
+        "state": null,
+        "value": "нет"
+      },
+      {
+        "group": "Жизненный цикл batch (запись ядра, recovery её не меняет)",
+        "label": "Остановлен",
+        "mark": "",
+        "state": null,
+        "value": "да"
+      },
+      {
+        "group": "Жизненный цикл batch (запись ядра, recovery её не меняет)",
+        "label": "Требует внимания",
+        "mark": "",
+        "state": null,
+        "value": "нет"
+      },
+      {
+        "group": "Последнее действие recovery",
+        "label": "Намерение",
+        "mark": "·",
+        "state": "info",
+        "value": "записей нет"
+      },
+      {
+        "group": "Проверки",
+        "label": "config",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "store",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "ledger",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "batch",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "lifecycle",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "runtime",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "snapshot",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "context",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "compatibility",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "operation",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "liveness",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "attention",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Проверки",
+        "label": "approval",
+        "mark": "✔ ок",
+        "state": "ok",
+        "value": "passed"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Код",
+        "mark": "✖ заблокировано",
+        "state": "blocked",
+        "value": "config-invalid"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Проверка",
+        "mark": "",
+        "state": null,
+        "value": "config"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Указатель (pointer)",
+        "mark": "",
+        "state": null,
+        "value": "/access_policy/defaults/mode"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Сообщение",
+        "mark": "",
+        "state": null,
+        "value": "orchestration.json: invalid mode value"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Получено (скрыто)",
+        "mark": "",
+        "state": null,
+        "value": "<redacted>"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Ожидалось",
+        "mark": "",
+        "state": null,
+        "value": "[\"inherit\", \"sandbox\", \"unsandboxed\"]"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Исправление",
+        "mark": "",
+        "state": null,
+        "value": "edit .harness/orchestration.json at the pointer, then run 'recovery reload'"
+      },
+      {
+        "group": "Диагностика 1: config-invalid",
+        "label": "Предложение ядра",
+        "mark": "·",
+        "state": "info",
+        "value": "sandbox"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Код",
+        "mark": "⚠ внимание",
+        "state": "warn",
+        "value": "stale-snapshot"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Проверка",
+        "mark": "",
+        "state": null,
+        "value": "snapshot"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Указатель (pointer)",
+        "mark": "",
+        "state": null,
+        "value": "не сообщается"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Сообщение",
+        "mark": "",
+        "state": null,
+        "value": "snapshot старше конфигурации"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Получено (скрыто)",
+        "mark": "",
+        "state": null,
+        "value": "<redacted>"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Ожидалось",
+        "mark": "",
+        "state": null,
+        "value": "[\"inherit\", \"sandbox\", \"unsandboxed\"]"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Исправление",
+        "mark": "",
+        "state": null,
+        "value": "не сообщается"
+      },
+      {
+        "group": "Диагностика 2: stale-snapshot",
+        "label": "Advisory",
+        "mark": "·",
+        "state": "info",
+        "value": "stale-snapshot"
+      }
+    ],
+    "unknown_outcome": false
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Веб-консоль Harness Next 2.0.0",
+    "subtitle": "Браузерный клиент читает факты Сервера консоли; команды и запись остаются у coordinator и Rust runtime.",
+    "output": "site/docs/diagrams/console.architecture.html",
+    "quality_profile": "showcase"
+  },
+  "components": [
+    { "id": "user", "type": "external", "label": "Разработчик", "sublabel": "Браузер", "pos": [40, 220], "size": [120, 64] },
+    { "id": "spa", "type": "frontend", "label": "React/TS SPA", "sublabel": "экраны консоли", "pos": [230, 220], "size": [140, 64] },
+    { "id": "api", "type": "backend", "label": "Сервер консоли", "sublabel": "FastAPI · read-only", "pos": [440, 220], "size": [150, 64] },
+    { "id": "coord", "type": "backend", "label": "Coordinator CLI", "sublabel": "batch · dispatch · ledger", "pos": [660, 220], "size": [150, 64] },
+    { "id": "tracker", "type": "external", "label": "Трекер", "sublabel": "GitHub · GitLab", "pos": [660, 70], "size": [140, 64] },
+    { "id": "runtime", "type": "backend", "label": "Rust runtime", "sublabel": "IPC · supervisor", "pos": [880, 220], "size": [140, 64] },
+    { "id": "store", "type": "database", "label": "runtime-store", "sublabel": "SQLite WAL · schema 7", "pos": [880, 380], "size": [140, 64] },
+    { "id": "agents", "type": "external", "label": "Агенты", "sublabel": "Claude Code · Codex", "pos": [660, 380], "size": [140, 64] },
+    { "id": "containers", "type": "cloud", "label": "OCI-контейнеры", "sublabel": "worker и QA", "pos": [1080, 300], "size": [140, 64] }
+  ],
+  "connections": [
+    { "id": "user-spa", "from": "user", "to": "spa", "label": "браузер" },
+    { "id": "spa-api", "from": "spa", "to": "api", "label": "HTTP + WS" },
+    { "id": "api-coord", "from": "api", "to": "coord", "label": "задачи и ledger" },
+    { "id": "api-runtime", "from": "api", "to": "runtime", "label": "runtime status", "variant": "dashed" },
+    { "id": "coord-tracker", "from": "coord", "to": "tracker", "label": "issues", "fromSide": "top", "toSide": "bottom" },
+    { "id": "coord-runtime", "from": "coord", "to": "runtime", "label": "IPC" },
+    { "id": "runtime-store", "from": "runtime", "to": "store", "label": "SQLite WAL", "fromSide": "bottom", "toSide": "top" },
+    { "id": "runtime-agents", "from": "runtime", "to": "agents", "label": "dispatch", "variant": "dashed", "fromSide": "bottom", "toSide": "right" },
+    { "id": "runtime-containers", "from": "runtime", "to": "containers", "label": "worker / QA", "variant": "dashed" }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "Наблюдение", "items": ["SPA показывает только факты Сервера консоли", "Соединение и данные — демонстрационные"] },
+    { "dot": "emerald", "title": "Действия", "items": ["Запись и approve идут через coordinator", "Rust runtime владеет store и процессов"] },
+    { "dot": "rose", "title": "Границы", "items": ["Консоль не заменяет решение человека", "Merge и публикация остаются человеку"] }
+  ]
+}

@@ -11,7 +11,7 @@ import argparse
 import hashlib
 import uuid
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from harness.context_builder.context_builder import (
     ContextPackageError,
@@ -38,9 +38,12 @@ from harness.orchestration.core.utils import (
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
     _load_batch,
+    _load_context_package,
+    _load_dispatch,
     _replace_record,
     _state_root,
     _write_record,
+    read_state,
 )
 from harness.orchestration.ledger.lifecycle import (
     BatchRecord,
@@ -48,10 +51,42 @@ from harness.orchestration.ledger.lifecycle import (
     LifecycleLedger,
 )
 from harness.orchestration.workflow.history import (
-    _latest_developer_candidate,
+    _current_developer_candidate,
     _reusable_context_package,
     _validate_batch_integrity,
+    _validate_context_package,
 )
+
+def show_context_package(args: argparse.Namespace) -> JsonObject:
+    """Read the package pinned to the immutable dispatch, including historical dispatches."""
+    repo = _repo(args)
+    root = _state_root(args, repo)
+    with read_state(LifecycleLedger(root), repo):
+        dispatch = _load_dispatch(root, args.dispatch)
+        package_id = dispatch.get("context_package_id")
+        if not isinstance(package_id, str):
+            raise CoordinatorError(
+                "dispatch has no pinned Context Package",
+                remedy="use a dispatch that references a Context Package",
+            )
+        batch = _load_batch(root, dispatch["batch_id"])
+        package = _load_context_package(root, package_id)
+        _validate_context_package(root, batch, package)
+        recorded_hash = hashlib.sha256(_canonical(package).encode("utf-8")).hexdigest()
+        if recorded_hash != dispatch.get("context_package_sha256"):
+            raise CoordinatorError(
+                "dispatch Context Package hash does not match its immutable package",
+                remedy="inspect ledger integrity before using this package",
+            )
+        section = args.section
+        if section:
+            if section not in package:
+                raise CoordinatorError(
+                    f"pinned Context Package has no section named {section!r}",
+                    remedy="use a field present in the pinned package",
+                )
+            return {"context_package_id": package_id, section: package[section]}
+        return package
 
 
 def _persist_context_package(
@@ -70,6 +105,7 @@ def _persist_context_package(
     symbol_graph_depth: int | None = None,
     max_related_tests: int | None = None,
     no_memory: bool = False,
+    starting_files: list[str] | None = None,
 ) -> JsonObject:
     """Build once and register a reusable Context Package for one pinned diff."""
     package_base = batch.get("integration_base_commit") or batch["base_commit"]
@@ -94,16 +130,33 @@ def _persist_context_package(
     reusable = _reusable_context_package(
         repo, root, batch, package_base, snapshot, identity
     )
-    if reusable is not None:
+    required = list(dict.fromkeys(starting_files or []))
+    if any(
+        not path or "\\" in path or PurePosixPath(path).is_absolute()
+        or ".." in PurePosixPath(path).parts or PurePosixPath(path).as_posix() != path
+        for path in required
+    ):
+        raise CoordinatorError(
+            "an explicit starting file must be a canonical repository-relative path",
+            remedy="pass --starting-file paths without absolute roots or parent traversal",
+        )
+    policy = _context_package_policy(core_config._config(repo))
+    if max_starting_files is None:
+        max_starting_files = policy["max_starting_files"]
+    if len(required) > max_starting_files:
+        raise CoordinatorError(
+            "explicit starting files exceed max_starting_files",
+            remedy="supply fewer starting files or approve a larger starting-file limit",
+        )
+    if reusable is not None and set(required).issubset(
+        item["path"] for item in reusable["starting_files"]
+    ):
         return reusable
     if role != "shared":
         raise CoordinatorError(
             "automatic Context Packages must be shared; role focus belongs in the immutable brief",
             remedy="remove role-specific focus from the shared Context Package; put it in the immutable dispatch brief instead",
         )
-    policy = _context_package_policy(core_config._config(repo))
-    if max_starting_files is None:
-        max_starting_files = policy["max_starting_files"]
     # `max_package_tokens` is documented as an optional *stricter* ceiling (see coordinator_cli.py
     # --max-package-tokens help text). Silently honouring a caller-supplied value above the
     # project's configured budget is exactly how a review context package was pushed to ~130k
@@ -151,7 +204,7 @@ def _persist_context_package(
         *task_files,
         "AGENTS.md",
         "README.md",
-        ".harness/orchestration/roles/_common.md",
+        ".harness/orchestration/roles/common.md",
         ".harness/orchestration/contract.py",
     ]
     try:
@@ -166,6 +219,7 @@ def _persist_context_package(
             max_package_tokens=token_limit,
             max_related_tests=related_tests_cap,
             seed_paths=seed_files,
+            required_paths=required,
             section_index_min_tokens=policy["section_index_min_tokens"],
             goal=goal,
             definition_of_done=dod,
@@ -218,7 +272,7 @@ def _persist_context_package(
 
 
 def register_context_package(args: argparse.Namespace) -> JsonObject:
-    """Build one Context Package for the batch's accepted developer candidate and register it as a
+    """Build one Context Package for the current candidate or initial planning snapshot and register it as a
     new immutable, versioned, hashed ledger record -- the same ownership pattern as a risk
     assessment. Read-only over the repository; writes no coordinator or batch state beyond the
     package itself and its pointer entry."""
@@ -250,10 +304,11 @@ def register_context_package(args: argparse.Namespace) -> JsonObject:
                     "context package base must match the batch-captured base commit",
                     remedy=f"omit --base-commit, or pass the batch base commit {base}",
                 )
-        if candidate != _latest_developer_candidate(repo, root, batch):
+        expected = _current_developer_candidate(repo, root, batch) or batch["base_commit"]
+        if candidate != expected:
             raise CoordinatorError(
-                "candidate commit does not match the accepted developer report",
-                remedy="pass the candidate_commit from the accepted developer report",
+                "candidate commit does not match the current candidate or initial planning snapshot",
+                remedy=f"pass the pinned snapshot {expected}",
             )
         package = _persist_context_package(
             repo,
@@ -278,6 +333,7 @@ def register_context_package(args: argparse.Namespace) -> JsonObject:
             symbol_graph_depth=getattr(args, "symbol_graph_depth", None),
             max_related_tests=getattr(args, "max_related_tests", None),
             no_memory=getattr(args, "no_memory", False),
+            starting_files=getattr(args, "starting_file", None),
         )
         _safe_id(batch["batch_id"], "batch")
         _replace_record(ledger, BatchRecord.from_dict(batch))

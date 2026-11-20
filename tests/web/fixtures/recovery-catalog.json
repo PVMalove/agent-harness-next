@@ -1,0 +1,225 @@
+{
+  "cancel_reason": "Отмена останавливает команду; уже внесённые изменения не откатываются.",
+  "commands": [
+    {
+      "available": true,
+      "command_id": "recovery-reload",
+      "confirmation_reason": null,
+      "fields": [
+        {
+          "choices": null,
+          "default": null,
+          "dest": "batch",
+          "flag": "--batch",
+          "help": "",
+          "repeatable": false,
+          "required": true,
+          "takes_value": true
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "json",
+          "flag": "--json",
+          "help": "structured output; the coordinator always prints JSON",
+          "repeatable": false,
+          "required": false,
+          "takes_value": false
+        }
+      ],
+      "inputs": [
+        "batch"
+      ],
+      "needs_confirmation": false,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "reversible",
+      "reversibility_label": "✔ обратимо",
+      "section": "recovery",
+      "title": "Перечитать конфигурацию для восстановления",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "recovery-resume",
+      "confirmation_reason": "Команда записывает терминальное решение coordinator — отменить его нельзя.",
+      "fields": [
+        {
+          "choices": null,
+          "default": null,
+          "dest": "batch",
+          "flag": "--batch",
+          "help": "",
+          "repeatable": false,
+          "required": true,
+          "takes_value": true
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "json",
+          "flag": "--json",
+          "help": "structured output; the coordinator always prints JSON",
+          "repeatable": false,
+          "required": false,
+          "takes_value": false
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "approved_by",
+          "flag": "--approved-by",
+          "help": "human who approves the audited resume-stop of a stopped batch",
+          "repeatable": false,
+          "required": false,
+          "takes_value": true
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "approved_at",
+          "flag": "--approved-at",
+          "help": "time of that approval",
+          "repeatable": false,
+          "required": false,
+          "takes_value": true
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "note",
+          "flag": "--note",
+          "help": "what was checked before resuming",
+          "repeatable": false,
+          "required": false,
+          "takes_value": true
+        }
+      ],
+      "inputs": [
+        "batch"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "terminal-coordinator-action",
+      "reversibility_label": "⚠ решение",
+      "section": "recovery",
+      "title": "Возобновить удержанный batch",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "recovery-fix",
+      "confirmation_reason": null,
+      "fields": [
+        {
+          "choices": null,
+          "default": null,
+          "dest": "batch",
+          "flag": "--batch",
+          "help": "",
+          "repeatable": false,
+          "required": true,
+          "takes_value": true
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "json",
+          "flag": "--json",
+          "help": "structured output; the coordinator always prints JSON",
+          "repeatable": false,
+          "required": false,
+          "takes_value": false
+        }
+      ],
+      "inputs": [
+        "batch"
+      ],
+      "needs_confirmation": false,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "reversible",
+      "reversibility_label": "✔ обратимо",
+      "section": "recovery",
+      "title": "Исправления восстановления: превью",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "recovery-fix-apply",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "fields": [
+        {
+          "choices": null,
+          "default": null,
+          "dest": "batch",
+          "flag": "--batch",
+          "help": "",
+          "repeatable": false,
+          "required": true,
+          "takes_value": true
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "json",
+          "flag": "--json",
+          "help": "structured output; the coordinator always prints JSON",
+          "repeatable": false,
+          "required": false,
+          "takes_value": false
+        }
+      ],
+      "inputs": [
+        "batch"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "recovery",
+      "title": "Применить исправления восстановления",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "recovery-abort",
+      "confirmation_reason": null,
+      "fields": [
+        {
+          "choices": null,
+          "default": null,
+          "dest": "batch",
+          "flag": "--batch",
+          "help": "",
+          "repeatable": false,
+          "required": true,
+          "takes_value": true
+        },
+        {
+          "choices": null,
+          "default": null,
+          "dest": "json",
+          "flag": "--json",
+          "help": "structured output; the coordinator always prints JSON",
+          "repeatable": false,
+          "required": false,
+          "takes_value": false
+        }
+      ],
+      "inputs": [
+        "batch"
+      ],
+      "needs_confirmation": false,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "reversible",
+      "reversibility_label": "✔ обратимо",
+      "section": "recovery",
+      "title": "Выйти из восстановления batch",
+      "typed_confirmation": null
+    }
+  ]
+}

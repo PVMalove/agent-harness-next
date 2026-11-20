@@ -1,0 +1,453 @@
+#!/usr/bin/env python3
+"""Конверт ответа управляемых hooks: JSON-вердикт, код возврата и профиль политики (issue #794).
+
+Каждый управляемый hook событий перезапускается через этот модуль: ``hook_response.py run
+<hook_id> <команда...>`` читает stdin, запускает исходный сценарий с тем же stdin и печатает вердикт
+``{hook_id, profile, decision, reason_code, remedy, evidence_ref}`` последней строкой stderr.
+Код возврата: 0 для allow/warn, 2 для block. JSON не пишется в stdout: Claude Code разбирает stdout
+при коде 0 как собственный протокол, а значения ``allow``/``warn`` в нём не определены.
+
+Профиль берётся только из ключа ``hook_policy`` файла ``.harness/project.json`` проекта, где лежит
+этот модуль (``.claude/hooks/hook_response.py``). Переменные окружения, включая ``HOOK_PROFILE``, и
+входные данные инструмента не читаются. Проект без ключа (и без файла) получает ``standard``; ключ,
+который нельзя разобрать, или файл, который нельзя прочитать, даёт ``strict`` (только в строгую
+сторону). Hook не знает роль и пути команды, поэтому не может проверить условия эскалации и применяет
+самую строгую эскалацию ко всем вызовам: профиль становится не слабее базового и не слабее любой
+эскалации (``hook_policy.resolve_profile`` для вызова с подходящими ролью и путями не выше этого).
+
+Критичный hook при внутренней ошибке блокирует (код 2); зависание тела дольше ``INNER_TIMEOUT_SECONDS``
+тоже внутренняя ошибка: процесс прерывается, критичный hook блокирует; поведенческий (``require-bounded-check``) и
+учётные (``count-skill-usage``, ``mark-qa-gate-passed``) разрешают с предупреждением (код 0). Профиль
+``minimal`` понижает блокировку поведенческого hook до предупреждения; критичные hooks блокируют в любом
+профиле (ADR 0024). Advisory-hooks ChangeImpact (``ADVISORY_HOOKS``) не блокируют никогда: тело
+предупреждает префиксом причины при коде 0, а в профиле вне ``ACTIVE_PROFILES`` тело не запускается.
+Их внутренняя ошибка (префикс ``[internal-error]``, иной код, тайм-аут ``ADVISORY_TIMEOUT_SECONDS``
+или свой из ``TIMEOUTS``) даёт warn с кодом 0 и пустым stdout. Advisory-hook ``runtime-autostart``
+(ADR 0031) запускает и освобождает runtime во всех профилях.
+Только стандартная библиотека, Python 3.9+.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+import tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional, Sequence, Tuple
+
+# hook_id -> (reason_code блокировки, критичность); ``ok`` — hook не блокирует по замыслу.
+# Значения зарегистрированы в systemFields.v1 (hook.id, hook.reason_code);
+# tests/orchestration/test_system_fields_contract.py сверяет их.
+HOOKS: Dict[str, Tuple[str, bool]] = {
+    "block-dangerous-git": ("dangerous-git", True),
+    "block-direct-master": ("direct-commit", True),
+    "block-pr-merge": ("pr-merge", True),
+    "block-public-attribution": ("public-attribution", True),
+    "check-branch-name": ("branch-name", True),
+    "check-worktree-branch-name": ("worktree-branch-name", True),
+    "block-scratch-outside-docs-tasks": ("scratch-location", True),
+    "require-qa-gate": ("qa-gate-missing", True),
+    "protect-hook-policy": ("hook-policy-protected", True),
+    "require-bounded-check": ("unbounded-check", False),
+    "count-skill-usage": ("ok", False),
+    "mark-qa-gate-passed": ("ok", False),
+    "impact-first-touch": ("risky-path-first-touch", False),
+    "targeted-check-reminder": ("targeted-checks-unreported", False),
+    "sensitive-path-recheck": ("sensitive-path-touched", False),
+    "runtime-autostart": ("runtime-autostart-failed", False),
+}
+# Advisory-hooks ChangeImpact (ADR 0024, раздел 2a): тело всегда завершается кодом 0 и называет
+# предупреждение префиксом ``[reason_code] `` строки stderr, следующая строка ``evidence_ref=<путь>``
+# называет evidence; тело, которое проверяет несколько путей, печатает пару строк на каждый путь. Конверт никогда их не блокирует. Hook работает только в профилях
+# ``ACTIVE_PROFILES``: в остальных конверт отвечает allow, не запуская тело.
+ACTIVE_PROFILES: Dict[str, Tuple[str, ...]] = {
+    "impact-first-touch": ("standard", "strict"),
+    "targeted-check-reminder": ("standard", "strict"),
+    "sensitive-path-recheck": ("strict",),
+    # Автозапуск runtime (ADR 0031): во всех профилях, никогда не блокирует.
+    "runtime-autostart": ("minimal", "standard", "strict"),
+}
+ADVISORY_HOOKS = tuple(ACTIVE_PROFILES)
+EVIDENCE_PREFIX = "evidence_ref="
+# Дополнительные причины блокировки: сценарий называет одну из них префиксом ``[reason_code] `` stderr.
+EXTRA_REASONS: Dict[str, Tuple[str, ...]] = {
+    "protect-hook-policy": (
+        "hook-policy-changed",
+        "hook-policy-unparseable",
+        "project-json-shell-write",
+        "agent-config-edit",
+        "apply-patch-unparseable",
+    ),
+    "block-scratch-outside-docs-tasks": ("apply-patch-unparseable",),
+}
+PROFILES = ("minimal", "standard", "strict")
+DEFAULT_PROFILE = "standard"
+STRICT_PROFILE = "strict"
+DECISIONS = ("allow", "warn", "ask", "block")
+REASON_OK = "ok"
+REASON_INTERNAL_ERROR = "internal-error"
+REASON_CODES = tuple(
+    dict.fromkeys(
+        [
+            REASON_OK,
+            REASON_INTERNAL_ERROR,
+            *(reason for reason, _ in HOOKS.values()),
+            *(reason for reasons in EXTRA_REASONS.values() for reason in reasons),
+        ]
+    )
+)
+REASON_PREFIX = re.compile(r"\[([a-z][a-z-]*)\] ")
+ENVELOPE_FIELDS = (
+    "hook_id",
+    "profile",
+    "decision",
+    "reason_code",
+    "remedy",
+    "evidence_ref",
+)
+EXIT_CODES = {"allow": 0, "warn": 0, "ask": 0, "block": 2}
+# Отказы, которые человек снимает ручным подтверждением: сценарий завершается кодом 3 с префиксом
+# ``[reason_code] ``. Вердикт ``ask`` выдаётся только там, где runtime понимает протокол stdout
+# (Claude Code задаёт CLAUDE_PROJECT_DIR); иначе тот же отказ остаётся ``block``.
+ASK_EXIT_CODE = 3
+ASK_REASONS: Dict[str, Tuple[str, ...]] = {
+    "protect-hook-policy": ("project-json-shell-write",),
+}
+# Маркер повторного запуска: исходный сценарий видит его и не оборачивает себя второй раз.
+ENVELOPE_MARKER = "HARNESS_HOOK_ENVELOPE"
+REMEDY_LIMIT = 1000
+# Меньше тайм-аута hook-а в runtime (60 с): при зависании тела вердикт выдаёт конверт, а не runtime.
+INNER_TIMEOUT_SECONDS = 50
+# Тело advisory-hook стоит на горячем пути каждой правки: его тайм-аут короче.
+ADVISORY_TIMEOUT_SECONDS = 10
+# Advisory-hooks со своим тайм-аутом: ``runtime-autostart`` ждёт готовности serve до 40 с.
+TIMEOUTS: Dict[str, float] = {"runtime-autostart": INNER_TIMEOUT_SECONDS}
+
+
+def build_response(
+    hook_id: str,
+    profile: str,
+    decision: str,
+    reason_code: str,
+    remedy: str = "",
+    evidence_ref: Optional[str] = None,
+) -> Dict[str, object]:
+    """Собрать вердикт; незарегистрированное значение — ошибка контракта (ValueError)."""
+    for field, value, allowed in (
+        ("hook_id", hook_id, tuple(HOOKS)),
+        ("profile", profile, PROFILES),
+        ("decision", decision, DECISIONS),
+        ("reason_code", reason_code, REASON_CODES),
+    ):
+        if value not in allowed:
+            raise ValueError(
+                f"{field} {value!r} is not registered; allowed: {', '.join(allowed)}"
+            )
+    return {
+        "hook_id": hook_id,
+        "profile": profile,
+        "decision": decision,
+        "reason_code": reason_code,
+        "remedy": remedy,
+        "evidence_ref": evidence_ref,
+    }
+
+
+def project_root() -> Path:
+    """Корень проекта по расположению модуля: ``<проект>/.claude/hooks/hook_response.py``."""
+    return Path(__file__).resolve().parents[2]
+
+
+def _policy_profile(policy: object) -> str:
+    """Самый строгий профиль политики: базовый и все эскалации; неразбираемая политика — ``strict``."""
+    if not isinstance(policy, dict):
+        return STRICT_PROFILE
+    escalations = policy.get("escalations", [])
+    if policy.get("profile") not in PROFILES or not isinstance(escalations, list):
+        return STRICT_PROFILE
+    profiles: List[str] = [policy["profile"]]
+    for item in escalations:
+        if not isinstance(item, dict) or item.get("profile") not in PROFILES:
+            return STRICT_PROFILE
+        profiles.append(item["profile"])
+    return max(profiles, key=PROFILES.index)
+
+
+def read_profile(root: Path) -> str:
+    """Действующий профиль из ``hook_policy``: нет файла или ключа — ``standard``; иначе самый строгий
+    из базового и эскалаций; файл, который нельзя прочитать или разобрать, и неразбираемый ключ —
+    ``strict``."""
+    try:
+        raw = (root / ".harness" / "project.json").read_text("utf-8")
+    except FileNotFoundError:
+        return DEFAULT_PROFILE
+    except (OSError, ValueError):
+        return STRICT_PROFILE
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        return STRICT_PROFILE
+    if not isinstance(data, dict):
+        return STRICT_PROFILE
+    if "hook_policy" not in data:
+        return DEFAULT_PROFILE
+    return _policy_profile(data["hook_policy"])
+
+
+def decide_advisory(
+    hook_id: str, profile: str, code: Optional[int], stderr: str
+) -> Dict[str, object]:
+    """Вердикт advisory-hook по всем строкам stderr: тело, которое проверяет несколько путей,
+    печатает предупреждение и диагностику каждого. Код 0 и строка ``[internal-error]`` — warn
+    ``internal-error``; иначе строки с префиксом hook — warn: remedy — их тексты, evidence_ref —
+    все строки ``evidence_ref=`` (через перевод строки); без них — allow. Иной код, тайм-аут и сбой
+    запуска — warn ``internal-error``. Advisory-hook не блокирует ни в одном профиле."""
+    reason = HOOKS[hook_id][0]
+    evidence = f".claude/hooks/{hook_id}.sh"
+    lines = stderr.strip().splitlines()
+    if code == 0:
+        named = [
+            (match.group(1), line[match.end() :])
+            for line in lines
+            if (match := REASON_PREFIX.match(line)) is not None
+        ]
+        if any(name == REASON_INTERNAL_ERROR for name, _ in named):
+            return build_response(
+                hook_id,
+                profile,
+                "warn",
+                REASON_INTERNAL_ERROR,
+                stderr.strip()[:REMEDY_LIMIT],
+                evidence,
+            )
+        warnings = [text for name, text in named if name == reason]
+        if not warnings:
+            return build_response(hook_id, profile, "allow", REASON_OK)
+        refs = [
+            line[len(EVIDENCE_PREFIX) :].strip()
+            for line in lines
+            if line.startswith(EVIDENCE_PREFIX)
+        ]
+        remedy = "\n".join(warnings)[:REMEDY_LIMIT]
+        return build_response(
+            hook_id, profile, "warn", reason, remedy, "\n".join(refs) or evidence
+        )
+    detail = f"hook вернул код {code}" if code is not None else "hook не отработал"
+    if lines:
+        detail = f"{detail}: {stderr.strip()}"
+    return build_response(
+        hook_id, profile, "warn", REASON_INTERNAL_ERROR, detail[:REMEDY_LIMIT], evidence
+    )
+
+
+def decide(
+    hook_id: str, profile: str, code: Optional[int], stderr: str
+) -> Dict[str, object]:
+    """Вердикт по коду возврата исходного сценария (``None`` — сценарий не запустился)."""
+    if hook_id in ADVISORY_HOOKS:
+        return decide_advisory(hook_id, profile, code, stderr)
+    block_reason, critical = HOOKS[hook_id]
+    named = REASON_PREFIX.match(stderr.lstrip())
+    if named and named.group(1) in EXTRA_REASONS.get(hook_id, ()):
+        block_reason = named.group(1)
+    remedy = stderr.strip()[:REMEDY_LIMIT]
+    evidence = f".claude/hooks/{hook_id}.sh"
+    if code == 0:
+        return build_response(hook_id, profile, "allow", REASON_OK)
+    if code == ASK_EXIT_CODE and named and named.group(1) in ASK_REASONS.get(hook_id, ()):
+        decision = "ask" if os.environ.get("CLAUDE_PROJECT_DIR") else "block"
+        return build_response(hook_id, profile, decision, named.group(1), remedy, evidence)
+    if code == 2 and block_reason != REASON_OK:
+        if not critical and profile == "minimal":
+            note = "профиль minimal понижает блокировку до предупреждения"
+            return build_response(
+                hook_id, profile, "warn", block_reason, f"{note}: {remedy}", evidence
+            )
+        return build_response(hook_id, profile, "block", block_reason, remedy, evidence)
+    reason = f"hook вернул код {code}" if code is not None else "hook не отработал"
+    if remedy:
+        reason = f"{reason}: {remedy}"
+    decision = "block" if critical else "warn"
+    return build_response(
+        hook_id, profile, decision, REASON_INTERNAL_ERROR, reason, evidence
+    )
+
+
+def run_inner(
+    command: Sequence[str], payload: bytes, timeout: Optional[float] = None
+) -> Tuple[Optional[int], bytes, bytes]:
+    """Запустить исходный сценарий с тем же stdin; код — ``None`` при сбое запуска или тайм-ауте.
+
+    ``timeout`` по умолчанию — ``INNER_TIMEOUT_SECONDS``."""
+    limit = INNER_TIMEOUT_SECONDS if timeout is None else timeout
+    env = dict(os.environ, **{ENVELOPE_MARKER: "1"})
+    try:
+        done = subprocess.run(
+            list(command),
+            input=payload,
+            capture_output=True,
+            env=env,
+            check=False,
+            timeout=limit,
+        )
+    except subprocess.TimeoutExpired:
+        message = f"тайм-аут {limit} с: hook прерван"
+        return None, b"", message.encode("utf-8")
+    except OSError as exc:
+        return None, b"", f"{exc}".encode("utf-8", "replace")
+    return done.returncode, done.stdout, done.stderr
+
+
+OBSERVED_EVENTS = frozenset(
+    ("PreToolUse", "PostToolUse", "Stop", "SubagentStop", "EnterWorktree", "SessionStart")
+)
+OBSERVED_TOOLS = frozenset(
+    ("Bash", "Write", "Edit", "MultiEdit", "NotebookEdit", "Skill", "apply_patch")
+)
+
+
+def observation_root() -> Path:
+    """The main checkout: a hook of an issue worktree reports where ``harness health`` reads."""
+    root = project_root()
+    # Read Git's own pointer files instead of starting `git`: hooks never spawn it.
+    try:
+        marker = root / ".git"
+        if not marker.is_file():
+            return root
+        text = marker.read_text(encoding="utf-8").strip()
+        if not text.startswith("gitdir:"):
+            return root
+        gitdir = (root / text.removeprefix("gitdir:").strip()).resolve()
+        common = (gitdir / (gitdir / "commondir").read_text(encoding="utf-8").strip()).resolve()
+    except (OSError, ValueError):
+        return root
+    return common.parent if common.name == ".git" else root
+
+
+def observed_runtime(event: object) -> str:
+    """Which runtime ran the hook, by its documented signals; never by tool input."""
+    fields = event if isinstance(event, dict) else {}
+    # `turn_id` and `model` are Codex extensions of the hook payload; `apply_patch` is its tool.
+    if "turn_id" in fields or fields.get("tool_name") == "apply_patch":
+        return "codex"
+    if os.environ.get("CLAUDE_PROJECT_DIR"):
+        return "claude"
+    if "model" in fields:
+        return "codex"
+    return "unknown"
+
+
+def observe(response: Dict[str, object], body_executed: bool, payload: bytes) -> None:
+    """Store one local verdict per hook without recording tool input, paths or messages."""
+    temporary: Optional[Path] = None
+    try:
+        directory = observation_root() / ".harness/.sandboxes/logs/hook-observations"
+        if directory.resolve() != directory:
+            return
+        if not directory.parent.parent.is_dir():
+            return
+        directory.mkdir(parents=True, exist_ok=True)
+        record = {
+            field: response[field]
+            for field in ("hook_id", "profile", "decision", "reason_code")
+        }
+        record["observed_at"] = datetime.now(timezone.utc).isoformat()
+        record["body_executed"] = body_executed
+        try:
+            event = json.loads(payload)
+        except (ValueError, RecursionError):
+            event = None
+        record["runtime"] = observed_runtime(event)
+        if isinstance(event, dict):
+            for source, field, values in (
+                ("hook_event_name", "event", OBSERVED_EVENTS),
+                ("tool_name", "tool", OBSERVED_TOOLS),
+            ):
+                value = event.get(source)
+                if isinstance(value, str) and value in values:
+                    record[field] = value
+        path = directory / f"{response['hook_id']}.json"
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", dir=directory, delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            json.dump(record, handle)
+        temporary.replace(path)
+    except (OSError, RuntimeError):
+        pass  # Observation has no authority over the hook verdict.
+    finally:
+        if temporary is not None:
+            try:
+                temporary.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
+def emit(
+    stdout: bytes, stderr: bytes, response: Dict[str, object], *,
+    payload: bytes = b"", body_executed: bool = True,
+) -> int:
+    """Передать вывод исходного сценария и вердикт; вернуть код возврата по decision."""
+    observe(response, body_executed, payload)
+    if response["decision"] == "ask":
+        # PreToolUse в Claude Code: человеку задают вопрос, причина показывается вместе с запросом.
+        stdout = json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "ask",
+                    "permissionDecisionReason": response["remedy"],
+                }
+            },
+            ensure_ascii=False,
+        ).encode("utf-8")
+    if stdout:
+        sys.stdout.buffer.write(stdout)
+        sys.stdout.buffer.flush()
+    line = json.dumps(response, ensure_ascii=False, separators=(",", ":"))
+    if stderr and not stderr.endswith(b"\n"):
+        stderr += b"\n"
+    sys.stderr.buffer.write(stderr + line.encode("utf-8") + b"\n")
+    sys.stderr.buffer.flush()
+    decision = response["decision"]
+    assert isinstance(decision, str)
+    return EXIT_CODES[decision]
+
+
+def main(argv: List[str]) -> int:
+    """``run <hook_id> <команда...>``; любой сбой самого конверта подчиняется критичности hook."""
+    if len(argv) < 3 or argv[0] != "run" or argv[1] not in HOOKS:
+        print(
+            "hook_response.py: ожидается 'run <hook_id> <команда...>' с зарегистрированным hook_id",
+            file=sys.stderr,
+        )
+        return 2
+    hook_id = argv[1]
+    critical = HOOKS[hook_id][1]
+    try:
+        payload = sys.stdin.buffer.read()
+        profile = read_profile(project_root())
+        advisory = hook_id in ADVISORY_HOOKS
+        if profile not in ACTIVE_PROFILES.get(hook_id, PROFILES):
+            return emit(
+                b"", b"", build_response(hook_id, profile, "allow", REASON_OK),
+                payload=payload, body_executed=False,
+            )
+        default = ADVISORY_TIMEOUT_SECONDS if advisory else INNER_TIMEOUT_SECONDS
+        timeout = TIMEOUTS.get(hook_id, default)
+        code, out, err = run_inner(argv[2:], payload, timeout)
+        response = decide(hook_id, profile, code, err.decode("utf-8", "replace"))
+        if advisory and response["reason_code"] == REASON_INTERNAL_ERROR:
+            out = b""  # частичный вывод тела сломал бы протокол runtime
+        return emit(out, err, response, payload=payload)
+    except Exception as exc:  # критичный hook не должен открывать проход при сбое
+        print(f"hook_response.py: внутренняя ошибка: {exc}", file=sys.stderr)
+        return 2 if critical else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

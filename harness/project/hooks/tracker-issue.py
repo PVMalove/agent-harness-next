@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     Run = Callable[[list[str]], subprocess.CompletedProcess[str] | None]
 
 TIMEOUT_SECONDS = 10
-RULE = "Issue First (docs/agents/git-workflow.md)"
+RULE = "Issue First (.harness/instructions/git-workflow.md)"
 # Tracker type -> (CLI, the -R address format).
 TRACKERS = {
     "github": ("gh", "{host}/{project}"),
@@ -123,7 +123,7 @@ def main(repo_dir: str, issue_id: str, name: str) -> int:
         reason = gitlab_404_reason(run, executable, address)
     messages: dict[Reason, str] = {
         "missing": f"{subject} не найдена в {address} — сначала заведи её "
-        f"('{tool} issue create' или /to-spec, /to-tickets).",
+        f"('{tool} issue create' или /publish-epic, /to-tickets).",
         "disabled": f"в {address} отключены issues, поэтому {subject} не проверить — включи "
         "issues в проекте или укажи нужный трекер в поле tracker .harness/project.json.",
         "auth": f"{tool} не авторизован на {host}, поэтому {subject} не проверить — выполни "

@@ -1,0 +1,145 @@
+{
+  "maintenance": {
+    "soft": {
+      "plan": {
+        "mode": "soft",
+        "root": "/work/project/.harness",
+        "min_age_hours": 24,
+        "remove": [
+          {
+            "kind": "directory",
+            "path": "/work/project/.harness/.sandboxes/runs/tests/run-0412"
+          },
+          {
+            "kind": "directory",
+            "path": "/work/project/.harness/.sandboxes/runs/qa/qa-0398"
+          },
+          {
+            "kind": "file",
+            "path": "/work/project/.harness/.sandboxes/logs/test-run-1.log"
+          }
+        ],
+        "skipped": [
+          {
+            "path": "/work/project/.harness/.sandboxes/runs/qa/qa-0411",
+            "reason": "active or newer than minimum age"
+          },
+          {
+            "path": "/work/project/.harness/.sandboxes/worktrees/issue-886",
+            "reason": "referenced by an active batch"
+          }
+        ]
+      },
+      "categories": {
+        "runs/tests": {
+          "bytes": 18874368,
+          "files": 412
+        },
+        "runs/qa": {
+          "bytes": 5242880,
+          "files": 96
+        },
+        "logs": {
+          "bytes": 81920,
+          "files": 12
+        }
+      },
+      "total": {
+        "bytes": 24199168,
+        "files": 520
+      },
+      "items": 3,
+      "digest": "d6ee40c8e87da9cedcd5a114ea5d66e8f8f4e7e6b57e5011cb56c9a3a5892d33"
+    },
+    "hard": {
+      "plan": {
+        "mode": "hard",
+        "root": "/work/project/.harness",
+        "min_age_hours": 24,
+        "remove": [
+          {
+            "kind": "directory",
+            "path": "/work/project/.harness/.sandboxes/runs/tests/run-0412"
+          },
+          {
+            "kind": "directory",
+            "path": "/work/project/.harness/.sandboxes/runs/qa/qa-0398"
+          },
+          {
+            "kind": "file",
+            "path": "/work/project/.harness/.sandboxes/logs/test-run-1.log"
+          },
+          {
+            "kind": "directory",
+            "path": "/work/project/.harness/.sandboxes/cache"
+          }
+        ],
+        "skipped": [
+          {
+            "path": "/work/project/.harness/.sandboxes/runs/qa/qa-0411",
+            "reason": "active or newer than minimum age"
+          },
+          {
+            "path": "/work/project/.harness/.sandboxes/worktrees/issue-886",
+            "reason": "referenced by an active batch"
+          }
+        ]
+      },
+      "categories": {
+        "runs/tests": {
+          "bytes": 18874368,
+          "files": 412
+        },
+        "runs/qa": {
+          "bytes": 5242880,
+          "files": 96
+        },
+        "logs": {
+          "bytes": 81920,
+          "files": 12
+        },
+        "cache": {
+          "bytes": 41943040,
+          "files": 1530
+        }
+      },
+      "total": {
+        "bytes": 66142208,
+        "files": 2050
+      },
+      "items": 4,
+      "digest": "277d3ca1b10471c6224abd54981cdd8cdf4d0782208917a8e1e49f2aec4d3a9d"
+    },
+    "worktrees": [
+      {
+        "path": "/work/project",
+        "branch": "integration/web-console",
+        "dirty": 0,
+        "reason": "current checkout"
+      },
+      {
+        "path": "/work/project/.harness/.sandboxes/worktrees/issue-871-done",
+        "branch": "feature/issue-871-done",
+        "dirty": 0,
+        "reason": ""
+      },
+      {
+        "path": "/work/project/.harness/.sandboxes/worktrees/issue-886",
+        "branch": "feature/issue-886",
+        "dirty": 4,
+        "reason": "referenced by an active batch"
+      }
+    ],
+    "worktree_error": "",
+    "tree_sizes": [
+      {
+        "path": "/work/project/.harness/.sandboxes/worktrees/issue-871-done",
+        "size": {
+          "bytes": 7340032,
+          "files": 880
+        }
+      }
+    ]
+  },
+  "error": ""
+}

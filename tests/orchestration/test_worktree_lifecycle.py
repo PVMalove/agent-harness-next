@@ -1,0 +1,983 @@
+"""The coordinator commands ``worktree create`` and ``worktree remove`` (#1180).
+
+The runtime is replaced at the client: the fake answers a request the way ``harness-runtime``
+does, by running the same ``git worktree`` command in the test repository.
+"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+import tomllib
+from pathlib import Path
+from unittest import mock
+
+import pytest
+
+from harness.orchestration import coordinator, worktree_lifecycle
+from harness.orchestration.core.utils import CoordinatorError
+from harness.orchestration.runtime_client import (
+    RuntimeClient,
+    RuntimeClientError,
+    RuntimeReply,
+)
+from tests.orchestration import runtime_store_support as support
+
+
+def _git(repo: Path, *arguments: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *arguments],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+    )
+    return result.stdout.strip()
+
+
+@pytest.fixture
+def repo(tmp_path: Path) -> Path:
+    root = tmp_path / "project"
+    root.mkdir()
+    _git(root, "init", "--quiet", "--initial-branch=main")
+    _git(root, "config", "user.name", "Test")
+    _git(root, "config", "user.email", "test@example.invalid")
+    (root / "README.md").write_text("project\n", encoding="utf-8")
+    (root / ".gitignore").write_text(".harness/\n", encoding="utf-8")
+    _git(root, "add", "README.md", ".gitignore")
+    _git(root, "commit", "--quiet", "-m", "chore: start")
+    return root.resolve()
+
+
+class FakeRuntime:
+    """Answers ``worktree.create`` and ``worktree.remove`` with real git commands."""
+
+    def __init__(self, repo: Path) -> None:
+        self.repo = repo
+        self.calls: list[dict[str, object]] = []
+
+    def call(self, operation: str, **arguments: object) -> RuntimeReply:
+        self.calls.append({"operation": operation, **arguments})
+        payload = arguments["payload"]
+        assert isinstance(payload, dict)
+        path = str(payload["path"])
+        if operation == "worktree.create":
+            branch = str(payload["branch"])
+            _git(
+                self.repo,
+                "worktree",
+                "add",
+                "--quiet",
+                "--no-track",
+                "-b",
+                branch,
+                path,
+                str(payload["base"]),
+            )
+            result = {
+                "path": path,
+                "branch": branch,
+                "head": _git(self.repo, "rev-parse", "HEAD"),
+                "created": True,
+            }
+        elif operation == "worktree.commit":
+            pathspecs = payload.get("pathspecs")
+            literal = [f":(literal){spec}" for spec in pathspecs or []]
+            _git(Path(path), "add", "--all", "--", *literal)
+            _git(Path(path), "commit", "--quiet", "-m", str(payload["message"]))
+            result = {
+                "path": path,
+                "branch": _git(Path(path), "rev-parse", "--abbrev-ref", "HEAD"),
+                "head": _git(Path(path), "rev-parse", "HEAD"),
+                "committed": True,
+            }
+        else:
+            _git(self.repo, "worktree", "remove", path)
+            result = {"path": path, "removed": True}
+        return RuntimeReply(hello={}, result=result, revision=None)
+
+
+def _run(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    runtime: object,
+    *arguments: str,
+) -> tuple[int, str, str]:
+    monkeypatch.setattr(sys, "argv", ["coordinator", "worktree", *arguments])
+    with mock.patch.object(worktree_lifecycle, "RuntimeClient", return_value=runtime):
+        code = coordinator.main()
+    captured = capsys.readouterr()
+    return code, captured.out, captured.err
+
+
+@pytest.mark.parametrize(
+    ("agent", "network_flag"),
+    [("codex", ()), ("codex", ("--network-access", "enabled")), ("claude", ())],
+)
+def test_prepare_provisions_artifacts_and_builds_the_native_session_command(
+    repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+    network_flag: tuple[str, ...],
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        None,
+        "prepare",
+        "--repo",
+        str(repo),
+        "--worktree",
+        str(tree),
+        "--runtime",
+        agent,
+        *network_flag,
+    )
+
+    assert code == 0, err
+    data = json.loads(out)
+    assert data["cwd"] == str(repo)
+    argv = data["argv"]
+    assert argv[0] == agent
+    dirs = [
+        repo / ".harness/orchestration/state",
+        *(
+            repo / ".harness/.sandboxes" / path
+            for path in (
+                "scratch/inbox",
+                "scratch/briefs",
+                "runs/qa",
+                "runs/tests",
+                "logs",
+                "cache/npm",
+                "cache/ms-playwright",
+            )
+        ),
+    ]
+    assert all(path.is_dir() for path in dirs)
+    if agent == "claude":
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        assert settings["sandbox"]["filesystem"]["allowWrite"] == [
+            str(path) for path in dirs
+        ]
+        assert argv[argv.index("--add-dir") + 1] == str(tree)
+        assert "EnterWorktree" in argv[-1]
+        assert "ExitWorktree" in argv[-1]
+        assert "worktree check" in argv[-1]
+    else:
+        settings = {}
+        for i, value in enumerate(argv[:-1]):
+            if value == "-c":
+                settings.update(tomllib.loads(argv[i + 1]))
+        profile = settings["permissions"][settings["default_permissions"]]
+        assert profile["network"] == {"enabled": bool(network_flag)}
+        filesystem = profile["filesystem"]
+        assert filesystem[":root"] == "read"
+        assert ":tmpdir" not in filesystem and ":slash_tmp" not in filesystem
+        assert settings["shell_environment_policy"]["set"]["TMPDIR"] == str(
+            repo / ".harness/.sandboxes/runs/tests"
+        )
+        gitdir = Path(_git(tree, "rev-parse", "--absolute-git-dir"))
+        assert all(filesystem[str(path)] == "write" for path in [*dirs, tree, gitdir])
+        assert filesystem[str(repo / ".git/hooks")] == "read"
+        # The main checkout is never writable; Git permissions may list it read-only.
+        assert filesystem.get(str(repo), "read") == "read"
+        assert str(tree.parent) not in filesystem
+
+
+def test_prepare_launch_starts_in_the_main_checkout_after_provisioning(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+    started: list[Path] = []
+
+    def launch(argv: list[str], *, cwd: Path) -> int:
+        assert argv[0] == "claude"
+        assert (cwd / ".harness/.sandboxes/cache/npm").is_dir()
+        started.append(cwd)
+        return 7
+
+    with mock.patch.object(subprocess, "call", side_effect=launch):
+        code, out, _ = _run(
+            monkeypatch,
+            capsys,
+            None,
+            "prepare",
+            "--repo",
+            str(repo),
+            "--worktree",
+            str(tree),
+            "--runtime",
+            "claude",
+            "--launch",
+        )
+
+    assert started == [repo]
+    assert code == 7
+    assert json.loads(out) == {"exit_code": 7}
+
+
+def test_worktree_check_detects_a_read_only_artifact_directory(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+    mkstemp = tempfile.mkstemp
+    runs = repo / ".harness/.sandboxes/runs/tests"
+    cache = repo / ".harness/.sandboxes/cache/npm"
+    denied = {runs, cache}
+    arguments = ("--repo", str(repo), "--worktree", str(tree))
+
+    assert (
+        _run(monkeypatch, capsys, None, "prepare", *arguments, "--runtime", "claude")[0]
+        == 0
+    )
+
+    def refuse(*, prefix: str, dir: Path) -> tuple[int, str]:
+        if dir in denied:
+            raise OSError(30, "Read-only file system")
+        return mkstemp(prefix=prefix, dir=dir)
+
+    with mock.patch("tempfile.mkstemp", side_effect=refuse):
+        code, _, err = _run(monkeypatch, capsys, None, "check", *arguments)
+
+    assert code == 2
+    assert str(runs) in err
+    assert "Read-only file system" in err
+
+    # A cache only helps, so an unwritable one is reported and the check passes.
+    denied.remove(runs)
+    with mock.patch("tempfile.mkstemp", side_effect=refuse):
+        code, out, err = _run(monkeypatch, capsys, None, "check", *arguments)
+
+    assert code == 0, err
+    assert json.loads(out)["writable"] is True
+    assert f"warning: unwritable path not granted: {cache}" in err
+
+
+@pytest.mark.parametrize("agent", ["codex", "claude"])
+def test_prepare_skips_an_optional_symlink_and_refuses_a_required_one(
+    repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    agent: str,
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+    shared = repo / ".harness/.sandboxes"
+    (shared / "cache").mkdir(parents=True)
+    (shared / "runs").mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    playwright, qa = shared / "cache/ms-playwright", shared / "runs/qa"
+    try:
+        playwright.symlink_to(outside, target_is_directory=True)
+        qa.symlink_to(outside, target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks unavailable: {exc}")
+    arguments = ("--repo", str(repo), "--worktree", str(tree), "--runtime", agent)
+
+    code, _, err = _run(monkeypatch, capsys, None, "prepare", *arguments)
+
+    assert code == 2
+    assert f"required path is a symlink: {qa}" in err
+
+    qa.unlink()
+    code, out, err = _run(monkeypatch, capsys, None, "prepare", *arguments)
+
+    assert code == 0, err
+    assert f"warning: symlink not granted: {playwright}" in err
+    argv = json.loads(out)["argv"]
+    if agent == "claude":
+        settings = json.loads(argv[argv.index("--settings") + 1])
+        writable = set(settings["sandbox"]["filesystem"]["allowWrite"])
+    else:
+        permissions = tomllib.loads(next(value for value in argv if value.startswith("permissions=")))
+        filesystem = permissions["permissions"]["harness-coordinator"]["filesystem"]
+        writable = {path for path, mode in filesystem.items() if mode == "write"}
+    assert str(qa) in writable
+    assert str(playwright) not in writable
+    assert list(outside.iterdir()) == []
+
+
+def test_prepare_refuses_network_access_for_a_claude_session(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness/.sandboxes/worktrees/issue-7-seven"
+    _git(repo, "worktree", "add", "-q", "-b", "feature/issue-7-seven", str(tree))
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        None,
+        "prepare",
+        *("--repo", str(repo), "--worktree", str(tree), "--runtime", "claude"),
+        *("--network-access", "enabled"),
+    )
+
+    assert code == 2
+    assert out == ""
+    assert "--network-access applies to Codex sessions" in err
+    assert not (repo / ".harness/.sandboxes/cache").exists()
+
+
+def test_create_asks_the_runtime_for_a_worktree_in_the_managed_directory(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runtime = FakeRuntime(repo)
+
+    code, out, _ = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "create",
+        "--repo",
+        str(repo),
+        "--branch",
+        "feature/issue-7-seven",
+        "--base",
+        "main",
+    )
+
+    expected = repo / ".harness" / ".sandboxes" / "worktrees" / "issue-7-seven"
+    assert code == 0
+    report = json.loads(out)
+    assert report["path"] == str(expected)
+    assert report["branch"] == "feature/issue-7-seven"
+    assert report["created"] is True
+    assert report["session_write_access"] == {"writable": True}
+    assert (
+        _git(expected, "rev-parse", "--abbrev-ref", "HEAD") == "feature/issue-7-seven"
+    )
+    call = runtime.calls[0]
+    assert call["operation"] == "worktree.create"
+    assert call["payload"] == {
+        "path": str(expected),
+        "branch": "feature/issue-7-seven",
+        "base": "main",
+    }
+    assert call["requires_minor"] == worktree_lifecycle.WORKTREE_PROTOCOL_MINOR
+
+
+def test_create_resolves_an_explicit_relative_path_against_the_repository(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runtime = FakeRuntime(repo)
+    monkeypatch.chdir(repo.parent)
+
+    code, out, _ = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "create",
+        "--repo",
+        str(repo),
+        "--branch",
+        "feature/issue-8-eight",
+        "--base",
+        "main",
+        "--path",
+        ".harness/.sandboxes/worktrees/custom",
+    )
+
+    assert code == 0
+    expected = repo / ".harness" / ".sandboxes" / "worktrees" / "custom"
+    assert json.loads(out)["path"] == str(expected)
+
+
+def test_create_reports_git_metadata_the_session_cannot_write(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runtime = FakeRuntime(repo)
+    refusal = CoordinatorError(
+        "the session cannot write to the git metadata directory /x: Read-only file system",
+        remedy="open write access",
+    )
+    monkeypatch.setattr(
+        worktree_lifecycle, "_require_writable_worktree", mock.Mock(side_effect=refusal)
+    )
+
+    code, out, _ = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "create",
+        "--repo",
+        str(repo),
+        "--branch",
+        "feature/issue-9-nine",
+        "--base",
+        "main",
+    )
+
+    assert code == 0
+    assert json.loads(out)["session_write_access"] == {
+        "writable": False,
+        "reason": refusal.message,
+        "remedy": "open write access",
+    }
+
+
+def test_remove_asks_the_runtime_and_keeps_the_branch(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness" / ".sandboxes" / "worktrees" / "issue-10-ten"
+    _git(repo, "worktree", "add", "--quiet", "-b", "feature/issue-10-ten", str(tree))
+    runtime = FakeRuntime(repo)
+
+    code, out, _ = _run(
+        monkeypatch, capsys, runtime, "remove", "--repo", str(repo), "--path", str(tree)
+    )
+
+    assert code == 0
+    assert json.loads(out) == {"path": str(tree), "removed": True}
+    assert not tree.exists()
+    assert _git(repo, "branch", "--list", "feature/issue-10-ten") != ""
+    assert runtime.calls[0]["operation"] == "worktree.remove"
+    assert runtime.calls[0]["payload"] == {"path": str(tree)}
+
+
+def test_a_refusal_of_the_runtime_exits_2_with_its_code_in_the_remedy(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    runtime = mock.Mock()
+    runtime.call.side_effect = RuntimeClientError(
+        "policy_denied",
+        "the path is outside the managed worktree directories",
+        remedy="pass a path under .harness/.sandboxes/worktrees",
+        domain="policy",
+    )
+
+    code, out, err = _run(
+        monkeypatch, capsys, runtime, "remove", "--repo", str(repo), "--path", "/etc"
+    )
+
+    assert code == 2
+    assert out == ""
+    lines = err.splitlines()
+    assert lines[0] == "ERROR: the path is outside the managed worktree directories"
+    assert lines[1].startswith("REMEDY: [policy_denied] ")
+
+
+def _issue_worktree(repo: Path, branch: str) -> Path:
+    tree = repo / ".harness" / ".sandboxes" / "worktrees" / branch.rsplit("/", 1)[-1]
+    _git(repo, "worktree", "add", "--quiet", "-b", branch, str(tree))
+    return tree
+
+
+def test_commit_asks_the_runtime_to_commit_the_named_paths(
+    repo: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-13-thirteen")
+    (tree / "kept.txt").write_text("one\n", encoding="utf-8")
+    (tree / "left.txt").write_text("two\n", encoding="utf-8")
+    message = tmp_path / "message.txt"
+    message.write_text("feat: kept\n\nbody line\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message-file",
+        str(message),
+        "--pathspec",
+        "kept.txt",
+    )
+
+    assert code == 0, err
+    report = json.loads(out)
+    assert report["committed"] is True
+    assert report["branch"] == "feature/issue-13-thirteen"
+    assert report["head"] == _git(tree, "rev-parse", "HEAD")
+    call = runtime.calls[0]
+    assert call["operation"] == "worktree.commit"
+    assert call["payload"] == {
+        "path": str(tree),
+        "message": "feat: kept\n\nbody line\n",
+        "pathspecs": ["kept.txt"],
+    }
+    assert call["requires_minor"] == worktree_lifecycle.WORKTREE_COMMIT_PROTOCOL_MINOR
+    assert _git(tree, "status", "--porcelain") == "?? left.txt"
+
+
+def test_commit_refuses_a_message_file_inside_the_worktree_before_asking(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-21-message-inside")
+    message = tree / "message.txt"
+    message.write_text("feat: staged by itself\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message-file",
+        str(message),
+    )
+
+    assert code == 2
+    assert out == ""
+    assert "inside the worktree" in err
+    assert runtime.calls == []
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "feat: x\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n",
+        "feat: x\n\nGenerated with Claude Code\n",
+    ],
+)
+def test_commit_and_merge_refuse_an_assistant_attribution_before_asking(
+    repo: Path,
+    message: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-22-attribution")
+    (tree / "added.txt").write_text("new\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+    common = ("--repo", str(repo), "--path", str(tree), "--message", message)
+
+    for command in (["commit"], ["merge", "--revision", "main"]):
+        code, out, err = _run(monkeypatch, capsys, runtime, *command, *common)
+
+        assert code == 2, command
+        assert out == ""
+        assert "assistant attribution" in err
+    assert runtime.calls == []
+
+
+@pytest.mark.parametrize("branch", ["integration/team", "release-notes"])
+def test_commit_refuses_a_worktree_off_an_issue_branch_before_asking(
+    repo: Path,
+    branch: str,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, branch)
+    (tree / "added.txt").write_text("new\n", encoding="utf-8")
+    runtime = FakeRuntime(repo)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message",
+        "feat: protected",
+    )
+
+    assert code == 2
+    assert out == ""
+    assert "issue branch" in err
+    assert runtime.calls == []
+    assert _git(tree, "status", "--porcelain") == "?? added.txt"
+
+
+def test_commit_refuses_a_detached_worktree_before_asking(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    tree = repo / ".harness" / ".sandboxes" / "worktrees" / "detached"
+    _git(repo, "worktree", "add", "--quiet", "--detach", str(tree))
+    runtime = FakeRuntime(repo)
+
+    code, _, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "commit",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        "--message",
+        "feat: detached",
+    )
+
+    assert code == 2
+    assert "detached HEAD" in err
+    assert runtime.calls == []
+
+
+def _answering(result: dict[str, object]) -> mock.Mock:
+    runtime = mock.Mock()
+    runtime.call.return_value = RuntimeReply(hello={}, result=result, revision=None)
+    return runtime
+
+
+@pytest.mark.parametrize(
+    ("arguments", "payload"),
+    [
+        (
+            ("--onto", "main", "--upstream", "base"),
+            {"action": "start", "onto": "main", "upstream": "base"},
+        ),
+        (("--continue",), {"action": "continue"}),
+        (("--skip",), {"action": "skip"}),
+        (("--abort",), {"action": "abort"}),
+    ],
+)
+def test_rebase_sends_each_action_to_the_runtime(
+    repo: Path,
+    arguments: tuple[str, ...],
+    payload: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-17-seventeen")
+    answer = {"path": str(tree), "in_progress": True, "conflicts": ["README.md"]}
+    runtime = _answering(answer)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "rebase",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        *arguments,
+    )
+
+    assert code == 0, err
+    assert json.loads(out) == answer
+    runtime.call.assert_called_once()
+    call = runtime.call.call_args
+    assert call.args == ("worktree.rebase",)
+    assert call.kwargs["payload"] == {"path": str(tree), **payload}
+    assert call.kwargs["requires_minor"] == 9
+
+
+@pytest.mark.parametrize(
+    ("arguments", "payload"),
+    [
+        (("--revision", "main"), {"action": "start", "revision": "main"}),
+        (
+            ("--revision", "main", "--message", "chore: merge"),
+            {"action": "start", "revision": "main", "message": "chore: merge"},
+        ),
+        (("--continue",), {"action": "continue"}),
+        (("--abort",), {"action": "abort"}),
+    ],
+)
+def test_merge_sends_each_action_to_the_runtime(
+    repo: Path,
+    arguments: tuple[str, ...],
+    payload: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-18-eighteen")
+    runtime = _answering({"path": str(tree), "in_progress": False, "conflicts": []})
+
+    code, _, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "merge",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        *arguments,
+    )
+
+    assert code == 0, err
+    call = runtime.call.call_args
+    assert call.args == ("worktree.merge",)
+    assert call.kwargs["payload"] == {"path": str(tree), **payload}
+
+
+@pytest.mark.parametrize(
+    ("command", "arguments", "parsed"),
+    [
+        ("rebase", ("--onto", "main"), True),
+        ("rebase", ("--continue", "--upstream", "main"), True),
+        ("merge", ("--abort", "--message", "chore: merge"), True),
+        ("rebase", ("--continue", "--abort"), False),
+        ("merge", (), False),
+    ],
+)
+def test_rebase_and_merge_refuse_arguments_that_do_not_go_together(
+    repo: Path,
+    command: str,
+    arguments: tuple[str, ...],
+    parsed: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-19-nineteen")
+    runtime = mock.Mock()
+    argv = (command, "--repo", str(repo), "--path", str(tree), *arguments)
+
+    if parsed:
+        code, _, _ = _run(monkeypatch, capsys, runtime, *argv)
+        assert code == 2
+    else:
+        with pytest.raises(SystemExit) as refused:
+            _run(monkeypatch, capsys, runtime, *argv)
+        assert refused.value.code == 2
+    runtime.call.assert_not_called()
+
+
+def test_a_stopped_rebase_keeps_its_branch_for_the_check(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def stopped_rebase(branch: str) -> Path:
+        tree = _issue_worktree(repo, branch)
+        (tree / "README.md").write_text("ours\n", encoding="utf-8")
+        _git(tree, "commit", "--quiet", "-am", "feat: ours")
+        (repo / "README.md").write_text(f"theirs {branch}\n", encoding="utf-8")
+        _git(repo, "commit", "--quiet", "-am", "chore: theirs")
+        failed = subprocess.run(
+            ["git", "-C", str(tree), "rebase", "main"], capture_output=True, check=False
+        )
+        assert failed.returncode != 0
+        assert _git(tree, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
+        return tree
+
+    issue = stopped_rebase("feature/issue-20-twenty")
+    protected = stopped_rebase("integration/team")
+    runtime = _answering({"in_progress": False})
+
+    allowed, _, err = _run(
+        monkeypatch, capsys, runtime, "rebase", "--repo", str(repo),
+        "--path", str(issue), "--abort",
+    )
+    refused, _, refusal = _run(
+        monkeypatch, capsys, runtime, "rebase", "--repo", str(repo),
+        "--path", str(protected), "--continue",
+    )
+
+    assert allowed == 0, err
+    assert refused == 2
+    assert "issue branch" in refusal
+    assert runtime.call.call_count == 1
+
+
+def test_a_writable_worktree_commits_through_git(repo: Path) -> None:
+    tree = _issue_worktree(repo, "feature/issue-14-fourteen")
+    probe = mock.Mock(return_value=True)
+
+    with mock.patch.object(worktree_lifecycle, "runtime_commits", probe):
+        route = worktree_lifecycle.require_committable_worktree(repo, str(tree))
+
+    assert route == "git"
+    probe.assert_not_called()
+
+
+@pytest.mark.parametrize(("serves", "route"), [(True, "runtime"), (False, None)])
+def test_read_only_git_metadata_commits_through_a_runtime_that_serves_it(
+    repo: Path, serves: bool, route: str | None
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-15-fifteen")
+    refusal = CoordinatorError(
+        "the session cannot write to the git metadata directory /x: Read-only file system",
+        remedy="open write access",
+    )
+
+    with (
+        mock.patch.object(
+            worktree_lifecycle,
+            "_require_writable_worktree",
+            mock.Mock(side_effect=refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle, "runtime_commits", mock.Mock(return_value=serves)
+        ),
+    ):
+        if route is None:
+            with pytest.raises(CoordinatorError) as refused:
+                worktree_lifecycle.require_committable_worktree(repo, str(tree))
+            assert refused.value is refusal
+        else:
+            assert (
+                worktree_lifecycle.require_committable_worktree(repo, str(tree)) == route
+            )
+
+
+def test_a_worktree_outside_the_managed_roots_never_takes_the_runtime_route(
+    repo: Path, tmp_path: Path
+) -> None:
+    tree = tmp_path / "outside-issue-17"
+    _git(repo, "worktree", "add", "--quiet", "-b", "feature/issue-17-outside", str(tree))
+    refusal = CoordinatorError("git metadata", remedy="open write access")
+
+    with (
+        mock.patch.object(
+            worktree_lifecycle,
+            "_require_writable_worktree",
+            mock.Mock(side_effect=refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle, "runtime_commits", mock.Mock(return_value=True)
+        ),
+    ):
+        with pytest.raises(CoordinatorError) as refused:
+            worktree_lifecycle.require_committable_worktree(repo, str(tree))
+    assert refused.value is refusal
+
+
+def test_an_unwritable_worktree_directory_is_refused_even_with_the_runtime(
+    repo: Path,
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-16-sixteen")
+    git_refusal = CoordinatorError("git metadata", remedy="open write access")
+    directory_refusal = CoordinatorError("issue worktree", remedy="open write access")
+
+    with (
+        mock.patch.object(
+            worktree_lifecycle,
+            "_require_writable_worktree",
+            mock.Mock(side_effect=git_refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle,
+            "_probe_writable_directory",
+            mock.Mock(side_effect=directory_refusal),
+        ),
+        mock.patch.object(
+            worktree_lifecycle, "runtime_commits", mock.Mock(return_value=True)
+        ),
+        pytest.raises(CoordinatorError) as refused,
+    ):
+        worktree_lifecycle.require_committable_worktree(repo, str(tree))
+
+    assert refused.value is directory_refusal
+
+
+def test_a_runtime_that_never_started_serves_no_commit(repo: Path) -> None:
+    client = mock.Mock(wraps=RuntimeClient(repo))
+    client.paths.token = repo / "no-such-token"
+
+    with mock.patch.object(worktree_lifecycle, "RuntimeClient", return_value=client):
+        assert worktree_lifecycle.runtime_commits(repo) is False
+
+    client.call.assert_not_called()
+
+
+def test_the_real_runtime_creates_and_removes_a_managed_worktree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The coordinator CLI as its own process against the built ``harness-runtime`` binary."""
+    project = support.coordinator_repository(tmp_path)
+    runtime = support.serve_new_project(project)
+    try:
+        for name, value in runtime.environ.items():
+            monkeypatch.setenv(name, value)
+        tree = project / ".harness" / ".sandboxes" / "worktrees" / "issue-11-eleven"
+        branch = "feature/issue-11-eleven"
+        create = ("worktree", "create", "--branch", branch, "--base", "master")
+
+        created = support.coordinator(project, *create)
+
+        assert created.returncode == 0, created.stderr
+        report = json.loads(created.stdout)
+        assert Path(report["path"]).resolve() == tree.resolve()
+        assert report["created"] is True
+        assert report["head"] == _git(project, "rev-parse", "master")
+        assert report["session_write_access"] == {"writable": True}
+        assert _git(tree, "rev-parse", "--abbrev-ref", "HEAD") == branch
+
+        repeated = support.coordinator(project, *create)
+
+        assert repeated.returncode == 0, repeated.stderr
+        assert json.loads(repeated.stdout)["created"] is False
+
+        outside = support.coordinator(
+            project,
+            "worktree",
+            "create",
+            "--branch",
+            "feature/issue-12-twelve",
+            "--base",
+            "master",
+            "--path",
+            str(tmp_path / "elsewhere"),
+        )
+
+        assert outside.returncode == 2
+        assert "[policy_denied]" in outside.stderr
+        assert not (tmp_path / "elsewhere").exists()
+
+        (tree / "added.txt").write_text("new\n", encoding="utf-8")
+        committed = support.coordinator(
+            project,
+            "worktree",
+            "commit",
+            "--path",
+            str(tree),
+            "--message",
+            "feat: commit through the runtime",
+        )
+
+        assert committed.returncode == 0, committed.stderr
+        assert json.loads(committed.stdout)["head"] == _git(tree, "rev-parse", "HEAD")
+        assert _git(tree, "log", "-1", "--format=%s") == "feat: commit through the runtime"
+        assert _git(tree, "status", "--porcelain") == ""
+
+        # A rebase onto a moved tip stops on a conflict, and the resolution goes on.
+        base = _git(tree, "rev-parse", "HEAD")
+        (tree / "added.txt").write_text("ours\n", encoding="utf-8")
+        assert support.coordinator(
+            project, "worktree", "commit", "--path", str(tree), "--message", "feat: ours"
+        ).returncode == 0
+        _git(project, "checkout", "--quiet", "-b", "moved", "master")
+        (project / "added.txt").write_text("theirs\n", encoding="utf-8")
+        _git(project, "add", "added.txt")
+        _git(project, "commit", "--quiet", "-m", "chore: theirs")
+        _git(project, "checkout", "--quiet", "master")
+        rebase = ("worktree", "rebase", "--path", str(tree))
+
+        stopped = support.coordinator(
+            project, *rebase, "--onto", "moved", "--upstream", base
+        )
+
+        assert stopped.returncode == 0, stopped.stderr
+        assert json.loads(stopped.stdout)["conflicts"] == ["added.txt"]
+        (tree / "added.txt").write_text("both\n", encoding="utf-8")
+        finished = support.coordinator(project, *rebase, "--continue")
+        assert finished.returncode == 0, finished.stderr
+        assert json.loads(finished.stdout)["in_progress"] is False
+        assert _git(tree, "rev-parse", "--abbrev-ref", "HEAD") == branch
+        assert _git(tree, "merge-base", "--is-ancestor", "moved", "HEAD") == ""
+
+        removed = support.coordinator(
+            project, "worktree", "remove", "--path", str(tree)
+        )
+
+        assert removed.returncode == 0, removed.stderr
+        assert json.loads(removed.stdout)["removed"] is True
+        assert not tree.exists()
+        assert _git(project, "branch", "--list", branch) != ""
+    finally:
+        runtime.stop()

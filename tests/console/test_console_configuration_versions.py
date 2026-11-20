@@ -76,9 +76,11 @@ def test_interrupted_pair_is_read_as_previous_set_and_recovers(
 
 
 def test_tracker_reader_uses_previous_generation_during_interrupted_write(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from harness.health import project_tracker
+
+    monkeypatch.setattr(project_tracker, "_origin_url", lambda _repo: None)
     root = tmp_path / ".harness"
     root.mkdir()
     old = json.loads(project("ru"))
@@ -238,6 +240,7 @@ def test_coordinator_pins_one_generation_for_policy_and_qa_commands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import shutil
+
     from harness.configuration_schema import PACKAGE
     from harness.orchestration.core import config
 
@@ -275,6 +278,7 @@ def test_health_readers_keep_previous_generation_until_commit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import shutil
+
     from harness.configuration_schema import PACKAGE
     from harness.health.checks.orchestration import _attention_policy_threshold
     from harness.health.checks.tracker import _base_branch

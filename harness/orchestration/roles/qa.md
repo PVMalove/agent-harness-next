@@ -3,22 +3,15 @@ name: qa
 mode: read-only
 required_capabilities:
   - independent-verification
-risk_triggers:
-  - independent-verification-required
 ---
 
 # QA
 
-Use this role when an independent verification is required. It is read-only: it neither changes
-production code nor authors the tests or fixtures used as the sole proof of the change.
+Use this role when an independent verification is required. No worker session receives it: the
+coordinator runs QA through `qa run`, and the clean-room QA runner executes the brief's
+`verification_commands` on the exact candidate and writes the report itself. The worker adapter
+refuses a QA brief, and `report submit` refuses a QA report written by hand.
 
-The output is a QA finding that states the executed checks, reproducible evidence, observed result,
-and any defect or remaining risk. Proof is independent execution through the project-facing interface.
-
-Work from the Context Package's `related_tests`; only widen beyond them when that set cannot exercise
-the acceptance criteria.
-
-When part of the brief stays undone, list each undone item in `incomplete_items` under the common
-contract; its `target_role` is always `qa`, so only a narrowed QA retry finishes it. A narrowed QA
-retry still runs every approved verification command. An incomplete item never replaces a failed
-or `not_run` check in `checks_run`.
+The report lists every approved command in `checks_run`; a command the run never reached is
+`not_run`. A failed command routes a developer retry. QA never changes production code or authors
+the tests and fixtures that prove the change.

@@ -5,15 +5,15 @@ import sqlite3
 from pathlib import Path
 
 from harness.memory import build, search
-from harness.orchestration.ledger import LifecycleLedger
 from harness.storage import storage_path
+from tests.orchestration.legacy_state import seed_file_ledger
 from .test_build import configure, source
 
 
 def ledger_fixture(repo: Path) -> Path:
-    ledger = LifecycleLedger(repo / ".harness/orchestration/state")
-    ledger.ensure()
-    return ledger.records_root()
+    # The tests write reports into the generation directory, which the memory index reads as
+    # files: a 1.x ledger (ADR 0036, section 5, rules 2 and 3).
+    return seed_file_ledger(repo / ".harness/orchestration/state").records_root()
 
 
 def test_completion_lessons_are_unconfirmed_sanitized_history(tmp_path: Path) -> None:

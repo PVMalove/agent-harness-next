@@ -169,6 +169,7 @@ class LedgerLockCommandTests(unittest.TestCase):
         owner = cast(JsonObject, status["owner"])
         self.assertEqual(owner["pid"], os.getpid())
 
+    @unittest.skipUnless(Path("/proc/self/ns/pid").exists(), "Linux PID namespaces")
     def test_lock_status_shows_an_orphaned_worker_and_its_timeout(self) -> None:
         self._orphan(age=STALE - 100)
 
@@ -179,6 +180,7 @@ class LedgerLockCommandTests(unittest.TestCase):
         self.assertLessEqual(cast(int, status["remaining_seconds"]), 100)
         self.assertGreater(cast(int, status["remaining_seconds"]), 0)
 
+    @unittest.skipUnless(Path("/proc/self/ns/pid").exists(), "Linux PID namespaces")
     def test_an_orphaned_worker_lock_is_released_once_stale(self) -> None:
         self._orphan(age=STALE - 100)
         with self.assertRaises(CoordinatorError) as refused:

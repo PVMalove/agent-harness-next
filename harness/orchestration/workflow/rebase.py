@@ -16,6 +16,7 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 
+from harness.orchestration.core.constants import BATCH_WRITER_ROLES, batch_writer_role
 from harness.orchestration.core.git_utils import (
     _candidate_commit,
     _commits_between,
@@ -38,6 +39,8 @@ def required_target(batch: JsonObject, dispatch: JsonObject) -> str | None:
     if approved is not None:
         return approved
     target = batch.get("rebase_target_commit")
+    # Only legacy batches imported from ledger 1.x by `harness-runtime migrate` can carry
+    # `base_rebase_required = true`; 2.x code never sets it (ADR 0014 removed the gate).
     if (
         dispatch.get("role") == "developer"
         and batch.get("base_rebase_required")
@@ -74,6 +77,8 @@ def propose_target(repo: Path, batch: JsonObject, snapshot: str) -> str | None:
     ):
         return None
     stale = batch.get("rebase_target_commit")
+    # Only legacy batches imported from ledger 1.x by `harness-runtime migrate` can carry
+    # `base_rebase_required = true`; 2.x code never sets it (ADR 0014 removed the gate).
     if (
         batch.get("base_rebase_required")
         and isinstance(stale, str)
@@ -96,7 +101,7 @@ def approved_target(
     if not isinstance(base, str) or not base:
         return None
     for item in reversed(batch.get("dispatches", [])):
-        if item.get("role") != "developer":
+        if item.get("role") != batch_writer_role(batch):
             continue
         target = plan_rules.rebase_target(_load_dispatch(root, item["dispatch_id"]))
         if (
@@ -141,7 +146,7 @@ def report_base(
     rebase brought in are never attributed to the ticket. Without such a target the base is the
     batch's own start (``batch_base``), so commits of an earlier published batch are not either."""
     snapshot = dispatch.get("snapshot_commit")
-    if dispatch.get("role") == "developer" and isinstance(snapshot, str):
+    if dispatch.get("role") in BATCH_WRITER_ROLES and isinstance(snapshot, str):
         target = approved_target(repo, root, batch, snapshot)
         if target:
             return target
@@ -172,7 +177,7 @@ def rebase_check(
     if (
         target is None
         or not isinstance(snapshot, str)
-        or dispatch.get("role") != "developer"
+        or dispatch.get("role") not in BATCH_WRITER_ROLES
     ):
         return None
     rebased, dropped = plan_rules.rebased_commits(

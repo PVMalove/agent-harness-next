@@ -1,0 +1,24 @@
+/* Compact site controls, shared by inline, expanded and standalone Archify views. */
+#btn-motion {
+  display: none !important;
+}
+
+.toolbar button {
+  min-height: 2rem;
+  padding-block: 0.25rem;
+}
+
+.toolbar button::before {
+  inset-block: 0.125rem;
+}
+
+.diagram-nav button {
+  height: 1.75rem;
+  min-height: 1.75rem;
+}
+
+.preset-option,
+.export-item {
+  min-height: 2rem;
+  padding-block: 0.3rem;
+}

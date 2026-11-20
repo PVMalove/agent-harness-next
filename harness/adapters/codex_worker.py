@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Standalone external adapter for a detached Codex app-server worker.
+"""Standalone external adapter for a Codex app-server worker.
 
 Install through harness init/adopt/update with backend-orchestration. The coordinator invokes
 ``codex_worker.py dispatch --repo <main repo> --brief <immutable brief>`` in the worker checkout.
 Only stdlib is required. Native permissions separate source access from lifecycle writes.
 The worker receives its own thread/start identity and still submits its own self-report.
+Under runtime supervision (a brief with an `execution` section) the adapter serves the turn
+in its own process, keeps the app-server in its process group, never reads its own stdin,
+writes `harness-event` JSON lines to stdout and returns the app-server's exit status. Without
+`execution` it starts a detached worker and returns after native readiness.
 """
 
 from __future__ import annotations
@@ -15,15 +19,37 @@ import os
 import queue
 import shlex
 import signal
+import stat
 import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import NotRequired, TypedDict, cast
 
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
+    import worker_write_probe  # type: ignore[import-not-found]
+else:
+    from harness.adapters import worker_write_probe
+
 STARTUP_CHECK_SECONDS = 10
+# serve_turn makes this many app-server requests, each bounded by STARTUP_CHECK_SECONDS, before
+# it writes the readiness receipt: the launcher waits for all of them.
+READINESS_REQUESTS = 4
+# A worker that dies this soon after readiness is still a startup failure (as in claude_worker).
+POST_READY_CHECK_SECONDS = 3
 PERMISSION_PROFILE = "harness-worker"
+SHARED_ARTIFACT_DIRS = (
+    "runs/qa",
+    "runs/tests",
+    "logs",
+    "cache/npm",
+    "cache/ms-playwright",
+)
+# Items whose start is not a tool step; their content never reaches the event stream.
+NON_TOOL_ITEMS = frozenset({"agentMessage", "userMessage", "reasoning"})
 
 
 class Liveness(TypedDict):
@@ -44,6 +70,49 @@ class Brief(TypedDict):
     resolved_transport: str
     purpose: str
     access: str
+    execution: NotRequired[dict[str, object]]
+
+
+class Job(TypedDict):
+    command: list[str]
+    prompt: str
+    brief: Brief
+    worktree: str
+    write_probe: list[str]
+
+
+class WorkerExited(ValueError):
+    """The app-server ended before the turn completed; `code` is its exit code."""
+
+    def __init__(self, code: int, detail: str = "") -> None:
+        super().__init__(
+            f"native runtime exited with {code}" + (f": {detail}" if detail else "")
+        )
+        self.code = code
+
+
+# The developer skill line of a developer prompt (#1161). The adapter is stdlib-only and installed
+# outside the hashed orchestration package, so it repeats the literal of
+# harness/orchestration/core/developer_skill.py; a parity test keeps both equal.
+DEVELOPER_SKILL_RELATIVE = ".harness/skills/developer/SKILL.md"
+DEVELOPER_SKILL_INSTRUCTION = (
+    "Developer skill: read the installed developer skill {path} before implementation and apply "
+    "its scope, test-first and evidence discipline. The immutable brief and the developer role "
+    "contract stay authoritative for assignment, scope, commits and the completion report; the "
+    "skill grants no path, tool or approval. If the file is missing or unreadable, stop before "
+    "any edit with outcome blocked and name the path in blockers."
+)
+
+# The contract reads of every worker prompt (#1249). The adapter is stdlib-only and installed outside
+# the hashed orchestration package, so it repeats the literal of
+# harness/orchestration/core/worker_contract.py; a parity test keeps both equal.
+CONTRACT_ROLES_RELATIVE = ".harness/orchestration/roles"
+CONTRACT_RULES_RELATIVE = ".claude/rules"
+CONTRACT_INSTRUCTION = (
+    "Contracts: before task work, read the common role contract {roles}/common.md and your role "
+    "contract {roles}/{role}.md. Write English coordination text by {rules}/technical-english.md "
+    "and Russian report text by {rules}/technical-russian.md."
+)
 
 
 PROMPT = """\
@@ -62,9 +131,11 @@ Proceed only after a successful self-report; escalate a mismatch or unavailable 
 Immediately after self-report and at least every {heartbeat} seconds while working, run:
 {cli} dispatch heartbeat --dispatch {dispatch_id}
 Allowed tools: {allowed_tools}. Follow the brief tool allowlist throughout the task.
-Context Package {package}: start from its starting_files, symbol_graph and
-related_tests. For a starting file with non-empty sections, read only the start_line-end_line
-ranges the task needs.
+Context Package {package}: start from its summary in the brief. Read only the indicated
+start_line-end_line ranges needed for the task.
+For more, read one section of the pinned package:
+{cli} context-package show --dispatch {dispatch_id} --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
@@ -74,8 +145,8 @@ or {{"status": "present", "details": "<Russian description>"}} when present. A n
 details; present requires a non-empty description. Put other explanations in output. Strings, translated
 statuses, passed and not-run are invalid; no aliases or old report formats are accepted.
 Then run:
-{cli} report submit --file "{staging}"
-Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+{cli} report submit --compact --file "{staging}"
+Confirm the ledger receipt in one line. Relay any blocked transition or required next action.
 If submission returns ledger_busy, retry after its interval. If submission otherwise fails before
 recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
@@ -95,7 +166,7 @@ def build_prompt(
             str(repo),
         )
     )
-    return PROMPT.format(
+    prompt = PROMPT.format(
         role=brief["role"],
         dispatch_id=brief["dispatch_id"],
         brief=brief_path,
@@ -107,6 +178,22 @@ def build_prompt(
         package=brief["context_package_id"],
         allowed_tools=", ".join(brief["allowed_tools"]),
     )
+    prompt += (
+        CONTRACT_INSTRUCTION.format(
+            roles=(repo / CONTRACT_ROLES_RELATIVE).resolve(),
+            rules=(repo / CONTRACT_RULES_RELATIVE).resolve(),
+            role=brief["role"],
+        )
+        + "\n"
+    )
+    if brief["role"] == "developer":
+        prompt += (
+            DEVELOPER_SKILL_INSTRUCTION.format(
+                path=(repo / DEVELOPER_SKILL_RELATIVE).resolve()
+            )
+            + "\n"
+        )
+    return prompt
 
 
 def git_commit_permissions(worktree: Path) -> dict[str, str]:
@@ -140,6 +227,13 @@ def git_commit_permissions(worktree: Path) -> dict[str, str]:
         permissions[str(gitdir)] = "write"
         permissions[str(common / "logs/refs")] = "write"
     permissions.update({str(common / name): "read" for name in ("config", "hooks")})
+    # The native profile permits temporary writes. Another checkout under a temporary
+    # root must still be read-only, including the main checkout of a linked worker.
+    for field in git("worktree", "list", "--porcelain", "-z").split("\0"):
+        if field.startswith("worktree "):
+            checkout = Path(field.removeprefix("worktree ")).resolve()
+            if checkout != worktree:
+                permissions[str(checkout)] = "read"
     return permissions
 
 
@@ -149,6 +243,7 @@ def worker_command(
     worktree: Path,
     binary: str = "codex",
     *,
+    shared_artifacts: tuple[Path, ...],
     network_access: bool = False,
 ) -> list[str]:
     access = brief.get("access")
@@ -163,9 +258,7 @@ def worker_command(
         str(worktree): "write" if access == "write" else "read",
         str(repo / ".harness/orchestration/state"): "write",
         str(Path(brief["report_staging_path"]).parent): "write",
-        str(repo / ".harness/.sandboxes/runs/qa"): "write",
-        str(repo / ".harness/.sandboxes/runs/tests"): "write",
-        str(repo / ".harness/.sandboxes/logs"): "write",
+        **{str(directory): "write" for directory in shared_artifacts},
     }
     if access == "write":
         filesystem.update({":tmpdir": "write", ":slash_tmp": "write"})
@@ -230,8 +323,7 @@ class AppServer:
         except queue.Empty as exc:
             raise ValueError("native runtime startup timed out") from exc
         if line is None:
-            code = self.process.wait(timeout=2)
-            raise ValueError(f"native runtime exited with {code}")
+            raise WorkerExited(self.process.wait(timeout=2))
         try:
             message = json.loads(line)
         except ValueError as exc:
@@ -241,9 +333,7 @@ class AppServer:
                 raise ValueError(
                     "native runtime returned invalid JSON: " + line[:500]
                 ) from exc
-            raise ValueError(
-                f"native runtime exited with {code}: {line[:500]}"
-            ) from exc
+            raise WorkerExited(code, line[:500]) from exc
         if not isinstance(message, dict):
             raise ValueError("native runtime message must be an object")
         if "method" in message and "id" in message:
@@ -300,11 +390,34 @@ def thread_params(brief: Brief, worktree: Path) -> dict[str, object]:
 
 
 def run_worker(args: argparse.Namespace) -> int:
+    """The detached child of an unsupervised launch: the job on stdin, readiness by receipt."""
     job = json.load(sys.stdin)
-    receipt = Path(job["receipt"])
+    return serve_turn(cast(Job, job), emit=None, receipt=Path(job["receipt"]))
+
+
+def emit_event(event: dict[str, str]) -> None:
+    """One allowlisted event line for the runtime's run log; never raw app-server JSON."""
+    print(json.dumps({"type": "harness-event", **event}), flush=True)
+
+
+def exit_status(code: int) -> int:
+    """A failed worker's status: its code, 128 + signal, or 1 for a clean early exit."""
+    if code < 0:
+        return 128 - code
+    return code or 1
+
+
+def serve_turn(
+    job: Job,
+    *,
+    emit: Callable[[dict[str, str]], None] | None,
+    receipt: Path | None,
+) -> int:
+    """Serve one worker turn; without `emit` agent text is printed as it arrives."""
     server: AppServer | None = None
+    messages: dict[str, str] = {}
     try:
-        brief = cast(Brief, job["brief"])
+        brief = job["brief"]
         worktree = Path(job["worktree"])
         server = AppServer(job["command"], worktree)
         server.request(
@@ -333,6 +446,22 @@ def run_worker(args: argparse.Namespace) -> int:
         thread = started.get("thread")
         if not isinstance(thread, dict) or not isinstance(thread.get("id"), str):
             raise ValueError("native thread/start returned no thread identity")
+        probe = server.request(
+            "command/exec",
+            {
+                "command": [
+                    sys.executable,
+                    str(Path(__file__).with_name("worker_write_probe.py").resolve()),
+                    *job["write_probe"],
+                ],
+                "cwd": str(worktree),
+                "permissionProfile": PERMISSION_PROFILE,
+                "timeoutMs": 5000,
+                "outputBytesCap": 2048,
+            },
+        )
+        if probe.get("exitCode") != 0:
+            raise ValueError(f"native worker write probe failed: {probe.get('stderr', '')}")
         evidence = {
             "source": "thread/start",
             "thread_id": thread["id"],
@@ -351,9 +480,12 @@ def run_worker(args: argparse.Namespace) -> int:
                 "input": [{"type": "text", "text": prompt}],
             },
         )
-        receipt.write_text(
-            json.dumps({"ready": True, "evidence": evidence}), encoding="utf-8"
-        )
+        if receipt is not None:
+            receipt.write_text(
+                json.dumps({"ready": True, "evidence": evidence}), encoding="utf-8"
+            )
+        if emit is not None:
+            emit({"kind": "system", "text": "Runtime session connected"})
         while True:
             message = (
                 server.notifications.pop(0)
@@ -365,12 +497,45 @@ def run_worker(args: argparse.Namespace) -> int:
             if not isinstance(payload, dict):
                 continue
             if method == "item/agentMessage/delta":
-                print(payload.get("delta", ""), end="", flush=True)
+                delta = payload.get("delta", "")
+                if emit is None:
+                    print(delta, end="", flush=True)
+                else:
+                    item_id = str(payload.get("itemId"))
+                    messages[item_id] = messages.get(item_id, "") + str(delta)
+            elif emit is not None and method in ("item/started", "item/completed"):
+                item = payload.get("item")
+                if not isinstance(item, dict):
+                    continue
+                kind = item.get("type")
+                if method == "item/started":
+                    if isinstance(kind, str) and kind not in NON_TOOL_ITEMS:
+                        emit({"kind": "tool", "text": kind})
+                elif text := messages.pop(str(item.get("id")), ""):
+                    emit({"kind": "output", "text": text})
             elif method == "error":
+                if emit is not None:
+                    error = payload.get("error")
+                    detail = error.get("message") if isinstance(error, dict) else None
+                    if not isinstance(detail, str) or not detail:
+                        detail = "native worker error"
+                    emit({"kind": "error", "text": detail})
                 raise ValueError(f"native worker error: {payload}")
             elif method == "turn/completed":
                 turn = payload.get("turn")
-                if not isinstance(turn, dict) or turn.get("status") != "completed":
+                status = turn.get("status") if isinstance(turn, dict) else None
+                if emit is not None:
+                    for text in messages.values():
+                        if text:
+                            emit({"kind": "output", "text": text})
+                    messages.clear()
+                    emit(
+                        {
+                            "kind": "result" if status == "completed" else "error",
+                            "text": f"Turn {status or 'ended without status'}",
+                        }
+                    )
+                if status != "completed":
                     raise ValueError(f"native worker turn did not complete: {turn}")
                 return 0
     except (
@@ -380,15 +545,105 @@ def run_worker(args: argparse.Namespace) -> int:
         TypeError,
         subprocess.SubprocessError,
     ) as exc:
-        if not receipt.exists():
+        if receipt is not None and not receipt.exists():
             receipt.write_text(
                 json.dumps({"ready": False, "error": str(exc)}), encoding="utf-8"
             )
         print(f"codex worker failed: {exc}", file=sys.stderr, flush=True)
-        return 1
+        return exit_status(exc.code) if isinstance(exc, WorkerExited) else 1
     finally:
         if server is not None:
             server.close()
+
+
+def log_path(brief: Brief) -> Path:
+    """The worker's stdout+stderr log; console observation reads it by the same rule."""
+    return (
+        Path(brief["report_staging_path"]).parent.parent
+        / "worker-logs"
+        / f"{brief['dispatch_id']}.log"
+    )
+
+
+def required_sandbox_dirs(role: str) -> frozenset[str]:
+    """The ``.harness/.sandboxes`` directories without which ``role`` cannot do its work.
+
+    Every role stages its self-report in the inbox and runs its checks through the bounded
+    wrapper, whose temporary data lives in ``runs/qa``; a developer also runs the full
+    verification and the test-author, which write ``runs/tests``. The other shared
+    directories (``logs`` and the caches) only help a check, so the launch goes on without them.
+    """
+    required = {"scratch/inbox", "runs/qa"}
+    if role == "developer":
+        required.add("runs/tests")
+    return frozenset(required)
+
+
+def shared_artifact_dirs(repo: Path, role: str, *, create: bool) -> tuple[Path, ...]:
+    """The shared check directories to grant ``role``, with its required ones verified.
+
+    A directory reached through a symlink, or blocked by a non-directory, is neither created
+    nor granted. A required one refuses the launch; any other is skipped with a warning and the
+    launch continues with the remaining grants. Creation never follows a symlink, so one planted
+    between a check and a ``mkdir`` is detected instead of written through.
+    """
+    required = required_sandbox_dirs(role)
+    granted = []
+    for name in ("scratch/inbox", *SHARED_ARTIFACT_DIRS):
+        directory = repo / ".harness/.sandboxes" / name
+        problem = _real_directory_problem(repo, directory, create=create)
+        if problem is None and create:
+            # A parent swapped for a symlink after its own check redirects the path.
+            problem = _real_directory_problem(repo, directory, create=False)
+        if problem is None:
+            if name in SHARED_ARTIFACT_DIRS:
+                granted.append(directory)
+            continue
+        component, symlink = problem
+        reason = "is a symlink" if symlink else "exists and is not a directory"
+        if name in required:
+            kind = "a symlink" if symlink else "not a directory"
+            raise ValueError(
+                f"required path is {kind}: {directory} ({component} {reason}); "
+                f"the {role} worker cannot run without writing it"
+            )
+        label = "symlink not granted" if symlink else "non-directory not granted"
+        print(
+            f"warning: {label}: {directory} ({component} {reason}); "
+            "the launch continues without this write grant",
+            file=sys.stderr,
+            flush=True,
+        )
+    return tuple(granted)
+
+
+def _real_directory_problem(
+    base: Path, directory: Path, *, create: bool
+) -> tuple[Path, bool] | None:
+    """The first component of ``directory`` below ``base`` that is not a real directory, and
+    whether it is a symlink; None for a real directory chain.
+
+    With ``create`` each missing component is made by a single ``mkdir`` and then verified
+    without following symlinks. Without it, a missing component ends the walk: the real
+    launch creates it.
+    """
+    current = base
+    for part in directory.relative_to(base).parts:
+        current = current / part
+        if create:
+            try:
+                current.mkdir()
+            except FileExistsError:
+                pass
+        try:
+            mode = current.lstat().st_mode
+        except FileNotFoundError:
+            return None
+        if stat.S_ISLNK(mode):
+            return current, True
+        if not stat.S_ISDIR(mode):
+            return current, False
+    return None
 
 
 def start(args: argparse.Namespace) -> int:
@@ -426,11 +681,17 @@ def start(args: argparse.Namespace) -> int:
     prompt = build_prompt(brief, brief_path, repo, worktree, sha)
     if args.extra_prompt_file:
         prompt += "\n" + Path(args.extra_prompt_file).read_text(encoding="utf-8")
+    # A writable mount cannot create itself under a read-only parent inside Codex,
+    # so a real launch creates the directories first; a dry run only inspects them.
+    shared_artifacts = shared_artifact_dirs(
+        repo, brief["role"], create=not args.dry_run
+    )
     command = worker_command(
         brief,
         repo,
         worktree,
         args.codex_bin,
+        shared_artifacts=shared_artifacts,
         network_access=args.network_access == "enabled",
     )
     if args.dry_run:
@@ -445,12 +706,27 @@ def start(args: argparse.Namespace) -> int:
             )
         )
         return 0
-    log = Path(brief["report_staging_path"]).parent.parent / "worker-logs"
-    log.mkdir(parents=True, exist_ok=True)
-    log_path = log / f"{brief['dispatch_id']}.log"
-    receipt = log / f"{brief['dispatch_id']}.ready.json"
+    # The probe checks exactly the shared directories granted above; `shared_artifact_dirs`
+    # already created them without following a symlink.
+    write_probe = worker_write_probe.write_targets(
+        worktree, staging.parent, shared_artifacts, writer=brief["access"] == "write"
+    )
+    if brief.get("execution"):
+        # Supervised: the runtime launches only briefs with `execution`. The turn runs in
+        # this process, so the app-server stays in its group and its exit is this exit.
+        job: Job = {
+            "command": command,
+            "prompt": prompt,
+            "brief": brief,
+            "worktree": str(worktree),
+            "write_probe": write_probe,
+        }
+        return serve_turn(job, emit=emit_event, receipt=None)
+    log = log_path(brief)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    receipt = log.with_name(f"{brief['dispatch_id']}.ready.json")
     receipt.unlink(missing_ok=True)
-    with log_path.open("ab") as sink:
+    with log.open("ab") as sink:
         process = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "_run"],
             cwd=worktree,
@@ -468,6 +744,7 @@ def start(args: argparse.Namespace) -> int:
                     "prompt": prompt,
                     "brief": brief,
                     "worktree": str(worktree),
+                    "write_probe": write_probe,
                     "receipt": str(receipt),
                 }
             ).encode("utf-8")
@@ -475,7 +752,7 @@ def start(args: argparse.Namespace) -> int:
         process.stdin.close()
     except BrokenPipeError:
         process.wait(timeout=STARTUP_CHECK_SECONDS)
-    deadline = time.monotonic() + STARTUP_CHECK_SECONDS + 2
+    deadline = time.monotonic() + READINESS_REQUESTS * STARTUP_CHECK_SECONDS + 2
     while time.monotonic() < deadline:
         if receipt.exists():
             try:
@@ -484,7 +761,12 @@ def start(args: argparse.Namespace) -> int:
                 time.sleep(0.02)
                 continue
             if result.get("ready") is True:
-                return 0
+                # The window opens at the verdict, however long the readiness requests took.
+                try:
+                    process.wait(timeout=POST_READY_CHECK_SECONDS)
+                except subprocess.TimeoutExpired:
+                    return 0
+                break
             process.wait(timeout=3)
             print(result.get("error", "worker startup failed"), file=sys.stderr)
             return 1
@@ -492,12 +774,12 @@ def start(args: argparse.Namespace) -> int:
             break
         time.sleep(0.02)
     if process.poll() is None:
-        if os.name == "posix":
+        if sys.platform != "win32":
             os.killpg(process.pid, signal.SIGTERM)
         else:
             process.terminate()
         process.wait(timeout=3)
-    tail = log_path.read_text(encoding="utf-8", errors="replace")[-500:]
+    tail = log.read_text(encoding="utf-8", errors="replace")[-500:]
     print(f"codex worker failed before native readiness: {tail}", file=sys.stderr)
     return 1
 

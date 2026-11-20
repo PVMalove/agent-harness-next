@@ -319,5 +319,38 @@ def test_an_ancestry_check_that_hangs_is_an_attestation_error(tmp_path: Path) ->
     assert caught.value.remedy.strip()
 
 
+@pytest.mark.parametrize("leftover", ["missing", "empty"])
+def test_a_lost_batch_worktree_names_the_recovery_command(
+    tmp_path: Path, leftover: str
+) -> None:
+    """Git forgot the issue worktree; the sandbox may leave an empty directory there (#1189)."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "test@example.invalid")
+    _git(repo, "config", "user.name", "Attestation Test")
+    _git(repo, "commit", "-q", "--allow-empty", "-m", "test: base")
+    branch = "feature/issue-1095-reports"
+    _git(repo, "branch", branch)
+    worktree = tmp_path / "issue-1095"
+    if leftover == "empty":
+        worktree.mkdir()
+    dispatch = {
+        "role": "developer",
+        "branch": branch,
+        "worktree": str(worktree),
+        "snapshot_commit": _git(repo, "rev-parse", "HEAD"),
+        "candidate_commit": None,
+    }
+
+    with pytest.raises(AttestationError) as caught:
+        attest(repo, dispatch, str(worktree))
+
+    assert "is lost" in caught.value.message
+    assert f"directory is {leftover}" in caught.value.message
+    assert f"worktree add {worktree.resolve()} {branch}" in caught.value.remedy
+    assert "EnterWorktree" in caught.value.remedy
+
+
 if __name__ == "__main__":
     unittest.main()

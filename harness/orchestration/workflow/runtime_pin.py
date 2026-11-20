@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -115,7 +116,32 @@ def pinned_runtime_command(args: argparse.Namespace) -> list[str] | None:
     entry = _pinned_runtime_entry(root, expected)
     if entry is None:
         return None
-    return [sys.executable, "-c", _PINNED_BOOTSTRAP, str(entry), *sys.argv[1:]]
+    argv = sys.argv[1:]
+    if getattr(args, "compact", False) and not _accepts_compact_submit(entry):
+        # A runtime pinned before the compact receipt refuses --compact; its full answer records
+        # the same report.
+        argv = [part for part in argv if part != "--compact"]
+    return [sys.executable, "-c", _PINNED_BOOTSTRAP, str(entry), *argv]
+
+
+def _accepts_compact_submit(entry: Path) -> bool:
+    """Whether the pinned snapshot's `report submit` parser takes --compact."""
+    probe = [
+        sys.executable,
+        "-c",
+        _PINNED_BOOTSTRAP,
+        str(entry),
+        "report",
+        "submit",
+        "--help",
+    ]
+    try:
+        result = subprocess.run(
+            probe, capture_output=True, text=True, timeout=60, check=False
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return result.returncode == 0 and "--compact" in result.stdout
 
 
 def restore_batch_runtime(args: argparse.Namespace) -> JsonObject:

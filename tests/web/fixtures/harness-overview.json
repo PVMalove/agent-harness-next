@@ -1,0 +1,81 @@
+{
+  "adapters": [
+    {
+      "path": ".harness/adapters/claude/settings.json",
+      "problem": null,
+      "status": "current"
+    },
+    {
+      "path": ".harness/adapters/codex/config.toml",
+      "problem": "locally changed adapter",
+      "status": "outdated"
+    }
+  ],
+  "containers": {
+    "cgroup_driver": "systemd",
+    "cgroup_version": "v2",
+    "engine": "docker",
+    "images": 3,
+    "images_problem": null,
+    "info_problem": null,
+    "rootless": true,
+    "selinux": false,
+    "version": "27.4.1",
+    "volumes": null,
+    "volumes_problem": "docker volume ls: код 1: permission denied"
+  },
+  "drift": "drift",
+  "drift_files": 3,
+  "integrations": [
+    {
+      "cli": true,
+      "detail": ".harness/adapters/claude/settings.json",
+      "kind": "runtime",
+      "name": "Claude Code",
+      "status": "current"
+    },
+    {
+      "cli": false,
+      "detail": ".harness/adapters/codex/config.toml",
+      "kind": "runtime",
+      "name": "Codex",
+      "status": "outdated"
+    },
+    {
+      "cli": true,
+      "detail": "github.com/acme/app",
+      "kind": "tracker",
+      "name": "GitHub",
+      "status": "current"
+    }
+  ],
+  "package_version": "2.0.1",
+  "state": {
+    "capabilities": [
+      "engineering-suite",
+      "orchestration"
+    ],
+    "installed": true,
+    "installed_version": "2.0.0",
+    "managed_files": 259,
+    "orchestration": true,
+    "skills": 32,
+    "updated_at": "2026-11-05 09:12 UTC"
+  },
+  "store": {
+    "audit_records": 1240,
+    "authority": "file-ledger",
+    "cutover_at": null,
+    "generation": "generation-1a2b3c4d",
+    "reason": "",
+    "schema": 3,
+    "start_command": ""
+  },
+  "usage": {
+    "batches": 48,
+    "dispatches": 212,
+    "reports": 187,
+    "tickets": 31,
+    "unavailable": null
+  }
+}

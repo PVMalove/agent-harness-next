@@ -11,8 +11,9 @@ from types import SimpleNamespace
 from harness.orchestration.core.constants import RECOVERY_ROUTES
 from harness.storage import storage_path
 from scripts.clean_room.support import (
-    assert_contract_link,
-    check_technical_english,
+    LANGUAGE_RULES,
+    assert_rule_link,
+    check_language_rules,
     HARNESS,
     ROOT,
     capture_json,
@@ -119,6 +120,88 @@ def _require_startup_recovery_contract(skill: str, playbook: str) -> None:
             )
 
 
+REBASER_FILES = (
+    ".harness/orchestration/roles/rebaser.md",
+    ".harness/orchestration/workflow/rebaser.py",
+)
+
+
+def _rebaser_route(project: Path) -> dict[str, object]:
+    """The `orchestration.rebaser_route` check; health may fail on unrelated checks here."""
+    command = HARNESS + ["health", str(project), "--json"]
+    result = run_step(command, capture_output=True, text=True, check=False)
+    try:
+        report = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        sys.exit(f"health --json output is not JSON: {result.stderr.strip()}")
+    return find_check(report, "orchestration.rebaser_route")
+
+
+def _expect_rebaser_route(
+    project: Path, status: str, phrase: str, *, plain_update_fix: bool = False
+) -> dict[str, object]:
+    check = _rebaser_route(project)
+    message = str(check.get("message", ""))
+    if check.get("status") != status or phrase not in message:
+        sys.exit(
+            f"orchestration.rebaser_route: expected {status} with {phrase!r}, "
+            f"got {check.get('status')}: {message}"
+        )
+    if plain_update_fix:
+        fix = check.get("fix")
+        command = str(fix.get("command") or "") if isinstance(fix, dict) else ""
+        if "update" not in command or "--force" in command:
+            sys.exit(f"orchestration.rebaser_route fix is not a plain update: {command!r}")
+    return check
+
+
+def _require_rebaser_delivery(project: Path, config_path: Path) -> None:
+    """Install and update deliver the rebaser role and its workflow; health tells the role a
+    project assigns from a missing one, an older version from local drift, and never calls
+    drift an installer defect (issue #1158)."""
+    _expect_rebaser_route(project, "ok", "назначена проектом")
+    lock_path = project / ".harness" / "harness.lock"
+    original_lock = lock_path.read_text(encoding="utf-8")
+    # An installation of a version before the rebaser: neither file nor its lock entry.
+    lock = json.loads(original_lock)
+    for relative in REBASER_FILES:
+        (project / relative).unlink()
+        lock["files"].pop(relative)
+    lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+    _expect_rebaser_route(project, "warn", "не поставляет роль rebaser", plain_update_fix=True)
+    run_ok(HARNESS + ["update", str(project)], quiet=True)
+    for relative in REBASER_FILES:
+        if not (project / relative).is_file():
+            sys.exit(f"harness update did not deliver {relative}")
+    _expect_rebaser_route(project, "ok", "назначена проектом")
+    # Local drift: the lock still lists the role file. A plain update restores a deleted
+    # managed file, so the check proposes that update, not --force-managed-files.
+    (project / REBASER_FILES[0]).unlink()
+    drift = _expect_rebaser_route(
+        project, "warn", "локальное расхождение установки", plain_update_fix=True
+    )
+    if "не дефект установщика" not in str(drift.get("message", "")):
+        sys.exit("orchestration.rebaser_route classifies local drift as an installer defect")
+    run_ok(HARNESS + ["update", str(project)], quiet=True)
+    _expect_rebaser_route(project, "ok", "назначена проектом")
+    # A project that assigns roles explicitly but not the rebaser keeps rebase-fix-forward.
+    original_config = config_path.read_text(encoding="utf-8")
+    config = json.loads(original_config)
+    config["assignment_plans"].pop("rebaser")
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    unassigned = _expect_rebaser_route(project, "warn", "не rebaser")
+    fix = unassigned.get("fix")
+    if not isinstance(fix, dict) or fix.get("command") or "assignment_plans.rebaser" not in str(
+        fix.get("text")
+    ):
+        sys.exit("orchestration.rebaser_route does not name assignment_plans.rebaser as its fix")
+    config_path.write_text(original_config, encoding="utf-8")
+    if json.loads(lock_path.read_text(encoding="utf-8"))["files"].keys() != json.loads(
+        original_lock
+    )["files"].keys():
+        sys.exit("harness update did not restore the rebaser entries of harness.lock")
+
+
 def run(ctx: SimpleNamespace) -> None:
     """Установка backend-orchestration, Repo Map и health.
 
@@ -128,12 +211,12 @@ def run(ctx: SimpleNamespace) -> None:
     """
     pv_project = ctx.pv_project
     test_root = ctx.test_root
-    # backend-orchestration is opt-in: it extends pvmalove-suite with the portable
-    # role contracts, while a regular pvmalove-suite project receives none of them.
+    # backend-orchestration is opt-in: it extends engineering-suite with the portable
+    # role contracts, while a regular engineering-suite project receives none of them.
     if (pv_project / ".harness" / "orchestration").exists():
-        sys.exit("pvmalove-suite unexpectedly installed orchestration resources")
+        sys.exit("engineering-suite unexpectedly installed orchestration resources")
     if (pv_project / ".harness" / "orchestration.json").exists():
-        sys.exit("pvmalove-suite unexpectedly installed orchestration config")
+        sys.exit("engineering-suite unexpectedly installed orchestration config")
     regular_implement = (
         pv_project / ".harness" / "skills" / "implement" / "SKILL.md"
     ).read_text(encoding="utf-8")
@@ -143,7 +226,7 @@ def run(ctx: SimpleNamespace) -> None:
         )
     fast_implement = pv_project / ".harness" / "skills" / "fast-implement" / "SKILL.md"
     if not fast_implement.is_file():
-        sys.exit("pvmalove-suite addition fast-implement missing")
+        sys.exit("engineering-suite addition fast-implement missing")
     if "no coordinator approval gates" not in fast_implement.read_text(
         encoding="utf-8"
     ):
@@ -158,7 +241,9 @@ def run(ctx: SimpleNamespace) -> None:
         return path
 
     orchestration_project.mkdir(parents=True)
-    run_step(["git", "init", "-q"], cwd=orchestration_project, check=True)
+    run_step(
+        ["git", "init", "-q", "-b", "master"], cwd=orchestration_project, check=True
+    )
     orchestration_remote = test_root / "orchestration-remote.git"
     run_step(["git", "init", "--bare", "-q", str(orchestration_remote)], check=True)
     run_step(
@@ -186,11 +271,37 @@ def run(ctx: SimpleNamespace) -> None:
         ]
     )
     fill_agents(orchestration_project)
-    check_technical_english(orchestration_project)
+    check_language_rules(orchestration_project)
     run_health(orchestration_project)
     orchestration_root = orchestration_project / ".harness" / "orchestration"
     if not (orchestration_root / "orchestration.schema.json").is_file():
         sys.exit("backend-orchestration schema missing")
+    # Issue #706: the egress proxy and its Dockerfile are a byte-identical, drift-checked payload
+    # of backend-orchestration only; a engineering-suite project never receives the container directory.
+    # Issue #710 adds the optional worker base image Dockerfile.sandbox to the same payload.
+    for proxy_file in ("egress_proxy.py", "Dockerfile.proxy", "Dockerfile.sandbox"):
+        installed_proxy = orchestration_project / ".harness" / "container" / proxy_file
+        if not installed_proxy.is_file():
+            sys.exit(f"backend-orchestration payload is missing container/{proxy_file}")
+        if (
+            installed_proxy.read_bytes()
+            != (ROOT / "harness" / "container" / proxy_file).read_bytes()
+        ):
+            sys.exit(f"installed container/{proxy_file} differs from its source")
+    if (pv_project / ".harness" / "container").exists():
+        sys.exit("engineering-suite unexpectedly installed container resources")
+    # Issue #710: the container executor guide ships with backend-orchestration only, from
+    # harness/project/instructions/ and never from the source repository's root docs/.
+    installed_guide = orchestration_project / ".harness/instructions/container-executor.md"
+    if not installed_guide.is_file():
+        sys.exit("backend-orchestration payload is missing docs/container-executor.md")
+    if (
+        installed_guide.read_bytes()
+        != (ROOT / "harness" / "project" / "instructions" / "container-executor.md").read_bytes()
+    ):
+        sys.exit("installed docs/container-executor.md differs from its source")
+    if (pv_project / ".harness/instructions/container-executor.md").exists():
+        sys.exit("engineering-suite unexpectedly installed the container guide")
     installed_implement = (
         orchestration_project / ".harness" / "skills" / "implement" / "SKILL.md"
     ).read_text(encoding="utf-8")
@@ -247,8 +358,13 @@ def run(ctx: SimpleNamespace) -> None:
     ):
         sys.exit("installed to-pull-requests step does not record accepted QA evidence")
     # Issue #537: the installed PR step carries the whole continuation (next step, separate
-    # confirmation bound to the SHA pair, CI wait, local-QA fallback, merge handoff) and still keeps
-    # the plain /qa-gate branch for a project without the optional orchestration.
+    # confirmation bound to the SHA pair, CI wait, local-QA fallback, merge handoff, the Release Gate
+    # tree check after the merge) and still keeps the plain /qa-gate branch for a project without the
+    # optional orchestration. Since #1214 the opt-in route lives in the skill's reference.
+    installed_pr_route = installed_pr_step.parent / "references" / "integration-route.md"
+    if not installed_pr_route.is_file():
+        sys.exit("installed to-pull-requests step is missing its integration route reference")
+    installed_pr_text += "\n" + installed_pr_route.read_text(encoding="utf-8")
     for required_pr_phrase in (
         "integration next",
         "integration collect-ci",
@@ -257,6 +373,9 @@ def run(ctx: SimpleNamespace) -> None:
         "qa_source",
         "Never merge it",
         "/qa-gate",
+        "--merge-commit",
+        "candidate_tree_sha",
+        "merge-tree-mismatch",
     ):
         if required_pr_phrase not in installed_pr_text:
             sys.exit(
@@ -292,69 +411,9 @@ def run(ctx: SimpleNamespace) -> None:
     ):
         sys.exit("force-managed-files did not restore the managed coordinator snapshot")
     orchestration_config.write_text(original_orchestration_config, encoding="utf-8")
-    public_documentation = {
-        ROOT / "README.md": (
-            "`backend-orchestration`",
-            "PR требует отдельного подтверждения",
-            "/to-pull-requests",
-        ),
-        ROOT / "CONTEXT.md": (
-            "`reported`",
-            "FIFO",
-            "санитизирован",
-        ),
-        ROOT / "docs" / "backend-orchestration.md": (
-            "`planned → awaiting-approval ↔ active → completed`",
-            "`reported`",
-            "детерминирован",
-            "Standards и Spec",
-            "обязательный полный QA gate",
-            "transport-only",
-            "санитизирован",
-            "stale",
-            "/to-pull-requests",
-            "integration next",
-            "verification-failure",
-        ),
-        ROOT / "docs" / "harness-guide.md": (
-            "строго opt-in маршрут",
-            "candidate commit",
-            "`reported`",
-            "/to-pull-requests",
-            "integration next",
-        ),
-        ROOT / "docs" / "agents" / "git-workflow.md": ("/to-pull-requests",),
-    }
-    for path, required_phrases in public_documentation.items():
-        text = path.read_text(encoding="utf-8")
-        if re.search(r"(?<![\w-])/to-pr(?![\w-])", text):
-            sys.exit(f"public documentation retains removed /to-pr route: {path}")
-        for phrase in required_phrases:
-            if phrase.casefold() not in text.casefold():
-                sys.exit(
-                    f"public documentation missing hybrid coordinator contract {phrase!r}: {path}"
-                )
-    for source_path, required_phrases in public_documentation.items():
-        if source_path.parent != ROOT / "docs" / "agents":
-            continue
-        installed_path = orchestration_project / "docs" / "agents" / source_path.name
-        if not installed_path.is_file():
-            sys.exit(
-                f"installed project is missing documentation seed: {source_path.name}"
-            )
-        installed_text = installed_path.read_text(encoding="utf-8")
-        for phrase in required_phrases:
-            if phrase.casefold() not in installed_text.casefold():
-                sys.exit(
-                    f"installed documentation missing hybrid coordinator contract {phrase!r}: {source_path.name}"
-                )
-        if re.search(r"(?<![\w-])/to-pr(?![\w-])", installed_text):
-            sys.exit(
-                f"installed documentation retains removed /to-pr route: {source_path.name}"
-            )
     # Developer guides stay in the source repository's docs/; only agent contracts are delivered.
     for human_guide in ("harness-guide.md", "backend-orchestration.md"):
-        if (orchestration_project / ".harness" / "docs" / human_guide).exists():
+        if (orchestration_project / ".harness" / "instructions" / human_guide).exists():
             sys.exit(f"developer guide leaked into the target project: {human_guide}")
     expected_role_files = {
         "architect.md",
@@ -364,6 +423,7 @@ def run(ctx: SimpleNamespace) -> None:
         "developer.md",
         "messaging-integration.md",
         "qa.md",
+        "rebaser.md",
         "verification.md",
     }
     actual_role_files = {
@@ -371,7 +431,7 @@ def run(ctx: SimpleNamespace) -> None:
         for path in (
             orchestration_project / ".harness" / "orchestration" / "roles"
         ).glob("*.md")
-        if path.name != "_common.md"
+        if path.name != "common.md"
     }
     if actual_role_files != expected_role_files:
         sys.exit(
@@ -397,25 +457,26 @@ def run(ctx: SimpleNamespace) -> None:
         / "SKILL.md"
     ).is_file():
         sys.exit("the skill the conflict-resolver role points to is not installed")
-    for name in ("_common.md", *sorted(expected_role_files)):
+    for name in ("common.md", *sorted(expected_role_files)):
         if not (
             orchestration_project / ".harness" / "orchestration" / "roles" / name
         ).is_file():
             sys.exit(f"backend-orchestration role manifest missing: {name}")
+    _require_rebaser_delivery(orchestration_project, orchestration_config)
 
     playbook_path = orchestration_root / "playbook.md"
     if not playbook_path.is_file():
         sys.exit("backend-orchestration playbook missing")
     playbook = playbook_path.read_text(encoding="utf-8")
     _require_startup_recovery_contract(installed_implement, playbook)
-    contract = orchestration_project / ".harness/docs/technical-english.md"
     for continuation_rule in ("integration next", "verification-failure"):
         if continuation_rule not in playbook:
             sys.exit(
                 f"installed playbook lacks the PR-continuation rule: {continuation_rule}"
             )
-    for entry in (playbook_path, orchestration_root / "roles/_common.md"):
-        assert_contract_link(entry, contract, entry.name)
+    for entry in (playbook_path, orchestration_root / "roles/common.md"):
+        for name in LANGUAGE_RULES:
+            assert_rule_link(entry, orchestration_project / ".claude/rules" / name, entry.name)
     pilot_path = orchestration_root / "pilot.md"
     if not pilot_path.is_file():
         sys.exit("backend-orchestration pilot guide missing")

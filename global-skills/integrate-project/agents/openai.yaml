@@ -1,0 +1,3 @@
+interface:
+  display_name: "Integrate Project"
+  short_description: "Audit and install the harness in an existing project"

@@ -13,7 +13,7 @@ import hashlib
 import uuid
 from pathlib import Path
 
-from harness.orchestration import extensions, operational_guards
+from harness.orchestration import extensions, operational_guards, operational_hold
 from harness.orchestration.core import config as core_config
 from harness.orchestration.core import utils
 from harness.orchestration.core.config import (
@@ -51,6 +51,7 @@ from harness.orchestration.ledger.ledger_ops import (
     _load_dispatch_status,
     _replace_record,
     _state_root,
+    persist_writes,
 )
 from harness.orchestration.ledger.lifecycle import BatchRecord, LifecycleLedger
 from harness.orchestration.workflow.approval import _approval
@@ -61,7 +62,45 @@ from harness.orchestration.workflow.history import (
 )
 
 
-def _stale_dispatch_finding(dispatch_id: str, silent: int) -> dict[str, str]:
+def staged_report(dispatch: JsonObject) -> str | None:
+    """The report file a worker staged for this dispatch, if it is on disk.
+
+    A container worker cannot write the ledger, so it normally exits with its report still staged:
+    that report, not a cancel, is what a human should record first."""
+    staged = dispatch.get("report_staging_path")
+    return staged if isinstance(staged, str) and Path(staged).is_file() else None
+
+
+def _stale_dispatch_finding(
+    dispatch_id: str,
+    silent: int,
+    worker_exit: JsonObject | None = None,
+    staged: str | None = None,
+) -> dict[str, str]:
+    if worker_exit and staged:
+        return operational_guards.attention_finding(
+            "stale-dispatch",
+            dispatch_id,
+            last_safe_action=f"dispatch {dispatch_id}: the container worker exited (exit code {worker_exit.get('exit_code')}) and left a staged report at {staged}; nothing was recorded or cancelled",
+            recommended_human_action=f"inspect {staged}, then record it with report submit --file {staged}; "
+            f"only if that report is unusable, inspect {RECOVERY_EVIDENCE_COMMANDS} and record dispatch cancel --runtime-stopped before "
+            "batch resume-stop or batch rewind; then resolve this attention",
+        )
+    if worker_exit:
+        gone = worker_exit.get("state") == "missing"
+        outcome = (
+            "the container engine no longer has its worker container"
+            if gone
+            else f"the container engine reports its worker exited with exit code {worker_exit.get('exit_code')}"
+        )
+        return operational_guards.attention_finding(
+            "stale-dispatch",
+            dispatch_id,
+            last_safe_action=f"dispatch {dispatch_id}: {outcome}; its brief, any report and the recorded exit evidence stay as immutable evidence and nothing was cancelled",
+            recommended_human_action=f"the engine proves the worker stopped; inspect {RECOVERY_EVIDENCE_COMMANDS}, "
+            "then record dispatch cancel --runtime-stopped before "
+            "batch resume-stop or batch rewind; batch abandon is a separate human decision; then resolve this attention",
+        )
     return operational_guards.attention_finding(
         "stale-dispatch",
         dispatch_id,
@@ -72,14 +111,37 @@ def _stale_dispatch_finding(dispatch_id: str, silent: int) -> dict[str, str]:
     )
 
 
+def _held(root: Path, batch_id: object) -> operational_hold.Hold | None:
+    """The operational hold of the batch in the runtime store (ADR 0026), read through the
+    command's state view; the file-ledger epoch keeps none."""
+    if not isinstance(batch_id, str):
+        return None
+    return operational_hold.current_hold(root, batch_id)
+
+
+def _hold_finding(held: operational_hold.Hold) -> dict[str, str]:
+    """The attention a hold raises; a new hold (another revision) raises it again."""
+    return operational_guards.attention_finding(
+        "operational-hold",
+        f"{held.batch_id}:{held.step}:{held.revision}",
+        last_safe_action=f"the runtime store holds batch {held.batch_id} ({held.reason}): "
+        f"{held.message}; no dispatch, decision or abandon was recorded and every brief, report "
+        "and candidate is unchanged",
+        recommended_human_action=held.remedy,
+    )
+
+
 def _attention_findings(
     repo: Path, root: Path, config: JsonObject, batch: JsonObject, moment: str
 ) -> list[dict[str, str]]:
-    """Every reason the batch currently needs a human, from ledger facts only. Nothing here changes
-    the lifecycle, deletes evidence or touches the candidate."""
+    """Every reason the batch currently needs a human, from ledger facts and the batch's
+    operational hold only. Nothing here changes the lifecycle, deletes evidence or touches the
+    candidate."""
     policy = _attention_policy(config)
     now = _moment(moment, "attention moment")
     findings: list[dict[str, str]] = []
+    if (held := _held(root, batch.get("batch_id"))) is not None:
+        findings.append(_hold_finding(held))
     entries = batch.get("dispatches", [])
     last = entries[-1] if entries else None
     decision = last.get("decision") if last else None
@@ -89,7 +151,10 @@ def _attention_findings(
         category = routing.get("reason_category")
         candidate = routing.get("candidate_commit")
         kept = f"the {routing.get('previous_role')} brief and report of {subject} stay as immutable evidence, candidate {_short(candidate)} is unchanged and no dispatch was created"
-        if category == "unknown":
+        if category == "unknown" and (
+            not isinstance(decision, dict)
+            or not decision.get("unknown_reason_acknowledged")
+        ):
             findings.append(
                 operational_guards.attention_finding(
                     "unknown-reason",
@@ -165,12 +230,21 @@ def _attention_findings(
         threshold = frozen.get(
             "stale_dispatch_seconds", policy["stale_dispatch_seconds"]
         )
-        if (
-            status.get("state") in LIVE_DISPATCH_STATES
-            and _silent_seconds(status) >= threshold
+        worker_exit = (
+            status["worker_exit"]
+            if isinstance(status.get("worker_exit"), dict)
+            else None
+        )
+        if status.get("state") in LIVE_DISPATCH_STATES and (
+            worker_exit is not None or _silent_seconds(status) >= threshold
         ):
             findings.append(
-                _stale_dispatch_finding(entry["dispatch_id"], _silent_seconds(status))
+                _stale_dispatch_finding(
+                    entry["dispatch_id"],
+                    _silent_seconds(status),
+                    worker_exit,
+                    staged_report(dispatch) if worker_exit else None,
+                )
             )
     return findings
 
@@ -257,6 +331,8 @@ def _require_no_attention(
         _safe_id(batch["batch_id"], "batch")
         _replace_record(ledger, BatchRecord.from_dict(batch))
     if batch.get("needs_attention") is True:
+        # The flag outlives the refusal that follows, as it did on the file ledger.
+        persist_writes(ledger)
         raise CoordinatorError(
             f"the batch needs human attention ({batch['attention_reason']}); no next dispatch is created until it is resolved",
             remedy=str(batch["recommended_human_action"])
@@ -265,13 +341,25 @@ def _require_no_attention(
 
 
 def _flag_stale_dispatch(
-    ledger: LifecycleLedger, repo: Path, root: Path, dispatch: JsonObject, silent: int
+    ledger: LifecycleLedger,
+    repo: Path,
+    root: Path,
+    dispatch: JsonObject,
+    silent: int,
+    worker_exit: JsonObject | None = None,
 ) -> None:
     batch = _load_batch(root, dispatch["batch_id"])
     if _apply_attention(
         core_config._config(repo),
         batch,
-        [_stale_dispatch_finding(dispatch["dispatch_id"], silent)],
+        [
+            _stale_dispatch_finding(
+                dispatch["dispatch_id"],
+                silent,
+                worker_exit,
+                staged_report(dispatch) if worker_exit else None,
+            )
+        ],
         utils._now(),
     ):
         _safe_id(batch["batch_id"], "batch")

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import hashlib
 import json
 import sys
@@ -11,6 +13,7 @@ from scripts.clean_room.support import (
     capture,
     commit_map_for,
     run_step,
+    spec_criteria,
 )
 
 
@@ -33,6 +36,7 @@ def run(ctx: SimpleNamespace) -> None:
     # ownership pattern as a risk assessment -- and checks its freshness before every new dispatch
     # brief.  A package is shared across role sessions when the pinned base/candidate is unchanged.
     ctxpkg_state = test_root / "context-package-state"
+    seed_file_ledger(ctxpkg_state)
     run_step(
         ["git", "branch", "feature/issue-138-context-package"],
         cwd=orchestration_project,
@@ -418,6 +422,7 @@ def run(ctx: SimpleNamespace) -> None:
                 "findings": [],
                 "risks": {"status": "none", "details": ""},
                 "blockers": {"status": "none", "details": ""},
+                "criteria": spec_criteria(first_ctxpkg_review_record["brief"]),
             },
         },
     }

@@ -1,4 +1,4 @@
-"""Согласованность документации с каталогом capability и зеркалом docs-agents.
+"""Согласованность документации с каталогом capability и шаблонами инструкций агентов.
 
 Каждая проверка ловит расхождение, которое уже однажды попадало в релиз: текст, продублированный
 вручную в нескольких документах, расходится с источником правды.
@@ -14,39 +14,41 @@ from pathlib import Path
 
 from scripts.verification.paths import (
     CAPABILITIES,
-    DOCS_AGENTS_TEMPLATE,
-    HARNESS_GUIDE,
+    INSTRUCTION_TEMPLATES,
+    MANAGED_INSTRUCTIONS,
     ROOT,
+    SITE_PROJECT_STRUCTURE,
+    SITE_REFERENCE_SKILLS,
 )
 from scripts.verification.text_checks import normalized_text
 
 RETIRED_PATH_INVENTORY_TERM = re.compile(r"filtered\s+Repo\s+Map", re.IGNORECASE)
+DIAGRAM_PREVIEW_LINK = re.compile(r"\]\(([^)]*diagrams/previews/[^)]+\.png)\)")
+STATIC_IMAGE_ROOTS = (ROOT / "docs", ROOT / "site" / "docs")
 PATH_INVENTORY_ROOTS = (
-    ROOT / "skills" / "first-party" / "pvmalove" / "to-tickets",
-    ROOT / "docs" / "agents",
-    DOCS_AGENTS_TEMPLATE,
-    ROOT / "docs" / "skills",
-    ROOT / "docs" / "diagrams",
-    ROOT / "docs" / "ARCHITECTURE.md",
+    ROOT / "skills" / "first-party" / "engineering" / "to-tickets",
+    INSTRUCTION_TEMPLATES,
+    ROOT / "site" / "docs",
     ROOT / "README.md",
 )
 
 
 @dataclass(frozen=True)
-class PvmaloveSuite:
-    """Состав pvmalove-suite из CAPABILITIES.json: переопределённые и добавленные скиллы."""
+class EngineeringSuite:
+    """Состав engineering-suite из CAPABILITIES.json: переопределённые и добавленные скиллы."""
 
     overrides: frozenset[str]
     additions: frozenset[str]
 
 
-def load_pvmalove_suite() -> PvmaloveSuite:
-    """Прочитать состав pvmalove-suite из CAPABILITIES.json — источника правды для документации."""
-    suite = json.loads(CAPABILITIES.read_text(encoding="utf-8"))["pvmalove-suite"]
-    return PvmaloveSuite(
+def load_engineering_suite() -> EngineeringSuite:
+    """Прочитать состав engineering-suite из CAPABILITIES.json — источника правды для документации."""
+    suite = json.loads(CAPABILITIES.read_text(encoding="utf-8"))["engineering-suite"]
+    return EngineeringSuite(
         overrides=frozenset(suite["overrides"].keys()),
         additions=frozenset(
-            entry.removeprefix("first-party/pvmalove/") for entry in suite["additions"]
+            entry.removeprefix("first-party/engineering/")
+            for entry in suite["additions"]
         ),
     )
 
@@ -56,33 +58,21 @@ def _documented(pattern: str, text: str) -> set[str]:
     return set(re.findall(pattern, text, re.MULTILINE))
 
 
-def check_docs_agents_mirror() -> None:
-    """Проверить, что docs/agents/*.md совпадают с harness/project/docs-agents/*.md.
+def check_diagram_previews() -> None:
+    """Проверить, что каждая ссылка на превью диаграммы ведёт на существующий PNG.
 
-    docs/agents — собственная копия файлов, которые scaffold_pvmalove_extras разворачивает в каждый
-    проект pvmalove-suite. Обе копии правятся вручную, поэтому расхождение ловится здесь.
+    Превью лежат в site/docs/diagrams/previews/. Проверка покрывает и корневой docs/, и site/docs:
+    битая картинка ловится там, где она появилась.
     """
-    for template in sorted(DOCS_AGENTS_TEMPLATE.glob("*.md")):
-        counterpart = ROOT / "docs" / "agents" / template.name
-        if not counterpart.is_file():
-            sys.exit(f"{template} has no docs/agents counterpart: {counterpart}")
-        if normalized_text(template) != normalized_text(counterpart):
-            sys.exit(
-                f"docs/agents/{template.name} has drifted from harness/project/docs-agents/{template.name}"
-            )
-
-
-def check_guide_diagram_previews() -> None:
-    """Проверить, что каждая картинка справочника есть среди превью Archify в docs/diagrams/previews/."""
-    previews = ROOT / "docs" / "diagrams" / "previews"
-    for name in re.findall(
-        r"\]\(\./diagrams/previews/([^)]+\.png)\)",
-        HARNESS_GUIDE.read_text(encoding="utf-8"),
-    ):
-        if not (previews / name).is_file():
-            sys.exit(
-                f"harness-guide.md references a missing diagram preview: ./diagrams/previews/{name}"
-            )
+    for base in STATIC_IMAGE_ROOTS:
+        for path in sorted(base.rglob("*.md")) if base.is_dir() else []:
+            for link in DIAGRAM_PREVIEW_LINK.findall(
+                path.read_text(encoding="utf-8", errors="replace")
+            ):
+                if "://" in link:
+                    continue
+                if not (path.parent / link).resolve().is_file():
+                    sys.exit(f"{path}: diagram preview link is broken: {link}")
 
 
 def check_no_retired_path_inventory_term() -> None:
@@ -101,66 +91,76 @@ def check_no_retired_path_inventory_term() -> None:
                 )
 
 
-def check_docs_agents_enumeration() -> None:
-    """Проверить перечисление docs/agents/{...}.md в README.md и harness-guide.md.
+def check_instructions_enumeration() -> None:
+    """Проверить перечисление .harness/instructions/{...}.md на странице структуры сайта.
 
-    Оба документа вручную перечисляют файлы, которые разворачивает scaffold_pvmalove_extras. Однажды
-    harness-guide.md уже отсутствовал в собственном перечислении.
+    Страница вручную перечисляет файлы, которые разворачивает scaffold_engineering_extras.
+    Однажды список в документе разошёлся с шаблонами.
     """
-    names = {path.stem for path in DOCS_AGENTS_TEMPLATE.glob("*.md")}
-    for doc in (ROOT / "README.md", HARNESS_GUIDE):
-        match = re.search(r"docs/agents/\{([a-z0-9,-]+)\}\.md", normalized_text(doc))
+    names = {
+        path.stem
+        for path in INSTRUCTION_TEMPLATES.glob("*.md")
+        if path.name not in MANAGED_INSTRUCTIONS
+    }
+    for doc in (SITE_PROJECT_STRUCTURE,):
+        match = re.search(
+            r"\.harness/instructions/\{([a-z0-9,-]+)\}\.md", normalized_text(doc)
+        )
         if not match:
-            sys.exit(f"{doc}: no docs/agents/{{...}}.md enumeration found")
+            sys.exit(f"{doc}: no .harness/instructions/{{...}}.md enumeration found")
         listed = set(match.group(1).split(","))
         if listed != names:
             sys.exit(
-                f"{doc}: docs/agents/{{...}}.md enumeration {sorted(listed)} does not match "
-                f"harness/project/docs-agents/*.md {sorted(names)}"
+                f"{doc}: .harness/instructions/{{...}}.md enumeration {sorted(listed)} does not match "
+                f"harness/project/instructions/*.md seeds {sorted(names)}"
             )
 
 
-def _guide_section(pattern: str, missing: str) -> str:
-    """Раздел harness-guide.md по регулярному выражению или завершение с ошибкой."""
-    section = re.search(pattern, normalized_text(HARNESS_GUIDE), re.DOTALL)
+def _site_section(path: Path, pattern: str, missing: str) -> str:
+    """Раздел страницы сайта по регулярному выражению или завершение с ошибкой."""
+    section = re.search(pattern, normalized_text(path), re.DOTALL)
     if not section:
         sys.exit(missing)
     return section.group(1)
 
 
-def check_pvmalove_override_docs_sync() -> None:
-    """Сверить таблицу раздела 7 harness-guide.md с pvmalove-suite.overrides.
+def check_engineering_override_docs_sync() -> None:
+    """Сверить таблицу переопределений на сайте с engineering-suite.overrides.
 
     Однажды wayfinder попал в overrides без строки в таблице.
     """
-    expected = set(load_pvmalove_suite().overrides)
-    section = _guide_section(
-        r"\n## 7\. .*?\n(.*?)\n## ",
-        "harness-guide.md: could not find section 7 (local customizations)",
+    expected = set(load_engineering_suite().overrides)
+    section = _site_section(
+        SITE_REFERENCE_SKILLS,
+        r"\n## Проектные переопределения\n(.*?)\n## ",
+        f"{SITE_REFERENCE_SKILLS}: could not find the 'Проектные переопределения' section",
     )
     documented = _documented(r"^\| `([a-z0-9-]+)` \|", section)
     if documented != expected:
         sys.exit(
-            "harness-guide.md section 7 table is out of sync with pvmalove-suite overrides in "
-            f"CAPABILITIES.json: missing={sorted(expected - documented)} extra={sorted(documented - expected)}"
+            f"{SITE_REFERENCE_SKILLS}: overrides table is out of sync with engineering-suite "
+            f"overrides in CAPABILITIES.json: missing={sorted(expected - documented)} "
+            f"extra={sorted(documented - expected)}"
         )
 
 
-def check_pvmalove_additions_docs_sync() -> None:
-    """Сверить таблицу проектных скиллов harness-guide.md с pvmalove-suite.additions.
+def check_engineering_additions_docs_sync() -> None:
+    """Сверить таблицу проектных скиллов на сайте с engineering-suite.additions.
 
     Однажды setup-labels попал в additions без строки в таблице.
     """
-    expected = set(load_pvmalove_suite().additions)
-    section = _guide_section(
-        r"\n### Проектные \(first-party, вне апстрима\)\n(.*?)\n---\n",
-        "harness-guide.md: could not find the project-specific skill catalog table",
+    expected = set(load_engineering_suite().additions)
+    section = _site_section(
+        SITE_REFERENCE_SKILLS,
+        r"\n### Проектные скиллы \(first-party\)\n(.*?)\n## ",
+        f"{SITE_REFERENCE_SKILLS}: could not find the first-party skill catalog table",
     )
     documented = _documented(r"^\| `([a-z0-9-]+)` \(skill\) \|", section)
     if documented != expected:
         sys.exit(
-            "harness-guide.md project-specific skill table is out of sync with pvmalove-suite "
-            f"additions in CAPABILITIES.json: missing={sorted(expected - documented)} extra={sorted(documented - expected)}"
+            f"{SITE_REFERENCE_SKILLS}: first-party skill table is out of sync with "
+            f"engineering-suite additions in CAPABILITIES.json: "
+            f"missing={sorted(expected - documented)} extra={sorted(documented - expected)}"
         )
 
 
@@ -170,7 +170,7 @@ def _check_listed(
     """Сверить список имён в прозе документа с ожидаемым набором из CAPABILITIES.json."""
     match = re.search(pattern, text)
     if not match:
-        sys.exit(f"{doc}: no pvmalove-suite {kind} list found")
+        sys.exit(f"{doc}: no engineering-suite {kind} list found")
     documented = set(re.findall(r"`([a-z0-9-]+)`", match.group(1)))
     if documented != expected:
         sys.exit(
@@ -179,19 +179,19 @@ def _check_listed(
         )
 
 
-def check_pvmalove_suite_summary_sync() -> None:
-    """Сверить списки переопределений и дополнений в прозе README.md и CONTEXT.md.
+def check_engineering_suite_summary_sync() -> None:
+    """Сверить списки переопределений и дополнений в прозе CONTEXT.md.
 
     Однажды устаревшие счётчики «5 overrides, 1 addition» прожили три дня после правки только
-    раздела 7.
+    таблицы переопределений.
     """
-    suite = load_pvmalove_suite()
-    for doc in (ROOT / "README.md", ROOT / "CONTEXT.md"):
+    suite = load_engineering_suite()
+    for doc in (ROOT / "CONTEXT.md",):
         text = normalized_text(doc)
         _check_listed(
             doc,
             text,
-            r"переопределены в `skills/first-party/pvmalove/`:\s*(.+?);",
+            r"переопределены в `skills/first-party/engineering/`:\s*(.+?);",
             "overrides",
             suite.overrides,
         )

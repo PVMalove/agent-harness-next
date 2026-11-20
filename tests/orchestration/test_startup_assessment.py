@@ -22,7 +22,7 @@ MATCHED = {
     ("status", "state"),
     [
         ({"state": "working", **MATCHED}, "live"),
-        ({"state": "dispatched"}, "live"),
+        ({"state": "dispatched"}, "unknown"),
         (
             {
                 "state": "blocked",
@@ -78,7 +78,7 @@ def test_a_missing_self_report_stays_fail_closed_while_the_worker_may_run() -> N
     assessment = assess_startup(DISPATCH, {"state": "dispatched"})
 
     assert assessment["classification"] == "model-self-report-missing"
-    assert assessment["worker_state"] == "live"
+    assert assessment["worker_state"] == "unknown"
     assert assessment["restart_allowed"] is False
     assert "the active model identity is not known" in assessment["unknowns"]
 
@@ -111,3 +111,26 @@ def test_capacity_while_the_worker_is_live_is_not_restartable() -> None:
 
     assert assessment["classification"] == "capacity"
     assert assessment["restart_allowed"] is False
+
+
+@pytest.mark.parametrize(
+    ("execution", "state"),
+    [
+        ("launching", "live"),
+        ("running", "live"),
+        ("stopping", "live"),
+        ("exited", "stopped"),
+        ("lost", "stopped"),
+        ("unknown", "unknown"),
+    ],
+)
+def test_a_supervised_worker_is_what_the_runtime_observed_of_its_execution(
+    execution: str, state: str
+) -> None:
+    status = {"state": "working", **MATCHED}
+
+    assert worker_process_state(status, execution={"state": execution}) == state
+    assessed = assess_startup(DISPATCH, status, execution={"state": execution})
+    assert assessed["worker_state"] == state
+    if execution in {"exited", "lost"}:
+        assert assessed["classification"] == "worker-exited-without-report"

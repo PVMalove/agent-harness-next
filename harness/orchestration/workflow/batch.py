@@ -16,6 +16,7 @@ from dataclasses import replace as _vo_replace
 from pathlib import Path
 from typing import cast
 
+from harness.orchestration import operational_hold
 from harness.orchestration.contract import (
     ContractError,
     is_clean_path_pattern,
@@ -29,18 +30,21 @@ from harness.orchestration.core.config import (
     _batch_verification_commands,
     _communication_policy,
     _preflight_policy,
+    _qa_gate_commands,
     _reject_sensitive,
-    _verification_commands,
 )
 from harness.orchestration.core.constants import (
     ATTENTION_STATE_FIELDS,
+    BATCH_WRITER_ROLES,
     LIVE_DISPATCH_STATES,
     PLAN_FIELDS,
     TERMINAL_BATCH_STATES,
     BatchState,
+    batch_writer_role,
 )
 from harness.orchestration.core.git_utils import (
     _fetch_ref_tip,
+    _git_is_ancestor,
     _head_commit,
 )
 from harness.orchestration.core.utils import (
@@ -62,8 +66,11 @@ from harness.orchestration.core.workspace import (
     _validate_branch,
     _validate_worktree,
 )
+from harness.orchestration.core import state_view
+from harness.orchestration.worktree_lifecycle import require_committable_worktree
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
+    read_state,
     _load_batch,
     _load_dispatch_status,
     _records_root,
@@ -95,11 +102,33 @@ from harness.orchestration.workflow.history import (
     _validate_batch_integrity,
 )
 
+BRANCH_START_MISSING_BASE = "branch_start_missing_base"
+
+
+def _reject_start_without_base(
+    repo: Path, worktree: str, base: str, start: str | None
+) -> None:
+    """Refuse a batch whose worktree branch does not contain the integration base it pins.
+
+    The batch measures its changes from that base when the branch starts below it, so the files
+    of the upstream commits would count as changes of the ticket. The coordinator never moves the
+    branch: the human brings the base into it and repeats ``batch create``."""
+    if start is None or _git_is_ancestor(repo, base, start):
+        return
+    raise CoordinatorError(
+        f"{BRANCH_START_MISSING_BASE}: the branch of worktree {worktree} starts at {start}, "
+        f"which does not contain the integration base {base}; the files of the upstream "
+        "commits would count as changes of this batch",
+        remedy=f"fast-forward the issue branch to the fetched tip with 'git -C {worktree} merge "
+        f"--ff-only {base}' (merge or rebase onto {base} when the branch has commits of its "
+        "own), then repeat batch create",
+    )
+
 
 def _batch_records(root: Path) -> Iterator[JsonObject]:
     """Every batch record of the ledger, in batch-id order."""
-    for path in sorted(
-        (_records_root(root) / BatchRecord.directory).glob("batch-*.json")
+    for path in state_view.glob(
+        _records_root(root) / BatchRecord.directory, "batch-*.json"
     ):
         yield _read_object(path, "batch record")
 
@@ -132,6 +161,9 @@ def _check_batch_conflicts(root: Path, config: JsonObject, batch: JsonObject) ->
         ):
             continue
         active += 1
+    # The count read every batch: a command that admits another batch in the meantime moves the
+    # generation, and the write of this command is refused instead of exceeding the budget.
+    state_view.depend_on_shared()
     if active >= budget:
         raise CoordinatorError(
             f"concurrency_budget ({budget}) is exhausted: {active} other batch(es) are already active",
@@ -148,7 +180,11 @@ def _reject_duplicate_work(root: Path, ticket: str, branch: str, worktree: str) 
     retain their ticket, branch and worktree until an explicit operator refusal.
     """
     mine_worktree = str(Path(worktree).resolve())
-    for other in _batch_records(root):
+    # The check reads every batch: a batch another command creates in the meantime moves the
+    # generation, and the creation of this one is refused instead of doubling the work.
+    others = list(_batch_records(root))
+    state_view.depend_on_shared()
+    for other in others:
         if terminal(other):
             continue
         other_worktree = other.get("worktree")
@@ -171,22 +207,67 @@ def _reject_duplicate_work(root: Path, ticket: str, branch: str, worktree: str) 
 
 
 def _reject_role_ceiling_overflow(
-    repo: Path, config: JsonObject, allowed_paths: list[str]
+    repo: Path, config: JsonObject, allowed_paths: list[str], role: str
 ) -> None:
-    """Refuse a scope wider than the developer role's write ceiling before a batch exists."""
+    """Check the selected owner's assignment and write ceiling before planning.
+
+    Args:
+        repo: Project checkout used to load the role manifest.
+        config: Validated project orchestration configuration.
+        allowed_paths: Repository-relative paths and globs requested for the batch.
+        role: Implementation role selected for the batch.
+
+    Raises:
+        CoordinatorError: A specialist lacks a write-mode assignment or the requested scope
+            exceeds the role's configured write ceiling.
+    """
     plans = config.get("assignment_plans")
-    plan = plans.get("developer") if isinstance(plans, dict) else None
+    plan = plans.get(role) if isinstance(plans, dict) else None
+    if role != "developer":
+        if not isinstance(plan, dict):
+            raise CoordinatorError(
+                f"role {role!r} has no assignment plan",
+                remedy=f"configure assignment_plans[{role!r}] before planning this batch",
+            )
+        if core_config._role(repo, role).get("mode") != "write":
+            raise CoordinatorError(
+                f"batch writer {role!r} must have a write-mode manifest",
+                remedy=f"install the write-mode manifest for {role!r}",
+            )
     if not isinstance(plan, dict) or not core_config._configured(repo):
         return
     try:
-        ceiling = role_write_ceiling(config, plan, "developer")
+        ceiling = role_write_ceiling(config, plan, role)
     except ContractError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
     if not paths_inside(allowed_paths, ceiling):
         raise CoordinatorError(
-            f"allowed_paths {allowed_paths} exceed the developer write ceiling {ceiling}",
-            remedy="narrow --allowed-path, or widen assignment_plans['developer'].write_paths in the project orchestration config",
+            f"allowed_paths {allowed_paths} exceed the {role} write ceiling {ceiling}",
+            remedy=f"narrow --allowed-path, or widen assignment_plans[{role!r}].write_paths in the project orchestration config",
         )
+
+
+def _planned_writer(args: argparse.Namespace) -> str:
+    """Resolve the intended implementation owner for an unapproved plan.
+
+    Args:
+        args: Batch command arguments with an optional ``writer_role``.
+
+    Returns:
+        The selected role, defaulting to ``developer`` for an omitted argument.
+
+    Raises:
+        CoordinatorError: The value is outside the supported implementation roles.
+    """
+    role = getattr(args, "writer_role", None)
+    if role is None:
+        return "developer"
+    if role not in BATCH_WRITER_ROLES:
+        raise CoordinatorError(
+            f"invalid batch writer role {role!r}",
+            remedy=f"select --writer-role from {', '.join(BATCH_WRITER_ROLES)}",
+        )
+    return cast(str, role)
 
 
 def _legacy_zone_paths(config: JsonObject, zone: object) -> list[str]:
@@ -316,6 +397,17 @@ def _scope_preflight(
 
 
 def preflight_batch(args: argparse.Namespace) -> JsonObject:
+    """Check the requested scope and owner before creating a batch.
+
+    Args:
+        args: Batch preflight arguments, including the ticket, scope, and optional owner.
+
+    Returns:
+        The scope preflight result and the owner when explicitly selected.
+
+    Raises:
+        CoordinatorError: The assignment, scope, or estimated batch size fails preflight.
+    """
     repo = _repo(args)
     config = core_config._config(repo)
     ticket = getattr(args, "ticket", None)
@@ -330,17 +422,35 @@ def preflight_batch(args: argparse.Namespace) -> JsonObject:
     dependencies = _strings(
         getattr(args, "dependency", None) or ["none"], "dependencies"
     )
-    return _scope_preflight(
+    allowed_paths = _allowed_paths(args)
+    role = _planned_writer(args)
+    if getattr(args, "writer_role", None) is not None:
+        _reject_role_ceiling_overflow(repo, config, allowed_paths, role)
+    result = _scope_preflight(
         config,
         ticket.strip(),
-        _allowed_paths(args),
+        allowed_paths,
         definition_of_done,
         dependencies,
         args,
     )
+    if getattr(args, "writer_role", None) is not None:
+        result["writer_role"] = role
+    return result
 
 
 def create_batch(args: argparse.Namespace) -> JsonObject:
+    """Create a planned batch and store its immutable scope and owner.
+
+    Args:
+        args: Batch creation arguments, including the ticket, issue checkout, and write scope.
+
+    Returns:
+        The new batch record in the ``planned`` state.
+
+    Raises:
+        CoordinatorError: The request fails scope, assignment, checkout, or lifecycle checks.
+    """
     repo = _repo(args)
     config = core_config._config(repo)
     ticket = getattr(args, "ticket", None)
@@ -377,7 +487,9 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
             remedy="pass --allowed-path one or more times (for example --allowed-path 'src/orders/**', or '**' for the whole repository)",
         )
     _validate_worktree(repo, worktree)
-    _reject_role_ceiling_overflow(repo, config, allowed_paths)
+    require_committable_worktree(repo, worktree)
+    writer_role = _planned_writer(args)
+    _reject_role_ceiling_overflow(repo, config, allowed_paths, writer_role)
     # Nullable for epic-less tasks: falls back to the project's base_branch, the same field
     # `_validate_branch` falls back to, rather than inventing a second convention.
     fetch_ref = (
@@ -400,6 +512,12 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
     )
     # A superseding batch is approved by a human before the lock (issue #506).
     superseded = supersede.request(args)
+    has_worktree = Path(worktree).is_dir()
+    branch_start = _head_commit(Path(worktree) if has_worktree else repo)
+    # A superseding batch keeps its branch: its rebase target brings the base in (issue #506).
+    # A conflict-resolver batch (issue #534) exists to merge the moved base into its branch.
+    if has_worktree and superseded is None and not getattr(args, "merges_base", False):
+        _reject_start_without_base(repo, worktree, pinned_base, branch_start)
     root = _state_root(args, repo)
     developer_commands, review_commands = _batch_verification_commands(
         config, allowed_paths
@@ -412,9 +530,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
         if _non_empty(integration_ref)
         else None,
         "integration_base_commit": pinned_base,
-        "branch_start_commit": _head_commit(Path(worktree))
-        if Path(worktree).is_dir()
-        else _head_commit(repo),
+        "branch_start_commit": branch_start,
         "state": "planned",
         "ticket": ticket.strip(),
         "branch": branch.strip(),
@@ -426,7 +542,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
         "prohibited_changes": prohibited,
         "developer_verification_commands": developer_commands,
         "review_verification_commands": review_commands,
-        "verification_commands": _verification_commands(config),
+        "verification_commands": _qa_gate_commands(config),
         "required_gates": _strings(
             getattr(args, "required_gate", None) or ["none"], "required_gates"
         ),
@@ -443,14 +559,28 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
         "risk_escalations": [],
         "risk_reassessment_required": False,
     }
+    if getattr(args, "writer_role", None) is not None:
+        record["writer_role"] = writer_role
     # Frozen like the command lists, and only when configured: a legacy batch keeps its shape.
     if isinstance(config.get("retry_verification"), dict):
         record["retry_verification"] = config["retry_verification"]
+    if isinstance(config.get("verification_plan_policy"), dict):
+        record["verification_plan_policy"] = config["verification_plan_policy"]
+        # The Repo Map policy shapes the import graph behind the plan, so it is frozen beside it.
+        repo_map_policy = config.get("repo_map_policy")
+        record["repo_map_policy"] = (
+            repo_map_policy if isinstance(repo_map_policy, dict) else {}
+        )
     _reject_sensitive(record, "batch")
+    ledger = LifecycleLedger(root)
+    try:
+        # Before the snapshot of the runtime: a refused batch leaves nothing behind.
+        ledger.refuse_new_project(repo)
+    except LedgerError as exc:
+        raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
     _store_runtime_snapshot(
         root, _runtime_snapshot_root(repo).parent, record["harness_runtime_sha256"]
     )
-    ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         try:
             ledger.ensure()
@@ -471,6 +601,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
                 {
                     **{field: record[field] for field in PLAN_FIELDS},
                     "goal": record["goal"],
+                    **({"writer_role": writer_role} if "writer_role" in record else {}),
                     # The link is immutable: integrity compares it with the batch's own copy.
                     **(
                         {"supersedes": record["supersedes"]}
@@ -559,7 +690,7 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
     repo = _repo(args)
     root = _state_root(args, repo)
     ledger = LifecycleLedger(root)
-    with _ledger_lock(ledger):
+    with read_state(ledger, repo):
         batches = []
         for batch in _batch_records(root):
             dispatches = batch.get("dispatches", [])
@@ -573,6 +704,7 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
                 continue
             if args.open and terminal(batch):
                 continue
+            closed = batch.get("abandoned")
             batches.append(
                 {
                     "batch_id": batch.get("batch_id"),
@@ -586,6 +718,17 @@ def list_batches(args: argparse.Namespace) -> JsonObject:
                     "dispatches": len(dispatches),
                     "open_dispatches": open_dispatches,
                     "next_action": batch.get("next_action"),
+                    "abandoned": {
+                        key: closed.get(key)
+                        for key in (
+                            "approved_by",
+                            "approved_at",
+                            "abandoned_at",
+                            "reason",
+                        )
+                    }
+                    if isinstance(closed, dict)
+                    else None,
                 }
             )
     return {"batches": batches}
@@ -609,6 +752,7 @@ def resume_batch(args: argparse.Namespace) -> JsonObject:
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         batch = _load_batch(root, args.batch)
+        operational_hold.require_no_hold(root, args.batch)
         _validate_batch_integrity(root, batch)
         if (
             approvals.auto_configured(core_config._config(repo), batch)
@@ -661,13 +805,18 @@ def resume_batch(args: argparse.Namespace) -> JsonObject:
             )
         next_action = batch.get("next_action")
         if not isinstance(next_action, str):
-            if latest.get("role") == "developer" and _accepted_architect(batch):
-                next_action = "developer"
+            if latest.get("role") == batch_writer_role(batch) and _accepted_architect(
+                batch
+            ):
+                next_action = (
+                    "publish" if latest.get("purpose") == "publish" else "developer"
+                )
             else:
                 next_action = latest.get("role")
         if not isinstance(next_action, str) or next_action not in {
             "architect",
             "developer",
+            "developer-retry",
             "verification",
             "code-review",
             "qa",
@@ -769,7 +918,18 @@ def abandon_batch(args: argparse.Namespace) -> JsonObject:
             }
         )
         _safe_id(batch["batch_id"], "batch")
-        _replace_record(ledger, BatchRecord.from_dict(batch))
+        # The transition audit names who closed the batch and why, like `batch decide` does.
+        _replace_record(
+            ledger,
+            BatchRecord.from_dict(batch),
+            decision={
+                "decision": "abandon",
+                "approver": {"kind": "human", "name": approval["approved_by"]},
+                "approved_at": approval["approved_at"],
+                "reason": reason,
+                "open_dispatches": open_dispatches,
+            },
+        )
         _discard_batch_leftovers(repo, ledger, batch, open_dispatches)
     return {
         "batch_id": batch["batch_id"],
@@ -817,7 +977,8 @@ def mark_batch_not_required(args: argparse.Namespace) -> JsonObject:
                 / DispatchStatusRecord.directory
                 / f"{_safe_id(entry['dispatch_id'], 'dispatch')}.json"
             )
-            if status_path.exists():
+            # The store epoch has no file behind the path: ask the view.
+            if state_view.exists(status_path):
                 status = _load_dispatch_status(root, entry["dispatch_id"])
                 status.update({"state": "cancelled", "updated_at": moment})
                 _replace_record(ledger, DispatchStatusRecord.from_dict(status))

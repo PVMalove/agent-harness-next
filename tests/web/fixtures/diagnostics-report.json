@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "repo": "/work/project",
+  "online": false,
+  "summary": {
+    "ok": 6,
+    "warn": 2,
+    "fail": 2,
+    "skipped": 2
+  },
+  "checks": [
+    {
+      "id": "files.lock",
+      "group": "files",
+      "status": "ok",
+      "message": "harness.lock на месте и читается",
+      "fix": null
+    },
+    {
+      "id": "files.managed",
+      "group": "files",
+      "status": "fail",
+      "message": "3 управляемых файла отличаются от снэпшота",
+      "fix": {
+        "text": "Посмотрите diff и примените обновление",
+        "command": "harness update ."
+      }
+    },
+    {
+      "id": "hooks.policy",
+      "group": "hooks",
+      "status": "fail",
+      "message": "Нет .harness/hook-policy.json: effective policy не записана",
+      "fix": {
+        "text": "Запишите policy обновлением после review",
+        "command": "harness update ."
+      }
+    },
+    {
+      "id": "hooks.codex",
+      "group": "hooks",
+      "status": "warn",
+      "message": "Codex: 6 из 8 критических hooks",
+      "fix": {
+        "text": "Проверьте профиль hooks Codex вручную",
+        "command": null
+      }
+    },
+    {
+      "id": "environment.python",
+      "group": "environment",
+      "status": "ok",
+      "message": "Python 3.14 · uv 0.12 · .venv синхронизирован с uv.lock",
+      "fix": null
+    },
+    {
+      "id": "environment.git",
+      "group": "environment",
+      "status": "ok",
+      "message": "Git 2.56, рабочее дерево доступно",
+      "fix": null
+    },
+    {
+      "id": "directories.sandboxes",
+      "group": "directories",
+      "status": "ok",
+      "message": "Каталоги .harness/.sandboxes на месте",
+      "fix": null
+    },
+    {
+      "id": "repo_map.cache",
+      "group": "repo_map",
+      "status": "warn",
+      "message": "Карта для HEAD не построена",
+      "fix": {
+        "text": "Постройте карту на экране Repo Map",
+        "command": "harness repo-map build ."
+      }
+    },
+    {
+      "id": "memory.index",
+      "group": "memory",
+      "status": "ok",
+      "message": "Индекс памяти проекта актуален",
+      "fix": null
+    },
+    {
+      "id": "orchestration.coordinator",
+      "group": "orchestration",
+      "status": "ok",
+      "message": "coordinator.py подключён, леджер читается",
+      "fix": null
+    },
+    {
+      "id": "tracker.auth",
+      "group": "tracker",
+      "status": "skipped",
+      "message": "Онлайн-проверки трекера пропущены: gh auth не проверялся",
+      "fix": null
+    },
+    {
+      "id": "tracker.labels",
+      "group": "tracker",
+      "status": "skipped",
+      "message": "Метки трекера не проверялись без --online",
+      "fix": null
+    }
+  ],
+  "fixes_applied": []
+}

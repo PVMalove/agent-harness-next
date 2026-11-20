@@ -1,17 +1,15 @@
 """Полный маршрут `/implement`: тест-автор обслуживает worker checkout или остаётся выключенным.
 
-In-process developer работает в отдельном git worktree, а `CLAUDE_PROJECT_DIR` указывает на основной
-checkout. Сценарий на установленном проекте и отдельном worktree проверяет правила из
-`harness/orchestration/roles/developer.md`: preflight основного checkout с `--worktree <worktree>`
-отвечает `checkout_mismatch`; developer идёт обычным TDD в worktree, а статус и `tests/` основного
-checkout не меняются; guard основного checkout отклоняет запись в worktree; `--worktree` с самим
-checkout даёт ответ вызова без аргументов; внешний transport даёт `transport_unsupported` без
-preflight. Реальный Claude Code этот сценарий не запускает.
+In-process preflight отклоняет другой checkout. External developer использует собственный
+установленный worker checkout с точным trust: guard разрешает только его test_paths, runner
+проверяет его код, а основной checkout остаётся неизменным. Сценарий учитывает общее хранилище
+логов linked worktree; по флагу live-пробы проверяет настоящий вызов developer → test-author.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -24,14 +22,18 @@ from scripts.clean_room.isolated_test_runner import (
     _assert_denied,
     _direct_execute,
     _guard,
+    _hook,
     _install,
     _json_line,
     _preflight,
     _run_hook,
     _test_author_payload,
+    _verify_guard_decisions,
+    _verify_red_evidence,
 )
 from scripts.clean_room.support import run_step
-from scripts.clean_room.test_author_cycle import Scenario, _module
+from scripts.clean_room.test_author_cycle import Scenario, _module, verify_cycle
+from scripts.clean_room.isolated_test_runner import _runner_execute
 
 MISMATCH = {"status": "disabled", "reason": "checkout_mismatch"}
 GIT_IDENTITY = [
@@ -49,8 +51,8 @@ def _fail(label: str, message: str) -> None:
 def effective_answer(
     transport: str, run_preflight: Callable[[], dict[str, object]]
 ) -> dict[str, object]:
-    """The answer the developer acts on: an external transport never enables the author."""
-    if transport == "external":
+    """Both transports check their served checkout; unknown transports fail closed."""
+    if transport not in {"external", "in-process"}:
         return {"status": "disabled", "reason": "transport_unsupported"}
     return run_preflight()
 
@@ -137,6 +139,10 @@ def run(ctx: SimpleNamespace) -> None:
     Читает из контекста: `test_root`.
     """
     project = _install(ctx.test_root / "full_route_project")
+    # Fixture setup: the main implementation differs before any developer/author work.
+    (project / "src/calc.py").write_text(
+        "def add(a, b):\n    return 99\n", encoding="utf-8"
+    )
     worktree = ctx.test_root / "full_route_worktree"
     _add_worktree(project, worktree)
     environment = claude_environment(project)
@@ -163,17 +169,42 @@ def run(ctx: SimpleNamespace) -> None:
         _guard(project, _test_author_payload("Write", {"file_path": str(leak)}))
     )
 
-    calls: list[str] = []
-
-    def preflight() -> dict[str, object]:
-        calls.append("preflight")
-        return answer
-
-    external = effective_answer("external", preflight)
-    if calls or external != {"status": "disabled", "reason": "transport_unsupported"}:
-        _fail("external transport", f"answered {external} after {calls}")
+    verify_external_worktree(project, worktree)
 
     ensure_unchanged("scenario end", project, main_snapshot)
     if _git(project, "status", "--porcelain") != main_status:
         _fail("scenario end", "the main checkout status changed")
     print("full-route worktree: preflight, fallback and guard verified", flush=True)
+
+
+def verify_external_worktree(main: Path, worktree: Path) -> None:
+    """An external developer serves the installed worker, with exact-path trust and real runner."""
+    before = snapshot(main)
+    _install(worktree, existing_checkout=True)
+    for trust in ("not-accepted", "other-project", "no-file"):
+        environment = claude_environment(worktree, trust=trust)
+        answer = _preflight_with(worktree, "--worktree", str(worktree), env=environment)
+        if answer != {"status": "disabled", "reason": "project_untrusted"}:
+            _fail("external trust", f"unexpected answer {answer}")
+    environment = claude_environment(worktree)
+    answer = effective_answer(
+        "external",
+        lambda: _preflight_with(worktree, "--worktree", str(worktree), env=environment),
+    )
+    if answer == {"status": "ok"}:
+        _verify_guard_decisions(worktree)
+        _verify_red_evidence(worktree)
+        verify_cycle(worktree, _runner_execute(worktree))
+        from scripts.clean_room.claude_probe import verify_worker_cycle
+
+        verify_worker_cycle(main, worktree)
+    elif os.environ.get("HARNESS_REQUIRE_TEST_SANDBOX") == "1":
+        _fail("external isolation", f"preflight refused: {answer}")
+    else:
+        if _hook(worktree, "--probe").get("status") == "ok":
+            _fail("external preflight", f"unexpected refusal: {answer}")
+        print(
+            f"full-route worktree: protected author unavailable ({answer.get('reason')})",
+            flush=True,
+        )
+    ensure_unchanged("external end", main, before)

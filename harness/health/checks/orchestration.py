@@ -20,7 +20,11 @@ Every check only reads state: ledger records, `git worktree list --porcelain`, a
 
 from __future__ import annotations
 
+import hashlib
+import shutil
+import subprocess
 import sys
+from contextlib import nullcontext
 from pathlib import Path
 
 from harness.configuration import read_config_json
@@ -52,37 +56,58 @@ class _LedgerState:
     """One read of the lifecycle ledger, shared by the ledger-backed checks in this module so
     none of them repeats the same pointer/generation resolution and error handling.
 
-    Only calls read-only `LifecycleLedger` methods (`status`, `records_root`,
-    `read_record_lenient`) -- it never writes, migrates, or resets the ledger."""
+    Materializes records inside the coordinator's read-only state view, so the same checks work
+    with a file ledger and with the runtime store. Nothing reads a virtual store path after the
+    view closes, and an unavailable runtime never falls back to the old generation."""
 
     def __init__(self, repo: Path) -> None:
         from harness.orchestration.core.constants import STATE_REL
-        from harness.orchestration.ledger.lifecycle import LedgerError, LifecycleLedger
+        from harness.orchestration.core import state_view
+        from harness.orchestration.ledger.ledger_ops import read_state
+        from harness.orchestration.ledger.lifecycle import (
+            LedgerError,
+            LifecycleLedger,
+            store_is_authority,
+        )
 
         self.ledger = LifecycleLedger(repo / STATE_REL)
         self.error: str | None = None
+        # The runtime error code behind `error`, so a check can tell an unavailable runtime.
+        self.error_code: str | None = None
         self.status: JsonObject = {}
         self.batches: list[JsonObject] = []
+        self.dispatch_statuses: dict[str, JsonObject] = {}
         self.records_root: Path | None = None
         try:
-            self.status = self.ledger.status()
-        except LedgerError as exc:
+            # File health stays lock-free and never initializes an empty state directory.
+            reader = (
+                read_state(self.ledger, repo)
+                if store_is_authority(self.ledger.root)
+                else nullcontext()
+            )
+            with reader:
+                self.status = self.ledger.status()
+                if self.needs_migration:
+                    return
+                if (
+                    self.status.get("generation") is None
+                    and self.status.get("authority") != "runtime-store"
+                ):
+                    return
+                root = self.ledger.records_root()
+                self.records_root = root
+                for path in state_view.glob(root / "batches", "*.json"):
+                    record = LifecycleLedger.read_record_lenient(path)
+                    if record is not None:
+                        self.batches.append(record)
+                for path in state_view.glob(root / "dispatch-status", "*.json"):
+                    record = LifecycleLedger.read_record_lenient(path)
+                    if record is not None:
+                        self.dispatch_statuses[path.stem] = record
+        except (LedgerError, HarnessError) as exc:
             self.error = str(exc)
-            return
-        if self.status.get("legacy") or self.status.get("stale_schema"):
-            return
-        if self.status.get("generation") is None:
-            return
-        try:
-            root = self.ledger.records_root()
-        except LedgerError as exc:
-            self.error = str(exc)
-            return
-        self.records_root = root
-        for path in sorted((root / "batches").glob("*.json")):
-            record = LifecycleLedger.read_record_lenient(path)
-            if record is not None:
-                self.batches.append(record)
+            code = getattr(exc, "code", None)
+            self.error_code = code if isinstance(code, str) else None
 
     @property
     def unreadable(self) -> bool:
@@ -91,6 +116,82 @@ class _LedgerState:
     @property
     def needs_migration(self) -> bool:
         return bool(self.status.get("legacy")) or bool(self.status.get("stale_schema"))
+
+
+# The same bound as the console's runtime probe (home_facts.RUNTIME_TIMEOUT_SECONDS); kept here
+# because the standalone health package imports no console module.
+_RUNTIME_TIMEOUT_SECONDS = 2.0
+
+
+def _serve_fix(context: HealthContext) -> Fix:
+    from harness.orchestration.runtime_client import serve_command
+
+    return Fix(
+        text="запустите runtime вне песочницы агента и держите его запущенным",
+        command=serve_command(context.repo),
+    )
+
+
+def _store_is_authority(repo: Path) -> bool:
+    from harness.orchestration.core.constants import STATE_REL
+    from harness.orchestration.ledger.lifecycle import store_is_authority
+
+    return store_is_authority(repo / STATE_REL)
+
+
+def check_runtime(context: HealthContext) -> CheckResult:
+    """Whether the runtime of a runtime-store repository answers one `status` request; it is
+    never started here. A file ledger needs no runtime, so the check is skipped."""
+    check_id = "orchestration.runtime"
+    if not context.orchestration_enabled():
+        return _skipped(check_id, context)
+    if not _store_is_authority(context.repo):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message="леджер файловый: runtime не нужен",
+        )
+    from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+
+    try:
+        client = RuntimeClient(context.repo)
+        reply = client.call(
+            "status",
+            operation_id=f"health-status-{client.paths.repo_id}",
+            timeout_seconds=_RUNTIME_TIMEOUT_SECONDS,
+        )
+    except RuntimeClientError as error:
+        if error.code == "runtime_unavailable":
+            return CheckResult(
+                id=check_id,
+                group="orchestration",
+                status="fail",
+                message=f"runtime не отвечает: {error}",
+                fix=_serve_fix(context),
+            )
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message=f"runtime отказал ({error.code}): {error}",
+            fix=Fix(text=error.remedy),
+        )
+    protocol = reply.hello.get("protocol")
+    version = (
+        f"{protocol.get('major')}.{protocol.get('minor')}"
+        if isinstance(protocol, dict)
+        else "?"
+    )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message=(
+            f"runtime работает: pid={reply.result.get('pid', '?')} "
+            f"server_version={reply.hello.get('server_version', '?')} протокол={version}"
+        ),
+    )
 
 
 def check_ledger_summary(context: HealthContext) -> CheckResult:
@@ -104,6 +205,7 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
             group="orchestration",
             status="fail",
             message=f"леджер оркестрации недоступен: {state.error}",
+            fix=_serve_fix(context) if state.error_code == "runtime_unavailable" else None,
         )
     if state.needs_migration:
         return CheckResult(
@@ -113,12 +215,18 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
             message=_MIGRATION_MESSAGE,
             fix=_migration_fix(context),
         )
-    if state.status.get("generation") is None:
+    if state.records_root is None:
+        from harness.orchestration.runtime_client import init_command
+
         return CheckResult(
             id=check_id,
             group="orchestration",
-            status="ok",
-            message="леджер оркестрации ещё не инициализирован (батчей нет)",
+            status="warn",
+            message="у проекта ещё нет runtime store оркестрации",
+            fix=Fix(
+                text="создайте runtime store: команду выполняет человек со своим approval",
+                command=init_command(context.repo),
+            ),
         )
     counts: dict[str, int] = {}
     for batch in state.batches:
@@ -132,12 +240,17 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
         if counts
         else "батчей нет"
     )
+    location = (
+        "authority=runtime-store"
+        if state.status.get("authority") == "runtime-store"
+        else f"generation={state.status['generation']}"
+    )
     return CheckResult(
         id=check_id,
         group="orchestration",
         status="ok",
         message=(
-            f"леджер: generation={state.status['generation']} "
+            f"леджер: {location} "
             f"schema_version={state.status['version']}; батчи по состояниям: {counts_text}"
         ),
     )
@@ -185,13 +298,9 @@ def check_unfinished_batches(context: HealthContext) -> CheckResult:
             message=_MIGRATION_MESSAGE,
             fix=_migration_fix(context),
         )
-    from harness.orchestration.core.constants import TERMINAL_BATCH_STATES
+    from harness.orchestration.ledger.recovery_chain import terminal
 
-    unfinished = [
-        batch
-        for batch in state.batches
-        if batch.get("state") not in TERMINAL_BATCH_STATES
-    ]
+    unfinished = [batch for batch in state.batches if not terminal(batch)]
     if not unfinished:
         return CheckResult(
             id=check_id,
@@ -312,18 +421,14 @@ def check_stale_dispatches(context: HealthContext) -> CheckResult:
             status="ok",
             message="леджер оркестрации ещё не инициализирован (диспатчей нет)",
         )
-    from harness.orchestration.core.constants import (
-        LIVE_DISPATCH_STATES,
-        TERMINAL_BATCH_STATES,
-    )
+    from harness.orchestration.core.constants import LIVE_DISPATCH_STATES
     from harness.orchestration.core.utils import CoordinatorError, _silent_seconds
-    from harness.orchestration.ledger.lifecycle import LifecycleLedger
+    from harness.orchestration.ledger.recovery_chain import terminal
 
     threshold = _attention_policy_threshold(context.repo)
-    root = state.records_root
     stale: list[str] = []
     for batch in state.batches:
-        if batch.get("state") in TERMINAL_BATCH_STATES:
+        if terminal(batch):
             continue
         entries = batch.get("dispatches")
         if not isinstance(entries, list):
@@ -334,9 +439,7 @@ def check_stale_dispatches(context: HealthContext) -> CheckResult:
             dispatch_id = entry.get("dispatch_id")
             if not isinstance(dispatch_id, str):
                 continue
-            status = LifecycleLedger.read_record_lenient(
-                root / "dispatch-status" / f"{dispatch_id}.json"
-            )
+            status = state.dispatch_statuses.get(dispatch_id)
             if status is None or status.get("state") not in LIVE_DISPATCH_STATES:
                 continue
             try:
@@ -385,7 +488,11 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
     check_id = "orchestration.orphaned_worktrees"
     if not context.orchestration_enabled():
         return _skipped(check_id, context)
-    from harness.cleanup import _active_worktrees, _registered_worktrees
+    from harness.cleanup import (
+        _active_worktrees,
+        _registered_worktrees,
+        sandbox_residue,
+    )
     from harness.storage import sandboxes_root, storage_root
 
     repo = context.repo
@@ -402,6 +509,7 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
     known = set(registered) | active
     worktree_dirs = [sandboxes_root(repo) / "worktrees", root / "worktrees"]
     candidates: list[Path] = []
+    residue: list[Path] = []
     seen: set[Path] = set()
     for worktrees in worktree_dirs:
         if not worktrees.is_dir() or worktrees.is_symlink():
@@ -413,20 +521,30 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
             if resolved in known or resolved in seen:
                 continue
             seen.add(resolved)
-            candidates.append(entry)
+            (residue if sandbox_residue(entry) else candidates).append(entry)
+    # An empty directory is not a worktree: the sandbox of a live session recreates it (#1194).
+    residue_note = (
+        "; пустые каталоги без worktree (песочница сессии создаёт их заново до её конца,"
+        " после конца сессии их удаляет harness cleanup --mode hard): "
+        + "; ".join(str(path) for path in residue)
+        if residue
+        else ""
+    )
     if not candidates:
         return CheckResult(
             id=check_id,
             group="orchestration",
             status="ok",
-            message="осиротевших воркдеревьев нет",
+            message="осиротевших воркдеревьев нет" + residue_note,
         )
     described = [f"{path} (owner={_owner(path)})" for path in candidates]
     return CheckResult(
         id=check_id,
         group="orchestration",
         status="warn",
-        message="осиротевшие каталоги воркдеревьев: " + "; ".join(described),
+        message="осиротевшие каталоги воркдеревьев: "
+        + "; ".join(described)
+        + residue_note,
         fix=Fix(
             text="ничего не удалено; сначала git worktree prune, затем предпросмотр harness cleanup",
             command=context.harness_command("cleanup", str(repo), "--mode", "hard"),
@@ -492,4 +610,356 @@ def check_disposable_data(context: HealthContext) -> CheckResult:
             f"одноразовых данных на {_human_size(total)} (информация, ничего не удалено); "
             f"предпросмотр очистки: {preview}"
         ),
+    )
+
+
+_ADAPTERS = (".harness/adapters/claude_worker.py", ".harness/adapters/codex_worker.py")
+
+
+def check_adapters(context: HealthContext) -> CheckResult:
+    """Whether the external adapters on disk are the ones the installed harness version shipped:
+    the sha256 of each must equal its hash in `.harness/harness.lock`."""
+    check_id = "orchestration.adapters"
+    if not context.orchestration_enabled() or context.lock is None:
+        return _skipped(check_id, context)
+    version = context.lock.get("package_version", "?")
+    hashes = context.lock.get("files")
+    problems: list[str] = []
+    for relative in _ADAPTERS:
+        expected = hashes.get(relative) if isinstance(hashes, dict) else None
+        path = context.repo / relative
+        if not isinstance(expected, str) or not path.is_file():
+            problems.append(f"адаптер {relative} не установлен")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+            problems.append(f"адаптер {relative} не совпадает с версией harness {version}")
+    if problems:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message="; ".join(problems),
+            fix=Fix(
+                text="переустановите адаптеры текущей версии harness",
+                command=context.harness_command("update", str(context.repo)),
+            ),
+        )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message=f"адаптеры claude и codex совпадают с версией harness {version}",
+    )
+
+
+_WORKER_BINARIES = ("claude", "codex")
+
+
+_IMAGE_TIMEOUT_SECONDS = 10
+
+
+def _external_needs(repo: Path) -> tuple[set[str], dict[str, set[str]]]:
+    """What the external roles run by default: the worker binaries of the host roles (the
+    `default_runtime` of a role, else every runtime it names), and the images by engine of the
+    roles the container executor runs (#1125). A container role needs no host binary."""
+    from harness.orchestration.contract import role_access_authored
+
+    try:
+        config = read_config_json(repo / ".harness" / "orchestration.json")
+    except (OSError, ValueError):
+        config = None
+    if not isinstance(config, dict):
+        return set(), {}
+    plans = config.get("assignment_plans")
+    extensions = config.get("extensions")
+    policy = config.get("access_policy")
+    docker = isinstance(extensions, dict) and extensions.get("runtime_access") == "docker"
+    binaries: set[str] = set()
+    images: dict[str, set[str]] = {}
+    for role, plan in plans.items() if isinstance(plans, dict) else ():
+        if not isinstance(plan, dict) or plan.get("transport") != "external":
+            continue
+        if docker and role_access_authored(policy, role):
+            container = _role_container(policy, role)
+            engine = container.get("engine", "docker")
+            tags = images.setdefault(str(engine), set())
+            tags.update(
+                str(container[key])
+                for key in ("worker_image", "proxy_image")
+                if isinstance(container.get(key), str)
+            )
+            continue
+        runtimes = plan.get("runtimes")
+        default = plan.get("default_runtime")
+        names = (
+            [default]
+            if isinstance(default, str)
+            else list(runtimes)
+            if isinstance(runtimes, dict)
+            else []
+        )
+        binaries.update(name for name in names if name in _WORKER_BINARIES)
+    return binaries, images
+
+
+def _role_container(policy: object, role: str) -> dict[str, object]:
+    """The `container` component of ``role``: its own override replaces the default whole."""
+    if not isinstance(policy, dict):
+        return {}
+    layers = [policy.get("defaults")]
+    roles = policy.get("roles")
+    if isinstance(roles, dict):
+        layers.append(roles.get(role))
+    container: dict[str, object] = {}
+    for layer in layers:
+        if isinstance(layer, dict) and isinstance(layer.get("container"), dict):
+            container = layer["container"]
+    return container
+
+
+def _find_binary(name: str, search_path: str) -> str | None:
+    """`name` on the serve PATH; `claude` also in `~/.local/bin`, as its adapter looks (#1123)."""
+    found = shutil.which(name, path=search_path)
+    if found is None and name == "claude":
+        found = shutil.which(name, path=str(Path.home() / ".local" / "bin"))
+    return found
+
+
+def _image_present(engine: str, tag: str) -> bool:
+    """Whether the local image store of ``engine`` holds ``tag``; the check pulls nothing."""
+    try:
+        result = subprocess.run(
+            [engine, "image", "inspect", "--format", "{{.Id}}", tag],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=_IMAGE_TIMEOUT_SECONDS,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0
+
+
+def check_worker_binaries(context: HealthContext) -> CheckResult:
+    """Whether `claude` and `codex` resolve on the PATH of the `harness-runtime serve` environment,
+    where the supervised adapters look them up. A binary an external role needs is a failure.
+
+    A role the container executor runs needs the engine on that PATH and its images in the
+    engine's local store instead: the agent CLI lives in the worker image (#1125)."""
+    check_id = "orchestration.worker_binaries"
+    if not context.orchestration_enabled():
+        return _skipped(check_id, context)
+    if not _store_is_authority(context.repo):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message="леджер файловый: worker запускает адаптер в окружении координатора",
+        )
+    from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+
+    try:
+        client = RuntimeClient(context.repo)
+        reply = client.call(
+            "status",
+            operation_id=f"health-search-path-{client.paths.repo_id}",
+            timeout_seconds=_RUNTIME_TIMEOUT_SECONDS,
+        )
+    except RuntimeClientError as error:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message=f"runtime недоступен ({error.code}): см. orchestration.runtime",
+        )
+    search_path = reply.result.get("search_path")
+    if not isinstance(search_path, str):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="warn",
+            message="runtime не сообщает PATH: обновите и перезапустите serve",
+            fix=_serve_fix(context),
+        )
+    missing = [name for name in _WORKER_BINARIES if _find_binary(name, search_path) is None]
+    binaries, images = _external_needs(context.repo)
+    required = sorted(binaries.intersection(missing))
+    container_problems: list[str] = []
+    for engine, tags in sorted(images.items()):
+        engine_path = _find_binary(engine, search_path)
+        if engine_path is None:
+            container_problems.append(f"в PATH окружения serve нет движка {engine}")
+            continue
+        container_problems.extend(
+            f"в {engine} нет образа {tag}"
+            for tag in sorted(tags)
+            if not _image_present(engine_path, tag)
+        )
+    if container_problems:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message="роли в контейнере не запустятся: " + "; ".join(container_problems),
+            fix=Fix(
+                text="установите движок в PATH окружения serve и соберите образы по "
+                ".harness/instructions/container-executor.md; харнесс образы не собирает и не скачивает",
+                command=_serve_fix(context).command,
+            ),
+        )
+    if required:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="fail",
+            message=f"в PATH окружения serve нет {', '.join(required)} для ролей с "
+            "транспортом external",
+            fix=Fix(
+                text=f"установите {', '.join(required)} в PATH окружения serve и "
+                "перезапустите runtime",
+                command=_serve_fix(context).command,
+            ),
+        )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message="worker-бинарники в PATH окружения serve найдены"
+        if not missing
+        else f"в PATH окружения serve нет {', '.join(missing)}; роли с транспортом "
+        "external их не используют",
+    )
+
+
+_REBASER_FILES = (
+    ".harness/orchestration/roles/rebaser.md",
+    ".harness/orchestration/workflow/rebaser.py",
+)
+_REBASER_FALLBACK = "маршрут rebase недоступен, сдвинутую базу ведёт developer-retry rebase-fix-forward"
+_REBASER_STORE_NOTE = "store harness-runtime должен быть собран из той же версии"
+
+
+def _pinned_without_rebaser(repo: Path) -> list[str]:
+    """Unfinished batches pinned to a runtime snapshot that ships no rebaser route.
+
+    Only reads: the snapshot is neither re-hashed nor rewritten. An unreadable ledger or one that
+    needs a migration yields nothing here; the ledger checks report it themselves."""
+    state = _LedgerState(repo)
+    if state.unreadable or state.needs_migration or not state.batches:
+        return []
+    from harness.orchestration.core import workspace
+    from harness.orchestration.core.constants import STATE_REL
+    from harness.orchestration.ledger.recovery_chain import effective_runtime, terminal
+
+    unfinished = [batch for batch in state.batches if not terminal(batch)]
+    if not unfinished:
+        return []
+    installed = workspace._runtime_hashes(workspace._runtime_snapshot_root(repo).parent)
+    state_root = (repo / STATE_REL).resolve()
+    described: list[str] = []
+    for batch in sorted(unfinished, key=lambda batch: str(batch.get("batch_id", ""))):
+        pin = effective_runtime(batch)
+        if not isinstance(pin, str) or pin in installed:
+            continue
+        snapshot = workspace._pinned_runtime_dir(state_root, pin) / "harness" / "orchestration"
+        batch_id = str(batch.get("batch_id", "?"))
+        if not snapshot.is_dir():
+            described.append(f"{batch_id} (snapshot не найден)")
+        elif not (
+            (snapshot / "roles" / "rebaser.md").is_file()
+            and (snapshot / "workflow" / "rebaser.py").is_file()
+        ):
+            described.append(batch_id)
+    return described
+
+
+def check_rebaser_route(context: HealthContext) -> CheckResult:
+    """Whether the rebase route of ADR 0034 can run: the rebaser role and its workflow are
+    installed, and the project either assigns no role (zero-config) or assigns the rebaser.
+
+    A missing role is a warning, never a failure: the developer rebase-fix-forward route stays.
+    The lock tells a version that does not ship the role from local drift of an installation that
+    did; a plain `harness update` restores a deleted managed file in both cases (clean-room
+    backend_orchestration checks it). Unfinished batches pinned to a snapshot without the rebaser are listed as information;
+    their snapshots are not rewritten."""
+    check_id = "orchestration.rebaser_route"
+    if not context.orchestration_enabled() or context.lock is None:
+        return _skipped(check_id, context)
+    version = context.lock.get("package_version", "?")
+    shipped = context.lock.get("files")
+    shipped = shipped if isinstance(shipped, dict) else {}
+    missing = [relative for relative in _REBASER_FILES if not (context.repo / relative).is_file()]
+    if missing:
+        drifted = [relative for relative in missing if relative in shipped]
+        if drifted:
+            return CheckResult(
+                id=check_id,
+                group="orchestration",
+                status="warn",
+                message=f"роль rebaser не установлена: {', '.join(drifted)} отсутствует, хотя "
+                f"harness {version} его поставил — локальное расхождение установки (см. "
+                f"files.skill_snapshot), а не дефект установщика; {_REBASER_FALLBACK}",
+                fix=Fix(
+                    text="восстановите управляемые файлы: обычный harness update возвращает "
+                    "удалённый управляемый файл установленной версии",
+                    command=context.harness_command("update", str(context.repo)),
+                ),
+            )
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="warn",
+            message=f"установленная версия harness {version} не поставляет роль rebaser; "
+            f"{_REBASER_FALLBACK}",
+            fix=Fix(
+                text="обновите harness до версии с ролью rebaser",
+                command=context.harness_command("update", str(context.repo)),
+            ),
+        )
+    try:
+        config = read_config_json(context.repo / ".harness" / "orchestration.json")
+    except (OSError, ValueError):
+        config = None
+    if not isinstance(config, dict):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message="конфигурация оркестрации не читается: см. files.orchestration_config",
+        )
+    from harness.orchestration.workflow import rebaser
+
+    reason = rebaser.availability(
+        context.repo / ".harness" / "orchestration" / "roles",
+        config,
+    )
+    pinned = _pinned_without_rebaser(context.repo)
+    pinned_note = (
+        f"; batch-и на закреплённом runtime без rebaser ({len(pinned)}): {', '.join(pinned)}; "
+        "они завершаются на rebase-fix-forward, snapshot не переписывается"
+        if pinned
+        else ""
+    )
+    if reason == rebaser.AVAILABLE_ZERO_CONFIG:
+        message = "роль rebaser доступна без настройки (zero-config): маршрут rebase работает"
+    elif reason == rebaser.AVAILABLE_ASSIGNED:
+        message = (
+            "роль rebaser назначена проектом (assignment_plans.rebaser): маршрут rebase работает"
+        )
+    else:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="warn",
+            message=f"проект назначает роли явно, но не rebaser: {_REBASER_FALLBACK}"
+            + pinned_note,
+            fix=Fix(
+                text="добавьте assignment_plans.rebaser по образцу "
+                ".harness/orchestration.example.json, когда нет живого dispatch"
+            ),
+        )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message=f"{message}; {_REBASER_STORE_NOTE}{pinned_note}",
     )

@@ -1,0 +1,984 @@
+"""The process supervisor of the runtime at seam 1: the coordinator CLI as its own process, the real
+``harness-runtime`` binary, and a fake foreground adapter (ADR 0021, sections 4 and 6; ADR 0022).
+
+Every test starts real processes; the fixture kills every process group the dispatch left."""
+
+from __future__ import annotations
+
+import json
+import os
+import signal
+import sqlite3
+import sys
+import time
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Protocol, cast
+
+import pytest
+
+from tests.orchestration.fake_clock import FakeClock
+from tests.orchestration.runtime_store_support import (
+    APPROVAL,
+    Supervised,
+    architect_report_file,
+    store_call,
+    store_records,
+)
+
+
+pytestmark = pytest.mark.skipif(
+    not sys.platform.startswith("linux"),
+    reason="the runtime supervises processes on Linux",
+)
+
+
+class Factory(Protocol):
+    def __call__(
+        self, *, timeout: int = ..., grace: int = ..., env: dict[str, str] | None = ...
+    ) -> Supervised: ...
+
+
+@pytest.fixture
+def supervised(tmp_path: Path) -> Iterator[Factory]:
+    made: list[Supervised] = []
+
+    def make(
+        *, timeout: int = 600, grace: int = 1, env: dict[str, str] | None = None
+    ) -> Supervised:
+        tmp = tmp_path / f"s{len(made)}"
+        tmp.mkdir()
+        repo = Supervised(
+            tmp, timeout=timeout, grace=grace, env=env, clock=FakeClock(tmp)
+        )
+        made.append(repo)
+        return repo
+
+    yield make
+    for repo in made:
+        repo.close()
+
+
+# The deadline and the grace of a supervised dispatch: far longer than a test runs, so only
+# ``past`` moves an execution across them, never a slow machine.
+DEADLINE = 300
+GRACE = 120
+
+
+def past(repo: Supervised, seconds: float) -> None:
+    """Move the clock of the runtime and its CLI processes ``seconds`` forward: a deadline or a
+    grace passes without the test waiting for it."""
+    clock = repo.runtime.clock
+    assert clock is not None
+    clock.advance(seconds)
+
+
+def reconciled(repo: Supervised, passes: int = 1) -> None:
+    """Move the clock past the periodic reconcile ``passes`` times and wait for each pass: the
+    point where anything the runtime does on its own, such as a second launch, would be done."""
+    clock = repo.runtime.clock
+    assert clock is not None
+    for _ in range(passes):
+        done = repo.runtime.traced("reconciled")
+        clock.advance(1)
+        repo.runtime.wait_trace("reconciled", done + 1)
+
+
+def alive(pid: int) -> bool:
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return stat.rsplit(")", 1)[1].split()[0] not in {"Z", "X"}
+
+
+def dig(value: object, *keys: str) -> object:
+    """The member at ``keys`` of nested JSON objects."""
+    for key in keys:
+        assert isinstance(value, dict), value
+        value = value[key]
+    return value
+
+
+def sent(result: object) -> dict[str, object]:
+    assert getattr(result, "returncode") == 0, getattr(result, "stderr")
+    answer: dict[str, object] = json.loads(getattr(result, "stdout"))
+    return answer
+
+
+def test_dispatch_send_launches_once_from_the_runtime_and_a_repeat_returns_the_same_receipt(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+
+    first = sent(repo.send())
+    second = sent(repo.send())
+
+    assert first["execution"] == second["execution"]
+    (launch,) = repo.wait_launches(1)
+    assert launch.ppid == repo.runtime.process.pid
+    assert launch.pgid == launch.pid
+    assert launch.operation_id == dig(repo.execution(), "execution_id")
+    reconciled(repo)
+    assert len(repo.launches()) == 1
+    assert repo.status()["state"] == "dispatched"
+
+
+def proc_start_time(pid: int) -> str:
+    return (
+        Path(f"/proc/{pid}/stat")
+        .read_text(encoding="utf-8")
+        .rsplit(")", 1)[1]
+        .split()[19]
+    )
+
+
+def test_the_receipt_names_the_boot_the_pid_namespace_the_pid_and_the_start_time(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+
+    receipt = sent(repo.send())["execution"]
+
+    (launch,) = repo.wait_launches(1)
+    assert dig(receipt, "identity", "pid") == launch.pid == dig(receipt, "pgid")
+    assert dig(receipt, "identity", "start_time") == proc_start_time(launch.pid)
+    boot_id = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+    assert dig(receipt, "identity", "boot_id") == boot_id
+    assert dig(receipt, "identity", "pid_namespace") == os.readlink(
+        f"/proc/{launch.pid}/ns/pid"
+    )
+    assert dig(receipt, "accounting") == "process-group"
+    assert dig(receipt, "adopted") is False
+
+
+@pytest.mark.parametrize(
+    "variable", ["HARNESS_RUNTIME_TEST_BOOT_ID", "HARNESS_RUNTIME_TEST_PID_NAMESPACE"]
+)
+def test_an_execution_seen_from_another_boot_or_pid_namespace_stays_unknown_and_is_never_stopped(
+    supervised: Factory, variable: str
+) -> None:
+    repo = supervised(timeout=DEADLINE)
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+
+    repo.restart_runtime({variable: "elsewhere"})
+
+    execution = repo.wait_execution("unknown")
+    assert dig(execution, "lease", "released_at") is None
+    past(repo, DEADLINE + 1)  # past the deadline: an unknown execution is never stopped
+    reconciled(repo, 2)
+    assert repo.wait_execution("unknown")["exit"] is None
+    assert alive(launch.pid)
+    assert repo.execution_actions()[-1] == "execution-unknown"
+
+
+@pytest.mark.fault_injection
+def test_a_reused_pid_is_lost_and_the_live_process_is_never_signalled(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    repo.runtime.kill()
+    # Another process with another start time holds the recorded pid now.
+    with sqlite3.connect(repo.database) as db:
+        db.execute("UPDATE executions SET start_time = '1'")
+
+    repo.restart_runtime()
+
+    execution = repo.wait_execution("lost")
+    assert dig(execution, "observation", "verdict") == "owner-pid-reused"
+    assert dig(execution, "lease", "released_at") is not None
+    assert alive(launch.pid)
+
+
+def test_the_execution_moves_from_launching_through_running_and_stopping_to_exited(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    sent(repo.send())
+    repo.wait_launches(1)
+
+    past(repo, DEADLINE + 1)
+    repo.wait_execution("exited")
+
+    assert repo.execution_actions() == [
+        "execution-launching",
+        "execution-running",
+        "execution-stopping",
+        "execution-exited",
+    ]
+    assert repo.rows(
+        "SELECT execution_state FROM dispatch_status WHERE id = ?", repo.dispatch
+    ) == [("exited",)]
+
+
+def test_dispatch_status_of_a_batch_shows_the_execution_the_runtime_observes(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    sent(repo.send())
+    repo.wait_launches(1)
+    repo.wait_execution("running")
+
+    viewed = repo.run("dispatch", "status", "--batch", repo.batch)
+
+    assert viewed.returncode == 0, viewed.stderr
+    (entry,) = cast(list[object], dig(json.loads(viewed.stdout), "dispatches"))
+    assert dig(entry, "dispatch_id") == repo.dispatch
+    assert dig(entry, "execution", "state") == "running"
+
+
+@pytest.mark.parametrize("ignores_term", [False, True], ids=["obeys", "ignores"])
+def test_a_deadline_stop_signals_the_group_and_releases_the_lease_only_after_the_exit(
+    supervised: Factory, ignores_term: bool
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    if ignores_term:
+        repo.ignore_term()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+
+    past(repo, DEADLINE + 1)
+    if ignores_term:
+        stopping = repo.wait_execution("stopping")
+        assert dig(stopping, "lease", "released_at") is None
+        assert alive(launch.pid)
+        past(repo, GRACE)
+    exited = repo.wait_execution("exited")
+
+    assert dig(exited, "exit", "stopped_by") == "deadline"
+    assert dig(exited, "exit", "signal") == (9 if ignores_term else 15)
+    assert (dig(exited, "exit", "kill_sent_at") is not None) is ignores_term
+    assert dig(exited, "lease", "released_at") is not None
+    assert not alive(launch.pid)
+
+
+def test_a_stop_begun_before_a_runtime_restart_is_driven_to_its_proof_by_reconcile(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    repo.ignore_term()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    past(repo, DEADLINE + 1)
+    stopping = repo.wait_execution("stopping")
+
+    # The runtime dies after SIGTERM and before SIGKILL; the worker ignores SIGTERM.
+    repo.restart_runtime()
+
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
+    assert dig(exited, "exit", "stopped_by") == "deadline"
+    assert dig(exited, "exit", "source") == "stop-observed"
+    assert dig(exited, "exit", "term_sent_at") == dig(
+        stopping, "observation", "term_sent_at"
+    )
+    assert dig(exited, "exit", "kill_sent_at") is not None
+    assert dig(exited, "lease", "released_at") is not None
+    assert not alive(launch.pid)
+    assert repo.execution_actions() == [
+        "execution-launching",
+        "execution-running",
+        "execution-stopping",
+        "execution-exited",
+    ]
+
+
+@pytest.mark.fault_injection
+def test_an_orphan_worker_of_a_killed_runtime_is_supervised_by_its_successor_until_the_deadline(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    repo.ignore_term()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    repo.wait_execution("running")
+
+    # The runtime dies while its worker runs, long before the deadline: the worker outlives it as
+    # an orphan, and only the successor can stop it.
+    repo.runtime.kill()
+    assert alive(launch.pid)
+    assert repo.rows(
+        "SELECT state FROM executions WHERE dispatch_id = ?", repo.dispatch
+    ) == [("running",)]
+    repo.restart_runtime()
+
+    past(repo, DEADLINE + 1)
+    stopping = repo.wait_execution("stopping")
+    assert dig(stopping, "lease", "released_at") is None
+    assert alive(launch.pid)
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
+    assert dig(exited, "exit", "stopped_by") == "deadline"
+    assert dig(exited, "lease", "released_at") is not None
+    assert not alive(launch.pid)
+    assert len(repo.launches()) == 1
+    assert repo.execution_actions() == [
+        "execution-launching",
+        "execution-running",
+        "execution-stopping",
+        "execution-exited",
+    ]
+
+
+def test_a_stop_resumed_within_its_grace_sends_sigterm_again(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    repo.count_term()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    past(repo, DEADLINE + 1)
+    repo.wait_execution("stopping")
+    assert repo.wait_terms(1) == 1
+
+    repo.restart_runtime()
+
+    assert repo.wait_terms(2) == 2
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
+    assert dig(exited, "exit", "kill_sent_at") is not None
+    assert not alive(launch.pid)
+
+
+def test_a_runtime_killed_after_the_sigterm_and_before_its_record_stops_the_execution_again(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        timeout=DEADLINE,
+        grace=GRACE,
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.stop:signalled"},
+    )
+    repo.count_term()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    past(repo, DEADLINE + 1)
+    repo.runtime.wait_paused("execution.stop:signalled")
+    assert repo.wait_terms(1) == 1
+
+    # The SIGTERM went out, its record did not: the row still says running.
+    assert repo.rows(
+        "SELECT state FROM executions WHERE dispatch_id = ?", repo.dispatch
+    ) == [("running",)]
+    repo.restart_runtime()
+
+    assert repo.wait_terms(2) == 2
+    past(repo, GRACE)
+    exited = repo.wait_execution("exited")
+    assert repo.terms() == 2
+    assert dig(exited, "exit", "stopped_by") == "deadline"
+    assert not alive(launch.pid)
+    assert repo.execution_actions() == [
+        "execution-launching",
+        "execution-running",
+        "execution-stopping",
+        "execution-exited",
+    ]
+
+
+def wait_zombie(pid: int, timeout: float = 30.0) -> None:
+    deadline = time.monotonic() + timeout
+    state = ""
+    while time.monotonic() < deadline:
+        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
+        state = stat.rsplit(")", 1)[1].split()[0]
+        if state == "Z":
+            return
+        time.sleep(0.05)
+    pytest.fail(f"the process {pid} is no zombie: {state!r}")
+
+
+def holds(pid: int, start_time: str) -> bool:
+    """Whether the process that started at ``start_time`` still holds ``pid``, a zombie included."""
+    try:
+        return proc_start_time(pid) == start_time
+    except OSError:
+        return False
+
+
+def test_a_refused_stopping_record_after_the_sigterm_is_retried_and_the_child_is_reaped(
+    supervised: Factory,
+) -> None:
+    step = "execution.stop:stopping"
+    repo = supervised(
+        timeout=DEADLINE,
+        grace=GRACE,
+        env={
+            "HARNESS_RUNTIME_TEST_PAUSE_AT": step,
+            "HARNESS_RUNTIME_TEST_FAIL_AT": step,
+        },
+    )
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    past(repo, DEADLINE + 1)
+    repo.runtime.wait_paused(step)
+
+    # The SIGTERM ended the leader; its record is not written, and nothing reaped the leader.
+    wait_zombie(launch.pid)
+    start_time = proc_start_time(launch.pid)
+    assert repo.rows(
+        "SELECT state FROM executions WHERE dispatch_id = ?", repo.dispatch
+    ) == [("running",)]
+    # The first record of the stop gets a repeatable refusal; the stop repeats it.
+    repo.runtime.resume()
+
+    exited = repo.wait_execution("exited")
+    assert dig(exited, "exit", "source") == "wait-status"
+    assert dig(exited, "exit", "signal") == 15
+    assert dig(exited, "exit", "kill_sent_at") is None
+    assert dig(exited, "lease", "released_at") is not None
+    assert not holds(launch.pid, start_time)
+    assert repo.execution_actions() == [
+        "execution-launching",
+        "execution-running",
+        "execution-stopping",
+        "execution-exited",
+    ]
+
+
+def test_an_adopted_leader_that_exits_before_its_group_keeps_the_lease_until_the_group_ends(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    repo.add_member()
+    sent(repo.send())
+    (launch,) = repo.wait_launches(1)
+    member = repo.member()
+    repo.restart_runtime()
+
+    repo.release(0)
+    deadline = time.monotonic() + 30
+    while alive(launch.pid) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert not alive(launch.pid)
+    # Reconcile observes the adopted execution every second: a whole pass after the exit.
+    reconciled(repo, 2)
+
+    running = repo.execution()
+    assert running is not None and running["state"] == "running", running
+    assert dig(running, "lease", "released_at") is None
+    assert alive(member)
+    repo.release_member()
+    lost = repo.wait_execution("lost", timeout=20)
+    assert dig(lost, "lease", "released_at") is not None
+    assert repo.execution_actions() == [
+        "execution-launching",
+        "execution-running",
+        "execution-lost",
+    ]
+
+
+@pytest.mark.fault_injection
+def test_a_lost_response_after_the_receipt_is_answered_from_the_stored_receipt_with_one_launch(
+    supervised: Factory,
+) -> None:
+    repo = supervised(env={"HARNESS_RUNTIME_TEST_FAIL_AT": "execution.launch:respond"})
+
+    answer = sent(repo.send())
+
+    # The runtime committed the launch and dropped its response: without the fault the test fails.
+    repo.runtime.wait_injected("execution.launch:respond")
+    assert dig(answer, "execution", "state") == "running"
+    assert repo.rows(
+        "SELECT state FROM operations WHERE operation = 'execution.launch'"
+    ) == [("committed",)]
+    assert len(repo.wait_launches(1)) == 1
+    reconciled(repo)
+    assert len(repo.launches()) == 1
+
+
+@pytest.mark.fault_injection
+def test_a_runtime_killed_between_launch_and_receipt_adopts_the_process_without_a_second_launch(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:launched"}
+    )
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:launched")
+    (launch,) = repo.wait_launches(1)
+
+    repo.restart_runtime()
+    out, err = send.communicate(timeout=60)
+
+    assert send.returncode == 0, err
+    receipt = json.loads(out)["execution"]
+    assert dig(receipt, "adopted") is True
+    assert dig(receipt, "identity", "pid") == launch.pid
+    assert len(repo.launches()) == 1
+    assert (
+        dig(repo.execution(), "lease", "owner", "identity", "pid")
+        == repo.runtime.process.pid
+    )
+
+
+def test_self_report_after_an_adopted_launch_moves_the_dispatch_to_working(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:launched"}
+    )
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:launched")
+    repo.wait_launches(1)
+    repo.restart_runtime()
+    out, _ = send.communicate(timeout=60)
+    worktree = json.loads(out)["worker_worktree"]
+
+    reported = repo.run(
+        "dispatch",
+        "self-report",
+        "--dispatch",
+        repo.dispatch,
+        "--model",
+        "sonnet",
+        "--worktree",
+        worktree,
+    )
+
+    assert reported.returncode == 0, reported.stderr
+    assert repo.status()["state"] == "working"
+    assert dig(repo.execution(), "state") == "running"
+
+
+def test_the_intent_is_committed_before_the_process_starts(supervised: Factory) -> None:
+    repo = supervised(env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:intent"})
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:intent")
+
+    assert repo.rows("SELECT state FROM executions") == [("launching",)]
+    assert repo.rows(
+        "SELECT state FROM operations WHERE operation = 'execution.launch'"
+    ) == [("intent",)]
+    assert repo.launches() == []
+    repo.runtime.resume()
+    _, err = send.communicate(timeout=60)
+    assert send.returncode == 0, err
+    assert len(repo.wait_launches(1)) == 1
+
+
+def test_a_runtime_killed_before_the_launch_leaves_a_lost_execution_and_no_process(
+    supervised: Factory,
+) -> None:
+    repo = supervised(env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:intent"})
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:intent")
+
+    repo.restart_runtime()
+    _, err = send.communicate(timeout=60)
+
+    assert send.returncode == 2
+    assert "never relaunched" in err
+    assert dig(repo.execution(), "state") == "lost"
+    assert repo.rows(
+        "SELECT state FROM operations WHERE operation = 'execution.launch'"
+    ) == [("failed",)]
+    assert repo.launches() == []
+    assert repo.status()["state"] == "blocked"
+
+
+@pytest.mark.fault_injection
+def test_a_coordinator_killed_after_the_launch_intent_gets_the_same_receipt_on_repeat_with_one_launch(
+    supervised: Factory,
+) -> None:
+    if sys.platform == "win32":
+        pytest.skip("signal.SIGKILL is POSIX-only")
+    repo = supervised(env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:intent"})
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:intent")
+
+    # SIGKILL of the coordinator: the runtime holds the committed intent and goes on alone.
+    send.kill()
+    send.communicate(timeout=30)
+    assert send.returncode == -signal.SIGKILL
+    repo.runtime.resume()
+    receipt = sent(repo.send())["execution"]
+
+    execution_id = dig(repo.execution(), "execution_id")
+    (launch,) = repo.wait_launches(1)
+    assert launch.operation_id == execution_id
+    assert dig(receipt, "adopted") is False
+    assert dig(receipt, "identity", "pid") == launch.pid
+    assert repo.rows(
+        "SELECT operation_id, state FROM operations WHERE operation = 'execution.launch'"
+    ) == [(execution_id, "committed")]
+    reconciled(repo)
+    assert len(repo.launches()) == 1
+    assert repo.status()["state"] == "dispatched"
+
+
+def test_a_store_failure_before_the_launch_starts_nothing_and_a_repeat_launches_once(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        env={"HARNESS_RUNTIME_TEST_FAIL_AT": "execution.launch:in-transaction"}
+    )
+
+    failed = repo.send()
+
+    assert failed.returncode == 2
+    assert "repeat dispatch send" in failed.stderr
+    assert repo.rows("SELECT COUNT(*) FROM executions") == [(0,)]
+    assert repo.status()["state"] == "dispatched"
+    assert repo.launches() == []
+    sent(repo.send())
+    assert len(repo.wait_launches(1)) == 1
+
+
+def test_a_failed_receipt_write_keeps_the_intent_and_the_repeat_adopts_the_process(
+    supervised: Factory,
+) -> None:
+    # The periodic reconcile adopts a launch without its receipt at any second; it is stopped, so
+    # the test reads the state the failed write left and the repeat is what adopts the process.
+    repo = supervised(
+        env={
+            "HARNESS_RUNTIME_TEST_FAIL_AT": "execution.launch:receipt",
+            "HARNESS_RUNTIME_TEST_NO_RECONCILE": "1",
+        }
+    )
+
+    failed = repo.send()
+
+    assert failed.returncode == 2
+    assert "repeat dispatch send" in failed.stderr
+    assert repo.rows(
+        "SELECT state FROM operations WHERE operation = 'execution.launch'"
+    ) == [("intent",)]
+    assert len(repo.wait_launches(1)) == 1
+    receipt = sent(repo.send())["execution"]
+    assert dig(receipt, "adopted") is True
+    assert len(repo.launches()) == 1
+
+
+@pytest.mark.fault_injection
+def test_a_second_send_during_a_launch_returns_the_same_receipt(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:launched"}
+    )
+    first = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:launched")
+    second = repo.start_send()
+    # The second send waits for the mutex of the launch the first one holds.
+    repo.runtime.wait_trace("waiting", 1)
+
+    repo.runtime.resume()
+    answers = [process.communicate(timeout=60) for process in (first, second)]
+
+    assert [process.returncode for process in (first, second)] == [0, 0], answers
+    receipts = [dig(json.loads(out), "execution") for out, _ in answers]
+    assert receipts[0] == receipts[1]
+    assert len(repo.launches()) == 1
+
+
+def test_a_send_refused_before_the_intent_launches_once_on_repeat(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        env={"HARNESS_RUNTIME_TEST_FAIL_AT": "execution.launch:before-begin"}
+    )
+
+    failed = repo.send()
+
+    assert failed.returncode == 2
+    assert repo.rows(
+        "SELECT COUNT(*) FROM operations WHERE operation = 'execution.launch'"
+    ) == [(0,)]
+    sent(repo.send())
+    assert len(repo.wait_launches(1)) == 1
+
+
+def test_a_launch_the_os_refuses_is_a_failed_operation_and_blocks_the_dispatch(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    # A file that is no program: the OS refuses to execute it.
+    repo.adapter = repo.adapter.with_suffix("")
+    repo.adapter.write_text("not a program\n", encoding="utf-8")
+    repo.adapter.chmod(0o644)
+
+    failed = repo.send()
+
+    assert failed.returncode == 2
+    assert "could not launch the worker" in failed.stderr
+    status = repo.status()
+    assert status["state"] == "blocked"
+    assert dig(status, "runtime_failure", "worker_started") is False
+    execution = repo.execution()
+    assert execution is not None and execution["state"] == "lost"
+    assert repo.rows(
+        "SELECT state FROM operations WHERE operation = 'execution.launch'"
+    ) == [("failed",)]
+
+
+def test_a_cancel_of_a_running_execution_is_refused_until_its_stop_is_proven(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    sent(repo.send())
+    cancel = (
+        "dispatch",
+        "cancel",
+        "--dispatch",
+        repo.dispatch,
+        "--approved-by",
+        APPROVAL["approved_by"],
+        "--approved-at",
+        APPROVAL["approved_at"],
+        "--runtime-stopped",
+        "--reason",
+        "the work is not needed",
+    )
+
+    refused = repo.run(*cancel)
+
+    assert refused.returncode == 2
+    assert repo.status()["state"] == "dispatched"
+    repo.release()
+    repo.wait_execution("exited", timeout=20)
+    accepted = repo.run(*cancel)
+    assert accepted.returncode == 0, accepted.stderr
+    assert repo.status()["state"] == "cancelled"
+
+
+@pytest.mark.fault_injection
+def test_a_broken_audit_chain_refuses_the_launch_before_any_process_starts(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:before-begin"}
+    )
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:before-begin")
+    with sqlite3.connect(repo.database) as db:
+        db.execute(
+            "INSERT INTO audit (seq, at, action, details_json, record_sha256, prev_chain_sha256,"
+            " chain_sha256) SELECT MAX(seq) + 1, 't', 'transition', '{}', 'x', 'y', 'z' FROM audit"
+        )
+
+    repo.runtime.resume()
+    _, err = send.communicate(timeout=60)
+
+    assert send.returncode == 2
+    assert "invariant_violation" in err
+    # The refusal is not repeatable: the runtime's remedy, never the advice to repeat the send.
+    assert "repeat dispatch send" not in err
+    assert repo.rows("SELECT COUNT(*) FROM executions") == [(0,)]
+    assert repo.launches() == []
+
+
+def test_a_restart_writes_the_execution_rows_and_never_a_dispatch_state(
+    supervised: Factory,
+) -> None:
+    repo = supervised(
+        env={"HARNESS_RUNTIME_TEST_PAUSE_AT": "execution.launch:launched"}
+    )
+    send = repo.start_send()
+    repo.runtime.wait_paused("execution.launch:launched")
+    repo.wait_launches(1)
+    before = repo.rows("SELECT state, revision, body_json FROM dispatch_status")
+    (last,) = repo.rows("SELECT MAX(seq) FROM audit")
+
+    repo.restart_runtime()
+
+    assert repo.rows("SELECT state, revision, body_json FROM dispatch_status") == before
+    actions = [
+        a for (a,) in repo.rows("SELECT action FROM audit WHERE seq > ?", last[0])
+    ]
+    assert actions == ["execution-running"]
+    send.communicate(timeout=60)
+
+
+def test_a_restart_without_a_live_execution_changes_nothing(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    sent(repo.send())
+    repo.release(0)
+    repo.wait_execution("exited")
+    before = repo.rows("SELECT MAX(seq) FROM audit")
+
+    repo.restart_runtime()
+
+    assert repo.rows("SELECT MAX(seq) FROM audit") == before
+    assert dig(repo.execution(), "state") == "exited"
+
+
+def test_an_invalid_config_refuses_dispatch_send_before_any_launch_and_changes_nothing(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    (repo.repo / ".harness" / "orchestration.json").write_text("{", encoding="utf-8")
+    before = repo.rows("SELECT MAX(seq) FROM audit")
+
+    failed = repo.send()
+
+    assert failed.returncode == 2
+    assert repo.rows("SELECT MAX(seq) FROM audit") == before
+    assert repo.launches() == []
+
+
+def test_an_unknown_dispatch_is_refused_and_launches_nothing(
+    supervised: Factory,
+) -> None:
+    from harness.orchestration.runtime_client import RuntimeClientError
+
+    repo = supervised()
+    unknown = "dispatch-00000000-0000-4000-8000-000000000000"
+    before = repo.rows("SELECT MAX(seq) FROM audit")
+
+    failed = repo.run(
+        "dispatch", "send", "--dispatch", unknown, "--adapter", str(repo.adapter)
+    )
+    with pytest.raises(RuntimeClientError) as refused:
+        store_call(
+            repo.repo, repo.runtime, "execution.launch", {"dispatch_id": unknown}
+        )
+
+    assert failed.returncode == 2
+    assert refused.value.code == "not_found"
+    assert repo.rows("SELECT MAX(seq) FROM audit") == before
+    assert repo.launches() == []
+
+
+def _working(repo: Supervised) -> None:
+    worktree = dig(sent(repo.send()), "worker_worktree")
+    reported = repo.run(
+        "dispatch",
+        "self-report",
+        "--dispatch",
+        repo.dispatch,
+        "--model",
+        "sonnet",
+        "--worktree",
+        str(worktree),
+    )
+    assert reported.returncode == 0, reported.stderr
+
+
+def _status_of(repo: Supervised) -> object:
+    viewed = repo.run("dispatch", "status", "--dispatch", repo.dispatch)
+    assert viewed.returncode == 0, viewed.stderr
+    return dig(json.loads(viewed.stdout), "dispatches")
+
+
+def test_a_report_submitted_while_the_execution_runs_is_accepted_after_it_exits(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    _working(repo)
+    path = f"dispatches/{repo.dispatch}.json"
+    brief = store_records(repo.repo, repo.runtime, path)[path]
+
+    submitted = repo.run(
+        "report",
+        "submit",
+        "--file",
+        str(architect_report_file(repo.repo, repo.dispatch, brief)),
+    )
+
+    assert submitted.returncode == 0, submitted.stderr
+    answer = json.loads(submitted.stdout)
+    assert (answer["state"], answer["awaiting"]) == ("working", "execution-exit")
+    assert repo.status()["state"] == "working"
+    repo.release(0)
+    repo.wait_execution("exited")
+    _status_of(repo)
+    assert repo.status()["state"] == "reported"
+    assert "pending_report" not in repo.status()
+
+
+def test_an_execution_that_exits_without_a_report_blocks_the_dispatch_with_its_domain(
+    supervised: Factory,
+) -> None:
+    repo = supervised(timeout=DEADLINE, grace=GRACE)
+    _working(repo)
+    past(repo, DEADLINE + 1)
+    repo.wait_execution("exited")
+
+    (entry,) = cast(list[object], _status_of(repo))
+
+    status = repo.status()
+    assert status["state"] == "blocked"
+    assert dig(status, "runtime_failure", "kind") == "timeout"
+    assert dig(entry, "execution", "state") == "exited"
+
+
+def test_a_lost_execution_blocks_the_dispatch_as_infrastructure(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    _working(repo)
+    repo.runtime.kill()
+    with sqlite3.connect(repo.database) as db:
+        db.execute("UPDATE executions SET start_time = '1'")
+    repo.restart_runtime()
+
+    _status_of(repo)
+
+    status = repo.status()
+    assert status["state"] == "blocked"
+    assert dig(status, "runtime_failure", "kind") == "runtime-unavailable"
+    assert dig(status, "runtime_failure", "execution_state") == "lost"
+
+
+def test_a_report_submitted_before_the_execution_is_lost_stays_for_the_operator(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    _working(repo)
+    path = f"dispatches/{repo.dispatch}.json"
+    brief = store_records(repo.repo, repo.runtime, path)[path]
+    report = architect_report_file(repo.repo, repo.dispatch, brief)
+    submitted = repo.run("report", "submit", "--file", str(report))
+    assert submitted.returncode == 0, submitted.stderr
+    held = repo.status()["pending_report"]
+    repo.runtime.kill()
+    with sqlite3.connect(repo.database) as db:
+        db.execute("UPDATE executions SET start_time = '1'")
+    repo.restart_runtime()
+
+    (entry,) = cast(list[object], _status_of(repo))
+
+    status = repo.status()
+    assert status["state"] == "blocked"
+    assert dig(status, "runtime_failure", "execution_state") == "lost"
+    assert "pending_report" not in status
+    assert status["held_report"] == held
+    assert dig(entry, "held_report") == held
+
+
+def test_a_report_refused_after_the_exit_is_shown_in_dispatch_status(
+    supervised: Factory,
+) -> None:
+    repo = supervised()
+    _working(repo)
+    path = f"dispatches/{repo.dispatch}.json"
+    brief = store_records(repo.repo, repo.runtime, path)[path]
+    report = architect_report_file(repo.repo, repo.dispatch, brief)
+    submitted = repo.run("report", "submit", "--file", str(report))
+    assert submitted.returncode == 0, submitted.stderr
+    # The pinned configuration breaks after the report waits: recording it at the exit fails.
+    with sqlite3.connect(repo.database) as db:
+        (body,) = db.execute(
+            "SELECT body_json FROM dispatch WHERE id = ?", (repo.dispatch,)
+        ).fetchone()
+        stored = json.loads(body)
+        stored["orchestration_policy"]["configuration"]["canonical_sha256"] = "0" * 64
+        db.execute(
+            "UPDATE dispatch SET body_json = ? WHERE id = ?",
+            (json.dumps(stored), repo.dispatch),
+        )
+    repo.release(0)
+    repo.wait_execution("exited")
+
+    (entry,) = cast(list[object], _status_of(repo))
+
+    assert "pinned configuration" in cast(str, dig(entry, "reaction_error", "error"))
+    assert dig(entry, "reaction_error", "remedy")
+    status = repo.status()
+    assert status["state"] == "working"
+    assert "pending_report" in status

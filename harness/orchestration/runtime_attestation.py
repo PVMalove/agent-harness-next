@@ -11,6 +11,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..errors import HarnessError
+from .core.constants import (
+    ISSUE_WORKTREE_WRITER_ROLES as ISSUE_WORKTREE_WRITER_ROLES,
+    WORKER_ROLES_REQUIRING_ISSUE_WORKTREE as WORKER_ROLES_REQUIRING_ISSUE_WORKTREE,
+)
 
 # Local Git plumbing only; a slow disk or a huge repository is the worst expected case.
 GIT_TIMEOUT_SECONDS = 60
@@ -20,18 +24,6 @@ class AttestationError(HarnessError):
     """The runtime did not start in the immutable dispatch's Git context."""
 
 
-WORKER_ROLES_REQUIRING_ISSUE_WORKTREE = frozenset(
-    {
-        "architect",
-        "developer",
-        "conflict-resolver",
-        "database-migrations",
-        "messaging-integration",
-        "code-review",
-    }
-)
-# Roles that write in the issue worktree itself; other roles run in the checkout they select.
-ISSUE_WORKTREE_WRITER_ROLES = frozenset({"architect", "developer", "conflict-resolver"})
 
 
 def requires_attestation(dispatch: Mapping[str, object]) -> bool:
@@ -86,6 +78,33 @@ def _git(path: Path, *arguments: str) -> str:
     return result.stdout.strip()
 
 
+def _lost_worktree(repo: Path, checkout: Path, branch: object) -> AttestationError:
+    """The batch's issue worktree that git no longer lists, with the command that recreates it.
+
+    The branch outlives the worktree, so `git worktree add` over the missing or empty directory
+    restores it. The sandbox mounts `.git/worktrees` read-only, so the command runs outside it,
+    and a new worktree needs the session's write access again (#1189).
+    """
+    if not checkout.exists():
+        state = "is missing"
+    elif checkout.is_dir() and not any(checkout.iterdir()):
+        state = "is empty"
+    else:
+        state = "has no git metadata"
+    name = branch if isinstance(branch, str) and branch else "<issue-branch>"
+    return AttestationError(
+        f"the batch's issue worktree {checkout} is lost: it is not registered in "
+        f"git worktree list and the directory {state}",
+        remedy=(
+            "outside the agent sandbox, recreate it on the kept branch: "
+            f"git -C {repo.resolve()} worktree prune && "
+            f"git -C {repo.resolve()} worktree add {checkout} {name}; "
+            "then reopen the session write access (EnterWorktree with this path, ExitWorktree "
+            "with action keep) and repeat the command"
+        ),
+    )
+
+
 def _registered_worktrees(repo: Path) -> set[Path]:
     worktrees: set[Path] = set()
     for line in _git(repo, "worktree", "list", "--porcelain").splitlines():
@@ -106,23 +125,25 @@ def attest(repo: Path, dispatch: Mapping[str, object], worktree: str) -> dict[st
             remedy="start the worker in the batch's registered issue worktree and report its canonical top-level path",
         )
     expected_path = dispatch.get("worker_worktree")
-    if expected_path is None and dispatch.get("role") in {
-        "architect",
-        "developer",
-        "conflict-resolver",
-    }:
+    if (
+        expected_path is None
+        and dispatch.get("role") in ISSUE_WORKTREE_WRITER_ROLES
+    ):
         expected_path = dispatch.get("worktree")
     if isinstance(expected_path, str) and checkout != Path(expected_path).resolve():
         raise AttestationError(
             "runtime worktree path does not match the expected worker checkout",
             remedy=f"start the worker in {Path(expected_path).resolve()} and report that canonical top-level path",
         )
+    registered = _registered_worktrees(repo)
+    if isinstance(expected_path, str) and checkout not in registered:
+        raise _lost_worktree(repo, checkout, dispatch.get("branch"))
     if not checkout.is_dir():
         raise AttestationError(
             "reported worktree does not exist",
             remedy=f"report the real worktree path instead of {checkout}",
         )
-    if checkout not in _registered_worktrees(repo):
+    if checkout not in registered:
         raise AttestationError(
             "reported worktree is not registered by the dispatch repository",
             remedy=f"run 'git worktree add' for {checkout} or report the correct registered worktree",
@@ -149,7 +170,7 @@ def attest(repo: Path, dispatch: Mapping[str, object], worktree: str) -> dict[st
         )
     role = dispatch.get("role")
     branch = _git(checkout, "branch", "--show-current")
-    if role in {"architect", "developer", "conflict-resolver"}:
+    if role in ISSUE_WORKTREE_WRITER_ROLES:
         expected_branch = dispatch.get("branch")
         if not isinstance(expected_branch, str):
             raise AttestationError(

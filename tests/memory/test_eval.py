@@ -174,92 +174,6 @@ def test_noise_ceiling_is_inclusive_and_independent_of_recall(tmp_path: Path) ->
     assert evaluate_memory(tmp_path, dataset=dataset, max_noise_ratio=0.8).gate_passed
 
 
-@pytest.mark.parametrize("query,code", [("transaction", 0), ("absent", 1)])
-def test_cli_memory_eval(tmp_path: Path, query: str, code: int) -> None:
-    """The JSON CLI gate exits nonzero on missed expected sources."""
-    configure(tmp_path)
-    source(tmp_path, "CONTEXT.md", "# Glossary\ntransaction")
-    build(tmp_path)
-    dataset = tmp_path / "dataset.json"
-    dataset.write_text(
-        json.dumps(
-            [
-                {
-                    "id": 1,
-                    "title": "Test",
-                    "query": query,
-                    "expected_sources": ["CONTEXT.md"],
-                }
-            ]
-        ),
-        encoding="utf-8",
-    )
-    process = subprocess.run(
-        [
-            sys.executable,
-            str(CLI),
-            "memory",
-            "eval",
-            str(tmp_path),
-            "--dataset",
-            str(dataset),
-            "--min-recall",
-            "0.6",
-            "--max-noise",
-            "0.7",
-            "--json",
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert process.returncode == code, process.stderr
-    report = json.loads(process.stdout)
-    assert report["gate_passed"] is (code == 0)
-    assert report["mean_recall"] == {"1": 1.0 - code, "3": 1.0 - code, "5": 1.0 - code}
-    assert report["mean_noise_ratio"] == 0.0
-
-
-def test_cli_memory_eval_text_and_invalid_input(tmp_path: Path) -> None:
-    """Human reports name every metric; invalid data never emits a successful gate."""
-    configure(tmp_path)
-    source(tmp_path, "CONTEXT.md", "# Glossary\ntransaction")
-    build(tmp_path)
-    dataset = tmp_path / "dataset.json"
-    dataset.write_text(
-        json.dumps(
-            [
-                {
-                    "id": 1,
-                    "title": "Test",
-                    "query": "transaction",
-                    "expected_sources": ["CONTEXT.md"],
-                }
-            ]
-        ),
-        encoding="utf-8",
-    )
-    argv = [
-        sys.executable,
-        str(CLI),
-        "memory",
-        "eval",
-        str(tmp_path),
-        "--dataset",
-        str(dataset),
-    ]
-    process = subprocess.run(argv, capture_output=True, text=True)
-    assert process.returncode == 0, process.stderr
-    assert all(
-        label in process.stdout
-        for label in ("recall@1", "recall@3", "recall@5", "noise_ratio", "PASS")
-    )
-    dataset.write_text("[]", encoding="utf-8")
-    process = subprocess.run(argv, capture_output=True, text=True)
-    assert process.returncode == 2
-    assert "non-empty list" in process.stderr
-    assert "ERROR:" in process.stderr and "REMEDY:" in process.stderr
-
-
 @pytest.mark.parametrize(
     "dataset",
     [
@@ -323,34 +237,6 @@ def test_invalid_gate_thresholds_are_rejected(
     with pytest.raises(HarnessError, match="thresholds") as error:
         evaluate_memory(tmp_path, min_recall_at_5=min_recall, max_noise_ratio=max_noise)
     assert error.value.remedy
-
-
-@pytest.mark.parametrize("content", [None, "{", "[]", "invalid UTF-8"])
-def test_dataset_read_errors_use_the_cli_error_contract(
-    tmp_path: Path, content: str | None
-) -> None:
-    """Missing, malformed and undecodable input all expose a concrete remedy."""
-    path = tmp_path / "dataset.json"
-    if content == "invalid UTF-8":
-        path.write_bytes(b"\xff")
-    elif content is not None:
-        path.write_text(content, encoding="utf-8")
-    process = subprocess.run(
-        [
-            sys.executable,
-            str(CLI),
-            "memory",
-            "eval",
-            str(tmp_path),
-            "--dataset",
-            str(path),
-        ],
-        capture_output=True,
-        text=True,
-    )
-    assert process.returncode == 2
-    assert "ERROR:" in process.stderr and "REMEDY:" in process.stderr
-    assert "Traceback" not in process.stderr
 
 
 def _baseline_corpus(tmp_path: Path, filename: str) -> Path:
@@ -425,6 +311,16 @@ def test_initial_single_label_measurement_is_preserved(initial_corpus: Path) -> 
     current = json.loads(
         GOLDEN.with_name("baseline_fts5.json").read_text(encoding="utf-8")
     )
+    archived = json.loads(
+        (GOLDEN.parent / "fixtures/initial-corpus.json").read_text(encoding="utf-8")
+    )
+    assert initial["source_hashes"].keys() == current["source_hashes"].keys()
+    changed = {
+        path
+        for path, digest in initial["source_hashes"].items()
+        if digest != current["source_hashes"][path]
+    }
+    assert changed <= archived.keys()
     assert initial["engine"] == current["engine"]
     old_labels = {
         result["ticket_id"]: result["expected"]

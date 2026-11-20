@@ -1,0 +1,391 @@
+{
+  "context": [
+    [
+      "Worker",
+      "не создан"
+    ],
+    [
+      "QA",
+      "не создан"
+    ],
+    [
+      "Метки",
+      "не сообщаются"
+    ]
+  ],
+  "selection": {
+    "batch": "b-887",
+    "role": "developer",
+    "runtime": ""
+  },
+  "stages": {
+    "cleanup": {
+      "actions": [
+        {
+          "effect": "observe",
+          "enabled": true,
+          "key": "cleanup-preview",
+          "label": "Превью очистки",
+          "needs_confirmation": false,
+          "reason": ""
+        },
+        {
+          "effect": "delete",
+          "enabled": false,
+          "key": "cleanup-apply",
+          "label": "Применить показанный план",
+          "needs_confirmation": true,
+          "reason": "сначала выполните превью"
+        }
+      ],
+      "blockers": [],
+      "notes": [
+        "Живой worker не останавливается: harness его не останавливает, а остановка требует отдельной явной авторизации вне Cleanup. Чужие ресурсы не удаляются.",
+        "Превью строится ядром по меткам этого репозитория для всего репозитория, а не для одного dispatch; apply удаляет весь показанный план."
+      ],
+      "rows": [
+        {
+          "group": "Доказательства",
+          "label": "Сохранённые доказательства (execution.exit)",
+          "mark": "○ не сообщается",
+          "state": "not-reported",
+          "value": "не сообщается: обновите Worker, чтобы получить execution.exit"
+        },
+        {
+          "group": "",
+          "label": "Превью",
+          "mark": "○ не проверено",
+          "state": "not-checked",
+          "value": "не запрошено: выполните превью"
+        }
+      ],
+      "stage": "cleanup"
+    },
+    "plan": {
+      "actions": [
+        {
+          "effect": "record",
+          "enabled": false,
+          "key": "propose",
+          "label": "Запросить предложение",
+          "needs_confirmation": false,
+          "reason": "сначала Preflight со статусом verified"
+        },
+        {
+          "effect": "approve",
+          "enabled": false,
+          "key": "approve",
+          "label": "Одобрить и создать dispatch",
+          "needs_confirmation": true,
+          "reason": "сначала запросите предложение (propose)"
+        }
+      ],
+      "blockers": [],
+      "notes": [],
+      "rows": [
+        {
+          "group": "",
+          "label": "Предложение",
+          "mark": "✖ заблокировано",
+          "state": "blocked",
+          "value": "заблокировано: сначала Preflight со статусом verified"
+        }
+      ],
+      "stage": "plan"
+    },
+    "preflight": {
+      "actions": [
+        {
+          "effect": "observe",
+          "enabled": true,
+          "key": "recheck",
+          "label": "Перепроверить",
+          "needs_confirmation": false,
+          "reason": ""
+        }
+      ],
+      "blockers": [
+        "refused"
+      ],
+      "notes": [
+        "Повторная проверка не запускает worker и не собирает и не скачивает образы: она только спрашивает у ядра, что наблюдается сейчас."
+      ],
+      "rows": [
+        {
+          "group": "",
+          "label": "Preflight",
+          "mark": "✖ заблокировано",
+          "state": "blocked",
+          "value": "refused: выход 2"
+        }
+      ],
+      "stage": "preflight"
+    },
+    "qa": {
+      "actions": [
+        {
+          "effect": "record",
+          "enabled": true,
+          "key": "qa-propose",
+          "label": "Запросить предложение QA",
+          "needs_confirmation": false,
+          "reason": ""
+        },
+        {
+          "effect": "approve",
+          "enabled": false,
+          "key": "qa-approve",
+          "label": "Одобрить и создать dispatch QA",
+          "needs_confirmation": true,
+          "reason": "сначала запросите предложение QA"
+        },
+        {
+          "effect": "run",
+          "enabled": false,
+          "key": "qa-run",
+          "label": "Запустить QA",
+          "needs_confirmation": true,
+          "reason": "нужен одобренный dispatch QA"
+        },
+        {
+          "effect": "observe",
+          "enabled": true,
+          "key": "qa-status",
+          "label": "Состояние lane",
+          "needs_confirmation": false,
+          "reason": ""
+        }
+      ],
+      "blockers": [],
+      "notes": [],
+      "rows": [
+        {
+          "group": "Привязка",
+          "label": "Одобрение",
+          "mark": "·",
+          "state": "info",
+          "value": "QA — отдельный dispatch роли qa с собственным propose и transition_digest; одобрение worker не заменяет одобрение QA"
+        },
+        {
+          "group": "",
+          "label": "Предложение QA",
+          "mark": "… ожидается",
+          "state": "pending",
+          "value": "не запрошено: выполните propose для роли qa"
+        },
+        {
+          "group": "Lane",
+          "label": "Lane",
+          "mark": "○ не проверено",
+          "state": "not-checked",
+          "value": "не проверено: qa status ещё не запрашивался"
+        }
+      ],
+      "stage": "qa"
+    },
+    "setup": {
+      "actions": [
+        {
+          "effect": "read",
+          "enabled": true,
+          "key": "edit-config",
+          "label": "Изменить в мастере настройки",
+          "needs_confirmation": false,
+          "reason": ""
+        },
+        {
+          "effect": "observe",
+          "enabled": true,
+          "key": "recheck",
+          "label": "Обновить эффективный план",
+          "needs_confirmation": false,
+          "reason": ""
+        }
+      ],
+      "blockers": [],
+      "notes": [
+        "Запись идёт только через мастер настройки: черновик, проверка, diff, подтверждение, резервная копия. Сохранение не запускает worker."
+      ],
+      "rows": [
+        {
+          "group": "",
+          "label": "extensions.runtime_access",
+          "mark": "✔ ок",
+          "state": "ok",
+          "value": "docker"
+        },
+        {
+          "group": "access_policy.defaults",
+          "label": "Режим",
+          "mark": "",
+          "state": null,
+          "value": "sandbox"
+        },
+        {
+          "group": "access_policy.defaults",
+          "label": "Движок",
+          "mark": "",
+          "state": null,
+          "value": "docker (по умолчанию)"
+        },
+        {
+          "group": "access_policy.defaults",
+          "label": "Образ worker",
+          "mark": "",
+          "state": null,
+          "value": "harness-worker:local"
+        },
+        {
+          "group": "access_policy.defaults",
+          "label": "Образ proxy",
+          "mark": "",
+          "state": null,
+          "value": "не задан"
+        },
+        {
+          "group": "access_policy.defaults",
+          "label": "Переменные окружения (имена)",
+          "mark": "",
+          "state": null,
+          "value": "API_TOKEN"
+        },
+        {
+          "group": "access_policy.roles.developer",
+          "label": "Движок",
+          "mark": "",
+          "state": null,
+          "value": "podman"
+        },
+        {
+          "group": "access_policy.roles.developer",
+          "label": "Образ worker",
+          "mark": "",
+          "state": null,
+          "value": "harness-worker:local"
+        },
+        {
+          "group": "access_policy.roles.developer",
+          "label": "Образ proxy",
+          "mark": "",
+          "state": null,
+          "value": "harness-proxy:local"
+        },
+        {
+          "group": "access_policy.roles.developer",
+          "label": "Переменные окружения (имена)",
+          "mark": "",
+          "state": null,
+          "value": "API_TOKEN"
+        },
+        {
+          "group": "access_policy.operations.qa",
+          "label": "Движок",
+          "mark": "",
+          "state": null,
+          "value": "docker (по умолчанию)"
+        },
+        {
+          "group": "access_policy.operations.qa",
+          "label": "Образ worker",
+          "mark": "",
+          "state": null,
+          "value": "harness-qa:local"
+        },
+        {
+          "group": "access_policy.operations.qa",
+          "label": "Образ proxy",
+          "mark": "",
+          "state": null,
+          "value": "не задан"
+        },
+        {
+          "group": "",
+          "label": "Эффективный план",
+          "mark": "✖ заблокировано",
+          "state": "blocked",
+          "value": "refused: выход 2"
+        }
+      ],
+      "stage": "setup"
+    },
+    "worker": {
+      "actions": [
+        {
+          "effect": "observe",
+          "enabled": false,
+          "key": "refresh",
+          "label": "Обновить: наблюдение, ядро может отреагировать",
+          "needs_confirmation": false,
+          "reason": "dispatch ещё не создан"
+        },
+        {
+          "effect": "run",
+          "enabled": false,
+          "key": "send",
+          "label": "Отправить worker (форма dispatch send)",
+          "needs_confirmation": true,
+          "reason": "dispatch ещё не создан"
+        }
+      ],
+      "blockers": [],
+      "notes": [
+        "detached-запуск, тишина, exit 0 и отсутствие отчёта не принимают отчёт, не доказывают остановку и не закрывают задачу: это отдельные факты.",
+        "Обновление спрашивает ядро и runtime; ядро может записать реакцию на завершившийся worker. Автоопроса по таймеру нет."
+      ],
+      "rows": [
+        {
+          "group": "",
+          "label": "Worker",
+          "mark": "… ожидается",
+          "state": "pending",
+          "value": "не создан: dispatch ещё не создан"
+        }
+      ],
+      "stage": "worker"
+    }
+  },
+  "tabs": [
+    {
+      "mark": "·",
+      "reason": "",
+      "stage": "setup",
+      "state": "info",
+      "title": "Setup"
+    },
+    {
+      "mark": "✖ заблокировано",
+      "reason": "refused",
+      "stage": "preflight",
+      "state": "blocked",
+      "title": "Preflight"
+    },
+    {
+      "mark": "✖ заблокировано",
+      "reason": "сначала Preflight со статусом verified",
+      "stage": "plan",
+      "state": "blocked",
+      "title": "Plan / approval"
+    },
+    {
+      "mark": "… ожидается",
+      "reason": "dispatch ещё не создан",
+      "stage": "worker",
+      "state": "pending",
+      "title": "Worker"
+    },
+    {
+      "mark": "… ожидается",
+      "reason": "отдельный dispatch роли qa ещё не создан",
+      "stage": "qa",
+      "state": "pending",
+      "title": "QA"
+    },
+    {
+      "mark": "·",
+      "reason": "превью не запрашивалось",
+      "stage": "cleanup",
+      "state": "info",
+      "title": "Cleanup"
+    }
+  ]
+}

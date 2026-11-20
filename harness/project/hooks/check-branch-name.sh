@@ -1,6 +1,10 @@
 #!/bin/bash
 # PreToolUse(Bash): enforces the branch_pattern from .harness/project.json, and that the
-# numeric ID it encodes is a real, registered tracker issue ("Issue First", docs/agents/git-workflow.md).
+# numeric ID it encodes is a real, registered tracker issue ("Issue First", .harness/instructions/git-workflow.md).
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" check-branch-name
 INPUT=$(cat)
 PY="$(command -v python3 || command -v python)"
 if [ -z "$PY" ]; then
@@ -41,7 +45,7 @@ except Exception:
   PATTERN=${PATTERN:-^feature/issue-[0-9]+-.+}
 
   if ! echo "$BRANCH" | grep -qE "$PATTERN"; then
-    echo "Ветка '$BRANCH' не соответствует branch_pattern из .harness/project.json ('$PATTERN', docs/agents/git-workflow.md)." >&2
+    echo "Ветка '$BRANCH' не соответствует branch_pattern из .harness/project.json ('$PATTERN', .harness/instructions/git-workflow.md)." >&2
     exit 2
   fi
 

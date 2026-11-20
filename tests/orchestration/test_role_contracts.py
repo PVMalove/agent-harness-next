@@ -1,0 +1,225 @@
+"""Тексты ролей оркестрации согласованы с кодом и навыками (#1216)."""
+
+from pathlib import Path
+
+from harness.orchestration.core.constants import (
+    REPORT_FIELDS,
+    SPECIALIST_WRITER_ROLES,
+    dispatch_role_for_action,
+)
+from harness.orchestration.runtime_attestation import (
+    ISSUE_WORKTREE_WRITER_ROLES,
+    WORKER_ROLES_REQUIRING_ISSUE_WORKTREE,
+)
+
+ROOT = Path(__file__).resolve().parents[2]
+ROLES = ROOT / "harness/orchestration/roles"
+REFERENCES = ROLES / "references"
+SKILLS = ROOT / "skills/first-party/engineering"
+AGENTS = ROOT / "harness/project/agents"
+
+
+def _text(path: Path) -> str:
+    return " ".join(path.read_text(encoding="utf-8").split())
+
+
+def _role(name: str) -> str:
+    return _text(ROLES / f"{name}.md")
+
+
+def test_qa_role_is_the_qa_run_lane_without_a_model_worker() -> None:
+    qa = _role("qa")
+    assert "`qa run`" in qa
+    assert "related_tests" not in qa
+    assert "incomplete_items" not in qa
+
+
+def test_specialist_manifests_describe_how_to_select_their_writer_route() -> None:
+    for role in SPECIALIST_WRITER_ROLES:
+        assert f"`--writer-role {role}`" in _role(role)
+        assert role in ISSUE_WORKTREE_WRITER_ROLES
+        assert dispatch_role_for_action({"writer_role": role}, "developer") == role
+
+
+def test_common_contract_names_every_attested_role_once() -> None:
+    common = _role("common")
+    sentence = common[common.index("Worktree attestation is mandatory for") :].split(
+        ";"
+    )[0]
+    for name in WORKER_ROLES_REQUIRING_ISSUE_WORKTREE:
+        assert f"`{name}`" in sentence
+    assert common.count("dispatch self-report") == 1
+
+
+def test_common_contract_lists_every_required_report_field() -> None:
+    common = _role("common")
+    for field in REPORT_FIELDS:
+        assert f"`{field}`" in common
+    assert "`not applicable — read-only role`" in common
+
+
+def test_every_writer_role_belongs_to_every_role_class_of_a_writer() -> None:
+    """A new writer joins every class at once (#1251): attestation, worktree writes, risk and
+    the stage rank of `batch rewind`."""
+    from harness.orchestration.core.constants import (
+        BATCH_WRITER_ROLES,
+        NEXT_ACTION_DISPATCH_ROLE,
+        RISK_ASSESSED_ROLES,
+    )
+    from harness.orchestration.workflow.recovery import STAGE_RANKS
+
+    writers = {*BATCH_WRITER_ROLES, "conflict-resolver", "rebaser"}
+    assert writers <= ISSUE_WORKTREE_WRITER_ROLES
+    assert writers <= RISK_ASSESSED_ROLES
+    assert ISSUE_WORKTREE_WRITER_ROLES <= WORKER_ROLES_REQUIRING_ISSUE_WORKTREE
+    dispatchable = set(BATCH_WRITER_ROLES) | set(NEXT_ACTION_DISPATCH_ROLE.values())
+    assert dispatchable <= set(STAGE_RANKS)
+
+
+def test_roles_call_the_brief_list_definition_of_done() -> None:
+    for name in ("common", "developer", "architect"):
+        text = _role(name)
+        assert "acceptance criteria" not in text
+        assert "`definition_of_done`" in text
+
+
+def test_architect_writes_the_decision_into_output() -> None:
+    architect = _role("architect")
+    assert "`accepted_design.output`" in architect
+    assert "does not repeat its narrative" not in architect
+    assert "Under `approval_policy: auto`" in architect
+
+
+def test_uncommitted_files_live_inside_the_tooling_blocker() -> None:
+    assert "inside that `tooling_blocker` object" in _role("developer")
+    assert "exactly three non-empty strings" not in _role("common")
+
+
+DEVELOPER_REFERENCES = {
+    "developer-test-author": "preflight",
+    "developer-retry": "`developer-retry`",
+    "developer-carried-items": "`carried_items`",
+    "developer-rerun-failed-tests": "`scripts/verify.py`",
+}
+
+
+def test_developer_core_is_compact_and_names_each_reference_with_its_condition() -> (
+    None
+):
+    core = _role("developer")
+    assert len(core.split()) <= 900
+    for name, condition in DEVELOPER_REFERENCES.items():
+        assert f"`references/{name}.md`" in core
+        assert condition in _text(REFERENCES / f"{name}.md")
+    assert "scripts/verify.py --worktree-cache" not in core
+    assert "/fast-implement" not in core
+    assert "`risk_triggers`" in core
+
+
+def test_developer_texts_cite_no_repository_adr_and_one_preflight() -> None:
+    texts = [_role("developer")] + [
+        _text(REFERENCES / f"{name}.md") for name in DEVELOPER_REFERENCES
+    ]
+    for text in texts:
+        assert "ADR 00" not in text
+    author = _text(REFERENCES / "developer-test-author.md")
+    assert "tdd/references/test-author.md" in author
+    assert author.count("test_author.py preflight") == 1
+    assert (
+        "Run `<brief worker_worktree>/.claude/hooks/test-author-preflight.sh"
+        not in author
+    )
+    rerun = _text(REFERENCES / "developer-rerun-failed-tests.md")
+    assert (
+        rerun.startswith("# ")
+        and "only when the project has `scripts/verify.py`" in rerun
+    )
+
+
+def test_code_review_role_names_its_sources_and_the_real_wrapper() -> None:
+    review = _role("code-review")
+    for source in (
+        "`definition_of_done`",
+        "`prohibited_changes`",
+        "`allowed_paths`",
+        "smell-baseline.md",
+    ):
+        assert source in review
+    assert "python .harness/skills/qa-gate" not in review
+    assert "<harness-root>" in review and "`shell`" in review
+    assert "so the coordinator can record `override-warning`" not in review
+    assert "`references/code-review-delta.md`" in review
+    assert "`delta_review_of`" in _text(REFERENCES / "code-review-delta.md")
+    assert "## Delta-review" not in (ROLES / "code-review.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_review_agents_use_ticket_bounds_and_one_smell_rule() -> None:
+    spec = _text(AGENTS / "code-review-spec.md")
+    assert (
+        "`## Out of scope`" in spec and "`## Non-Goals & Rejected Alternatives`" in spec
+    )
+    rule = "documented repo standard"
+    owners = [
+        path
+        for path in (
+            AGENTS / "code-review-standards.md",
+            SKILLS / "code-review/SKILL.md",
+            SKILLS / "code-review/references/smell-baseline.md",
+        )
+        if rule in _text(path)
+    ]
+    assert owners == [SKILLS / "code-review/references/smell-baseline.md"]
+
+
+def test_code_review_skill_has_no_dangling_section_and_full_delta_rule() -> None:
+    assert "_Runtime boundary_" not in _text(SKILLS / "code-review/SKILL.md")
+    assert "Spec Warning or Blocker" in _text(
+        SKILLS / "code-review/references/gated-route.md"
+    )
+
+
+def test_backend_orchestration_ships_the_role_references() -> None:
+    from harness.bin.harness import package_files
+
+    files = package_files(["backend-orchestration"])
+    for path in sorted(REFERENCES.glob("*.md")):
+        relative = f".harness/orchestration/roles/references/{path.name}"
+        assert files[relative] == path.read_bytes()
+
+
+def test_no_report_hands_an_item_to_qa() -> None:
+    """#1234: qa run has no worker that could finish an item, so no report may target it."""
+    import pytest
+
+    from harness.orchestration.core.constants import INCOMPLETE_ITEM_TARGET_ROLES
+    from harness.orchestration.core.utils import CoordinatorError
+    from harness.orchestration.workflow import reports
+
+    assert "qa" not in INCOMPLETE_ITEM_TARGET_ROLES
+    assert all("qa" not in targets for targets in INCOMPLETE_ITEM_TARGET_ROLES.values())
+    report = {
+        "role": "code-review",
+        "incomplete_items": [
+            {"brief_item": "Run the e2e suite", "reason": "No browser", "target_role": "qa"}
+        ],
+    }
+    with pytest.raises(CoordinatorError, match="target_role 'qa'"):
+        reports._validate_incomplete_items(report, {"mode": "read-only"})
+    for name in ("architect", "code-review", "verification", "common"):
+        assert "or `qa`" not in _role(name)
+        assert "`code-review`, `qa`" not in _role(name)
+
+
+def test_placeholder_risk_triggers_are_gone() -> None:
+    for name in ("qa", "verification", "rebaser", "conflict-resolver"):
+        assert "risk_triggers:" not in (ROLES / f"{name}.md").read_text(encoding="utf-8")
+
+
+def test_implement_carries_the_epic_non_goals_into_prohibited_changes() -> None:
+    text = _text(SKILLS / "implement/SKILL.md")
+    assert (
+        "each item of the parent epic's `## Non-Goals & Rejected Alternatives` → "
+        "`--prohibited-change`" in text
+    )

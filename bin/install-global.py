@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """Installs a minimal instruction profile plus start-project. It never installs MCP,
 models, plugins, credentials, or permissions."""
 
 from __future__ import annotations
 
 import argparse
-import filecmp
+import os
+import shlex
 import shutil
 import sys
 from datetime import datetime
@@ -48,16 +56,22 @@ def backup_target(target: Path, target_home: Path):
     print(f"  {C_YELLOW}[BACKUP]{C_RESET} Moved existing to {backup_dest}")
 
 
-def install_file(
-    source: Path, target: Path, check: bool, replace: bool, target_home: Path
+def install_content(
+    content: bytes,
+    target: Path,
+    check: bool,
+    replace: bool,
+    target_home: Path,
+    what: str,
 ) -> bool:
+    """Place `content` at `target` under the installer's conflict policy; True when current."""
     if target.exists() or target.is_symlink():
         if (
             target.is_file()
             and not target.is_symlink()
-            and filecmp.cmp(source, target, shallow=False)
+            and target.read_bytes() == content
         ):
-            print(f"  {C_GREEN}[OK]{C_RESET} Profile already matches: {target}")
+            print(f"  {C_GREEN}[OK]{C_RESET} {what} already matches: {target}")
             return True
         if check or not replace:
             print(
@@ -72,9 +86,17 @@ def install_file(
         return False
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, target)
-    print(f"  {C_GREEN}[WRITE]{C_RESET} Copied profile to: {target}")
+    target.write_bytes(content)
+    print(f"  {C_GREEN}[WRITE]{C_RESET} Wrote {what.lower()} to: {target}")
     return True
+
+
+def install_file(
+    source: Path, target: Path, check: bool, replace: bool, target_home: Path
+) -> bool:
+    return install_content(
+        source.read_bytes(), target, check, replace, target_home, "Profile"
+    )
 
 
 def install_link(
@@ -119,6 +141,40 @@ def install_link(
             file=sys.stderr,
         )
         return False
+
+
+def launcher_name(platform: str) -> str:
+    """File name of the `harness` launcher on `platform`."""
+    return "harness.cmd" if platform == "win32" else "harness"
+
+
+def launcher_text(harness_py: Path, platform: str) -> bytes:
+    """Launcher that runs `harness_py` with the user's Python on `platform`."""
+    if platform == "win32":
+        return f'@echo off\r\npython -B "{harness_py}" %*\r\n'.encode("utf-8")
+    return (
+        f'#!/bin/sh\nexec python3 -B {shlex.quote(str(harness_py))} "$@"\n'
+    ).encode("utf-8")
+
+
+def install_launcher(
+    kit_root: Path,
+    check: bool,
+    replace: bool,
+    target_home: Path,
+    platform: str = sys.platform,
+) -> bool:
+    """Install `~/.local/bin/harness` (`harness.cmd` on Windows) for this checkout's CLI."""
+    target = target_home / ".local" / "bin" / launcher_name(platform)
+    content = launcher_text(kit_root / "harness" / "bin" / "harness.py", platform)
+    if not install_content(content, target, check, replace, target_home, "Launcher"):
+        return False
+    if not check:
+        target.chmod(0o755)
+    path_dirs = [Path(entry) for entry in os.environ.get("PATH", "").split(os.pathsep) if entry]
+    if target.parent not in path_dirs:
+        print(f"  {C_YELLOW}[INFO]{C_RESET} {target.parent} is not on PATH; add it to run `harness`")
+    return True
 
 
 def install_entries(
@@ -185,9 +241,14 @@ def main():
     parser.add_argument(
         "--runtime",
         action="append",
-        required=True,
+        default=[],
         choices=["codex", "claude", "kimi", "opencode", "hermes"],
         help="Target runtime(s)",
+    )
+    parser.add_argument(
+        "--cli",
+        action="store_true",
+        help="Install the `harness` launcher into ~/.local/bin for this checkout's CLI",
     )
     parser.add_argument(
         "--check", action="store_true", help="Dry run, only check status"
@@ -202,6 +263,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if not args.runtime and not args.cli:
+        parser.error("pass at least one --runtime, or --cli")
 
     target_home = args.target_home.resolve()
     if not target_home.is_dir():
@@ -259,6 +322,13 @@ def main():
             status = 1
         if not install_entries(
             skills_dest, kit_root, args.check, args.replace_conflicts, target_home
+        ):
+            status = 1
+
+    if args.cli:
+        print(f"\n{C_CYAN}>>> Installing the harness launcher{C_RESET}")
+        if not install_launcher(
+            kit_root, args.check, args.replace_conflicts, target_home
         ):
             status = 1
 

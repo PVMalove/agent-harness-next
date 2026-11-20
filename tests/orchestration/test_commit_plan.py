@@ -85,7 +85,7 @@ class PinnedPlanTests(unittest.TestCase):
         for name, document in cases.items():
             with self.subTest(case=name):
                 with self.assertRaisesRegex(
-                    CoordinatorError, "commit plan file is invalid"
+                    CoordinatorError, "commit plan is invalid"
                 ):
                     commit_plan.pinned_plan(document, DOD)
 

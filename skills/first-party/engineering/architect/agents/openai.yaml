@@ -1,0 +1,6 @@
+interface:
+  display_name: "Interactive Architect"
+  short_description: "Compare architectural options and precedents"
+  default_prompt: "Use $architect to compare the architectural options for this boundary decision and return a decision brief."
+policy:
+  allow_implicit_invocation: false

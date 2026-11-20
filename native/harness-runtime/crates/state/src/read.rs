@@ -1,0 +1,757 @@
+//! The read operation of the store: what `state.read` of the IPC answers (ADR 0020, section 3).
+//!
+//! A read opens the store read-only in one transaction, so it never sees half of a transition, and
+//! answers records in the form the legacy file ledger had them: the same path (`batches/<id>.json`)
+//! and the same JSON object, so the Python policy layer renders the same text from either epoch.
+//! The revision of the answer is the sequence number of the last audit record: it moves with every
+//! change of the store. The generation revision of the answer is the one a write expects when its
+//! command decided over every batch (`expected_generation_revision`).
+//!
+//! A request may name a `filter` (`{"batch_id": ...}` and/or `{"dispatch_id": ...}`) beside its
+//! collections: the store then selects those rows itself, so a command that reads one batch never
+//! reads or validates the records of the other batches. The filter is part of the same read
+//! transaction, so a filtered answer comes from the same snapshot as an unfiltered one.
+
+use std::path::Path;
+
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
+use serde_json::{Map, Value};
+
+use crate::authority::{Epoch, STORE_NAME, epoch};
+use crate::project::{Spec, spec_of};
+
+/// The largest answer: a frame holds 16 MiB, and the answer keeps room for the envelope.
+pub const MAX_ANSWER_BYTES: usize = 15 * 1024 * 1024;
+/// The most paths a request may name.
+pub const MAX_PATHS: usize = 10_000;
+
+/// What a read can refuse with.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ReadError {
+    /// The runtime store is not the authority of this repository (or its files disagree).
+    NotAttached(String),
+    /// The request is not valid.
+    Malformed(String),
+    /// The store moved on since the revision the request expected.
+    RevisionConflict { expected: u64, actual: u64 },
+    /// The answer would not fit one frame.
+    TooLarge,
+    /// The audit chain after the checkpoint failed its verification.
+    Broken(crate::audit::Broken),
+    /// The store could not be read; `busy` says the reason is a lock another process holds.
+    Store { message: String, busy: bool },
+    /// The snapshot the request names is closed or expired, or no other snapshot may be opened
+    /// (`reason` is `snapshot_expired` or `snapshot_limit`); a new snapshot answers.
+    Snapshot {
+        reason: &'static str,
+        detail: String,
+    },
+}
+
+impl From<rusqlite::Error> for ReadError {
+    fn from(err: rusqlite::Error) -> Self {
+        Self::Store {
+            message: err.to_string(),
+            busy: crate::store_error::is_busy(&err),
+        }
+    }
+}
+
+/// The records of one answer.
+#[derive(Debug)]
+pub struct Answer {
+    pub revision: u64,
+    /// The revision of the `generation` row in the same snapshot.
+    pub generation_revision: u64,
+    /// Legacy path (relative to the generation) to record.
+    pub records: Map<String, Value>,
+    /// The `revision` of every row that has one, by the same path: the value a write expects.
+    pub revisions: Map<String, Value>,
+    /// The snapshot the answer came from, when the request opened or named one.
+    pub snapshot: Option<String>,
+}
+
+/// One read transaction of the store: a read-only connection inside `BEGIN`, after its first
+/// `SELECT`, so every answer from it sees the store as it was at that moment (WAL), and no writer
+/// waits for it.
+pub struct Snapshot {
+    connection: Connection,
+    pub revision: u64,
+    pub generation_revision: u64,
+    selected: String,
+}
+
+impl std::fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Snapshot")
+            .field("revision", &self.revision)
+            .field("generation_revision", &self.generation_revision)
+            .finish_non_exhaustive()
+    }
+}
+
+/// What a request asks a read for: collections, paths and the filter of a collection read, checked.
+pub struct Wanted {
+    collections: Vec<String>,
+    paths: Vec<String>,
+    filter: Option<Filter>,
+}
+
+/// The store-side filter of one read: the batch and/or the dispatch a command asks for. Both
+/// fields are ANDed, so the answer holds only the records that belong to that batch and dispatch.
+/// The filter is only defined for the collections that carry those keys, and it never widens a
+/// read.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Filter {
+    pub batch_id: Option<String>,
+    pub dispatch_id: Option<String>,
+}
+
+/// The collections a filter applies to: the records that name their batch or are keyed by it.
+pub const FILTERED_COLLECTIONS: [&str; 4] = ["batches", "plans", "dispatches", "dispatch-status"];
+
+/// The `store_id` of the store when it is the authority of the state directory.
+pub fn store_id(state: &Path) -> Option<String> {
+    match epoch(state) {
+        Epoch::Store(authority) => Some(authority.store_id),
+        Epoch::FileLedger | Epoch::Inconsistent(_) => None,
+    }
+}
+
+fn names(payload: &Value, key: &str) -> Result<Vec<String>, ReadError> {
+    match payload.get(key) {
+        None => Ok(Vec::new()),
+        Some(Value::Array(items)) => items
+            .iter()
+            .map(|item| {
+                item.as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| ReadError::Malformed(format!("{key} must hold strings only")))
+            })
+            .collect(),
+        Some(_) => Err(ReadError::Malformed(format!("{key} must be a list"))),
+    }
+}
+
+pub(crate) fn valid_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('/')
+        && !path.contains('\\')
+        && !path.split('/').any(|part| part.is_empty() || part == "..")
+}
+
+fn parse(body: &str) -> Result<Map<String, Value>, ReadError> {
+    match serde_json::from_str::<Value>(body) {
+        Ok(Value::Object(record)) => Ok(record),
+        _ => Err(ReadError::Store {
+            message: "a stored record is not a JSON object".to_owned(),
+            busy: false,
+        }),
+    }
+}
+
+/// The records of an answer by path, and the revision of each row that has one.
+#[derive(Default)]
+struct Found {
+    records: Map<String, Value>,
+    revisions: Map<String, Value>,
+}
+
+impl Found {
+    fn add(&mut self, path: String, record: Map<String, Value>, revision: Option<i64>) {
+        if let Some(revision) = revision {
+            self.revisions.insert(path.clone(), Value::from(revision));
+        }
+        self.records.insert(path, Value::Object(record));
+    }
+}
+
+fn typed_rows(
+    connection: &Connection,
+    spec: &Spec,
+    only: Option<&str>,
+    found: &mut Found,
+) -> Result<(), ReadError> {
+    let sql = match only {
+        None => spec.select_sql(),
+        Some(_) => spec
+            .select_sql()
+            .replace("ORDER BY id", "WHERE id = ?1 ORDER BY id"),
+    };
+    let mut statement = connection.prepare(&sql)?;
+    let mut rows = match only {
+        None => statement.query([])?,
+        Some(id) => statement.query([id])?,
+    };
+    while let Some(row) = rows.next()? {
+        let (id, record) = spec.join(row)?;
+        let revision = if spec.revisioned() {
+            Some(row.get::<_, i64>(spec.typed.len() + 2)?)
+        } else {
+            None
+        };
+        found.add(format!("{}/{id}.json", spec.directory), record, revision);
+    }
+    Ok(())
+}
+
+/// The `FROM` clause, the conditions and their parameters of a filtered read of `spec`.
+fn filter_query(
+    spec: &Spec,
+    filter: &Filter,
+) -> Result<(String, Vec<String>, Vec<String>), ReadError> {
+    let mut conditions = Vec::new();
+    let mut parameters = Vec::new();
+    let from = match spec.table {
+        "dispatch" => {
+            if let Some(batch_id) = &filter.batch_id {
+                conditions.push("batch_id = ?".to_owned());
+                parameters.push(batch_id.clone());
+            }
+            if let Some(dispatch_id) = &filter.dispatch_id {
+                conditions.push("id = ?".to_owned());
+                parameters.push(dispatch_id.clone());
+            }
+            "dispatch".to_owned()
+        }
+        // The status row names its dispatch, and the dispatch row names its batch: a status is
+        // selected through the batch of its dispatch, never through a second read.
+        "dispatch_status" => {
+            if let Some(batch_id) = &filter.batch_id {
+                conditions.push("dispatch.batch_id = ?".to_owned());
+                parameters.push(batch_id.clone());
+            }
+            if let Some(dispatch_id) = &filter.dispatch_id {
+                conditions.push("dispatch_status.id = ?".to_owned());
+                parameters.push(dispatch_id.clone());
+            }
+            "dispatch_status JOIN dispatch ON dispatch.id = dispatch_status.id".to_owned()
+        }
+        "batch" | "plan" => {
+            if let Some(batch_id) = &filter.batch_id {
+                conditions.push("id = ?".to_owned());
+                parameters.push(batch_id.clone());
+            }
+            if let Some(dispatch_id) = &filter.dispatch_id {
+                conditions.push("id IN (SELECT batch_id FROM dispatch WHERE id = ?)".to_owned());
+                parameters.push(dispatch_id.clone());
+            }
+            spec.table.to_owned()
+        }
+        other => {
+            return Err(ReadError::Malformed(format!(
+                "the collection {other:?} takes no filter"
+            )));
+        }
+    };
+    if conditions.is_empty() {
+        return Err(ReadError::Malformed(
+            "filter needs batch_id or dispatch_id".to_owned(),
+        ));
+    }
+    Ok((from, conditions, parameters))
+}
+
+/// The rows of `spec` that `filter` selects: the store does the selecting, in the same read
+/// transaction as every other read of the answer.
+fn filtered_rows(
+    connection: &Connection,
+    spec: &Spec,
+    filter: &Filter,
+    found: &mut Found,
+) -> Result<(), ReadError> {
+    let prefix = if spec.table == "dispatch_status" {
+        "dispatch_status."
+    } else {
+        ""
+    };
+    let typed: Vec<String> = spec
+        .typed
+        .iter()
+        .map(|(name, _)| format!("{prefix}{name}"))
+        .collect();
+    let names = if typed.is_empty() {
+        String::new()
+    } else {
+        format!("{}, ", typed.join(", "))
+    };
+    let revision = if spec.revisioned() {
+        format!(", {prefix}revision")
+    } else {
+        String::new()
+    };
+    let (from, conditions, parameters) = filter_query(spec, filter)?;
+    let sql = format!(
+        "SELECT {prefix}id, {names}{prefix}body_json{revision} FROM {from} WHERE {} ORDER BY {prefix}id",
+        conditions.join(" AND ")
+    );
+    let mut statement = connection.prepare(&sql)?;
+    let mut rows = statement.query(rusqlite::params_from_iter(parameters.iter()))?;
+    while let Some(row) = rows.next()? {
+        let (id, record) = spec.join(row)?;
+        let revision = if spec.revisioned() {
+            Some(row.get::<_, i64>(spec.typed.len() + 2)?)
+        } else {
+            None
+        };
+        found.add(format!("{}/{id}.json", spec.directory), record, revision);
+    }
+    Ok(())
+}
+
+/// The rows of `sql`, each as `(path, body, revision)`: the third column is optional.
+fn table_rows(
+    connection: &Connection,
+    sql: &str,
+    argument: Option<&str>,
+    mut accept: impl FnMut(String, String, Option<i64>) -> Result<(), ReadError>,
+) -> Result<(), ReadError> {
+    let mut statement = connection.prepare(sql)?;
+    let has_revision = statement.column_count() > 2;
+    let mut rows = match argument {
+        None => statement.query([])?,
+        Some(value) => statement.query([value])?,
+    };
+    while let Some(row) = rows.next()? {
+        let revision = if has_revision {
+            Some(row.get(2)?)
+        } else {
+            None
+        };
+        accept(row.get(0)?, row.get(1)?, revision)?;
+    }
+    Ok(())
+}
+
+/// The audit chain in the form of the legacy audit files: `startup` and recovery look for the
+/// decision of a transition in `audit/*.json`, and the chain holds it after the cutover.
+fn chain_name(seq: i64) -> String {
+    format!("audit-chain-{seq:012}")
+}
+
+fn chain_rows(
+    connection: &Connection,
+    only: Option<i64>,
+    found: &mut Found,
+) -> Result<(), ReadError> {
+    let sql = match only {
+        None => "SELECT seq, at, action, details_json, record_sha256 FROM audit ORDER BY seq",
+        Some(_) => "SELECT seq, at, action, details_json, record_sha256 FROM audit WHERE seq = ?1",
+    };
+    let mut statement = connection.prepare(sql)?;
+    let mut rows = match only {
+        None => statement.query([])?,
+        Some(seq) => statement.query([seq])?,
+    };
+    while let Some(row) = rows.next()? {
+        let seq: i64 = row.get(0)?;
+        let details: String = row.get(3)?;
+        let mut record = Map::new();
+        record.insert("audit_id".to_owned(), Value::String(chain_name(seq)));
+        record.insert("at".to_owned(), Value::String(row.get(1)?));
+        record.insert("action".to_owned(), Value::String(row.get(2)?));
+        record.insert(
+            "details".to_owned(),
+            serde_json::from_str(&details).unwrap_or(Value::Null),
+        );
+        record.insert("record_sha256".to_owned(), Value::String(row.get(4)?));
+        found.add(format!("audit/{}.json", chain_name(seq)), record, None);
+    }
+    Ok(())
+}
+
+fn collection(
+    connection: &Connection,
+    name: &str,
+    selected: &str,
+    filter: Option<&Filter>,
+    found: &mut Found,
+) -> Result<(), ReadError> {
+    if let Some(spec) = spec_of(name) {
+        return match filter {
+            None => typed_rows(connection, spec, None, found),
+            Some(filter) => filtered_rows(connection, spec, filter, found),
+        };
+    }
+    if name == "audit" {
+        let prefix = format!("generations/{selected}/");
+        table_rows(
+            connection,
+            "SELECT path, CAST(bytes AS TEXT) FROM legacy_audit ORDER BY path",
+            None,
+            |path, text, _| {
+                if let Some(relative) = path.strip_prefix(&prefix)
+                    && let Ok(Value::Object(record)) = serde_json::from_str::<Value>(&text)
+                {
+                    found.add(relative.to_owned(), record, None);
+                }
+                Ok(())
+            },
+        )?;
+        return chain_rows(connection, None, found);
+    }
+    if name == "qa-lane" {
+        table_rows(
+            connection,
+            "SELECT 'qa-lane/lease.json', body_json, revision FROM qa_lane WHERE owner_id IS NOT NULL",
+            None,
+            |path, body, revision| {
+                found.add(path, parse(&body)?, revision);
+                Ok(())
+            },
+        )?;
+        table_rows(
+            connection,
+            "SELECT 'qa-lane/queue/' || id || '.json', body_json, revision FROM qa_queue ORDER BY id",
+            None,
+            |path, body, revision| {
+                found.add(path, parse(&body)?, revision);
+                Ok(())
+            },
+        )?;
+    }
+    table_rows(
+        connection,
+        "SELECT path, body_json, revision FROM record WHERE collection = ?1 ORDER BY path",
+        Some(name),
+        |path, body, revision| {
+            found.add(path, parse(&body)?, revision);
+            Ok(())
+        },
+    )
+}
+
+fn one_path(
+    connection: &Connection,
+    path: &str,
+    selected: &str,
+    found: &mut Found,
+) -> Result<(), ReadError> {
+    let parts: Vec<&str> = path.split('/').collect();
+    let stem = |name: &str| {
+        name.strip_suffix(".json")
+            .filter(|stem| !stem.is_empty())
+            .map(str::to_owned)
+    };
+    match parts[..] {
+        [directory, name] if spec_of(directory).is_some() => {
+            if let (Some(spec), Some(id)) = (spec_of(directory), stem(name)) {
+                typed_rows(connection, spec, Some(&id), found)?;
+            }
+            return Ok(());
+        }
+        ["qa-lane", "lease.json"] => {
+            return table_rows(
+                connection,
+                "SELECT 'qa-lane/lease.json', body_json, revision FROM qa_lane WHERE owner_id IS NOT NULL",
+                None,
+                |path, body, revision| {
+                    found.add(path, parse(&body)?, revision);
+                    Ok(())
+                },
+            );
+        }
+        ["qa-lane", "queue", name] => {
+            if let Some(id) = stem(name) {
+                return table_rows(
+                    connection,
+                    "SELECT 'qa-lane/queue/' || id || '.json', body_json, revision FROM qa_queue WHERE id = ?1",
+                    Some(&id),
+                    |path, body, revision| {
+                        found.add(path, parse(&body)?, revision);
+                        Ok(())
+                    },
+                );
+            }
+        }
+        ["audit", name] if name.starts_with("audit-chain-") => {
+            let seq = name
+                .strip_prefix("audit-chain-")
+                .and_then(|rest| rest.strip_suffix(".json"))
+                .and_then(|digits| digits.parse::<i64>().ok());
+            if let Some(seq) = seq {
+                chain_rows(connection, Some(seq), found)?;
+            }
+            return Ok(());
+        }
+        ["audit", name] if stem(name).is_some() => {
+            let stored = format!("generations/{selected}/{path}");
+            let text: Option<String> = connection
+                .query_row(
+                    "SELECT CAST(bytes AS TEXT) FROM legacy_audit WHERE path = ?1",
+                    [&stored],
+                    |row| row.get(0),
+                )
+                .optional()?;
+            if let Some(text) = text
+                && let Ok(Value::Object(record)) = serde_json::from_str::<Value>(&text)
+            {
+                found.add(path.to_owned(), record, None);
+            }
+            return Ok(());
+        }
+        _ => {}
+    }
+    table_rows(
+        connection,
+        "SELECT path, body_json, revision FROM record WHERE path = ?1",
+        Some(path),
+        |path, body, revision| {
+            found.add(path, parse(&body)?, revision);
+            Ok(())
+        },
+    )
+}
+
+fn meta(connection: &Connection, key: &str) -> Result<String, ReadError> {
+    connection
+        .query_row(
+            "SELECT value FROM store_meta WHERE key = ?1",
+            [key],
+            |row| row.get(0),
+        )
+        .map_err(ReadError::from)
+}
+
+fn attached(state: &Path) -> Result<(), ReadError> {
+    match epoch(state) {
+        Epoch::Store(_) => Ok(()),
+        Epoch::FileLedger => Err(ReadError::NotAttached(
+            "the file ledger is the authority of this repository".to_owned(),
+        )),
+        Epoch::Inconsistent(reason) => Err(ReadError::NotAttached(reason)),
+    }
+}
+
+/// The filter of a `state.read` payload: absent, or an object with `batch_id` and/or
+/// `dispatch_id`, each a non-empty string.
+fn filter_of(members: &Map<String, Value>) -> Result<Option<Filter>, ReadError> {
+    let value = match members.get("filter") {
+        None | Some(Value::Null) => return Ok(None),
+        Some(value) => value,
+    };
+    let Value::Object(fields) = value else {
+        return Err(ReadError::Malformed("filter must be an object".to_owned()));
+    };
+    if let Some(unknown) = fields
+        .keys()
+        .find(|key| !matches!(key.as_str(), "batch_id" | "dispatch_id"))
+    {
+        return Err(ReadError::Malformed(format!(
+            "unknown filter field {unknown:?}"
+        )));
+    }
+    let text = |key: &str| -> Result<Option<String>, ReadError> {
+        match fields.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(text)) if !text.is_empty() => Ok(Some(text.clone())),
+            Some(_) => Err(ReadError::Malformed(format!(
+                "filter.{key} must be a non-empty string"
+            ))),
+        }
+    };
+    let filter = Filter {
+        batch_id: text("batch_id")?,
+        dispatch_id: text("dispatch_id")?,
+    };
+    if filter.batch_id.is_none() && filter.dispatch_id.is_none() {
+        return Err(ReadError::Malformed(
+            "filter needs batch_id or dispatch_id".to_owned(),
+        ));
+    }
+    Ok(Some(filter))
+}
+
+/// The collections and paths of a `state.read` payload; `extra` names the other fields the
+/// caller reads from it.
+///
+/// # Errors
+/// `Malformed` for an unknown field, a list that holds no strings, a bad path, or a filter that
+/// names a collection it does not apply to, comes with paths, or holds no key.
+pub fn wanted(payload: Option<&Value>, extra: &[&str]) -> Result<Wanted, ReadError> {
+    let empty = Value::Object(Map::new());
+    let payload = payload.unwrap_or(&empty);
+    let Value::Object(members) = payload else {
+        return Err(ReadError::Malformed(
+            "the payload must be an object".to_owned(),
+        ));
+    };
+    if let Some(unknown) = members.keys().find(|key| {
+        !matches!(key.as_str(), "collections" | "paths" | "filter")
+            && !extra.contains(&key.as_str())
+    }) {
+        return Err(ReadError::Malformed(format!(
+            "unknown payload field {unknown:?}"
+        )));
+    }
+    let collections = names(payload, "collections")?;
+    let paths = names(payload, "paths")?;
+    if paths.len() > MAX_PATHS {
+        return Err(ReadError::Malformed(format!(
+            "at most {MAX_PATHS} paths per request"
+        )));
+    }
+    if let Some(bad) = paths.iter().find(|path| !valid_path(path)) {
+        return Err(ReadError::Malformed(format!(
+            "{bad:?} is not a record path"
+        )));
+    }
+    let filter = filter_of(members)?;
+    if filter.is_some() {
+        if !paths.is_empty() {
+            return Err(ReadError::Malformed(
+                "filter reads collections, not named paths".to_owned(),
+            ));
+        }
+        if collections.is_empty() {
+            return Err(ReadError::Malformed("filter needs a collection".to_owned()));
+        }
+        if let Some(name) = collections
+            .iter()
+            .find(|name| !FILTERED_COLLECTIONS.contains(&name.as_str()))
+        {
+            return Err(ReadError::Malformed(format!(
+                "the collection {name:?} takes no filter"
+            )));
+        }
+    }
+    Ok(Wanted {
+        collections,
+        paths,
+        filter,
+    })
+}
+
+/// Open a read transaction of the store of `state`: a read-only connection, `BEGIN`, and the
+/// first `SELECT`s (the audit tail, the revision, the generation and the selected generation).
+///
+/// # Errors
+/// See [`ReadError`].
+pub fn open(state: &Path) -> Result<Snapshot, ReadError> {
+    attached(state)?;
+    let connection = Connection::open_with_flags(
+        state.join(STORE_NAME),
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    connection.busy_timeout(std::time::Duration::from_secs(5))?;
+    connection.execute_batch("BEGIN")?;
+    // An ordinary command verifies the audit records after the checkpoint (ADR 0020, section 4).
+    crate::audit::verify_tail(&connection).map_err(ReadError::Broken)?;
+    let revision: i64 =
+        connection.query_row("SELECT COALESCE(MAX(seq), 0) FROM audit", [], |row| {
+            row.get(0)
+        })?;
+    let generation_revision: i64 = connection.query_row(
+        "SELECT COALESCE((SELECT revision FROM generation WHERE id = 1), 0)",
+        [],
+        |row| row.get(0),
+    )?;
+    let selected = meta(&connection, "selected_generation")?;
+    Ok(Snapshot {
+        connection,
+        revision: u64::try_from(revision).unwrap_or(0),
+        generation_revision: u64::try_from(generation_revision).unwrap_or(0),
+        selected,
+    })
+}
+
+impl Snapshot {
+    /// The records `wanted` names, as the store was when the snapshot was opened.
+    ///
+    /// # Errors
+    /// See [`ReadError`].
+    pub fn answer(&self, wanted: &Wanted) -> Result<Answer, ReadError> {
+        let answer = self.unbounded(wanted)?;
+        let size: usize = answer
+            .records
+            .iter()
+            .map(|(path, record)| path.len() + record.to_string().len())
+            .sum();
+        if size > MAX_ANSWER_BYTES {
+            return Err(ReadError::TooLarge);
+        }
+        Ok(answer)
+    }
+
+    /// The records `wanted` names, of any size: for a read whose records stay inside the runtime
+    /// (a verdict over them), never for an answer that leaves it in one frame.
+    ///
+    /// # Errors
+    /// See [`ReadError`]; never `TooLarge`.
+    pub(crate) fn unbounded(&self, wanted: &Wanted) -> Result<Answer, ReadError> {
+        let mut found = Found::default();
+        for name in &wanted.collections {
+            collection(
+                &self.connection,
+                name,
+                &self.selected,
+                wanted.filter.as_ref(),
+                &mut found,
+            )?;
+        }
+        for path in &wanted.paths {
+            one_path(&self.connection, path, &self.selected, &mut found)?;
+        }
+        let Found { records, revisions } = found;
+        Ok(Answer {
+            revision: self.revision,
+            generation_revision: self.generation_revision,
+            records,
+            revisions,
+            snapshot: None,
+        })
+    }
+
+    /// The bytes of the artifact at `path` (a QA log, a stage-evidence document, an output
+    /// stream), as the store was when the snapshot was opened; `None` when it holds none.
+    ///
+    /// # Errors
+    /// The store cannot be read.
+    pub fn artifact(&self, path: &str) -> Result<Option<Vec<u8>>, ReadError> {
+        Ok(self
+            .connection
+            .query_row(
+                "SELECT bytes FROM artifact WHERE path = ?1",
+                [path],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// End the read transaction.
+    pub fn close(self) {
+        let _ = self.connection.execute_batch("COMMIT");
+    }
+}
+
+/// Answer one `state.read` request for the store of `state`, in a read transaction of its own.
+///
+/// The payload is `{"collections": [...], "paths": [...], "filter": {...}}`: a collection is a
+/// record directory of the legacy generation (`batches`, `dispatch-status`, `qa-lane`, `audit`,
+/// `reports`, ...), a path is one record file relative to the generation, and an optional `filter`
+/// (`batch_id` and/or `dispatch_id`, only with `batches`, `plans`, `dispatches` and
+/// `dispatch-status`) makes the store select the rows itself. A path that holds no record is left
+/// out.
+///
+/// # Errors
+/// See [`ReadError`].
+pub fn read(
+    state: &Path,
+    payload: Option<&Value>,
+    expected_revision: Option<u64>,
+) -> Result<Answer, ReadError> {
+    attached(state)?;
+    let wanted = wanted(payload, &[])?;
+    let snapshot = open(state)?;
+    if let Some(expected) = expected_revision
+        && expected != snapshot.revision
+    {
+        return Err(ReadError::RevisionConflict {
+            expected,
+            actual: snapshot.revision,
+        });
+    }
+    let answer = snapshot.answer(&wanted);
+    snapshot.close();
+    answer
+}

@@ -33,6 +33,7 @@ def test_install_preserves_unknown_adapter(repo: Path, command: str) -> None:
 def install(repo: Path) -> None:
     result = harness("init", str(repo), "--capability", "backend-orchestration")
     assert result.returncode == 0, result.stderr
+    assert (repo / ".harness/adapters/worker_write_probe.py").is_file()
 
 
 def test_update_refuses_local_adapter_unless_explicit_force(repo: Path) -> None:
@@ -100,7 +101,7 @@ def test_capability_removal_preserves_modified_and_unknown_adapters(repo: Path) 
     unknown = path.with_name("local.py")
     unknown.write_text("unknown\n")
     result = harness(
-        "update", str(repo), "--capability", "pvmalove-suite", "--force-managed-files"
+        "update", str(repo), "--capability", "engineering-suite", "--force-managed-files"
     )
     assert result.returncode == 0, result.stderr
     assert path.read_text() == "local edit\n"
@@ -216,7 +217,9 @@ def test_seed_settings_drift_is_visible_and_requires_explicit_replacement(
     result = harness("update", str(repo))
     assert result.returncode == 0, result.stderr
     assert "--force-seed-file .claude/settings.local.json" in result.stdout
-    assert settings.read_text() == local
+    merged = json.loads(settings.read_text())
+    assert merged["permissions"] == {"allow": ["Bash(project-command)"]}
+    assert "hooks" in merged
     result = harness(
         "update", str(repo), "--force-seed-file", ".claude/settings.local.json"
     )

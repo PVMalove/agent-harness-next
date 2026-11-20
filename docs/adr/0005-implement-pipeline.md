@@ -1,5 +1,7 @@
 # Управляемый конвейер `/implement` и короткий маршрут `/fast-implement`
 
+**Статус: ACCEPTED (2026-09-28). Частично заменён ADR 0012, ADR 0014 и ADR 0033.**
+
 ## Контекст системы
 
 Один тикет должен пройти от принятого архитектурного решения до проверенного commit без потери
@@ -28,18 +30,18 @@ completion report связывает каждый созданный commit с �
 `dispatch propose` показывает decision packet и `transition_digest`. При явном approval
 `dispatch create` сверяет digest с текущими данными ledger; изменённые candidate, scope,
 Context Package или команды требуют нового предложения. Проект выбирает `manual_all`,
-`low_risk` или `milestone` policy: автоматическое принятие чистого отчёта возможно только там,
-где это допускает policy; риск, finding, сбой и publish сохраняют соответствующие ручные
-решения. In-process и external transport исполняют один brief и возвращают одинаковое evidence.
+`low_risk`, `milestone` или `auto` policy: автоматическое принятие чистого отчёта возможно только
+там, где это допускает policy. Кроме `auto`, риск, finding, сбой и publish сохраняют
+соответствующие ручные решения. Policy `auto` описывает
+`harness/orchestration/orchestration.schema.json`; PR и в ней открывает только человек.
+In-process и external transport исполняют один brief и возвращают одинаковое evidence.
 Model self-report и watchdog выявляют mismatch или потерю живости, не меняя brief.
 
-`batch create` закрепляет integration base. Перед review и publish coordinator сверяет её с
-`origin/<integration_ref>`; устаревшая база требует нового developer-dispatch для rebase и нового
-candidate assessment. Стандарты и спецификация проверяются независимыми отчётами. Delta-review
-разрешён только для нового test-only исправления конкретного finding при выполнении условий
-coordinator; иначе проводится полное review. ADR 0012 сужает оба правила: rebase идёт в том же
-developer-retry, что и исправление, а delta-review допустим после fix-forward. QA запускается
-в clean-room worktree через сериализованную lane и привязывается к точному candidate SHA.
+`batch create` закрепляет integration base. Review, QA и publish проверяют закреплённый
+candidate. Финальное обновление базы при подготовке PR задаёт ADR 0014, rebase внутри
+developer-retry и delta-review задаёт ADR 0012. Стандарты и спецификация проверяются
+независимыми отчётами. QA запускается в clean-room worktree через сериализованную lane и
+привязывается к точному candidate SHA.
 
 Writer-dispatch может оставить checkpoint на зелёной границе с commit SHA, оставшимся DoD и
 результатами проверок и продолжиться в новой worker session после повторной self-report.
@@ -73,3 +75,8 @@ brief architect, получает один тест и санитизирова�
 нового dispatch, состояния или записи ledger нет, независимая QA и её граница прежние. Не
 согласованный в brief seam идёт по обычному пути blocker. Контракт цикла описывает раздел
 «Red-Green-Refactor with the optional test author» в `harness/orchestration/roles/developer.md`.
+
+В полном маршруте этот цикл доступен external и in-process developer в его worker worktree
+после preflight `ok` и разрешения вызова автора в утверждённом brief. Корень проекта, доверие
+worktree и вызов автора у in-process developer задаёт ADR 0033; guard, runner и выбор
+исполнителя задаёт ADR 0035. Rust authority не меняется.

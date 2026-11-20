@@ -1,3 +1,10 @@
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """Маршрутизация аргументов командной строки для координатора оркестрации.
 
 Этот модуль намеренно знает только имена команд и структуру аргументов. Доменные
@@ -32,6 +39,33 @@ def build_parser(
     root.add_argument("--state-dir", help="coordinator state directory")
     commands = root.add_subparsers(dest="command", required=True)
 
+    config = commands.add_parser("config", help="inspect or explicitly normalize project config")
+    config_commands = config.add_subparsers(dest="config_command", required=True)
+    validate = config_commands.add_parser(
+        "validate",
+        help="validate without changing lifecycle state; exits 2 on an invalid configuration",
+    )
+    _common(validate)
+    validate.add_argument(
+        "--json",
+        action="store_true",
+        help="structured diagnostics: file, JSON pointer, code, allowed and redacted received value",
+    )
+    mode = validate.add_mutually_exclusive_group()
+    mode.add_argument(
+        "--canonical",
+        action="store_true",
+        help="require canonical source spelling: a value runtime normalization would repair "
+        "with a warning is an error",
+    )
+    mode.add_argument(
+        "--fix",
+        action="store_true",
+        help="explicitly persist safe normalization with a backup; runtime loading never writes",
+    )
+    validate.add_argument("--dry-run", action="store_true", help="preview --fix without writing")
+    validate.set_defaults(handler=handlers.validate_config)
+
     ledger = commands.add_parser(
         "ledger", help="inspect or explicitly maintain versioned lifecycle state"
     )
@@ -65,6 +99,14 @@ def build_parser(
     ):
         command = ledger_commands.add_parser(name, help=help_text)
         _common(command)
+        if name == "validate":
+            command.add_argument(
+                "--full",
+                action="store_true",
+                help="Recompute the whole audit chain from its genesis and compare every row "
+                "with its audit records, without the checkpoint (the runtime-store epoch; a "
+                "file ledger keeps no checkpoint, so its check is always full)",
+            )
         command.set_defaults(handler=handler)
     release_lock = ledger_commands.add_parser(
         "release-lock",
@@ -97,6 +139,142 @@ def build_parser(
     )
     ledger_reset.set_defaults(handler=handlers.reset_ledger)
 
+    runtime = commands.add_parser(
+        "runtime", help="ask the Rust harness-runtime process; never a fallback write"
+    )
+    runtime_commands = runtime.add_subparsers(dest="runtime_command", required=True)
+    runtime_status = runtime_commands.add_parser(
+        "status",
+        help="Read-only: connect to harness-runtime, say hello and report its state",
+    )
+    # The runtime serves one repository and reads no coordinator state: no `--state-dir` here.
+    runtime_status.add_argument(
+        "--repo", default=argparse.SUPPRESS, help="target project root"
+    )
+    runtime_status.add_argument(
+        "--timeout",
+        type=float,
+        default=5.0,
+        help="seconds to keep repeating the request while the runtime does not answer",
+    )
+    runtime_status.set_defaults(handler=handlers.runtime_status)
+
+    worktree = commands.add_parser(
+        "worktree",
+        help="manage an issue worktree and prepare or check in-process session access",
+    )
+    worktree_commands = worktree.add_subparsers(dest="worktree_command", required=True)
+    worktree_create = worktree_commands.add_parser(
+        "create", help="Create a new branch from --base in a managed worktree"
+    )
+    worktree_create.add_argument("--branch", required=True, help="the new issue branch")
+    worktree_create.add_argument(
+        "--base", required=True, help="the commit or ref the branch starts from"
+    )
+    worktree_create.add_argument(
+        "--path",
+        help="worktree directory; default: .harness/.sandboxes/worktrees/<last branch segment>",
+    )
+    worktree_create.set_defaults(handler=handlers.create_worktree)
+    worktree_remove = worktree_commands.add_parser(
+        "remove", help="Remove a clean managed worktree; its branch stays"
+    )
+    worktree_remove.add_argument("--path", required=True, help="worktree directory")
+    worktree_remove.set_defaults(handler=handlers.remove_worktree)
+    worktree_commit = worktree_commands.add_parser(
+        "commit",
+        help="Stage and commit the changes of a managed worktree through the runtime",
+    )
+    worktree_commit.add_argument("--path", required=True, help="worktree directory")
+    message = worktree_commit.add_mutually_exclusive_group(required=True)
+    message.add_argument("--message", help="the commit message")
+    message.add_argument(
+        "--message-file", help="a UTF-8 file outside the worktree with the commit message"
+    )
+    worktree_commit.add_argument(
+        "--pathspec",
+        action="append",
+        help="a path to stage, relative to the worktree root and read literally; repeatable. "
+        "Default: every change of the worktree",
+    )
+    worktree_commit.set_defaults(handler=handlers.commit_worktree)
+    worktree_rebase = worktree_commands.add_parser(
+        "rebase",
+        help="Rebase a managed worktree's branch, or continue, skip or abort it, through the runtime",
+    )
+    worktree_rebase.add_argument("--path", required=True, help="worktree directory")
+    rebase_action = worktree_rebase.add_mutually_exclusive_group(required=True)
+    rebase_action.add_argument("--onto", help="start: the commit to rebase onto")
+    for flag, text in (
+        ("--continue", "stage every change of the worktree and go on"),
+        ("--skip", "drop the commit that stopped the rebase"),
+        ("--abort", "restore the branch as it was before the rebase"),
+    ):
+        rebase_action.add_argument(flag, action="store_true", help=text)
+    worktree_rebase.add_argument(
+        "--upstream",
+        help="start, with --onto: the old base; the commits above it are carried",
+    )
+    worktree_rebase.set_defaults(handler=handlers.rebase_worktree)
+    worktree_merge = worktree_commands.add_parser(
+        "merge",
+        help="Merge a commit into a managed worktree's branch, or continue or abort, through the runtime",
+    )
+    worktree_merge.add_argument("--path", required=True, help="worktree directory")
+    merge_action = worktree_merge.add_mutually_exclusive_group(required=True)
+    merge_action.add_argument("--revision", help="start: the commit to merge")
+    for flag, text in (
+        ("--continue", "stage every change of the worktree and commit the merge"),
+        ("--abort", "restore the branch as it was before the merge"),
+    ):
+        merge_action.add_argument(flag, action="store_true", help=text)
+    worktree_merge.add_argument(
+        "--message", help="start: the merge commit message instead of Git's"
+    )
+    worktree_merge.set_defaults(handler=handlers.merge_worktree)
+    for worktree_command in (
+        worktree_create,
+        worktree_remove,
+        worktree_commit,
+        worktree_rebase,
+        worktree_merge,
+    ):
+        # The runtime serves one repository and reads no coordinator state: no `--state-dir` here.
+        worktree_command.add_argument(
+            "--repo", default=argparse.SUPPRESS, help="target project root"
+        )
+        worktree_command.add_argument(
+            "--timeout",
+            type=float,
+            default=120.0,
+            help="seconds to wait for the runtime to finish the git command",
+        )
+    prepare = worktree_commands.add_parser(
+        "prepare",
+        help="prepare shared directories and build a native coordinator launch command",
+    )
+    prepare.add_argument("--runtime", choices=("codex", "claude"), required=True)
+    prepare.add_argument(
+        "--network-access",
+        choices=("disabled", "enabled"),
+        help="Codex command networking (default disabled). Enabled permits direct access without a proxy.",
+    )
+    prepare.add_argument(
+        "--launch", action="store_true", help="start the coordinator session"
+    )
+    prepare.set_defaults(handler=handlers.prepare_session)
+    check = worktree_commands.add_parser(
+        "check", help="probe write access from the running coordinator session"
+    )
+    check.set_defaults(handler=handlers.check_session)
+    for session_command in (prepare, check):
+        session_command.add_argument(
+            "--repo", default=argparse.SUPPRESS, help="main checkout"
+        )
+        session_command.add_argument(
+            "--worktree", required=True, help="registered issue worktree"
+        )
+
     batch = commands.add_parser("batch")
     batch_commands = batch.add_subparsers(dest="batch_command", required=True)
     create = batch_commands.add_parser("create", aliases=["plan"])
@@ -104,6 +282,11 @@ def build_parser(
     create.add_argument("--ticket", required=True)
     create.add_argument("--branch", required=True)
     create.add_argument("--worktree", required=True)
+    create.add_argument(
+        "--writer-role",
+        choices=defaults.BATCH_WRITER_ROLES,
+        help="implementation owner of the batch (default: developer)",
+    )
     create.add_argument(
         "--allowed-path",
         action="append",
@@ -127,7 +310,9 @@ def build_parser(
     )
     create.add_argument("--definition-of-done", action="append", required=True)
     create.add_argument("--prohibited-change", action="append", required=True)
-    create.add_argument("--required-gate", action="append")
+    create.add_argument(
+        "--required-gate", action="append", choices=defaults.REQUIRED_GATES
+    )
     create.add_argument("--dependency", action="append")
     create.add_argument(
         "--expected-file", action="append", help="planned changed path; repeated"
@@ -148,12 +333,31 @@ def build_parser(
     create.add_argument(
         "--supersedes",
         help="abandoned batch of the same ticket and issue branch this batch resumes from its "
-        "abandoned.last_accepted record; requires --approved-by and --approved-at",
+        "abandoned.last_accepted record, or whose confirmed architect report it carries with "
+        "--carry-architect; requires --approved-by and --approved-at",
     )
     create.add_argument(
         "--approved-by", help="human who approved --supersedes; never a policy"
     )
     create.add_argument("--approved-at", help="time of the --supersedes approval")
+    create.add_argument(
+        "--carry-architect",
+        help="architect dispatch of the --supersedes batch whose never-accepted report this "
+        "batch carries instead of running the architect again; same Definition of Done only; "
+        "requires --architect-report-sha256, --architect-confirmed-by and "
+        "--architect-confirmed-at",
+    )
+    create.add_argument(
+        "--architect-report-sha256",
+        help="report_sha256 of the --carry-architect report the human confirmed",
+    )
+    create.add_argument(
+        "--architect-confirmed-by",
+        help="human who confirmed the --carry-architect report; never a policy",
+    )
+    create.add_argument(
+        "--architect-confirmed-at", help="time of the --carry-architect confirmation"
+    )
     create.set_defaults(handler=handlers.create_batch)
     batch_preflight = batch_commands.add_parser(
         "preflight", help="reject an oversized ticket before creating a batch"
@@ -161,6 +365,7 @@ def build_parser(
     _common(batch_preflight)
     batch_preflight.add_argument("--ticket", required=True)
     batch_preflight.add_argument("--allowed-path", action="append")
+    batch_preflight.add_argument("--writer-role", choices=defaults.BATCH_WRITER_ROLES)
     batch_preflight.add_argument("--definition-of-done", action="append", required=True)
     batch_preflight.add_argument("--dependency", action="append")
     batch_preflight.add_argument("--expected-file", action="append")
@@ -184,7 +389,11 @@ def build_parser(
     batch_list = batch_commands.add_parser("list")
     _common(batch_list)
     batch_list.add_argument("--ticket", help="only batches of this ticket")
-    batch_list.add_argument("--state", help="only batches in this state")
+    batch_list.add_argument(
+        "--state",
+        choices=[str(state) for state in defaults.BatchState],
+        help="only batches in this state",
+    )
     batch_list.add_argument(
         "--open", action="store_true", help="hide batches already in a terminal state"
     )
@@ -210,13 +419,18 @@ def build_parser(
     batch_resume.set_defaults(handler=handlers.resume_batch)
     resume_stop = batch_commands.add_parser(
         "resume-stop",
-        help="resume a recorded stop with human approval; next dispatch still needs a fresh approval",
+        help="resume a recorded stop; --restart includes its unchanged successor in the human approval",
     )
     _common(resume_stop)
     resume_stop.add_argument("--batch", required=True)
     resume_stop.add_argument("--approved-by", required=True)
     resume_stop.add_argument("--approved-at", required=True)
     resume_stop.add_argument("--note", required=True)
+    resume_stop.add_argument(
+        "--restart",
+        action="store_true",
+        help="also approve one same-contract successor; does not send it or relax later manual approvals",
+    )
     resume_stop.add_argument(
         "--runtime-stopped",
         action="store_true",
@@ -304,13 +518,13 @@ def build_parser(
     )
     decide.add_argument(
         "--reason-category",
-        choices=defaults.RETRY_REASON_CATEGORIES,
+        choices=[str(reason) for reason in defaults.RETRY_REASON_CATEGORIES],
         help="why the reporting role stopped, for retry; structured report data overrides an unsupported claim",
     )
     decide.add_argument(
         "--retry-role",
-        choices=["developer"],
-        help="force a developer retry where the coordinator would re-run the same candidate",
+        choices=defaults.BATCH_WRITER_ROLES,
+        help="force a retry by the batch's planned writer",
     )
     decide.add_argument(
         "--commit-plan-file",
@@ -424,13 +638,13 @@ def build_parser(
     )
     packet.add_argument(
         "--reason-category",
-        choices=defaults.RETRY_REASON_CATEGORIES,
+        choices=[str(reason) for reason in defaults.RETRY_REASON_CATEGORIES],
         help="preview the retry route as batch decide computes it with this --reason-category; the preview does not check the developer-retry budget",
     )
     packet.add_argument(
         "--retry-role",
-        choices=["developer"],
-        help="preview the retry route as batch decide computes it with --retry-role developer; the preview does not check the developer-retry budget",
+        choices=defaults.BATCH_WRITER_ROLES,
+        help="preview a forced retry by the planned writer without checking the retry budget",
     )
     packet.add_argument(
         "--commit-plan-file",
@@ -477,6 +691,10 @@ def build_parser(
     context_package_register.add_argument("--batch", required=True)
     context_package_register.add_argument("--candidate-commit", required=True)
     context_package_register.add_argument(
+        "--starting-file", action="append", default=None,
+        help="required repository-relative read input at the pinned snapshot; repeatable",
+    )
+    context_package_register.add_argument(
         "--role",
         default="shared",
         choices=["shared"],
@@ -511,6 +729,17 @@ def build_parser(
         "--max-package-tokens", type=int, help="optional stricter token ceiling"
     )
     context_package_register.set_defaults(handler=handlers.register_context_package)
+    context_package_show = context_package_commands.add_parser(
+        "show", help="read the package pinned to a dispatch"
+    )
+    _common(context_package_show)
+    context_package_show.add_argument("--dispatch", required=True)
+    context_package_show.add_argument(
+        "--section", help="return one field, for example starting_files, related_tests or symbol_graph"
+    )
+    context_package_show.set_defaults(
+        handler=handlers.show_context_package, installed_runtime_only=True
+    )
 
     dispatch = commands.add_parser("dispatch")
     dispatch_commands = dispatch.add_subparsers(dest="dispatch_command", required=True)
@@ -605,6 +834,25 @@ def build_parser(
         "candidate_commit; every other role omits this",
     )
     dispatch_send.set_defaults(handler=handlers.send_dispatch)
+    dispatch_observe = dispatch_commands.add_parser(
+        "observe",
+        help="read existing worker events; no model calls or lifecycle changes",
+    )
+    _common(dispatch_observe)
+    dispatch_observe.add_argument("--dispatch", required=True)
+    dispatch_observe.add_argument("--offset", type=int, default=0)
+    dispatch_observe.set_defaults(handler=handlers.observe_dispatch)
+    dispatch_logs = dispatch_commands.add_parser(
+        "logs",
+        help="read the visible events of a worker's log; --follow prints each as a JSON line "
+        "until the execution ends; no model calls, lifecycle changes or ledger lock while following",
+    )
+    _common(dispatch_logs)
+    dispatch_logs.add_argument("--dispatch", required=True)
+    dispatch_logs.add_argument("--offset", type=int, default=0)
+    dispatch_logs.add_argument("--follow", action="store_true")
+    dispatch_logs.add_argument("--poll-seconds", type=float, default=1.0)
+    dispatch_logs.set_defaults(handler=handlers.dispatch_logs)
     dispatch_cancel = dispatch_commands.add_parser("cancel")
     _common(dispatch_cancel)
     dispatch_cancel.add_argument("--dispatch", required=True)
@@ -858,6 +1106,11 @@ def build_parser(
         type=int,
         help="the opened pull request; without it the step is the one before the pull request",
     )
+    integration_next.add_argument(
+        "--merge-commit",
+        help="after the merge of --pull-request: the commit the merge created; its tree is "
+        "compared with the candidate_tree_sha of the pair (merged or merge-tree-mismatch)",
+    )
     integration_next.set_defaults(handler=handlers.integration_next)
     integration_link = integration_commands.add_parser(
         "link-evidence",
@@ -871,7 +1124,9 @@ def build_parser(
     integration_link.add_argument("--candidate-commit", required=True)
     integration_link.add_argument("--target-commit", required=True)
     integration_link.add_argument(
-        "--result", required=True, choices=defaults.INTEGRATION_EVIDENCE_RESULTS
+        "--result",
+        required=True,
+        choices=[str(result) for result in defaults.INTEGRATION_EVIDENCE_RESULTS],
     )
     integration_link.add_argument(
         "--reference", required=True, help="where the check result can be inspected"
@@ -948,6 +1203,21 @@ def build_parser(
     report_submit = report_commands.add_parser("submit", aliases=["record"])
     _common(report_submit)
     report_submit.add_argument("--file", required=True)
+    report_submit.add_argument(
+        "--compact",
+        action="store_true",
+        help="return a worker receipt without the coordinator's decision packet",
+    )
+    report_submit.add_argument(
+        "--relayed-by", help="coordinator delivering an unchanged worker report"
+    )
+    report_submit.add_argument(
+        "--relay-reason",
+        help="exact worker submission failure; requires --relayed-by and --source-sha256",
+    )
+    report_submit.add_argument(
+        "--source-sha256", help="SHA256 of the original staged worker bytes"
+    )
     report_submit.set_defaults(handler=handlers.submit_report)
     report_complete = report_commands.add_parser(
         "complete",
@@ -956,4 +1226,68 @@ def build_parser(
     _common(report_complete)
     report_complete.add_argument("--dispatch", required=True)
     report_complete.set_defaults(handler=handlers.complete_report)
+    recovery = commands.add_parser(
+        "recovery",
+        help="status, reload, resume, fix and abort of a batch the runtime store holds or "
+        "the coordinator stopped; never reads stdin, exits 0 on success and 2 on refusal",
+    )
+    recovery_commands = recovery.add_subparsers(dest="recovery_command", required=True)
+    for name, handler, help_text in (
+        (
+            "status",
+            handlers.recovery_status,
+            "read-only reconciliation checks, diagnostics and the available actions",
+        ),
+        (
+            "reload",
+            handlers.recovery_reload,
+            "re-read and validate the current configuration and the runtime; never starts "
+            "a worker",
+        ),
+        (
+            "resume",
+            handlers.recovery_resume,
+            "re-check the batch and release its hold through the existing approval gates",
+        ),
+        (
+            "fix",
+            handlers.recovery_fix,
+            "preview the safe normalization of the configuration; --apply writes it",
+        ),
+        (
+            "abort",
+            handlers.recovery_abort,
+            "record that the operator left recovery; nothing is abandoned or stopped",
+        ),
+    ):
+        command = recovery_commands.add_parser(name, help=help_text)
+        _common(command)
+        command.add_argument("--batch", required=True)
+        command.add_argument(
+            "--json",
+            action="store_true",
+            help="structured output; the coordinator always prints JSON",
+        )
+        if name == "status":
+            command.add_argument(
+                "--skip",
+                action="append",
+                metavar="DIAGNOSTIC_ID",
+                help="hide an allowlisted advisory for this call only; repeatable",
+            )
+        if name == "resume":
+            command.add_argument(
+                "--approved-by",
+                help="human who approves the audited resume-stop of a stopped batch",
+            )
+            command.add_argument("--approved-at", help="time of that approval")
+            command.add_argument("--note", help="what was checked before resuming")
+        if name == "fix":
+            command.add_argument(
+                "--apply",
+                action="store_true",
+                help="write the normalization through the configuration transaction",
+            )
+        # Recovery runs on the installed runtime, like resume-stop and rewind.
+        command.set_defaults(handler=handler, installed_runtime_only=True)
     return root

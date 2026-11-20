@@ -1,0 +1,49 @@
+{
+  "cancel_reason": "Отмена останавливает команду; уже внесённые изменения не откатываются.",
+  "commands": [
+    {
+      "available": true,
+      "command_id": "update",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "update",
+      "title": "Обновить харнесс",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "update-force-managed",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "update",
+      "title": "Обновить харнесс с перезаписью управляемых файлов",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "update-seed-selected",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [
+        "paths"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "update",
+      "title": "Обновить харнесс с перезаписью выбранных seed-файлов",
+      "typed_confirmation": null
+    }
+  ]
+}

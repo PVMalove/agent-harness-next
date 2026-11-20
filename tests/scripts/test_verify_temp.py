@@ -220,6 +220,10 @@ class PytestCommandTest(unittest.TestCase):
         self.assertNotIn("--ignore=tests/memory/test_eval.py", cmd)
         self.assertNotIn("--ignore=tests/memory/test_vector_probe.py", cmd)
 
+    def test_idle_workers_steal_pending_tests(self) -> None:
+        cmd = verify.pytest_command(Path("/tmp/run"), platform="linux", cpu_count=8)
+        self.assertEqual(cmd[cmd.index("--dist") + 1], "worksteal")
+
     def test_workers_are_capped_at_eight(self) -> None:
         cmd = verify.pytest_command(Path("/tmp/run"), platform="linux", cpu_count=16)
         self.assertEqual(cmd[cmd.index("-n") + 1], "8")

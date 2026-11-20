@@ -22,7 +22,7 @@ def _checkout(path: Path) -> Path:
     return path
 
 
-def test_external_transport_never_runs_a_preflight() -> None:
+def test_external_transport_checks_the_worker_before_enabling_the_author() -> None:
     calls: list[str] = []
 
     def preflight() -> dict[str, object]:
@@ -31,8 +31,8 @@ def test_external_transport_never_runs_a_preflight() -> None:
 
     answer = full_route.effective_answer("external", preflight)
 
-    assert answer == {"status": "disabled", "reason": "transport_unsupported"}
-    assert calls == []
+    assert answer == {"status": "ok"}
+    assert calls == ["preflight"]
 
 
 def test_in_process_transport_uses_the_preflight_answer() -> None:

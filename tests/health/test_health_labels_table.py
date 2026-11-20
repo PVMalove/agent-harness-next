@@ -93,7 +93,7 @@ def test_no_tables_returns_empty() -> None:
 
 def test_repository_triage_labels_are_recognized_with_expected_colors() -> None:
     """Проверить, что канонические метки репозитория распознаются с ожидаемыми цветами."""
-    text = (HARNESS_ROOT / "docs" / "agents" / "triage-labels.md").read_text(
+    text = (HARNESS_ROOT / "harness" / "project" / "instructions" / "triage-labels.md").read_text(
         encoding="utf-8"
     )
 

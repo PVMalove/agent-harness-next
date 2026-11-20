@@ -1,0 +1,15 @@
+[
+  "/work/project/.harness/config_versions",
+  "claude",
+  "✔ актуален",
+  ".harness/adapters/claude.json",
+  "codex",
+  "⚠ требует обновления",
+  ".harness/adapters/codex.json",
+  "⚠ локальная правка",
+  "opencode",
+  "○ не установлен",
+  ".harness/adapters/opencode.json",
+  "Будут обновлены: .harness/adapters/codex.json",
+  "Будут добавлены: .harness/adapters/opencode.json"
+]

@@ -1,0 +1,53 @@
+{
+  "cancel_reason": "Отмена останавливает команду; уже внесённые изменения не откатываются.",
+  "commands": [
+    {
+      "available": true,
+      "command_id": "setup-init",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [
+        "capability"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "setup",
+      "title": "Установить харнесс в выбранный проект",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "setup-adopt",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [
+        "capability"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "setup",
+      "title": "Установить харнесс в выбранный проект",
+      "typed_confirmation": null
+    },
+    {
+      "available": true,
+      "command_id": "setup-update",
+      "confirmation_reason": "Команда перезаписывает файлы харнесса в проекте (управляемые или seed) — незакоммиченные правки в них пропадут.",
+      "inputs": [
+        "capability"
+      ],
+      "needs_confirmation": true,
+      "plan_required": false,
+      "read_only": false,
+      "reversibility": "overwrites-managed-files",
+      "reversibility_label": "⚠ перезапись",
+      "section": "setup",
+      "title": "Установить харнесс в выбранный проект",
+      "typed_confirmation": null
+    }
+  ]
+}

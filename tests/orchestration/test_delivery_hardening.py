@@ -31,6 +31,8 @@ class _Run(Protocol):
 def routing() -> Iterator[coordinator_tests.CoordinatorRetryRoutingTests]:
     """The coordinator routing fixture, by composition so its own suite does not run again."""
     fixture = coordinator_tests.CoordinatorRetryRoutingTests()
+    # Publish needs runtime QA evidence: a 1.x ledger (ADR 0036, section 5).
+    fixture.file_ledger = True
     fixture.setUp()
     try:
         yield fixture

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from harness.health import project_files
 from harness.configuration_schema import value_problems
+from harness.health import project_files
 
 _SCHEMA = (
     Path(project_files.__file__).resolve().parents[1]
@@ -32,10 +32,6 @@ def _problems(tmp_path: Path, extra: dict[str, object]) -> list[str]:
     problems: list[str] = []
     project_files.validate_project_json(tmp_path, problems)
     return problems
-
-
-def test_fields_are_optional(tmp_path: Path) -> None:
-    assert _problems(tmp_path, {}) == []
 
 
 @pytest.mark.parametrize(

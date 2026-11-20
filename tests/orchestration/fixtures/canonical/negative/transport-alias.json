@@ -1,0 +1,43 @@
+{
+  "provider_profiles": {
+    "default-profile": {
+      "capabilities": [
+        "architecture-analysis",
+        "backend-development",
+        "code-review",
+        "independent-verification"
+      ],
+      "fallback": [],
+      "known_limitations": []
+    }
+  },
+  "assignment_plans": {
+    "developer": {
+      "transport": "in_process",
+      "runtimes": {
+        "claude": {
+          "profiles": [
+            "default-profile"
+          ],
+          "model": "example-model",
+          "effort": "high"
+        }
+      }
+    },
+    "code-review": {
+      "runtimes": {
+        "claude": {
+          "profiles": [
+            "default-profile"
+          ],
+          "model": "example-model",
+          "effort": "high"
+        }
+      }
+    }
+  },
+  "concurrency_budget": 1,
+  "verification_commands": [
+    "make lint"
+  ]
+}

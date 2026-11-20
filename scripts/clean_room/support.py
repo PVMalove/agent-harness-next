@@ -10,9 +10,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import IO, TypedDict, Unpack
 
 from harness.gate_runner.gate_runner import sanitise
+from harness.seed_links import agents_rules_pointer
 from harness.storage import storage_path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -50,8 +53,31 @@ BASH = _find_bash()
 # hung step must fail the run and name the command instead of holding CI until the job timeout.
 STEP_TIMEOUT_SECONDS = 300
 
+# One clean-room command: a shell string or an argument list.
+Command = str | Sequence[str | Path]
+JsonReport = dict[str, object]
 
-def run_step(cmd, **kwargs) -> subprocess.CompletedProcess:
+
+class StepOptions(TypedDict, total=False):
+    """The ``subprocess.run`` options a clean-room step passes through."""
+
+    timeout: float
+    check: bool
+    capture_output: bool
+    text: bool
+    encoding: str
+    errors: str
+    stdin: int | IO[str] | None
+    stdout: int | None
+    stderr: int | None
+    input: str | bytes
+    env: Mapping[str, str]
+    cwd: Path | None
+
+
+def run_step(
+    cmd: Command, **kwargs: Unpack[StepOptions]
+) -> subprocess.CompletedProcess[str]:
     """`subprocess.run` с ограничением времени: зависший шаг завершает прогон с именем команды.
 
     Остальные аргументы (`check`, `capture_output`, `input`, `env`, `cwd`) передаются без
@@ -131,7 +157,7 @@ def run_health(repo: Path) -> None:
         raise SystemExit(code)
 
 
-def run_ok(cmd, quiet=False, quiet_all=False):
+def run_ok(cmd: Command, quiet: bool = False, quiet_all: bool = False) -> None:
     """Запустить команду, которая обязана пройти; при сбое завершиться её кодом выхода, как `set -e`."""
     stdout = subprocess.DEVNULL if (quiet or quiet_all) else None
     stderr = subprocess.DEVNULL if quiet_all else None
@@ -143,7 +169,7 @@ def run_ok(cmd, quiet=False, quiet_all=False):
         sys.exit(result.returncode)
 
 
-def run_fails(cmd, quiet=False, quiet_all=False) -> bool:
+def run_fails(cmd: Command, quiet: bool = False, quiet_all: bool = False) -> bool:
     """Запустить команду, которая должна упасть; вернуть `True`, если она упала."""
     stdout = subprocess.DEVNULL if (quiet or quiet_all) else None
     stderr = subprocess.DEVNULL if quiet_all else None
@@ -151,49 +177,68 @@ def run_fails(cmd, quiet=False, quiet_all=False) -> bool:
     return result.returncode != 0
 
 
-def fail_output(cmd) -> str:
+def fail_output(cmd: Command) -> str:
     """Запустить команду, которая обязана упасть, и вернуть её stdout и stderr вместе."""
     result = run_step(cmd, capture_output=True, text=True, check=False)
     if result.returncode == 0:
         sys.exit("command unexpectedly succeeded: " + " ".join(map(str, cmd)))
-    return result.stdout + result.stderr
+    return str(result.stdout) + str(result.stderr)
 
 
-def capture(cmd) -> str:
+def capture(cmd: Command) -> str:
     """Запустить команду, которая обязана пройти, и вернуть её stdout."""
-    return run_step(cmd, capture_output=True, text=True, check=True).stdout
+    return str(run_step(cmd, capture_output=True, text=True, check=True).stdout)
 
 
-def fail_json(cmd) -> dict:
+def _report(text: str) -> JsonReport:
+    report: object = json.loads(text)
+    if not isinstance(report, dict):
+        sys.exit("health --json output is not a JSON object")
+    return report
+
+
+def fail_json(cmd: Command) -> JsonReport:
     """Запустить `harness health ... --json`, которая обязана упасть, и разобрать её JSON stdout."""
     result = run_step(cmd, capture_output=True, text=True, check=False)
     if result.returncode == 0:
         sys.exit("command unexpectedly succeeded: " + " ".join(map(str, cmd)))
-    return json.loads(result.stdout)
+    return _report(result.stdout)
 
 
-def capture_json(cmd) -> dict:
+def capture_json(cmd: Command) -> JsonReport:
     """Запустить `harness health ... --json`, которая обязана пройти, и разобрать её JSON stdout."""
-    return json.loads(run_step(cmd, capture_output=True, text=True, check=True).stdout)
+    return _report(capture(cmd))
 
 
-def find_check(report: dict, check_id: str) -> dict:
+def find_check(report: JsonReport, check_id: str) -> JsonReport:
     """Найти проверку по стабильному `id` в отчёте `harness health --json`."""
-    for check in report["checks"]:
-        if check["id"] == check_id:
+    checks = report.get("checks")
+    for check in checks if isinstance(checks, list) else []:
+        if isinstance(check, dict) and check.get("id") == check_id:
             return check
     sys.exit(f"health --json report has no check with id {check_id!r}")
 
 
-def commit_map_for(brief: dict, commit_sha: str) -> list[dict]:
+def commit_map_for(brief: JsonReport, commit_sha: str) -> list[dict[str, object]]:
     """Обязательный `commit_map` отчёта developer для кандидата из одного коммита."""
+    plan = brief.get("commit_plan")
     return [
         {"commit_sha": commit_sha, "plan_entry_id": entry["id"]}
-        for entry in brief.get("commit_plan", [])
+        for entry in (plan if isinstance(plan, list) else [])
+        if isinstance(entry, dict)
     ]
 
 
-def fill_agents(repo: Path):
+def spec_criteria(brief: JsonReport) -> list[dict[str, str]]:
+    """Строки Spec Review, где каждый критерий brief выполнен: их требует полное review."""
+    criteria = brief["definition_of_done"]
+    return [
+        {"criterion": criterion, "status": "met", "evidence": "clean-room check passed"}
+        for criterion in (criteria if isinstance(criteria, list) else [])
+    ]
+
+
+def fill_agents(repo: Path) -> None:
     """Заменить незаполненные маркеры `{{...}}` в AGENTS.md проекта на `N/A`."""
     agents = repo / "AGENTS.md"
     agents.write_text(
@@ -212,10 +257,10 @@ def run_hook(
     project_dir: Path,
     command: str,
     *,
-    raw_payload=None,
-    env_overrides=None,
+    raw_payload: str | None = None,
+    env_overrides: Mapping[str, str] | None = None,
     cwd: Path | None = None,
-):
+) -> subprocess.CompletedProcess[str]:
     """Передать PreToolUse(Bash) hook тот же JSON, что отправляет Claude Code, с `CLAUDE_PROJECT_DIR`.
 
     Так поведение hook проверяется напрямую, а не выводится из файлов, созданных harness.
@@ -240,18 +285,12 @@ def run_hook(
     )
 
 
-def assert_contract_link(doc: Path, contract: Path, label: str) -> None:
-    """Проверить, что документ ровно один раз ссылается на контракт и требует прочитать его до handoff."""
+def assert_rule_link(doc: Path, rule: Path, label: str) -> None:
+    """Проверить, что документ ровно один раз ссылается на установленное правило."""
     text = doc.read_text(encoding="utf-8")
-    links = re.findall(r"\[[^\]]+\]\(([^)]+technical-english\.md)\)", text)
-    if len(links) != 1 or (doc.parent / links[0]).resolve() != contract.resolve():
-        sys.exit(f"{label} does not reach the shared technical-English contract")
-    paragraph = next(
-        part for part in text.split("\n\n") if "technical-english.md" in part
-    )
-    normalized = " ".join(paragraph.split()).lower()
-    if "must read" not in normalized or "before" not in normalized:
-        sys.exit(f"{label} technical-English reference is not mandatory")
+    links = re.findall(rf"\[[^\]]+\]\(([^)]*{re.escape(rule.name)})\)", text)
+    if len(links) != 1 or (doc.parent / links[0]).resolve() != rule.resolve():
+        sys.exit(f"{label} does not reach the installed rule {rule.name}")
 
 
 def apply_patch(patch: str, cwd: Path) -> None:
@@ -275,22 +314,25 @@ def starts_with_text(data: bytes, text: str) -> bool:
     return data.replace(b"\r\n", b"\n").startswith(text.encode("utf-8"))
 
 
-def check_technical_english(project: Path) -> None:
-    """Проверить доставку управляемого контракта и достижимость из новых точек входа."""
-    contract = project / ".harness/docs/technical-english.md"
-    if not contract.is_file():
-        sys.exit("standard install did not deliver the technical-English contract")
-    delivered = contract.read_bytes()
-    if delivered != (ROOT / "harness/docs/technical-english.md").read_bytes():
-        sys.exit("installed technical-English contract differs from its shared source")
+LANGUAGE_RULES = ("technical-english.md", "technical-russian.md")
+
+
+def check_language_rules(project: Path) -> None:
+    """Проверить доставку языковых правил и путь к ним для Claude Code и Codex (#1249).
+
+    Правила — managed-файлы `.claude/rules/`, которые Claude Code грузит сам; Codex читает их по
+    указателю из `AGENTS.md`. Старого контракта в `.harness/instructions/` нет."""
     lock = json.loads((project / ".harness/harness.lock").read_text(encoding="utf-8"))
-    if (
-        lock["files"].get(".harness/docs/technical-english.md")
-        != hashlib.sha256(delivered).hexdigest()
-    ):
-        sys.exit("technical-English contract is not managed by the snapshot lock")
-    if list((project / ".harness").rglob("technical-english.md")) != [contract]:
-        sys.exit("installation contains more than one technical-English contract")
-    assert_contract_link(project / "AGENTS.md", contract, "AGENTS.md")
-    if "@AGENTS.md" not in (project / "CLAUDE.md").read_text(encoding="utf-8"):
-        assert_contract_link(project / "CLAUDE.md", contract, "CLAUDE.md")
+    for name in LANGUAGE_RULES:
+        rule = project / ".claude/rules" / name
+        if not rule.is_file():
+            sys.exit(f"standard install did not deliver the language rule {name}")
+        delivered = rule.read_bytes()
+        if delivered != (ROOT / "harness/project/rules" / name).read_bytes():
+            sys.exit(f"installed language rule differs from its source: {name}")
+        if lock["files"].get(f".claude/rules/{name}") != hashlib.sha256(delivered).hexdigest():
+            sys.exit(f"language rule is not managed by the snapshot lock: {name}")
+    if list((project / ".harness").rglob("technical-english.md")):
+        sys.exit("installation still contains the old technical-English contract")
+    if not agents_rules_pointer((project / "AGENTS.md").read_text(encoding="utf-8")):
+        sys.exit("AGENTS.md does not point Codex to the runtime rules")

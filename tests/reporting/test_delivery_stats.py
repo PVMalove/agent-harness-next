@@ -14,9 +14,9 @@ from pathlib import Path
 from unittest import mock
 
 from harness.errors import HarnessError
-from harness.orchestration.ledger import LifecycleLedger
 from harness.reporting import delivery_stats
 from harness.reporting.common import JsonObject
+from tests.orchestration.legacy_state import seed_file_ledger
 
 ORCHESTRATION_ROOT = Path(__file__).resolve().parents[2] / "harness" / "orchestration"
 
@@ -47,8 +47,9 @@ class OrchestrationMetricsLenientReadTests(unittest.TestCase):
         _install_ledger_source(self.repo)
         self.state_dir = self.tmp / "state"
 
-        self.ledger = LifecycleLedger(self.state_dir)
-        self.ledger.ensure()
+        # A state dir outside the repo with hand-written and corrupted records: a 1.x ledger
+        # (ADR 0036, section 5, rules 3 and 5).
+        self.ledger = seed_file_ledger(self.state_dir)
         generation = self.ledger.records_root()
 
         self.batch_id = "batch-197-1"
@@ -268,8 +269,9 @@ class OrchestrationMetricsIncompatibleLedgerModuleTests(unittest.TestCase):
 
         # Build real, well-formed ledger state with the current (compatible) LifecycleLedger --
         # only the module installed under the analyzed repo is incompatible/old.
-        ledger = LifecycleLedger(self.state_dir)
-        ledger.ensure()
+        # A state dir outside the repo with hand-written records: a 1.x ledger (ADR 0036,
+        # section 5, rules 3 and 5).
+        ledger = seed_file_ledger(self.state_dir)
         generation = ledger.records_root()
         batch_id = "batch-197-2"
         ledger.write_immutable(

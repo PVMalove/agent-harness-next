@@ -10,7 +10,9 @@ a prepared report or a replaced route.
 from __future__ import annotations
 
 import argparse
+import io
 import json
+import os
 import subprocess
 import textwrap
 import unittest
@@ -28,6 +30,14 @@ LOCK_SYNC_ERROR = (
     "package-lock.json are in sync"
 )
 OUTAGE_ERROR = "npm ERR! network request failed: getaddrinfo EAI_AGAIN registry.example"
+# What `uv sync` prints when there is no network to the package index (uv 0.x, offline).
+UV_OFFLINE_ERROR = (
+    "  x No solution found when resolving dependencies:\n"
+    "  `-> Because pytest was not found in the cache and your project depends on pytest>=8, "
+    "we can conclude that your project's requirements are unsatisfiable.\n\n"
+    "      hint: Packages were unavailable because the network was disabled. When the network "
+    "is disabled, registry packages may only be read from the cache."
+)
 
 
 def _git(repo: Path, *arguments: str) -> None:
@@ -103,6 +113,7 @@ class PreparationFixture(unittest.TestCase):
         _git(self.repo, "add", "-A")
         _git(self.repo, "commit", "-m", "declare the QA gate")
         _git(self.repo, "push", "origin", "master")
+        self.configure_before_batch()
         # The QA lane is repository-scoped: its ledger is the repository's own state directory.
         self.fx.state_dir = self.repo / coordinator.STATE_REL
         self.batch_id = self.fx._create_batch()["batch_id"]
@@ -111,11 +122,25 @@ class PreparationFixture(unittest.TestCase):
         self.fx._reported_review(self.batch_id, self.candidate)
         self.fx._decide(self.batch_id, "accept")
 
+    def configure_before_batch(self) -> None:
+        """Optionally add project configuration before the verification plan is pinned."""
+
     def _script(self, name: str, body: str) -> str:
         path = self.scripts / f"{name}.py"
         path.write_text(textwrap.dedent(body).lstrip(), encoding="utf-8")
         # A bare `python` is always the launcher the gate runner pins; `python.exe` is not.
         return f'python "{path}"'
+
+    def uv_offline_prepare(self) -> str:
+        """A preparation command that fails the way ``uv sync`` fails without a network."""
+        return self._script(
+            "uv_sync",
+            f"""
+            import sys
+            print({UV_OFFLINE_ERROR!r}, file=sys.stderr)
+            sys.exit(2)
+            """,
+        )
 
     def configure(self, *, preparation: list[str] | None, facts: bool = True) -> None:
         config: JsonObject = {
@@ -150,7 +175,7 @@ class PreparationFixture(unittest.TestCase):
 
     def report_of(self, result: JsonObject) -> JsonObject:
         report: JsonObject = json.loads(
-            Path(result["report"]).read_text(encoding="utf-8")
+            self.fx._stored(result["report"]).read_text(encoding="utf-8")
         )
         return report
 
@@ -166,6 +191,36 @@ class PreparationFixture(unittest.TestCase):
 
     def developer_retries(self) -> int:
         return decisions._developer_retry_count(self.fx._batch_record(self.batch_id))
+
+
+class PreQaE2ETests(PreparationFixture):
+    def configure_before_batch(self) -> None:
+        self.pre_qa = self._script("pre_qa", "raise SystemExit(1)")
+        (self.repo / ".harness/orchestration.json").write_text(
+            json.dumps(
+                {
+                    "verification_commands": self.gate,
+                    "pre_qa_commands": [self.pre_qa],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def test_pre_qa_failure_is_recorded_and_stops_the_candidate_gate(self) -> None:
+        brief = self.qa_brief()
+        report = self.report_of(self.run_qa(brief))
+
+        batch = self.fx._batch_record(self.batch_id)
+        self.assertEqual(batch["verification_commands"], [self.pre_qa, *self.gate])
+        self.assertEqual(batch["developer_verification_commands"], self.gate)
+        self.assertEqual(batch["review_verification_commands"], self.gate)
+        self.assertEqual(brief["candidate_commit"], self.candidate)
+        self.assertEqual(report["outcome"], "failed")
+        self.assertEqual(
+            [(item["command"], item["result"]) for item in report["checks_run"]],
+            [(self.pre_qa, "fail"), *((command, "not_run") for command in self.gate)],
+        )
+        self.assertFalse(self.gate_ran.exists())
 
 
 class QaPreparationE2ETests(PreparationFixture):
@@ -200,7 +255,7 @@ class QaPreparationE2ETests(PreparationFixture):
         )
         self.assertIn("code was not verified", report["output"])
         self.assertFalse(self.gate_ran.exists(), "the gate must not start")
-        artifact = Path(result["artifact"]).read_text(encoding="utf-8")
+        artifact = self.fx._stored(result["artifact"]).read_text(encoding="utf-8")
         # The artifact shows what ran; the stage keeps the approved command and names what ran.
         self.assertIn(f"$ {stage['executed_command']}", artifact)
         self.assertIn("EAI_AGAIN", artifact)
@@ -223,6 +278,8 @@ class QaPreparationE2ETests(PreparationFixture):
                 self.candidate,
             ),
         )
+        self.assertEqual(routing["failure"]["domain"], "environment_preparation")
+        self.assertEqual(routing["failure"]["method"], "structured")
         self.assertEqual(self.developer_retries(), 0)
         self.registry_down.unlink()
         second = self.qa_brief()
@@ -251,7 +308,7 @@ class QaPreparationE2ETests(PreparationFixture):
         self.assertTrue(self.gate_ran.exists())
         self.assertIn(
             "prepared: True",
-            Path(rerun_result["artifact"]).read_text(encoding="utf-8"),
+            self.fx._stored(rerun_result["artifact"]).read_text(encoding="utf-8"),
         )
         # The first dispatch, its report and its decision stay as audit evidence.
         entries = {
@@ -260,7 +317,7 @@ class QaPreparationE2ETests(PreparationFixture):
         }
         self.assertEqual(entries[first["dispatch_id"]]["state"], "reported")
         self.assertEqual(entries[first["dispatch_id"]]["decision"]["decision"], "retry")
-        self.assertTrue(Path(result["report"]).is_file())
+        self.assertTrue(self.fx._stored(result["report"]).is_file())
         self.assertEqual(self.developer_retries(), 0)
         accepted = self.fx._decide(self.batch_id, "accept")
         self.assertEqual(accepted["coordinator_decisions"][-1]["decision"], "accept")
@@ -286,6 +343,8 @@ class QaPreparationE2ETests(PreparationFixture):
             (routing["route"], routing["reason_category"], routing["next_role"]),
             ("developer-retry", "code", "developer"),
         )
+        self.assertEqual(routing["failure"]["domain"], "code_test")
+        self.assertEqual(routing["failure"]["method"], "structured")
         self.assertEqual(self.developer_retries(), 1)
 
     def test_an_outage_log_without_independent_facts_waits_for_triage(self) -> None:
@@ -361,6 +420,103 @@ class QaPreparationE2ETests(PreparationFixture):
         self.assertNotIn("qa_stages", report)
         self.assertEqual([c["result"] for c in report["checks_run"]], ["pass", "pass"])
 
+    def test_mcp_reads_accepted_qa_for_exact_candidate(self) -> None:
+        from harness.mcp_server import serve
+
+        self.configure(preparation=None)
+        brief = self.qa_brief()
+        self.run_qa(brief)
+        self.fx._decide(self.batch_id, "accept")
+        batch = self.fx._batch_record(self.batch_id)
+        requests = [
+            {
+                "jsonrpc": "2.0",
+                "id": index,
+                "method": "tools/call",
+                "params": {
+                    "name": "accepted_qa",
+                    "arguments": {
+                        "ticket": batch["ticket"],
+                        "branch": batch["branch"],
+                        "candidate_commit": candidate,
+                    },
+                },
+            }
+            for index, candidate in enumerate((self.candidate, "f" * 40))
+        ]
+        package_id = batch["context_packages"][-1]["context_package_id"]
+        requests.append(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "context_package",
+                    "arguments": {
+                        "batch_id": self.batch_id,
+                        "package_id": package_id,
+                        "section": "file_hashes",
+                    },
+                },
+            }
+        )
+        source = io.BytesIO(
+            b"".join(json.dumps(request).encode() + b"\n" for request in requests)
+        )
+        sink = io.BytesIO()
+
+        serve(self.repo, lambda repo: {}, source, sink)
+
+        accepted, absent, package = [
+            json.loads(line)["result"] for line in sink.getvalue().splitlines()
+        ]
+        self.assertEqual(
+            accepted["structuredContent"],
+            {
+                "batch_id": self.batch_id,
+                "candidate_commit": self.candidate,
+                "outcome": "completed",
+            },
+        )
+        self.assertFalse(package["isError"])
+        self.assertEqual(package["structuredContent"]["context_package_id"], package_id)
+        self.assertIsInstance(package["structuredContent"]["file_hashes"], dict)
+        self.assertTrue(absent["isError"])
+        self.assertEqual(
+            absent["structuredContent"]["error"]["code"], "qa_evidence_unavailable"
+        )
+
+    @unittest.skipIf(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        "a privileged process is not denied by file permissions",
+    )
+    @unittest.skipIf(os.name == "nt", "Windows does not deny writes by POSIX mode bits")
+    def test_qa_run_with_a_read_only_git_worktrees_directory_runs_the_gate_and_leaves_it_unchanged(
+        self,
+    ) -> None:
+        self.configure(preparation=[self.prepare])
+        brief = self.qa_brief()
+        common = Path(
+            subprocess.run(
+                ["git", "-C", str(self.repo), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        )
+        registry = common / "worktrees"
+        registry.mkdir(exist_ok=True)
+        listing = sorted(path.name for path in registry.iterdir())
+        registry.chmod(0o555)
+        self.addCleanup(registry.chmod, 0o755)
+
+        report = self.report_of(self.run_qa(brief))
+
+        self.assertEqual(report["outcome"], "completed")
+        self.assertEqual([c["result"] for c in report["checks_run"]], ["pass", "pass"])
+        self.assertTrue(self.gate_ran.exists())
+        self.assertEqual(sorted(path.name for path in registry.iterdir()), listing)
+
     def test_a_report_failure_after_preparation_leaves_the_lane_free_for_a_rerun(
         self,
     ) -> None:
@@ -381,6 +537,119 @@ class QaPreparationE2ETests(PreparationFixture):
         report = self.report_of(self.run_qa(brief))
         self.assertEqual(report["outcome"], "completed")
         self.assert_lane_free_and_dispatch(brief, "reported")
+
+
+class OfflineUvSyncTests(PreparationFixture):
+    """``uv sync`` with no network to the package index is the environment, not the code (#800).
+
+    The preparation script prints what uv really prints when the network is disabled; the
+    environment probe and the offline lock check are the independent facts. The runner's own
+    diagnosis names no category for this log, so the failure domain has to come from the stages.
+    """
+
+    def failure_of(self, decided: JsonObject) -> JsonObject:
+        routing = decided["coordinator_decisions"][-1]["routing"]
+        failure: JsonObject = routing["failure"]
+        return failure
+
+    def test_an_offline_uv_sync_is_environment_preparation_and_spends_no_developer_retry(
+        self,
+    ) -> None:
+        self.configure(preparation=[self.uv_offline_prepare()])
+        brief = self.qa_brief()
+        self.registry_down.write_text("down", encoding="utf-8")
+
+        report = self.report_of(self.run_qa(brief))
+
+        self.assertEqual(report["outcome"], "blocked")
+        stages = report["qa_stages"]
+        self.assertEqual(stages["failed_stage"], "preparation")
+        self.assertEqual(stages["code_checks_started"], "not_started")
+        self.assertIn("network was disabled", stages["stages"][0]["diagnostics"])
+        # The log alone is no project defect, and the runner names no environment category.
+        self.assertNotEqual(stages["diagnosis"]["category"], "project-defect")
+        self.assertFalse(self.gate_ran.exists())
+
+        decided = self.fx._decide(self.batch_id, "retry")
+
+        routing = decided["coordinator_decisions"][-1]["routing"]
+        self.assertEqual(
+            (routing["route"], routing["reason_category"], routing["next_role"]),
+            ("same-candidate-rerun", "verification-infrastructure", "qa"),
+        )
+        failure = self.failure_of(decided)
+        self.assertEqual(
+            (failure["domain"], failure["method"], failure["source"]),
+            ("environment_preparation", "structured", "qa_stages"),
+        )
+        self.assertEqual(self.developer_retries(), 0)
+
+    def test_the_same_log_with_a_failing_lock_check_is_a_code_defect(self) -> None:
+        self.configure(preparation=[self.uv_offline_prepare()])
+        brief = self.qa_brief()
+        # The offline lock check fails while the package index answers: the project files are wrong.
+        self.lock_broken.write_text("broken", encoding="utf-8")
+
+        report = self.report_of(self.run_qa(brief))
+
+        self.assertEqual(report["qa_stages"]["diagnosis"]["category"], "project-defect")
+        decided = self.fx._decide(self.batch_id, "retry")
+        routing = decided["coordinator_decisions"][-1]["routing"]
+        self.assertEqual(
+            (routing["route"], routing["reason_category"]),
+            ("developer-retry", "code"),
+        )
+        self.assertEqual(self.failure_of(decided)["domain"], "code_test")
+        self.assertEqual(self.developer_retries(), 1)
+
+    def test_the_same_log_without_independent_facts_is_unknown_and_retried_by_nobody(
+        self,
+    ) -> None:
+        self.configure(preparation=[self.uv_offline_prepare()], facts=False)
+        brief = self.qa_brief()
+        self.registry_down.write_text("down", encoding="utf-8")
+
+        report = self.report_of(self.run_qa(brief))
+
+        self.assertEqual(report["outcome"], "blocked")
+        before = self.fx._batch_record(self.batch_id)
+        with self.assertRaises(CoordinatorError) as refused:
+            self.fx._decide(self.batch_id, "retry")
+        self.assertIn("needs triage", refused.exception.message)
+        self.assertEqual(self.fx._batch_record(self.batch_id), before)
+        self.assertEqual(self.developer_retries(), 0)
+
+    def test_the_same_log_with_contradicting_facts_is_unknown(self) -> None:
+        self.configure(preparation=[self.uv_offline_prepare()])
+        brief = self.qa_brief()
+        # The index is down and the lock check fails too: the facts do not confirm either cause.
+        self.registry_down.write_text("down", encoding="utf-8")
+        self.lock_broken.write_text("broken", encoding="utf-8")
+
+        report = self.report_of(self.run_qa(brief))
+
+        self.assertEqual(report["outcome"], "blocked")
+        with self.assertRaises(CoordinatorError) as refused:
+            self.fx._decide(self.batch_id, "retry")
+        self.assertIn("needs triage", refused.exception.message)
+        self.assertEqual(self.developer_retries(), 0)
+
+    def test_an_approver_naming_the_code_proves_it_even_for_the_offline_failure(
+        self,
+    ) -> None:
+        self.configure(preparation=[self.uv_offline_prepare()])
+        brief = self.qa_brief()
+        self.registry_down.write_text("down", encoding="utf-8")
+        self.report_of(self.run_qa(brief))
+
+        decided = self.fx._decide(self.batch_id, "retry", reason_category="code")
+
+        failure = self.failure_of(decided)
+        self.assertEqual(
+            (failure["domain"], failure["method"], failure["matched"]),
+            ("code_test", "approver", "--reason-category code"),
+        )
+        self.assertEqual(self.developer_retries(), 1)
 
 
 if __name__ == "__main__":

@@ -2,8 +2,12 @@
 # PreToolUse(Bash): blocks unconditionally destructive git commands, adapted from the upstream
 # mattpocock/skills "git-guardrails-claude-code" skill (skills/misc/, not part of the vendored
 # mattpocock-suite capability). Deliberately does NOT block `git push` outright, unlike upstream —
-# docs/agents/git-workflow.md requires pushing issue branches; push-to-base/integration is already
+# .harness/instructions/git-workflow.md requires pushing issue branches; push-to-base/integration is already
 # covered by block-direct-master.sh.
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" block-dangerous-git
 INPUT=$(cat)
 PY="$(command -v python3 || command -v python)"
 if [ -z "$PY" ]; then
@@ -21,7 +25,20 @@ import json
 import re
 import sys
 
-PATTERNS = ("git reset --hard", "git clean -f", "git branch -D", "git checkout \\.", "git restore \\.")
+# Raw-text fallback for a command the parser cannot read: any words may stand between `git`
+# and the subcommand (global options) and between the subcommand and its option.
+RAW_PATTERNS = {
+    "git reset --hard": r"\bgit\b.*\breset\b.*\s--hard\b",
+    "git clean -f": r"\bgit\b.*\bclean\b.*\s(-[a-zA-Z]*f|--force\b)",
+    "git branch -D": r"\bgit\b.*\bbranch\b.*\s(-[a-zA-Z]*D|--delete\b.*\s(--force\b|-[a-zA-Z]*f))",
+    "git checkout .": r"\bgit\b.*\bcheckout\b.*\s\.(\s|$)",
+    "git restore .": r"\bgit\b.*\brestore\b.*\s\.(\s|$)",
+}
+# Global options of `git` that take the next word as their value (`git --help`).
+VALUE_OPTIONS = {
+    "-C", "-c", "--git-dir", "--work-tree", "--namespace", "--config-env",
+    "--super-prefix", "--attr-source", "--list-cmds",
+}
 SHELLS = ("sh", "bash", "zsh", "dash", "ksh")
 METACHARACTERS = " \t\n|&;()<>"
 
@@ -38,14 +55,55 @@ def basename(word):
     return word.rsplit("/", 1)[-1]
 
 
+def short_flags(arguments):
+    """Letters of the short option clusters (`-fd` gives f and d) before a `--` separator."""
+    letters = set()
+    for argument in arguments:
+        if argument == "--":
+            break
+        if re.fullmatch(r"-[a-zA-Z]+", argument):
+            letters.update(argument[1:])
+    return letters
+
+
+def destructive(subcommand, arguments):
+    """The pattern a git subcommand with these arguments matches, or None."""
+    flags = short_flags(arguments)
+    options = set(arguments)
+    if subcommand == "reset" and "--hard" in options:
+        return "git reset --hard"
+    if subcommand == "clean" and ("f" in flags or "--force" in options):
+        return "git clean -f"
+    if subcommand == "branch" and (
+        "D" in flags
+        or ("d" in flags or "--delete" in options) and ("f" in flags or "--force" in options)
+    ):
+        return "git branch -D"
+    if subcommand == "checkout" and "." in options:
+        return "git checkout ."
+    if subcommand == "restore" and "." in options and not (
+        options & {"--staged", "-S"} and not options & {"--worktree", "-W"}
+    ):
+        return "git restore ."
+    return None
+
+
+def check_git(arguments):
+    """Skip the global options of `git` (`-C dir`, `-c k=v`, `--no-pager` ...), check the rest."""
+    index = 0
+    while index < len(arguments) and arguments[index].startswith("-"):
+        index += 2 if arguments[index] in VALUE_OPTIONS else 1
+    if index < len(arguments):
+        pattern = destructive(arguments[index], arguments[index + 1 :])
+        if pattern:
+            raise Blocked(pattern)
+
+
 def check_words(words):
     for index, word in enumerate(words):
         name = basename(word)
         if name == "git":
-            rest = "git " + " ".join(words[index + 1 :])
-            for pattern in PATTERNS:
-                if re.match(pattern, rest):
-                    raise Blocked(pattern)
+            check_git(words[index + 1 :])
         elif name in SHELLS:
             for option, script in zip(words[index + 1 :], words[index + 2 :]):
                 if re.fullmatch(r"-[a-z]*c[a-z]*", option):
@@ -254,15 +312,19 @@ if isinstance(command, str) and command:
     except Blocked as blocked:
         print(blocked.args[0])
     except Exception:
-        for pattern in PATTERNS:
-            if re.search(pattern, command):
+        for pattern, raw in RAW_PATTERNS.items():
+            if re.search(raw, command):
                 print(pattern)
                 break
 PY_EOF
 
 PATTERN="$(printf '%s' "$INPUT" | "$PY" -c "$CHECK")"
 if [ -n "$PATTERN" ]; then
-  echo "Заблокировано: команда матчит деструктивный паттерн '$PATTERN' — такие операции требуют явного запроса пользователя." >&2
+  REMEDY="такие операции требуют явного запроса пользователя."
+  if [ "$PATTERN" = "git branch -D" ]; then
+    REMEDY="локальную ветку слитого тикета удаляет 'harness branch-delete <repo> <branch>': команда сама проверяет, что ветка соответствует branch_pattern, не извлечена и сохранена на origin или в слитом PR/MR."
+  fi
+  echo "Заблокировано: команда матчит деструктивный паттерн '$PATTERN' — $REMEDY" >&2
   exit 2
 fi
 

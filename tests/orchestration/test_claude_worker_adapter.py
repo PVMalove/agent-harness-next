@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import stat
+import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from unittest import mock
+
+from tests.orchestration.test_runtime_adapters import CLAUDE_PROBE
 
 ADAPTER = Path(__file__).resolve().parents[2] / "harness/adapters/claude_worker.py"
 SPEC = importlib.util.spec_from_file_location("claude_worker", ADAPTER)
@@ -34,6 +39,12 @@ POSIX_ONLY = unittest.skipIf(
 
 class ClaudeWorkerAdapterTest(unittest.TestCase):
     def setUp(self) -> None:
+        # QA itself runs in the container executor (HARNESS_EXECUTOR=docker). The host-prompt
+        # tests must not inherit it; container tests set the variable explicitly.
+        host_env = {k: v for k, v in os.environ.items() if k != "HARNESS_EXECUTOR"}
+        env_patch = mock.patch.dict(os.environ, host_env, clear=True)
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
@@ -79,13 +90,16 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.prompt_dump = root / "prompt.txt"
         self.cwd_dump = root / "cwd.txt"
 
-    def fake_claude(self, exit_code: int) -> None:
+    def fake_claude(self, exit_code: int, probe_seconds: float = 0.0) -> None:
         script = self.bin / "claude"
         script.write_text(
-            "#!/bin/sh\n"
-            f'pwd > "{self.cwd_dump}"\n'
-            f'cat > "{self.prompt_dump}"\n'
-            f"exit {exit_code}\n"
+            f"#!{sys.executable}\n"
+            + CLAUDE_PROBE.replace(
+                "emit({'type': 'result'", f"time.sleep({probe_seconds})\nemit({{'type': 'result'"
+            )
+            + f"Path({str(self.cwd_dump)!r}).write_text(os.getcwd())\n"
+            + f"Path({str(self.prompt_dump)!r}).write_text(prompt, encoding='utf-8')\n"
+            + f"sys.exit({exit_code})\n"
         )
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
@@ -120,6 +134,239 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         for flag in ("--repo", "--brief", "--extra-prompt-file", "--dry-run"):
             self.assertIn(flag, result.stdout)
 
+    def test_author_permission_exposes_shared_runner_evidence_without_widening_tools(
+        self,
+    ) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["allowed_tools"] = ["Read", "Bash", "Agent(test-author)"]
+
+        command = claude_worker.worker_command(brief)
+
+        self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), command)
+        self.assertEqual(
+            command[command.index("--allowedTools") + 1], "Read,Bash,Agent(test-author)"
+        )
+        prompt = claude_worker.build_prompt(
+            brief, self.brief, self.repo, self.worktree, self.sha
+        )
+        self.assertIn(
+            str(Path(self.worktree) / ".claude" / "hooks" / "test-author-preflight.sh"), prompt
+        )
+        self.assertIn(f"--worktree {shlex.quote(str(self.worktree))}", prompt)
+        self.assertIn(f"--brief {shlex.quote(str(self.brief))}", prompt)
+        self.assertIn("without model or effort overrides", prompt)
+        self.assertIn(str(self.repo / ".harness/.sandboxes/runs"), prompt)
+
+    def test_host_prompts_name_the_pinned_package_section_command(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief.update(role="code-review", allowed_tools=["Read"])
+        command = (
+            f"context-package show --dispatch {brief['dispatch_id']} --section <section>"
+        )
+        codex_path = ADAPTER.with_name("codex_worker.py")
+        codex_spec = importlib.util.spec_from_file_location("codex_worker", codex_path)
+        assert codex_spec and codex_spec.loader
+        codex_worker = importlib.util.module_from_spec(codex_spec)
+        codex_spec.loader.exec_module(codex_worker)
+        prompts = {
+            "claude": claude_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            ),
+            "codex": codex_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            ),
+        }
+        for runtime, prompt in prompts.items():
+            with self.subTest(runtime=runtime):
+                self.assertIn(command, prompt)
+                self.assertIn("precedent_cards, memory or goal", prompt)
+        skill = (
+            ADAPTER.parents[2] / "skills/first-party/engineering/implement/SKILL.md"
+        ).read_text(encoding="utf-8")
+        self.assertIn(
+            "context-package show --dispatch <dispatch_id> --section <section>", skill
+        )
+        with mock.patch.dict(os.environ, {"HARNESS_EXECUTOR": "docker"}):
+            container = claude_worker.build_prompt(
+                brief, self.brief, self.repo, self.worktree, self.sha
+            )
+        self.assertNotIn("context-package show", container)
+
+    def test_developer_prompts_carry_the_core_developer_skill_line(self) -> None:
+        from harness.orchestration.core.developer_skill import (
+            DEVELOPER_SKILL_RELATIVE,
+            INSTRUCTION,
+        )
+
+        codex_path = ADAPTER.with_name("codex_worker.py")
+        codex_spec = importlib.util.spec_from_file_location("codex_worker", codex_path)
+        assert codex_spec and codex_spec.loader
+        codex_worker = importlib.util.module_from_spec(codex_spec)
+        codex_spec.loader.exec_module(codex_worker)
+        # The stdlib-only adapters repeat the core literal; it must never drift.
+        for adapter in (claude_worker, codex_worker):
+            self.assertEqual(adapter.DEVELOPER_SKILL_INSTRUCTION, INSTRUCTION)
+            self.assertEqual(adapter.DEVELOPER_SKILL_RELATIVE, DEVELOPER_SKILL_RELATIVE)
+        line = INSTRUCTION.format(
+            path=(self.repo / DEVELOPER_SKILL_RELATIVE).resolve()
+        )
+
+        def prompts(brief: dict[str, object]) -> dict[str, str]:
+            built = {
+                "claude": claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+                "codex": codex_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+            }
+            with mock.patch.dict(os.environ, {"HARNESS_EXECUTOR": "docker"}):
+                built["container"] = claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                )
+            return built
+
+        developer = json.loads(self.brief.read_text())
+        for runtime, prompt in prompts(developer).items():
+            with self.subTest(runtime=runtime, role="developer"):
+                self.assertIn(line, prompt)
+        for role in ("architect", "code-review"):
+            brief = {**developer, "role": role, "allowed_tools": ["Read"]}
+            for runtime, prompt in prompts(brief).items():
+                with self.subTest(runtime=runtime, role=role):
+                    self.assertNotIn("Developer skill:", prompt)
+
+    def test_every_worker_prompt_names_the_core_contract_reads(self) -> None:
+        from harness.orchestration.core.worker_contract import (
+            INSTRUCTION,
+            ROLES_RELATIVE,
+            RULES_RELATIVE,
+        )
+
+        codex_path = ADAPTER.with_name("codex_worker.py")
+        codex_spec = importlib.util.spec_from_file_location("codex_worker", codex_path)
+        assert codex_spec and codex_spec.loader
+        codex_worker = importlib.util.module_from_spec(codex_spec)
+        codex_spec.loader.exec_module(codex_worker)
+        # The stdlib-only adapters repeat the core literal; it must never drift.
+        for adapter in (claude_worker, codex_worker):
+            self.assertEqual(adapter.CONTRACT_INSTRUCTION, INSTRUCTION)
+            self.assertEqual(adapter.CONTRACT_ROLES_RELATIVE, ROLES_RELATIVE)
+            self.assertEqual(adapter.CONTRACT_RULES_RELATIVE, RULES_RELATIVE)
+        # The in-process route copies the template of the implement skill.
+        skill = (
+            Path(__file__).resolve().parents[2]
+            / "skills/first-party/engineering/implement/SKILL.md"
+        ).read_text(encoding="utf-8")
+        template = INSTRUCTION.format(
+            roles=f"<repo>/{ROLES_RELATIVE}", rules=f"<repo>/{RULES_RELATIVE}", role="<role>"
+        )
+        self.assertIn(template, " ".join(skill.split()))
+
+        developer = json.loads(self.brief.read_text())
+        for role in ("developer", "code-review"):
+            brief = {**developer, "role": role}
+            line = INSTRUCTION.format(
+                roles=(self.repo / ROLES_RELATIVE).resolve(),
+                rules=(self.repo / RULES_RELATIVE).resolve(),
+                role=role,
+            )
+            built = {
+                "claude": claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+                "codex": codex_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+            }
+            with mock.patch.dict(os.environ, {"HARNESS_EXECUTOR": "docker"}):
+                built["container"] = claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                )
+            for runtime, prompt in built.items():
+                with self.subTest(runtime=runtime, role=role):
+                    self.assertIn(line, prompt)
+
+    def test_another_role_keeps_its_original_directory_scope(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["role"] = "architect"
+        brief["allowed_tools"] = ["Read", "Agent"]
+
+        command = claude_worker.worker_command(brief)
+
+        self.assertNotIn(str(self.repo / ".harness/.sandboxes/runs"), command)
+
+    def test_read_only_role_may_write_only_its_report_file(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        staging = Path(brief["report_staging_path"])
+        for role in ("architect", "code-review"):
+            with self.subTest(role=role):
+                brief["role"] = role
+                brief["allowed_tools"] = ["Read", "Grep", "Bash(git diff:*)"]
+
+                command = claude_worker.worker_command(brief)
+
+                self.assertEqual(
+                    command[command.index("--allowedTools") + 1],
+                    "Read,Grep,Bash(git diff:*),"
+                    + claude_worker.report_write_rule(staging),
+                )
+
+    def test_report_write_rule_is_one_absolute_path(self) -> None:
+        self.assertEqual(
+            claude_worker.report_write_rule(PurePosixPath("/repo/inbox/d-1.json")),
+            "Edit(//repo/inbox/d-1.json)",
+        )
+        self.assertEqual(
+            claude_worker.report_write_rule(PureWindowsPath(r"C:\repo\inbox\d-1.json")),
+            "Edit(//c/repo/inbox/d-1.json)",
+        )
+
+    def test_developer_and_writing_roles_keep_their_tools(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        cases = (
+            ("developer", ["Read", "Bash"]),
+            ("architect", ["Read", "Write"]),
+            ("code-review", ["Read", "Edit(//repo/docs/**)"]),
+        )
+        for role, tools in cases:
+            with self.subTest(role=role, tools=tools):
+                brief["role"] = role
+                brief["allowed_tools"] = tools
+
+                command = claude_worker.worker_command(brief)
+
+                self.assertEqual(
+                    command[command.index("--allowedTools") + 1], ",".join(tools)
+                )
+
+    @POSIX_ONLY
+    def test_claude_outside_path_is_found_in_user_local_bin(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["execution"] = {"kind": "process"}
+        self.brief.write_text(json.dumps(brief))
+        home = self.repo.parent / "home"
+        local_bin = home / ".local" / "bin"
+        local_bin.mkdir(parents=True)
+        self.fake_claude(7)
+        (self.bin / "claude").rename(local_bin / "claude")
+        git_dir = str(Path(shutil.which("git") or "git").parent)
+        self.assertIsNone(shutil.which("claude", path=git_dir))
+        cwd = Path.cwd()
+        os.chdir(self.worktree)
+        try:
+            with mock.patch.dict(
+                os.environ, {"PATH": git_dir, "HOME": str(home)}, clear=True
+            ):
+                code = claude_worker.main(
+                    ["dispatch", "--repo", str(self.repo), "--brief", str(self.brief)]
+                )
+        finally:
+            os.chdir(cwd)
+
+        self.assertEqual(code, 7)
+        self.assertEqual(self.cwd_dump.read_text().strip(), str(self.worktree))
+
     def test_dry_run_starts_nothing_and_targets_the_selected_checkout(self) -> None:
         result = subprocess.run(
             [
@@ -146,6 +393,101 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertEqual(command[command.index("--effort") + 1], "medium")
         self.assertEqual(command[command.index("--permission-mode") + 1], "dontAsk")
         self.assertEqual(command[command.index("--allowedTools") + 1], "Read,Bash,Edit")
+        targets = [Path(path) for path in shlex.split(plan["probe"])[2:]]
+        self.assertIn(self.worktree, targets)
+        self.assertIn(Path(git(self.worktree, "rev-parse", "--absolute-git-dir")), targets)
+
+    def test_read_only_probe_checks_report_directory_without_source_writes(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief.update(role="code-review", access="read-only")
+
+        command = claude_worker.native_write_probe(brief, self.worktree, [])
+        arguments = shlex.split(command)
+
+        self.assertEqual(arguments[2:], [str(Path(brief["report_staging_path"]).parent)])
+
+    def test_container_worker_is_asked_only_for_the_staged_report(self) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["execution"] = {"kind": "container"}
+        self.brief.write_text(json.dumps(brief))
+        env = {**os.environ, "HARNESS_EXECUTOR": "docker"}
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(ADAPTER),
+                "dispatch",
+                "--dry-run",
+                "--repo",
+                str(self.repo),
+                "--brief",
+                str(self.brief),
+            ],
+            cwd=self.worktree,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+
+        plan = json.loads(result.stdout)
+        prompt = plan["prompt"]
+        self.assertIn("running in a container", prompt)
+        self.assertIn(f"Report staging path: {brief['report_staging_path']}", prompt)
+        self.assertIn("never run dispatch self-report", prompt)
+        self.assertNotIn("coordinator.py", prompt)
+        self.assertNotIn("report submit --file", prompt)
+        command = plan["command"]
+        self.assertNotIn(prompt, command)
+        self.assertIn("worker_write_probe.py", plan["probe"])
+        self.assertEqual(
+            command[command.index("--output-format") + 1 :][:2],
+            ["stream-json", "--verbose"],
+        )
+
+    def test_container_review_reads_one_verified_section(self) -> None:
+        brief = json.loads(self.brief.read_text(encoding="utf-8"))
+        brief.update(role="code-review", context_package_summary={"review_focus": True})
+        payload = json.dumps(
+            {
+                "context_package_id": brief["context_package_id"],
+                "related_tests": ["tests/test_order.py"],
+                "diff": "full diff must stay out of this output",
+            }
+        ).encode("utf-8")
+        package = (
+            self.repo
+            / ".harness"
+            / ".sandboxes"
+            / "runs"
+            / f"review-context-{brief['dispatch_id']}.json"
+        )
+        package.parent.mkdir(parents=True, exist_ok=True)
+        package.write_bytes(payload)
+        brief["context_package_sha256"] = hashlib.sha256(payload).hexdigest()
+        self.brief.write_text(json.dumps(brief), encoding="utf-8")
+        command = [
+            sys.executable,
+            str(ADAPTER),
+            "context",
+            "--repo",
+            str(self.repo),
+            "--brief",
+            str(self.brief),
+            "--section",
+            "related_tests",
+        ]
+
+        selected = subprocess.run(command, capture_output=True, text=True, check=True)
+
+        self.assertEqual(
+            json.loads(selected.stdout), {"related_tests": ["tests/test_order.py"]}
+        )
+        package.write_bytes(payload + b" ")
+        refused = subprocess.run(command, capture_output=True, text=True, check=False)
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertIn("hash", refused.stderr)
+        self.assertEqual(refused.stdout, "")
 
     @POSIX_ONLY
     def test_worker_runs_in_the_worktree_and_receives_the_prompt(self) -> None:
@@ -165,8 +507,35 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         )
 
     @POSIX_ONLY
+    def test_supervised_worker_gets_the_prompt_after_probe_and_returns_its_code(
+        self,
+    ) -> None:
+        brief = json.loads(self.brief.read_text())
+        brief["execution"] = {"kind": "process"}
+        self.brief.write_text(json.dumps(brief))
+        self.fake_claude(5)
+        extra = self.repo / "retry.txt"
+        extra.write_text("Retry handoff: {}")
+
+        self.assertEqual(self.run_adapter("--extra-prompt-file", str(extra)), 5)
+
+        self.assertEqual(self.cwd_dump.read_text().strip(), str(self.worktree))
+        prompt = self.prompt_dump.read_text()
+        self.assertIn("worker for dispatch dispatch-1", prompt)
+        self.assertIn("Retry handoff: {}", prompt)
+        self.assertFalse(
+            (self.repo / ".harness/.sandboxes/scratch/worker-logs").exists()
+        )
+
+    @POSIX_ONLY
     def test_worker_that_dies_at_startup_is_rejected(self) -> None:
         self.fake_claude(3)
+        self.assertEqual(self.run_adapter(), 1)
+
+    @POSIX_ONLY
+    def test_worker_that_dies_after_a_slow_probe_is_rejected(self) -> None:
+        # run_adapter() sets the startup window to 0.5 s; the probe alone outlasts it.
+        self.fake_claude(3, probe_seconds=1.0)
         self.assertEqual(self.run_adapter(), 1)
 
 

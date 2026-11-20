@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from tests.orchestration.legacy_state import seed_file_ledger
+
 import json
 import sys
 from types import SimpleNamespace
@@ -10,6 +12,7 @@ from scripts.clean_room.support import (
     capture,
     commit_map_for,
     run_step,
+    spec_criteria,
 )
 
 
@@ -31,6 +34,7 @@ def run(ctx: SimpleNamespace) -> None:
     # the Standards/Spec axis that was Clean is inherited without re-analysis, only the axis that
     # was Warning is re-checked, and the follow-up is always a new independent dispatch.
     delta_state = test_root / "delta-review-state"
+    seed_file_ledger(delta_state)
     run_step(
         ["git", "branch", "feature/issue-906-delta-review"],
         cwd=orchestration_project,
@@ -258,7 +262,8 @@ def run(ctx: SimpleNamespace) -> None:
             "coordinator rejected the first delta-review-fixture code-review dispatch: "
             + first_review_dispatch.stderr
         )
-    first_review_id = json.loads(first_review_dispatch.stdout)["dispatch_id"]
+    first_review_record = json.loads(first_review_dispatch.stdout)
+    first_review_id = first_review_record["dispatch_id"]
     first_review_sent = coordinator_run(
         "--state-dir",
         str(delta_state),
@@ -328,6 +333,7 @@ def run(ctx: SimpleNamespace) -> None:
                 ],
                 "risks": {"status": "present", "details": "spec risk"},
                 "blockers": {"status": "none", "details": ""},
+                "criteria": spec_criteria(first_review_record["brief"]),
             },
         },
     }

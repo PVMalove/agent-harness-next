@@ -1,3 +1,10 @@
+# Copyright (c) 2026 Malov Pavel (p.malove@yandex.ru)
+# SPDX-License-Identifier: BUSL-1.1
+# Licensed under the Business Source License 1.1 (BSL-1.1).
+# Commercial use, sale, or use in commercial application development is strictly
+# prohibited without prior written permission from the copyright holder.
+# Removing or altering this header is prohibited and voids all license rights.
+
 """Сборка версионированного установочного архива и заметок о релизе из отслеживаемых файлов git."""
 
 from __future__ import annotations
@@ -17,6 +24,9 @@ ARCHIVE_ROOTS = (
     "global-skills/",
     "bin/",
     "third_party/",
+    # The Rust sources of harness-runtime: `harness update` looks for its release build in the
+    # harness checkout, and 2.0 needs the runtime (upgrade guide, step 1).
+    "native/",
 )
 VERSION_HEADING = re.compile(r"^## \[([^]]+)\](?: - [0-9]{4}-[0-9]{2}-[0-9]{2})?\s*$")
 CHANGELOG_CATEGORIES = frozenset(
@@ -30,6 +40,9 @@ CHANGELOG_CATEGORIES = frozenset(
         "Breaking Changes",
     }
 )
+# The console SPA build is not tracked (frontend/.gitignore); release.yml builds it from the tracked
+# sources and package-lock.json before the archive, and the archive carries it (ADR 0029 §4).
+CONSOLE_BUILD = "harness/console/frontend/dist"
 TAG_PATTERN = re.compile(r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z")
 GIT_TIMEOUT_SECONDS = 60
 
@@ -113,9 +126,30 @@ def check_release(repo: Path, tag: str) -> tuple[str, list[str]]:
     return notes, files
 
 
-def build_release(repo: Path, tag: str, output: Path) -> tuple[Path, Path, Path]:
+def console_build_files(repo: Path) -> list[str]:
+    """Файлы собранной SPA консоли, если сборка есть; без `index.html` сборки нет."""
+    build = repo / CONSOLE_BUILD
+    if not (build / "index.html").is_file():
+        return []
+    return sorted(
+        path.relative_to(repo).as_posix()
+        for path in build.rglob("*")
+        if path.is_file() and not path.is_symlink()
+    )
+
+
+def build_release(
+    repo: Path, tag: str, output: Path, *, require_console_build: bool = False
+) -> tuple[Path, Path, Path]:
     """Собрать установочный архив релиза, вычислить его sha256 и записать release notes."""
     notes, files = check_release(repo, tag)
+    console = console_build_files(repo)
+    if require_console_build and not console:
+        raise ValueError(
+            f"{CONSOLE_BUILD}/index.html is missing: run `npm ci && npm run build` "
+            "in harness/console/frontend first"
+        )
+    files = sorted({*files, *console})
     output.mkdir(parents=True, exist_ok=True)
     archive = output / f"claude-agent-harness-{tag}.tar.gz"
     with tarfile.open(archive, "w:gz") as bundle:
@@ -147,6 +181,11 @@ def main() -> int:
         dest="check",
         help="only validate the tag, harness/VERSION, CHANGELOG and payload; build nothing",
     )
+    parser.add_argument(
+        "--require-console-build",
+        action="store_true",
+        help=f"refuse to build without {CONSOLE_BUILD}/index.html (release.yml)",
+    )
     arguments = parser.parse_args()
     repo = Path(__file__).resolve().parent.parent
     tag = arguments.tag
@@ -163,7 +202,12 @@ def main() -> int:
             check_release(repo, tag)
             print(f"{tag}: release checks passed")
             return 0
-        archive, checksum, notes = build_release(repo, tag, arguments.output)
+        archive, checksum, notes = build_release(
+            repo,
+            tag,
+            arguments.output,
+            require_console_build=arguments.require_console_build,
+        )
     except (OSError, ValueError, subprocess.SubprocessError) as exc:
         parser.error(str(exc))
     print(archive)

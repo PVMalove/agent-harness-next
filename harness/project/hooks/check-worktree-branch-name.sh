@@ -1,6 +1,10 @@
 #!/bin/bash
 # PreToolUse(EnterWorktree): same branch_pattern convention as check-branch-name.sh,
-# extended to the native worktree tool (docs/agents/worktrees.md).
+# extended to the native worktree tool (.harness/instructions/worktrees.md).
+# Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
+# JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below
+# decides alone.
+[ -f "$(dirname "$0")/hook-envelope.sh" ] && . "$(dirname "$0")/hook-envelope.sh" check-worktree-branch-name
 INPUT=$(cat)
 
 # Entering an existing worktree by path, or letting the tool assign a random name, isn't ticket
@@ -14,12 +18,12 @@ if [ -n "$NAME" ]; then
   PATTERN=${PATTERN:-^feature/issue-[0-9]+-.+}
 
   if ! echo "$NAME" | grep -qE "$PATTERN"; then
-    echo "Имя worktree/ветки '$NAME' не соответствует branch_pattern из .harness/project.json ('$PATTERN', docs/agents/git-workflow.md, docs/agents/worktrees.md)." >&2
+    echo "Имя worktree/ветки '$NAME' не соответствует branch_pattern из .harness/project.json ('$PATTERN', .harness/instructions/git-workflow.md, .harness/instructions/worktrees.md)." >&2
     exit 2
   fi
 
   # Pattern match alone only proves the name has the right shape - confirm the ID it encodes is a
-  # real registered issue, not a made-up number ("Issue First", docs/agents/git-workflow.md).
+  # real registered issue, not a made-up number ("Issue First", .harness/instructions/git-workflow.md).
   # tracker-issue.py addresses the issue through the project tracker resolver and skips a local
   # tracker or a missing gh/glab.
   ID=$(echo "$NAME" | grep -oE '[0-9]+' | head -n1)
