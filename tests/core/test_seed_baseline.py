@@ -407,3 +407,46 @@ def test_diff_hints_the_moved_rule_source_without_changing_its_json(repo: Path) 
     assert text.count("Источник правил переехал") == 1
     assert data["seed_modified"] == [GUIDE]
     assert not any("переехал" in json.dumps(value) for value in data.values())
+
+
+PROCEDURE_MOVES = {
+    "docs/agents/worktrees.md": (
+        "Источник процедуры переехал: раздел Coordinator issue worktree → "
+        ".harness/skills/implement/references/issue-worktree.md",
+    ),
+    "docs/agents/test-author.md": (
+        "Источник процедуры переехал: раздел 6 (короткий маршрут /fast-implement) → "
+        ".harness/skills/fast-implement/SKILL.md",
+        "Источник процедуры переехал: раздел 7 (полный маршрут /implement) → "
+        ".harness/orchestration/roles/references/developer-test-author.md",
+    ),
+}
+
+
+def test_update_names_the_new_source_of_moved_procedures(repo: Path) -> None:
+    edited = {}
+    for relative in PROCEDURE_MOVES:
+        edited[relative] = (repo / relative).read_bytes() + b"\nLocal note.\n"
+        (repo / relative).write_bytes(edited[relative])
+
+    result = harness("update", str(repo))
+
+    assert result.returncode == 0, result.stderr
+    for relative, notices in PROCEDURE_MOVES.items():
+        assert (repo / relative).read_bytes() == edited[relative]
+        for notice in notices:
+            assert notice in result.stdout
+    assert "правила Conventions → .claude/rules/worktree-conventions.md" in result.stdout
+    assert "локальный текст старого раздела больше не читается как источник" in result.stdout
+
+
+def test_diff_names_every_moved_source_of_a_modified_guide(repo: Path) -> None:
+    (repo / "docs/agents/test-author.md").write_bytes(b"# local guide\n")
+
+    text = harness("diff", str(repo)).stdout
+    data = json.loads(harness("diff", str(repo), "--json").stdout)
+
+    for notice in PROCEDURE_MOVES["docs/agents/test-author.md"]:
+        assert f"    {notice}" in text
+    assert "Источник правил переехал" not in text
+    assert not any("переехал" in json.dumps(value) for value in data.values())
