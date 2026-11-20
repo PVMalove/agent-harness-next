@@ -22,8 +22,15 @@ commit, push и передачу в `/to-pull-requests` оставляет `/fas
 
 ## Роль оркестрации `developer`
 
-Интерактивный скилл и роль координатора `developer` разные. Внутри dispatch действуют манифест роли
-и brief, скилл их не повторяет и не расширяет. Дальше описан контракт роли.
+Интерактивный скилл и роль координатора `developer` разные. Каждый developer dispatch читает
+установленный скилл: `dispatch send` и `dispatch resume` возвращают поле `developer_skill` с
+абсолютным путём `<repo>/.harness/skills/developer/SKILL.md` и строкой промпта, а адаптеры Claude и
+Codex добавляют ту же строку сами. Worker применяет дисциплину скилла (границы, сначала тест,
+доказательства), но brief и манифест роли старше: согласованный дизайн brief заменяет согласование
+с человеком, машиночитаемый отчёт роли заменяет отчёт в чате, план коммитов решает коммиты. Скилл не
+даёт путей, инструментов и одобрений. Без установленного скилла обе команды отказывают до изменения
+ledger и brief; worker, который не может прочитать файл, останавливается с `outcome: blocked` и
+путём в `blockers`. Дальше описан контракт роли.
 
 Источник: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) и общий контракт [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 

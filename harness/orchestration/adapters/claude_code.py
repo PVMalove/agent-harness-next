@@ -28,6 +28,10 @@ if __package__ in {None, ""}:
         run_name="adapter_bootstrap",
     )
 
+from harness.orchestration.core.developer_skill import (
+    DEVELOPER_SKILL_RELATIVE,
+    INSTRUCTION as DEVELOPER_SKILL_INSTRUCTION,
+)
 from harness.orchestration.core.utils import (
     CoordinatorError,
     JsonObject,
@@ -132,6 +136,14 @@ def _prompt(args: argparse.Namespace, brief: JsonObject) -> str:
         + (["--state-dir", args.state_dir] if args.state_dir else [])
     )
     reason = brief.get("retry_reason")
+    skill = (
+        DEVELOPER_SKILL_INSTRUCTION.format(
+            path=(Path(args.repo).resolve() / DEVELOPER_SKILL_RELATIVE).resolve()
+        )
+        + "\n"
+        if brief["role"] == "developer"
+        else ""
+    )
     return f"""You are the {brief['role']} worker for dispatch {brief['dispatch_id']}.
 Read {Path(args.repo).resolve() / '.harness/instructions/technical-english.md'} before English coordination.
 Read {Path(args.repo).resolve() / '.harness/orchestration/roles/common.md'} and the role manifest in that directory.
@@ -160,7 +172,7 @@ Then run {cli} report submit --compact --file {shlex.quote(brief['report_staging
 If submission fails, preserve the original file and return the exact command and error.
 If the result includes completion, relay it for report complete; never submit again.
 The monitor reads the runtime events of this session; write text only for a blocker and the final result.
-"""
+{skill}"""
 
 
 def _stream_runtime(

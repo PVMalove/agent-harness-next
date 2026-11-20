@@ -23,6 +23,7 @@ from harness.orchestration.contract import NO_GATE_WORK_ROLES
 from harness.orchestration.core import config as core_config
 from harness.orchestration.core import utils
 from harness.orchestration.core.check_results import parse_check_result
+from harness.orchestration.core.developer_skill import developer_skill
 from harness.orchestration.core.report_evidence import evidence_text, validate_evidence
 from harness.orchestration.core.config import (
     _adaptive_continuation_policy,
@@ -966,6 +967,8 @@ def resume_dispatch(args: argparse.Namespace) -> JsonObject:
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         dispatch = _load_dispatch(root, args.dispatch)
+        # A resumed developer reads the installed skill again: refuse before any ledger change.
+        skill = developer_skill(repo) if dispatch.get("role") == "developer" else None
         batch = _load_batch(root, dispatch["batch_id"])
         _validate_batch_integrity(root, batch)
         if batch["state"] in {"paused", "blocked", "failed"}:
@@ -1134,6 +1137,7 @@ def resume_dispatch(args: argparse.Namespace) -> JsonObject:
         "state": "dispatched",
         "authorization": authorization["decision"],
         "next_role_action": "dispatch self-report",
+        **({"developer_skill": skill} if skill is not None else {}),
     }
 
 

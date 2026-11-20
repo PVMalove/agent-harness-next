@@ -376,3 +376,32 @@ def test_native_permission_uses_control_frames_without_extra_model_messages(
         "user:",
         "control_response:success",
     ]
+
+
+def test_developer_prompt_carries_the_core_developer_skill_line(tmp_path: Path) -> None:
+    import argparse
+
+    from harness.orchestration.adapters import claude_code
+    from harness.orchestration.core.developer_skill import (
+        DEVELOPER_SKILL_RELATIVE,
+        INSTRUCTION,
+    )
+
+    args = argparse.Namespace(
+        repo=str(tmp_path),
+        state_dir=None,
+        brief=str(tmp_path / "brief.json"),
+        endpoint="http://127.0.0.1:1",
+    )
+    brief = {
+        "role": "developer",
+        "dispatch_id": "dispatch-1",
+        "report_staging_path": str(tmp_path / "report.json"),
+        "worktree": str(tmp_path / "worktree"),
+        "liveness": {"heartbeat_every_seconds": 300},
+    }
+    line = INSTRUCTION.format(path=(tmp_path / DEVELOPER_SKILL_RELATIVE).resolve())
+
+    assert line in claude_code._prompt(args, brief)
+    for role in ("architect", "code-review"):
+        assert "Developer skill:" not in claude_code._prompt(args, {**brief, "role": role})

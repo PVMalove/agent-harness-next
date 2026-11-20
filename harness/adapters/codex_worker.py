@@ -86,6 +86,19 @@ class WorkerExited(ValueError):
         self.code = code
 
 
+# The developer skill line of a developer prompt (#1161). The adapter is stdlib-only and installed
+# outside the hashed orchestration package, so it repeats the literal of
+# harness/orchestration/core/developer_skill.py; a parity test keeps both equal.
+DEVELOPER_SKILL_RELATIVE = ".harness/skills/developer/SKILL.md"
+DEVELOPER_SKILL_INSTRUCTION = (
+    "Developer skill: read the installed developer skill {path} before implementation and apply "
+    "its scope, test-first and evidence discipline. The immutable brief and the developer role "
+    "contract stay authoritative for assignment, scope, commits and the completion report; the "
+    "skill grants no path, tool or approval. If the file is missing or unreadable, stop before "
+    "any edit with outcome blocked and name the path in blockers."
+)
+
+
 PROMPT = """\
 You are the {role} worker for dispatch {dispatch_id}.
 Brief: {brief}
@@ -137,7 +150,7 @@ def build_prompt(
             str(repo),
         )
     )
-    return PROMPT.format(
+    prompt = PROMPT.format(
         role=brief["role"],
         dispatch_id=brief["dispatch_id"],
         brief=brief_path,
@@ -149,6 +162,14 @@ def build_prompt(
         package=brief["context_package_id"],
         allowed_tools=", ".join(brief["allowed_tools"]),
     )
+    if brief["role"] == "developer":
+        prompt += (
+            DEVELOPER_SKILL_INSTRUCTION.format(
+                path=(repo / DEVELOPER_SKILL_RELATIVE).resolve()
+            )
+            + "\n"
+        )
+    return prompt
 
 
 def git_commit_permissions(worktree: Path) -> dict[str, str]:

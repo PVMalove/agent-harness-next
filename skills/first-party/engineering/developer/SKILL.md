@@ -6,9 +6,22 @@ description: Implements an agreed change in the current issue branch within the 
 # Developer
 
 Implement one agreed change in this session and finish with a human-readable evidence report. This
-skill is separate from the coordinator's `developer` role: inside an orchestration dispatch, follow
-`harness/orchestration/roles/developer.md` and the brief instead; this skill neither repeats nor
-widens them.
+skill is separate from the coordinator's `developer` role contract,
+`harness/orchestration/roles/developer.md`: it neither repeats nor widens that contract or the
+brief. A coordinator developer dispatch also reads this skill, under
+[Inside a coordinator dispatch](#inside-a-coordinator-dispatch).
+
+## Inside a coordinator dispatch
+
+A coordinator developer dispatch applies the Scope, Implementation and Completion checks below. The
+immutable brief and `harness/orchestration/roles/developer.md` stay authoritative; when they
+conflict with this skill, they win, and this skill grants no path, tool or approval. In a dispatch:
+
+- the brief's allowed paths and accepted design replace the agreement with the human and the
+  ticket's scope sections; the Prerequisites below are proven by the brief and the worker checkout;
+- the role's machine-readable completion report replaces the Evidence report in chat;
+- the role contract and the brief's commit plan decide commits, which replaces the rule that this
+  skill never commits.
 
 ## Prerequisites
 

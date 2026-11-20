@@ -22,8 +22,15 @@ ticket (`pipeline::*`), the description points to `/fast-implement` or `/impleme
 
 ## Orchestration role `developer`
 
-The interactive skill and the coordinator's `developer` role are different. Inside a dispatch, the role
-manifest and the brief apply; the skill neither repeats nor widens them. The role contract follows.
+The interactive skill and the coordinator's `developer` role are different. Every developer dispatch
+reads the installed skill: `dispatch send` and `dispatch resume` return a `developer_skill` field with
+the absolute path `<repo>/.harness/skills/developer/SKILL.md` and the prompt line, and the Claude and
+Codex adapters add the same line themselves. The worker applies the skill's discipline (scope,
+test-first, evidence), but the brief and the role manifest stay authoritative: the brief's accepted
+design replaces the agreement with the human, the role's machine-readable report replaces the chat
+report, and the commit plan decides commits. The skill grants no path, tool or approval. Without the
+installed skill, both commands refuse before any ledger or brief change; a worker that cannot read
+the file stops with `outcome: blocked` and the path in `blockers`. The role contract follows.
 
 Source: [`harness/orchestration/roles/developer.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/developer.md) and the shared contract [`common.md`](https://github.com/PVMalove/agent-harness-next/blob/master/harness/orchestration/roles/common.md).
 
