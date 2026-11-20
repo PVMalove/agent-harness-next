@@ -450,6 +450,10 @@ An early exit of a detached worker, even with code `0`, returns a launch error a
 `harness health` compares the installed adapters with the harness version (`orchestration.adapters`) and
 looks for `claude` and `codex` on the PATH of the `harness-runtime serve` environment
 (`orchestration.worker_binaries`): the runtime starts the worker in that environment, not in the coordinator's.
+The `orchestration.rebaser_route` check shows whether the rebaser role is available: with zero configuration,
+assigned by the project (`assignment_plans.rebaser`), not installed, or not assigned. In the last two cases a
+developer-retry `rebase-fix-forward` carries the moved base; the check lists batches pinned to a runtime
+without the rebaser and leaves their snapshots unchanged.
 To check a command without a model, there is `dispatch --dry-run`; for a test executable,
 `--claude-bin`/`--codex-bin`; for developer-retry lines, `--extra-prompt-file`.
 

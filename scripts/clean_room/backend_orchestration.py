@@ -119,6 +119,88 @@ def _require_startup_recovery_contract(skill: str, playbook: str) -> None:
             )
 
 
+REBASER_FILES = (
+    ".harness/orchestration/roles/rebaser.md",
+    ".harness/orchestration/workflow/rebaser.py",
+)
+
+
+def _rebaser_route(project: Path) -> dict[str, object]:
+    """The `orchestration.rebaser_route` check; health may fail on unrelated checks here."""
+    command = HARNESS + ["health", str(project), "--json"]
+    result = run_step(command, capture_output=True, text=True, check=False)
+    try:
+        report = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        sys.exit(f"health --json output is not JSON: {result.stderr.strip()}")
+    return find_check(report, "orchestration.rebaser_route")
+
+
+def _expect_rebaser_route(
+    project: Path, status: str, phrase: str, *, plain_update_fix: bool = False
+) -> dict[str, object]:
+    check = _rebaser_route(project)
+    message = str(check.get("message", ""))
+    if check.get("status") != status or phrase not in message:
+        sys.exit(
+            f"orchestration.rebaser_route: expected {status} with {phrase!r}, "
+            f"got {check.get('status')}: {message}"
+        )
+    if plain_update_fix:
+        fix = check.get("fix")
+        command = str(fix.get("command") or "") if isinstance(fix, dict) else ""
+        if "update" not in command or "--force" in command:
+            sys.exit(f"orchestration.rebaser_route fix is not a plain update: {command!r}")
+    return check
+
+
+def _require_rebaser_delivery(project: Path, config_path: Path) -> None:
+    """Install and update deliver the rebaser role and its workflow; health tells the role a
+    project assigns from a missing one, an older version from local drift, and never calls
+    drift an installer defect (issue #1158)."""
+    _expect_rebaser_route(project, "ok", "назначена проектом")
+    lock_path = project / ".harness" / "harness.lock"
+    original_lock = lock_path.read_text(encoding="utf-8")
+    # An installation of a version before the rebaser: neither file nor its lock entry.
+    lock = json.loads(original_lock)
+    for relative in REBASER_FILES:
+        (project / relative).unlink()
+        lock["files"].pop(relative)
+    lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+    _expect_rebaser_route(project, "warn", "не поставляет роль rebaser", plain_update_fix=True)
+    run_ok(HARNESS + ["update", str(project)], quiet=True)
+    for relative in REBASER_FILES:
+        if not (project / relative).is_file():
+            sys.exit(f"harness update did not deliver {relative}")
+    _expect_rebaser_route(project, "ok", "назначена проектом")
+    # Local drift: the lock still lists the role file. A plain update restores a deleted
+    # managed file, so the check proposes that update, not --force-managed-files.
+    (project / REBASER_FILES[0]).unlink()
+    drift = _expect_rebaser_route(
+        project, "warn", "локальное расхождение установки", plain_update_fix=True
+    )
+    if "не дефект установщика" not in str(drift.get("message", "")):
+        sys.exit("orchestration.rebaser_route classifies local drift as an installer defect")
+    run_ok(HARNESS + ["update", str(project)], quiet=True)
+    _expect_rebaser_route(project, "ok", "назначена проектом")
+    # A project that assigns roles explicitly but not the rebaser keeps rebase-fix-forward.
+    original_config = config_path.read_text(encoding="utf-8")
+    config = json.loads(original_config)
+    config["assignment_plans"].pop("rebaser")
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    unassigned = _expect_rebaser_route(project, "warn", "не rebaser")
+    fix = unassigned.get("fix")
+    if not isinstance(fix, dict) or fix.get("command") or "assignment_plans.rebaser" not in str(
+        fix.get("text")
+    ):
+        sys.exit("orchestration.rebaser_route does not name assignment_plans.rebaser as its fix")
+    config_path.write_text(original_config, encoding="utf-8")
+    if json.loads(lock_path.read_text(encoding="utf-8"))["files"].keys() != json.loads(
+        original_lock
+    )["files"].keys():
+        sys.exit("harness update did not restore the rebaser entries of harness.lock")
+
+
 def run(ctx: SimpleNamespace) -> None:
     """Установка backend-orchestration, Repo Map и health.
 
@@ -379,6 +461,7 @@ def run(ctx: SimpleNamespace) -> None:
             orchestration_project / ".harness" / "orchestration" / "roles" / name
         ).is_file():
             sys.exit(f"backend-orchestration role manifest missing: {name}")
+    _require_rebaser_delivery(orchestration_project, orchestration_config)
 
     playbook_path = orchestration_root / "playbook.md"
     if not playbook_path.is_file():

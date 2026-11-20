@@ -55,14 +55,34 @@ REPORT_REMEDY = (
 )
 
 
+AVAILABLE_ZERO_CONFIG = "zero-config"
+AVAILABLE_ASSIGNED = "assigned"
+UNAVAILABLE_NOT_INSTALLED = "not-installed"
+UNAVAILABLE_NOT_ASSIGNED = "not-assigned"
+AVAILABLE = frozenset({AVAILABLE_ZERO_CONFIG, AVAILABLE_ASSIGNED})
+
+
+def availability(roles_dir: Path, config: JsonObject) -> str:
+    """Why the rebaser can or cannot be dispatched from ``roles_dir`` under ``config``.
+
+    The manifest must be installed; then a project that assigns no role at all is zero-config,
+    a project that assigns the rebaser has it assigned, and any other assignment (including a
+    malformed one) leaves it unassigned."""
+    if not (roles_dir / f"{REBASER_ROLE}.md").is_file():
+        return UNAVAILABLE_NOT_INSTALLED
+    plans = config.get("assignment_plans")
+    if not plans:
+        return AVAILABLE_ZERO_CONFIG
+    if isinstance(plans, dict) and REBASER_ROLE in plans:
+        return AVAILABLE_ASSIGNED
+    return UNAVAILABLE_NOT_ASSIGNED
+
+
 def available(repo: Path, config: JsonObject) -> bool:
     """Whether the rebaser can be dispatched: its manifest is installed and the project assigns
     it, or assigns no role at all (zero-config). Otherwise the moved base keeps the developer
     route of ADR 0012."""
-    if not (core_config._roles_dir(repo) / f"{REBASER_ROLE}.md").is_file():
-        return False
-    plans = config.get("assignment_plans")
-    return not plans or (isinstance(plans, dict) and REBASER_ROLE in plans)
+    return availability(core_config._roles_dir(repo), config) in AVAILABLE
 
 
 def routing(

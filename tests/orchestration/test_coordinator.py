@@ -14189,6 +14189,124 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(qa_again["candidate_commit"], head)
         self.assertNotIn("auto_stop", done)
 
+    # -- rebaser availability under explicit assignment and pinned snapshots (issue #1158) -----
+
+    def test_an_explicit_assignment_without_the_rebaser_keeps_qa_and_rebase_fix_forward(
+        self,
+    ) -> None:
+        self._reviewed_candidate()
+        upstream = self._push_upstream()
+        self._patch_config(assignment_plans={"developer": {}, "code-review": {}, "qa": {}})
+
+        preview = self._packet()["route_preview"]
+        retry = self._packet(reason_category="candidate-change")["route_preview"]["retry"]
+        decided = self._decide(self.batch_id, "accept")
+
+        self.assertTrue(
+            (self.repo / ".harness/orchestration/roles/rebaser.md").is_file()
+        )
+        self.assertNotIn("accept", preview)
+        self.assertEqual(
+            (retry["route"], retry["next_role"], retry["rebase_target_commit"]),
+            ("rebase-fix-forward", "developer", upstream),
+        )
+        self.assertEqual(decided["next_action"], "qa")
+        self.assertEqual(decisions._developer_retry_count(decided), 0)
+
+    def test_an_explicit_assignment_of_the_rebaser_routes_an_accepted_review_to_it(
+        self,
+    ) -> None:
+        candidate = self._reviewed_candidate()
+        upstream = self._push_upstream()
+        self._patch_config(
+            assignment_plans={"developer": {}, "code-review": {}, "qa": {}, "rebaser": {}}
+        )
+
+        decided = self._decide(self.batch_id, "accept")
+
+        routing = self._routing(decided)
+        self.assertEqual(
+            (
+                routing["route"],
+                routing["next_role"],
+                routing["candidate_commit"],
+                routing["rebase_target_commit"],
+            ),
+            ("rebase", "rebaser", candidate, upstream),
+        )
+        self.assertEqual(decided["next_action"], "rebase")
+
+    def test_a_rebaser_dispatch_outside_auto_needs_the_explicit_approval_of_its_target(
+        self,
+    ) -> None:
+        self._reviewed_candidate()
+        upstream = self._push_upstream()
+        self._decide(self.batch_id, "accept")
+
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            coordinator.create_dispatch(
+                self._args(
+                    transition_digest=None,
+                    approved_by=None,
+                    approved_at=None,
+                    **self._proposal_fields(self.batch_id, "rebaser", "work", None),
+                )
+            )
+        proposal = self._propose(self.batch_id, "rebaser")
+        brief = self._dispatch(
+            self.batch_id, "rebaser", digest=proposal["transition_digest"]
+        )["brief"]
+
+        self.assertIn("--approved-by", refused.exception.remedy)
+        self.assertEqual(proposal["transition"]["rebase_target_sha"], upstream)
+        self.assertEqual(
+            (
+                brief["rebase_target_commit"],
+                brief["transition"]["next_action"],
+                brief["coordinator_approval"]["approved_by"],
+            ),
+            (upstream, "rebase", "Malove"),
+        )
+
+    def test_an_accepted_rebase_reaches_publish_only_through_qa_of_the_new_candidate(
+        self,
+    ) -> None:
+        brief, candidate, head = self._run_rebaser(conflict=False)
+        self._decide(self.batch_id, "accept")
+        changed = git_utils._changed_files_between(
+            self.repo, brief["rebase_target_commit"], head
+        )
+        self._assess(self.batch_id, head, changed)
+
+        for stale in (candidate, head):
+            with self.subTest(candidate=stale):
+                with self.assertRaises(coordinator.CoordinatorError):
+                    self._dispatch(
+                        self.batch_id, "developer", purpose="publish", candidate=stale
+                    )
+        self.assertEqual(self._batch_record(self.batch_id)["next_action"], "qa")
+
+    def test_a_pinned_snapshot_without_the_rebaser_keeps_qa_on_a_moved_base(
+        self,
+    ) -> None:
+        self._reviewed_candidate()
+        self._push_upstream()
+        installed = self.repo / ".harness" / "orchestration" / "roles"
+        pinned = self.tmp / "pinned-roles"
+        shutil.copytree(installed, pinned)
+        (pinned / "rebaser.md").unlink()
+        patcher = mock.patch.object(config, "_roles_dir", lambda repo: pinned)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        preview = self._packet()["route_preview"]
+        decided = self._decide(self.batch_id, "accept")
+
+        self.assertTrue((installed / "rebaser.md").is_file())
+        self.assertNotIn("accept", preview)
+        self.assertEqual(decided["next_action"], "qa")
+        self.assertFalse((pinned / "rebaser.md").exists())
+
     # -- delta-review after a fix-forward (issue #625) -----------------------------------------
 
     SPEC_WARNING = {

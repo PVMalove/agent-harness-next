@@ -700,6 +700,7 @@
     "Локальные правки сохраняются; стоп на конфликтах.": "Local edits are kept; stops on conflicts.",
     "Локальные правки управляемых файлов": "Local edits of managed files",
     "Маршрут": "Route",
+    "Маршрут rebase недоступен": "The rebase route is unavailable",
     "Маршрут сессии": "Session route",
     "Маршрут сессии {id}": "Session route {id}",
     "Маршрутизация проверок настроена неверно": "Verification routing is misconfigured",
@@ -2270,6 +2271,10 @@
       "en": "Orphaned worktrees take space and may hold unsaved work.",
       "ru": "Осиротевшие worktree занимают место и могут содержать несохранённую работу."
     },
+    "orchestration.rebaser_route": {
+      "en": "Without an available rebaser role a developer-retry rebase-fix-forward carries the moved base, and the candidate goes through code-review again.",
+      "ru": "Без доступной роли rebaser сдвинутую базу переносит developer-retry rebase-fix-forward, а кандидат снова проходит code-review."
+    },
     "orchestration.runtime": {
       "en": "Without a running harness-runtime serve, orchestration and worktree cleanup do not work.",
       "ru": "Без запущенного harness-runtime serve оркестрация и очистка worktree не работают."
@@ -2848,6 +2853,10 @@
     "orchestration.orphaned_worktrees": {
       "en": "Orphaned worktrees",
       "ru": "Брошенные рабочие копии"
+    },
+    "orchestration.rebaser_route": {
+      "en": "Rebase route",
+      "ru": "Маршрут rebase"
     },
     "orchestration.runtime": {
       "en": "Runtime process",
