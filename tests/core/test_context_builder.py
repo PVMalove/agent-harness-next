@@ -1308,21 +1308,22 @@ class GuardHotPathTests(unittest.TestCase):
         self,
     ) -> None:
         """Проверить, что реальный запуск не создает кэш байткода __pycache__ в пакете harness."""
-        harness_root = MODULE_ROOT.parent  # .../harness
-        before = {path for path in harness_root.rglob("__pycache__")}
-        fixture = ContextBuilderFixture()
-        fixture.setUp()
-        try:
-            build_context_package(
-                fixture.repo,
-                fixture.base_commit,
-                fixture.candidate_commit,
-                min_starting_files=1,
-            )
-        finally:
-            fixture.tearDown()
-        after = {path for path in harness_root.rglob("__pycache__")}
-        self.assertEqual(after - before, set())
+        # The child process gets a private cache location: whatever it writes lands there, and
+        # the imports of pytest workers running in parallel do not (they share the package tree).
+        with tempfile.TemporaryDirectory() as written:
+            fixture = ContextBuilderFixture()
+            fixture.setUp()
+            try:
+                with patch.dict(os.environ, {"PYTHONPYCACHEPREFIX": written}):
+                    build_context_package(
+                        fixture.repo,
+                        fixture.base_commit,
+                        fixture.candidate_commit,
+                        min_starting_files=1,
+                    )
+            finally:
+                fixture.tearDown()
+            self.assertEqual(list(Path(written).iterdir()), [])
 
     def test_hot_path_source_has_no_network_venv_requirements_or_uv_run(self) -> None:
         """Проверить отсутствие упоминаний сети, venv, requirements.txt и uv run в исходном коде сборщика."""

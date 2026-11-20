@@ -48,6 +48,10 @@ def _selected(tmp_path: Path, *selection: str) -> list[str]:
             str(ROOT / "pyproject.toml"),
             "--rootdir",
             str(tmp_path),
+            # Without it the walk to the probe starts at the repository root (the directory of
+            # -c) and stats every sibling temp directory of the tests running in parallel.
+            "--confcutdir",
+            str(tmp_path),
             "-p",
             "no:cacheprovider",
             # An unregistered marker would only warn; registration is part of the contract.
