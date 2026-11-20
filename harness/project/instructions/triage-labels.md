@@ -10,15 +10,15 @@ Every triaged issue or PR carries exactly one label from each of the first three
 
 ### 1. Type (`type::*`)
 
-| Label | Meaning |
-| --- | --- |
-| `type::bug` | Something is broken |
-| `type::feature` | New feature or improvement |
-| `type::refactoring` | Internal restructuring, no behavior change |
-| `type::chore` | Maintenance, tooling, or dependency upkeep |
-| `type::security` | Security fix or hardening |
-| `type::performance` | Performance improvement |
-| `type::hotfix` | Urgent production fix |
+| Label | Color | Meaning |
+| --- | --- | --- |
+| `type::bug` | red `#d73a4a` | Something is broken |
+| `type::feature` | light cyan `#a2eeef` | New feature or improvement |
+| `type::refactoring` | light gray `#cfd3d7` | Internal restructuring, no behavior change |
+| `type::chore` | pale blue `#bfd4f2` | Maintenance, tooling, or dependency upkeep |
+| `type::security` | violet `#7057ff` | Security fix or hardening |
+| `type::performance` | peach `#f9d0c4` | Performance improvement |
+| `type::hotfix` | bright red `#e11d21` | Urgent production fix |
 
 ### 2. Execution mode — who does the work
 
@@ -91,9 +91,9 @@ Epic grouping uses no label: a ticket decomposed from an epic is linked to it th
 | `wayfinder:grilling` | violet `#6554c0` | HITL ticket type — a conversation, the default case. |
 | `wayfinder:task` | slate `#8993a4` | HITL-or-AFK ticket type — manual work that unblocks a decision. |
 
-### Pipeline hint (`pipeline::*`) — from story points, `afk` only
+### Pipeline hint (`pipeline::*`) — `afk` only
 
-A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets` assigns every `afk` ticket a Fibonacci story-point score (Planning Poker: one primary pass, plus a second cheap advisory pass when the score lands in the gray zone) and derives one of these labels from it on the STOP-AND-ASK gate, where a developer can override the label without changing the score. `hitl` tickets never receive a `pipeline::*` label. The scale and thresholds come from the optional `story_points` field in `.harness/project.json` (schema: `.harness/project.schema.json`); without it, `/to-tickets` falls back to `≤3` fast, `≥5` full, gray zone `4`.
+A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets` assigns every `afk` ticket a Fibonacci story-point score (Planning Poker: one primary pass, plus a second cheap advisory pass when the score lands in the gray zone) and derives one of these labels from it on the STOP-AND-ASK gate, where a developer can override the label without changing the score. `/triage` is the second source: for an `afk` issue it proposes `pipeline::fast` (a small change with a settled direction) or `pipeline::full` with a reason, and applies the one the maintainer agrees to; it computes no story points. `hitl` tickets never receive a `pipeline::*` label. The scale and thresholds come from the optional `story_points` field in `.harness/project.json` (schema: `.harness/project.schema.json`); without it, `/to-tickets` falls back to `≤3` fast, `≥5` full, gray zone `4`.
 
 | Label | Color | Meaning |
 | --- | --- | --- |
@@ -104,7 +104,7 @@ A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets`
 
 An unlabeled issue is implicitly "needs triage" — there's no dedicated label for that state.
 
-1. Triage analyzes the issue: determine `type::*`, and either `hitl`/`afk` or — if the issue is epic-sized and needs decomposition before anything is actionable — route it to `status::specs` instead and point the maintainer at `/to-spec`.
+1. Triage analyzes the issue: determine `type::*`, and either `hitl`/`afk` (plus the agreed `pipeline::*` for `afk`) or — if the issue is epic-sized and needs decomposition before anything is actionable — route it to `status::specs` instead and point the maintainer at `/to-spec`.
 2. `/publish-epic` applies `status::specs` when it publishes a new epic after `/to-spec`.
 3. Once specified, place the ticket in `status::ready` (nothing blocking it) or `status::blocked` (a dependency, or missing info from you — either way, post triage notes).
 4. `status::blocked` → `status::ready` once the blocker clears or you reply. A blocker clears only when its predecessor is closed, and the predecessor is closed only after its merge is confirmed; a push, publish, accepted QA or an open PR does not clear it.
@@ -124,7 +124,7 @@ A local-markdown-tracked ticket (`.scratch/<feature>/issues/NN-*.md`) has no Git
 **Workflow:** status::specs / status::ready / status::in-progress / status::blocked / done
 **Execution:** hitl / afk (omit while **Workflow:** is status::specs)
 **Story Points:** Fibonacci score (afk tickets only; omit the line entirely for hitl tickets)
-**Pipeline:** pipeline::fast / pipeline::full (afk tickets only, derived from Story Points; omit the line entirely for hitl tickets)
+**Pipeline:** pipeline::fast / pipeline::full (afk tickets only, derived from Story Points or agreed in /triage; omit the line entirely for hitl tickets)
 **Task report:** required (omit the line entirely if not required)
 ```
 

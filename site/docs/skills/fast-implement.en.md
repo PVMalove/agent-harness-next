@@ -19,7 +19,8 @@ closes the ticket.
 2. The ticket label changes to `status::in-progress`.
 3. The integration branch comes from `## Integration Branch` or the local ticket's
    `**Integration branch:**` line, otherwise from the epic.
-4. The skill creates and pushes the issue branch.
+4. When the current branch does not match `branch_pattern`, the skill creates the issue branch from the
+   integration branch and pushes it; a matching current branch stays the working branch.
 5. The ticket's `## Relevant Files (Discovery Context)`, `## Contract touchpoints` and
    `## Out of scope` bound the change, and its `Action -> Verify` criteria are the checks. A change
    outside them needs your approval.
@@ -28,8 +29,10 @@ closes the ticket.
 
 The implementation steps follow the `developer` skill: the seam is agreed before the first test,
 then `/tdd`, the optional test author under `tdd/references/test-author.md`, and the `Verify`
-checks. `/qa-gate` runs the full suite before the PR. The skill then asks whether to run code
+checks. `/qa-gate` runs the full suite before the PR; it runs only `qa_gate_commands`, while
+`pre_qa_commands` and the QA overlays apply to `/implement` alone. The skill then asks whether to run code
 review, waits for permission to commit and push, and pushes the issue branch. Finally, it offers to
-run `/to-pull-requests <ticket>` manually.
+run `/to-pull-requests <ticket>` manually. The ticket keeps `status::in-progress`: after the merge,
+`/to-pull-requests` closes it and moves its unblocked dependents to `status::ready`.
 
 [Source SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/fast-implement/SKILL.md)

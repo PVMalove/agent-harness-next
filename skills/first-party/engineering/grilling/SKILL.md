@@ -1,6 +1,6 @@
 ---
 name: grilling
-description: Run a structured interview to stress-test a plan, idea, or decision. Use directly when asked to grill or as the interview engine for other skills.
+description: Runs a structured interview that stress-tests a plan, idea, or decision. Use when asked to grill, or as other skills' interview engine; /grill-me and /grill-with-docs also keep its results.
 ---
 
 ## Set the scope

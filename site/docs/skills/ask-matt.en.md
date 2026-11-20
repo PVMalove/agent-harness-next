@@ -15,7 +15,7 @@
 
 ```yaml
 name: ask-matt
-description: Ask which skill or flow fits your situation. A router over the skills in this repository.
+description: Recommends which skill or flow fits the user's situation. Use explicitly when unsure what to run next; it only routes and never runs the chosen skill.
 disable-model-invocation: true
 ```
 
@@ -37,8 +37,9 @@ The route that most work travels. You have an idea and want it built.
 3. **Branch — is this a multi-session build?**
    - **Yes** → **`/to-spec`** (turn the conversation thread into a spec), then **`/to-tickets`** to split it into tracer-bullet tickets, each declaring its **blocking edges**. On a local tracker this is one file per ticket under `.scratch/<feature>/issues/`, worked by hand, blockers first. On a real tracker the edges become native blocking links, so you can take any ticket whose blockers are done. Run **`/implement`** (`pipeline::full`) or **`/fast-implement`** (`pipeline::fast`) for each ticket, **clearing the context with `/clear` between tickets**. Each ticket is self-contained, so the context of the last one is disposable.
    - **No** → open one `pipeline::fast` ticket for it (the Issue First rule from the git workflow) and run **`/fast-implement`** on it right here, in the same context window.
+   - **Either way, a ticket a human codes** (`hitl`) → **`/to-guide`** writes a step-by-step guide for the ticket instead of building it.
 
-   **`/fast-implement`** builds the ticket by driving **`/tdd`** — one red-green slice at a time. It then asks the developer whether to run **`/code-review`**, a two-axis review (Standards + Spec) of the diff, and asks for approval to commit and push the current issue branch. **`/implement`** instead coordinates gated architect → developer → code-review → QA → publish dispatches and never writes code in its own session. Both then offer a manual **`/to-pull-requests`**. Use **`/tdd`** on its own when you only want to build a concrete behavior test-first without a full spec. Use **`/code-review`** on its own whenever you want to review a branch or PR against a fixed point.
+   **`/fast-implement`** builds the ticket by driving **`/tdd`** — one red-green slice at a time. It then asks the developer whether to run **`/code-review`**, a two-axis review (Standards + Spec) of the diff, and asks for approval to commit and push the current issue branch. **`/implement`** (needs the `backend-orchestration` capability) instead coordinates gated architect → developer → code-review → QA → publish dispatches and never writes code in its own session. Both then offer a manual **`/to-pull-requests`**. Use **`/tdd`** on its own when you only want to build a concrete behavior test-first without a full spec. Use **`/code-review`** on its own whenever you want to review a branch or PR against a fixed point.
 
 ##### Context hygiene
 
@@ -50,7 +51,7 @@ The limit is the **[smart zone](https://www.aihero.dev/ai-coding-dictionary/smar
 
 A starting situation that generates work and then merges onto the main flow.
 
-- **Bugs and requests are piling up** → **`/triage`**. It moves issues through the triage roles and produces agent-ready issues, which **`/implement`** picks up later.
+- **Bugs and requests are piling up** → **`/triage`**. It moves issues through the triage roles and produces agent-ready issues. For an `afk` issue it proposes the route, and the label the maintainer agrees to decides who picks it up: **`/fast-implement`** for `pipeline::fast`, **`/implement`** for `pipeline::full`.
 
   Triage is only for issues **you did not create**: bug reports, incoming feature requests, anything that arrives raw. Tickets that `/to-tickets` produced are already agent-ready, so **do not triage them**.
 
@@ -99,10 +100,14 @@ Off the main flow entirely.
 - **`/wait-what`** — the corrective for a message that did not land. Use it mid-conversation, inside any other skill, and the agent restates what it just said, with the context you were missing, in plain English, using the `CONTEXT.md` vocabulary. It works after the fact. `/grill-with-docs` is the upfront prevention, because a shared language agreed early stops jargon from appearing at all.
 - **`/teach`** — learn a concept over multiple sessions, using the current directory as a stateful workspace.
 - **`/writing-for-agents`** — a reference for writing documents that agents consume: skills, AGENTS.md, and targeted documents.
+- **`/architect`** — compare architectural options for a boundary decision the spec doesn't settle, before implementing the ticket.
+- **`/developer`** — implement an agreed change in the current issue branch outside a labeled ticket route.
+- **`/qa-gate`** — run the project's full local quality gate before opening a PR.
+- **`/delivery-stats`** — report what a finished epic cost, after its release PR is merged.
 
 #### Precondition
 
-**`/setup-matt-pocock-skills`** — run it before your first engineering flow, to configure the issue tracker, the triage label vocabulary, and the documentation layout that the other skills assume. Custom issue trackers also work.
+**`harness update`** seeds `docs/agents/` (issue tracker, triage labels, domain docs) from the harness templates; then run **`/setup-labels`** once on a GitHub or GitLab tracker. Don't run `/setup-matt-pocock-skills` here: it writes the upstream label vocabulary that `/triage` forbids.
 
 </div>
 

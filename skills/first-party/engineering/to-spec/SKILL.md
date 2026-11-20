@@ -16,9 +16,11 @@ Never create tasks, publish, or change Git state.
    folder for a child task. Look for `artifacts/discovery-context.md` there before treating the
    handoff as a cold start. Propose the spec file at the root of that folder.
 2. Check `docs/tasks/.../artifacts/discovery-context.md` for this task and the final grilling summary in chat.
-   Import the goal and scope, accepted decision IDs and selected option numbers, rejected
-   alternatives and their reasons, open questions, assumptions, and confirmed glossary and ADR updates.
-   Clarify decision gaps that affect the design. Copy option numbers only where supplied.
+   Import the goal and scope, accepted decision IDs and selected option numbers, rejected alternatives and
+   their reasons, open questions, assumptions, and confirmed glossary and ADR updates. Clarify decision
+   gaps that affect the design. Copy option numbers only where supplied. On a `kill` verdict, stop and
+   report its decisive reason; write no spec. On `needs-clarification`, carry each blocking unknown into
+   the open questions and ask whether to resolve them first or write a partial spec.
 3. Use the task's nonempty, approved Discovery Context as the file allowlist.
    Preserve the approved lines in order, including any supplied context. If chat and the artifact
    disagree on the approved list, ask the user to reconcile them before relying on disputed paths.
@@ -31,9 +33,8 @@ Never create tasks, publish, or change Git state.
   Show each proposed repo-relative path and why it is needed. Ask which paths to add to Discovery Context.
 - Wait for explicit approval before reading or citing a candidate. Apply the same rule to any new
   code, tests, configuration, glossary, or ADR path discovered while assembling the spec.
-- Keep declined paths out of repository reads and the change plan.
-  Get fresh approval before using a previously declined path. Preserve the rejected approach
-  and rationale without naming an unapproved file.
+- Keep declined paths out of repository reads and the change plan. Get fresh approval before using
+  a previously declined path. Preserve the rejected approach and rationale without naming an unapproved file.
 - Keep newly approved paths in chat for this session. Preserve the approved artifact on disk as supplied.
   Use the resulting allowlist for evidence, proposed changes, and verification paths.
 - Run key unresolved architectural choices through the protocol after the user approves the path list.
@@ -86,5 +87,4 @@ Create only directories needed for the approved file. Apply the same gates to re
 
 Return the saved path and status. If the write fails, report the error and return the complete specification in chat.
 Offer revisions or, for an Approved spec, a manual next step: `/publish-epic` and then `/to-tickets`,
-or `/implement` when its prerequisites are met. For a Draft, offer to resolve the blockers first.
-Never invoke either skill automatically.
+or `/implement` when its prerequisites are met. For a Draft, offer to resolve the blockers first. Never invoke either skill automatically.

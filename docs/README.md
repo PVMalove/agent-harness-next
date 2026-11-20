@@ -30,6 +30,7 @@
 | [Technical English](../harness/project/instructions/technical-english.md) | Контракт английской координации агентов. |
 | [Technical Russian](./technical-russian.md) | Правила технического русского языка и Keep a Changelog. |
 | [Runtime discovery](../site/docs/runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
+| [Типовые запросы скиллов](./skills-trigger-queries.md) | Набор запросов, который проверяет срабатывание скиллов до и после правки описаний. |
 | [Восстановление и runtime store](./adr/0030-runtime-store-ledger-reconciliation.md) | ADR 0030: записи восстановления в runtime store, сверка с authority lifecycle и граница гарантии. |
 
 Порядок выпуска описан в [releases.md](../site/docs/agents/releases.md), рабочий процесс — в

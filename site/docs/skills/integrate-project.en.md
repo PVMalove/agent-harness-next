@@ -46,7 +46,7 @@ If step 6 found a meaningful history and there is no existing decision-record co
 
 Continue from the "Assemble" section of `global-skills/start-project/SKILL.md`, starting at step 2 and onward, using this audit in place of its step 1 (which the Audit stage of this skill already covers more deeply), together with its "Finish" section unchanged. A repository that reaches this skill has, by definition, no existing harness, so Assemble step 5 (`harness init`) applies, not step 6 (`harness update`/`adopt`) — unless the Audit found an already present `.harness/harness.lock` file, in which case stop and switch fully to `start-project`: that is routine harness maintenance, not a first integration.
 
-Set `hook_policy` with the `standard` profile explicitly, as Assemble step 5 says: put the profile in the confirmed manifest and, after `harness init`, verify that `.harness/project.json` contains `"hook_policy": {"profile": "standard"}` and that `harness health` shows `hooks.policy` with the `standard` profile. The repository's own hooks stay in their native files: `harness init` merges them with the managed entries and does not replace them.
+Pass the branch pattern, base branches, tracker, and QA commands this audit found to `harness init` as the flags in Assemble step 5, and install and verify `hook_policy` as that step states for `engineering-suite` and `backend-orchestration`. The repository's own hooks stay in their native files: `harness init` merges them with the managed entries and does not replace them.
 
 #### Reconstruct decision history (optional)
 

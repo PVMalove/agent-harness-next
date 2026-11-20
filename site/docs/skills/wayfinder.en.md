@@ -15,7 +15,7 @@
 
 ```yaml
 name: wayfinder
-description: Plan a huge amount of work that does not fit in one agent session as a shared map of decision tickets in the issue tracker, and resolve them one at a time until the path to the goal is clear.
+description: Charts an effort too big for one session as a tracker map of decision tickets, resolving one per session. Use explicitly for foggy multi-session work; use /to-spec for a scoped feature. Never builds the deliverable.
 disable-model-invocation: true
 ```
 
@@ -26,6 +26,8 @@ The destination varies with the effort, and naming it is the first step of drawi
 #### Plan, do not do
 
 By default, Wayfinder **plans**. Each ticket defines a decision, and the map is complete when the path is clear: nothing is left to decide before someone goes and does the work. An urge to just do the work is usually a signal that you have reached the edge of the map and it is time to hand off. An effort may override this in its **Notes** (moving execution into the map itself). Otherwise, the output is decisions, not deliverables.
+
+When the map has no open tickets, hand off: run `/to-spec` with the map as its input, then `/publish-epic` and `/to-tickets`. Go straight to an implementation ticket only when the effort turned out small.
 
 #### Address by name
 
@@ -117,7 +119,10 @@ Deciding that something is out of scope is a preliminary act, not a step on the 
 
 There are two modes. In either mode, **never resolve more than one ticket per session**, except research tickets.
 
-##### Draw the map
+- **Chart the map** — the user invokes with a loose idea. Read [references/chart.md](#chart-the-map).
+- **Work through the map** — the user invokes with a map (URL or number). Read [references/work.md](#work-the-map).
+
+##### `references/chart.md` — chart the map { #chart-the-map }
 
 The user invokes the skill with a vague idea.
 
@@ -128,7 +133,7 @@ The user invokes the skill with a vague idea.
 5. **Launch research subagents.** For each newly created `research` ticket, deploy a `/research` subagent to resolve it in parallel. It records its results in the issue branch of that research ticket (the name follows `branch_pattern` from `.harness/project.json`, see `docs/agents/git-workflow.md`), with a context pointer from the ticket.
 6. Stop. Charting is the work of one session. It resolves nothing by hand.
 
-##### Working the map { #work-the-map }
+##### `references/work.md` — work through the map { #work-the-map }
 
 The user invokes the skill with a map (URL or number). The ticket is **optional**: without it, you choose the next decision, not the user.
 

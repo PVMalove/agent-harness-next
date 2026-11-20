@@ -15,7 +15,7 @@
 
 ```yaml
 name: grill-me
-description: Проверяет идею или план и собирает согласованный Discovery Context. Для ведения глоссария и ADR используйте /grill-with-docs.
+description: Проводит интервью /grilling, чтобы проверить идею или план, и собирает согласованный Discovery Context, не меняя CONTEXT.md и ADR. Используйте явно перед /to-spec; чтобы также обновлять доменные документы, используйте /grill-with-docs.
 disable-model-invocation: true
 ```
 

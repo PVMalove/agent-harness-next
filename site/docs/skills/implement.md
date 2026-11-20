@@ -14,7 +14,9 @@
 Ядро навыка лежит в `SKILL.md`, а процедуры по условию — в `references/`: рантайм Claude Code
 (`claude-code-runtime.md`), тест-автор полного маршрута (`test-author.md`), план коммитов
 (`commit-plan.md`), автоматический путь (`auto-path.md`), остановки и восстановление (`recovery.md`),
-ожидание и наблюдение воркеров (`workers.md`). Ниже перевод всего текста в прежнем порядке.
+ожидание и наблюдение воркеров (`workers.md`). Ниже перевод всего текста. Порядок разделов
+совпадает с `SKILL.md`, кроме одного: «Контракт coordinator» стоит после «Подготовки batch», а в
+`SKILL.md` — перед ней.
 
 <div class="ah-skill-text" markdown="1">
 
@@ -282,7 +284,9 @@ publish и риска тоже принимаются автоматически
 ещё нужно одобрение человека. Выбирая маршрут восстановления для `retry` или `abandon`, покажите
 `route_preview` из decision packet (с `--reason-category` или `--retry-role`, которые вы собираетесь
 передать в `batch decide`) и следуйте таблице Recovery route в `.harness/orchestration/playbook.md`
-(ситуация → маршрут → кто одобряет → доказательства). Сообщайте о каждом сбое запуска под его
+(ситуация → маршрут → кто одобряет → доказательства). Если маршрут — `rebase` (`next_action: rebase`,
+он же `route_preview.accept`), создайте `dispatch create --role rebaser`; после принятого отчёта
+выполните оценку риска и переходите к QA, а не к новому code-review. Сообщайте о каждом сбое запуска под его
 классификацией (неподдерживаемый флаг, отсутствующий или отклонённый self-report, capacity,
 rate-limit, service-unavailable) вместе с маршрутом восстановления.
 
@@ -441,9 +445,11 @@ another checkout as your actual directory. Confirm your active model and the pro
 Proceed only after a successful self-report; escalate a mismatch or unavailable model identity.
 Immediately after self-report and at least every <heartbeat.every_seconds> seconds while working, run:
 <coordinator CLI> dispatch heartbeat --dispatch <dispatch_id>
-Context Package <context_package_id>: start from its starting_files, symbol_graph and
-related_tests. For a starting file with non-empty sections, read only the start_line–end_line
-ranges the task needs.
+Context Package <context_package_id>: start from its summary in the brief. Read only the indicated
+start_line–end_line ranges needed for the task.
+For more, read one section of the pinned package:
+<coordinator CLI> context-package show --dispatch <dispatch_id> --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
@@ -453,8 +459,8 @@ or {"status": "present", "details": "<Russian description>"} when present. A non
 details; present requires a non-empty description. Put other explanations in output. Strings, translated
 statuses, passed and not-run are invalid; no aliases or old report formats are accepted.
 Then run:
-<coordinator CLI> report submit --file "<report_staging_path>"
-Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+<coordinator CLI> report submit --compact --file "<report_staging_path>"
+Confirm the ledger receipt in one line. Relay any blocked transition or required next action.
 If submission fails before recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
 already recorded, so submit it only once. Chat text alone does not complete the dispatch.

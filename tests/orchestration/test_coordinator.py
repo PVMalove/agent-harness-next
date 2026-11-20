@@ -15220,7 +15220,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
                     incomplete_items=[{**item, "target_role": "designer"}],
                 ),
             )
-        self.assertIn("architect, developer, code-review, qa", unknown.exception.remedy)
+        self.assertIn("architect, developer, code-review", unknown.exception.remedy)
+        self.assertNotIn("qa", unknown.exception.remedy)
         tooled = {
             **item,
             "target_role": "architect",
@@ -15250,10 +15251,12 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
     ) -> None:
         read_only = {"mode": "read-only"}
         for stage, role, target, allowed in (
-            ("architect", read_only, "qa", True),
+            ("architect", read_only, "code-review", True),
             ("verification", read_only, "code-review", True),
-            ("code-review", read_only, "qa", True),
-            ("qa", read_only, "qa", True),
+            ("code-review", read_only, "code-review", True),
+            ("architect", read_only, "qa", False),
+            ("code-review", read_only, "qa", False),
+            ("qa", read_only, "qa", False),
             ("qa", read_only, "developer", False),
             ("code-review", read_only, "architect", False),
             ("verification", read_only, "developer", False),

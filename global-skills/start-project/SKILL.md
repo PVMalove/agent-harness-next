@@ -58,12 +58,18 @@ explicitly requests one.
 2. Select the smallest coherent public capability:
    - `project-foundation` for general project thinking, research, handoff, domain language, and
      agent-facing instructions;
-   - `mattpocock-suite` for recurring software engineering work;
+   - `mattpocock-suite` for the unmodified upstream engineering skills;
+   - `engineering-suite` instead of `mattpocock-suite` for this harness's ticket, review, QA and PR
+     workflow configured in `.harness/project.json`;
+   - `backend-orchestration`, which includes `engineering-suite`, only for the gated `/implement`
+     route;
    - no additional package merely because it is available.
-3. When the owner asks `start-project` to select recurring workflows, allow a matching installed
-   personal or organization catalog-entry skill to return catalog metadata. Pass only the project
-   facts and recurring activities, and follow that entry skill's access boundary. Catalog selection
-   does not authorize unrelated personal knowledge, tasks, notes, or secrets.
+3. When the owner names a team preset, or the project has `.harness/catalogs.json`, list presets
+   with `harness catalogs <repo>` and preview one with `harness presets <repo> --catalog <id>
+   --entry <id>`. Apply it with `--apply` only after the owner confirms the preview. A preset does
+   not authorize unrelated personal knowledge, tasks, notes, or secrets. For `engineering-suite` or
+   `backend-orchestration`, read [references/engineering-setup.md](references/engineering-setup.md)
+   before writing the manifest.
 4. Present one harness manifest containing the project facts, public capability, overlay packages,
    project-only packages, integrations, boundaries, and files that will change. Resolve same-name,
    provenance, and licensing conflicts, then obtain owner confirmation for this manifest.
@@ -77,6 +83,11 @@ explicitly requests one.
      --base-branch <branch>
    ```
 
+   For `engineering-suite` and `backend-orchestration`, also pass every value the manifest
+   confirmed: `--language`, `--pr-base-branch`, `--branch-pattern`, `--qa-gate-command` (repeat in
+   run order), `--tracker-type`, `--tracker-host`, `--tracker-project`, `--test-path` (repeatable).
+   Without a terminal, `harness init` silently takes the default for every omitted value.
+
    On Windows/PowerShell there is no `python3` (use `python`), and line
    continuation is `` ` ``, not `\`.
 
@@ -85,10 +96,11 @@ explicitly requests one.
    `harness registry` after composing all packages. Use relative discovery links, never links back
    to a machine-local catalog.
 
-   Install `hook_policy` with the `standard` profile explicitly: name the profile in the manifest
-   and, after `harness init`, verify that `.harness/project.json` holds
-   `"hook_policy": {"profile": "standard"}` and that `harness health` reports `hooks.policy` with
-   profile `standard`. Do not pick `minimal` or `strict` unless the owner asked for it.
+   For `engineering-suite` and `backend-orchestration`, install `hook_policy` with the `standard`
+   profile explicitly: name the profile in the manifest and, after `harness init`, verify that
+   `.harness/project.json` holds `"hook_policy": {"profile": "standard"}` and that `harness health`
+   reports `hooks.policy` with profile `standard`. Do not pick `minimal` or `strict` unless the
+   owner asked for it. Other capabilities create no `.harness/project.json` and no hooks.
 
    When the manifest includes `backend-orchestration`, the new project needs its runtime store
    before the first `batch create`. The store needs a human approval, so do not run the command
@@ -126,127 +138,5 @@ Prove each layer separately:
 
 If the current session cannot rescan discovery, report steps 4 and 5 as the exact remaining fresh-
 session check. Finish by naming the project type, installed capabilities, excluded surfaces,
-verification evidence, and next useful action.
-
-
-<!--
-Краткое описание (Summary): Навык `start-project` помогает пользователю пройти путь от неоформленной идеи до переносимого проекта, включая создание репозитория, сборку агентной обвязки (agent harness) и проверку установленных зависимостей.
-
-Перевод:
----
-name: start-project
-description: Начать новый проект с идеи или создать, провести аудит или обновить его автономную агентную обвязку (agent harness). Используйте, когда пользователь хочет сформировать или инициализировать программный, контентный, исследовательский, операционный, личный или иной проект, решить, когда ему нужен репозиторий, или установить, либо пересмотреть проектную обвязку. Обычная работа внутри проекта, уже имеющего обвязку, не вызывает этот навык; для репозитория со значительным существующим кодом и соглашениями, но пока без обвязки, лучше подойдет более глубокий аудит от `integrate-project`.
----
-
-# Начать проект
-
-Владейте путем от неоформленной идеи до переносимого проекта. Репозиторий, стек, трекер и обвязка (harness)
-являются результатами проектирования проекта, а не предварительными условиями. Держите каждую фазу в режиме только для чтения, пока владелец не подтвердит
-её предложенный долговечный артефакт.
-
-Определите реальный путь этого навыка и убедитесь, что публичный корень `agent-harness` на два уровня выше него
-содержит `skills/REGISTRY.md` и `harness/bin/harness.py`. Его встроенные рабочие процессы — это библиотека: используйте
-реестр, чтобы найти и прочитать только тот точный `SKILL.md`, который нужен для текущей фазы. Это
-определение считается завершенным только тогда, когда существуют оба файла; в противном случае сообщите, что публичный пакет
-неполный, вместо того чтобы угадывать другую установку.
-
-## Формирование (Shape)
-
-1. Установите, есть ли у пользователя идея, начальный каталог или существующий репозиторий. Изучите
-   существующие файлы, прежде чем задавать вопросы. Репозиторий со значительным существующим кодом и
-   соглашениями, но пока без обвязки — это специализированный аудит от `integrate-project`, а не этот общий путь —
-   передайте работу ему, вместо того чтобы поверхностно выводить факты здесь.
-2. Классифицируйте основную работу проекта как программное обеспечение, контент, исследования/знания, операции,
-   личное или другую явную область. Классификация выбирает рабочие процессы; она не ограничивает
-   то, чем проект может стать.
-3. Примите решения, которые изменят следующий артефакт. Для неоформленной идеи прочитайте и следуйте
-   `skills/vendor/mattpocock/productivity/grilling/SKILL.md`. Используйте `research`, `to-questionnaire`,
-   `prototype` или `domain-modeling` только тогда, когда их описание в реестре соответствует текущей ветке.
-   Рабочие процессы, зависящие от трекера, такие как `to-spec` и `wayfinder`, начинаются после того, как появятся репозиторий и его
-   контракт с трекером.
-4. Оставляйте одноразовые размышления в сессии. Как только цель, ожидаемый результат, повторяющаяся работа и
-   следующий полезный артефакт будут известны, порекомендуйте ровно одно из следующего: продолжить разговор, написать
-   бриф (brief), создать начальный репозиторий или собрать обвязку.
-
-Формирование завершено только тогда, когда владелец подтверждает эту рекомендацию или явно оставляет работу в
-разговоре. Подтверждение авторизует этот один артефакт, а не последующие строительные леса (scaffolding).
-
-## Начало (Seed)
-
-После того, как владелец подтвердит начало (seed), создайте или переиспользуйте названный Git-репозиторий и запишите только
-подтвержденный бриф и заметки о решениях. Сохраняйте структуру и инструкции существующего репозитория.
-Записывайте нерешенные решения по стеку, трекеру и обвязке как нерешенные, а не выбирайте их, чтобы
-сделать начальную версию (seed) выглядящей завершенной.
-
-Начало (Seed) завершено, когда путь к репозиторию проверен, долговечные файлы содержат только подтвержденные факты,
-`git status` был проверен, и владелец может видеть, какие решения остаются открытыми. Код
-приложения, настройка трекера и обвязка требуют своего собственного подтвержденного следующего артефакта.
-
-## Сборка (Assemble)
-
-Создавайте обвязку только после того, как у проекта появится стабильная работа для поддержки, или немедленно, когда пользователь
-явно её запрашивает.
-
-1. Выведите цель, тип проекта, этап, базовую ветку, трекер, повторяющиеся действия, команды,
-   границы, политику доставки и Определение готовности (Definition of Done) из репозитория и разговора. Пометьте
-   неприменимые команды и трекер как `N/A`.
-2. Выберите наименьшую целостную публичную возможность (capability):
-   - `project-foundation` для общего проектного мышления, исследований, передачи дел (handoff), языка предметной области и
-     инструкций, ориентированных на агентов;
-   - `mattpocock-suite` для повторяющейся работы в области программной инженерии;
-   - никаких дополнительных пакетов только потому, что они доступны.
-3. Когда владелец просит `start-project` выбрать повторяющиеся рабочие процессы, позвольте соответствующему установленному
-   навыку входа в личный каталог или каталог организации (catalog-entry skill) вернуть метаданные каталога. Передайте только факты
-   о проекте и повторяющиеся действия, и следуйте границам доступа этого навыка входа. Выбор из каталога
-   не дает прав на не относящиеся к делу личные знания, задачи, заметки или секреты.
-4. Представьте один манифест обвязки, содержащий факты о проекте, публичную возможность, пакеты-наложения (overlay),
-   пакеты только для проекта (project-only), интеграции, границы и файлы, которые будут изменены. Разрешите конфликты одинаковых имен,
-   происхождения и лицензирования, затем получите подтверждение владельца для этого манифеста.
-5. Для подтвержденной новой обвязки выполните команду разрешенного пакета, заменив примеры значений на
-   подтвержденный манифест:
-
-   ```bash
-   python3 "<resolved-agent-harness-root>/harness/bin/harness.py" init "<repo>" \
-     --project-type <type> \
-     --capability <selected-capability> \
-     --base-branch <branch>
-   ```
-
-   В Windows/PowerShell нет `python3` (используйте `python`), и перенос
-   строки — это `` ` ``, а не `\`.
-
-   Заполните каждое неразрешенное `{{...}}` в `AGENTS.md`. Добавьте пакеты только для проекта в
-   `.harness/skills`; запустите `harness lock-project-skills` для блокировки их версионированного хэша, затем
-   `harness registry` после компоновки всех пакетов. Используйте относительные ссылки для обнаружения (discovery links), никогда не делайте ссылки обратно
-   на локальный каталог машины.
-
-   Установите `hook_policy` с профилем `standard` явно: назовите профиль в манифесте и после `harness init`
-   проверьте, что `.harness/project.json` содержит `"hook_policy": {"profile": "standard"}`, а `harness health`
-   показывает `hooks.policy` с профилем `standard`. Не выбирайте `minimal` или `strict`, если владелец об этом не просил.
-6. Для существующей обвязки выполните `harness diff` перед `harness update`. Используйте `harness adopt
-   --replace-conflicts` только для явной миграции после проверки конфликтов одинаковых имен.
-   `harness update` не записывает `hook_policy`; `hook_policy` существующего проекта оставьте его владельцу.
-7. Храните MCP-серверы, плагины, хуки и настройки среды выполнения в их родных файлах проекта. Когда такие
-   файлы существуют, внесите их относительные пути, хэши, среды выполнения, действия по проверке и имена секретных
-   переменных среды в инвентарь `.harness/integrations.json`; никогда не копируйте учетные данные в Git.
-
-Сборка завершена, когда подтвержденный манифест представлен закоммиченными файлами проекта, каждый
-пакет имеет подтвержденное происхождение источника и хэша, и не была добавлена ни одна неподтвержденная интеграция или рабочий процесс.
-
-## Завершение (Finish)
-
-Докажите каждый слой по отдельности:
-
-1. **Сохранено (Stored)** — выбранные пакеты и блокировки существуют в каталоге `.harness/`.
-2. **Подключено (Wired)** — `.agents/skills` и `.claude/skills` указывают на один и тот же снимок проекта.
-3. **Здорово (Healthy)** — `harness health` проходит успешно: маркеры шаблонов, имена, реестр, хэши публичных/наложенных пакетов,
-   ссылки для обнаружения и инвентарь интеграций совпадают.
-4. **Объявлено (Advertised)** — новая сессия среды выполнения (runtime) отображает установленный навык проекта. Если среда выполнения не имеет
-   родного корня навыков проекта, она может маршрутизировать через `.harness/skills/REGISTRY.md` из `AGENTS.md`.
-5. **Вызвано (Invoked)** — эта сессия открывает выбранный навык через его родной механизм.
-
-Если текущая сессия не может повторно просканировать обнаружение (discovery), сообщите шаги 4 и 5 как точную оставшуюся проверку новой
-сессии. Завершите, назвав тип проекта, установленные возможности, исключенные поверхности,
-доказательства проверки и следующее полезное действие.
--->
-
+verification evidence, and next useful action. With a GitHub or GitLab tracker under
+`engineering-suite` or `backend-orchestration`, that action is `/setup-labels`.

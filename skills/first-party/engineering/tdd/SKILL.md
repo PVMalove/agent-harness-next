@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Use test-driven development to build behavior or fix bugs test-first, at agreed public seams, with independent expectations, deterministic boundaries, and a red-green-refactor loop.
+description: "Builds behavior or fixes a bug test-first: red-green-refactor at an agreed public seam. Use when asked for TDD or test-first work; use /diagnosing-bugs to find an unexplained failure's cause."
 ---
 
 # Test-driven development

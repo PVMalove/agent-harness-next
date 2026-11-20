@@ -1,6 +1,6 @@
 ---
 name: developer
-description: Implements an agreed change in the current issue branch within the ticket's scope and reports changes, checks, unverified items, risks and blockers. Use for standalone implementation outside a coordinator dispatch, or when a calling skill such as fast-implement hands over its implementation step; never commits, pushes, or opens a pull request.
+description: Implements an agreed change in the current issue branch within the ticket's scope and reports changes, checks, unverified items, risks and blockers. Use for standalone work outside a coordinator dispatch or when /fast-implement hands over its step; for a labeled afk ticket, use /fast-implement or /implement. Never commits, pushes, or opens a pull request.
 ---
 
 # Developer
@@ -53,7 +53,8 @@ Finish with a report in chat, in the project's language, with these five section
 Write an empty section as "none" in that language.
 
 1. **Changes:** each changed file and why it changed.
-2. **Checks:** each command run and its result: pass, fail or not run.
+2. **Checks:** each acceptance criterion with its `[R<n>]` IDs and `Verify` command, then any other
+   command run; each with its result: pass, fail or not run.
 3. **Unverified:** what no check proved, with the reason.
 4. **Risks:** residual risks for the reviewer.
 5. **Blockers:** what stopped the work, including a missing prerequisite.

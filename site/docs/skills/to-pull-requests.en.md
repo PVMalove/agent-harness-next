@@ -42,7 +42,15 @@ The skill checks the merge and, for an opt-in project, the tree of the merge com
 (`--merge-commit`, `merge-tree-mismatch`). It then closes the ticket or verifies its auto-close, and
 moves to `status::ready` the tickets that no longer have an open blocker. Drafts in `docs/tasks/` are
 not tickets. A managed worktree is removed with `coordinator.py worktree remove`, a session worktree
-with the runtime's tool. When the sandbox blocks the removal, the skill hands you the command. When
+with the runtime's tool. When the sandbox blocks the removal, the skill hands you the command.
+
+The skill deletes the local branch only after a proven merge and your consent. For a PR/MR, the PR
+itself proves the merge: its merged state and a head SHA equal to the branch, because after a squash or
+rebase merge `git branch -d` does not see the merge. `harness branch-delete <repo> <branch-name>`
+deletes the branch: it refuses when the branch does not match `branch_pattern`, is checked out in a
+worktree, or has a tip that is neither reachable from `origin` nor the head of a merged PR/MR. For a
+local tracker without a PR, `git branch -d` deletes the branch after the `git merge-base --is-ancestor`
+check. When the PR is not merged or the SHAs differ, the branch stays. When
 the epic's last child ticket closes, the skill offers `/to-pull-requests --release <epic>`.
 
 ## Release (`--release <epic>`)
