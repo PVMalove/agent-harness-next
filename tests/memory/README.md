@@ -92,6 +92,9 @@ additions and owns the epic integration branch; only the source hash changes and
 identical to version 13.
 Version 15 (#1199) re-evaluates `CONTEXT.md` and ADR 0004 after the role and ChangeImpact updates.
 The report, including the per-query rankings, is identical to version 14.
+Version 16 (#1251) re-evaluates `CONTEXT.md` after #1250 points its agent-guide links at
+`harness/project/instructions/`; only the source hash changes and the report is identical to
+version 15.
 Vector comparisons must use the same reviewed
 multi-label dataset and corpus as the active FTS5 baseline; never compare across label revisions.
 
