@@ -89,6 +89,7 @@
     "resources": [
       "orchestration",
       "diagnostics.py",
+      "public_metadata.py",
       "configuration_schema.py",
       "configuration_store.py",
       "orchestration.example.json",
