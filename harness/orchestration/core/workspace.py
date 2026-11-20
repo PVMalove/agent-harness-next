@@ -95,6 +95,8 @@ WORKTREE_WRITE_REMEDY = (
     "EnterWorktree with path=<issue worktree>, then ExitWorktree with action=keep, and repeat the "
     "command from the main checkout. For Codex, use 'worktree prepare --runtime codex "
     "--worktree <issue worktree> --launch' from the operator's terminal. "
+    "When only the git metadata is read-only, start harness-runtime with protocol 1.9 or later: "
+    "the writer then commits with 'worktree commit'. "
     "Otherwise use the single-session route (/fast-implement)"
 )
 

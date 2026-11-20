@@ -90,6 +90,37 @@ python .harness/orchestration/coordinator.py --repo . worktree check \
 каталог без права записи не получает разрешения, строка `warning: ... not granted` называет его, и
 работа продолжается. При отказе исправьте доступ к указанному в ошибке пути и повторите проверку.
 
+**Коммит через runtime.** Если сессия может писать в worktree, но не в его служебный каталог Git,
+`batch create`, `dispatch preflight` и `dispatch send` всё равно допускают роль на запись, когда
+`harness-runtime` отвечает по протоколу 1.9 или новее. Тогда исполнитель коммитит не через
+`git add` и `git commit`, а командой координатора:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . worktree commit \
+  --path <issue-worktree> --message "feat: <summary>" [--pathspec <path> ...]
+```
+
+Runtime индексирует все изменения worktree или только пути `--pathspec`, понимая их буквально, и
+коммитит в ветку worktree с выключенными hooks. Длинное сообщение передавайте через
+`--message-file`; файл держите вне worktree, иначе он попадёт в коммит.
+
+Rebase и merge выполняются так же:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . worktree rebase --path <issue-worktree> \
+  --onto <target> --upstream <old base>      # или --continue, --skip, --abort
+python .harness/orchestration/coordinator.py --repo . worktree merge --path <issue-worktree> \
+  --revision <commit> [--message "<title>"]  # или --continue, --abort
+```
+
+Конфликт — обычный ответ, а не ошибка: `in_progress` равен `true`, `conflicts` перечисляет
+неслитые пути, а `git_output` содержит вывод Git. Исправьте эти файлы и отправьте `--continue`:
+команда индексирует все изменения worktree. Rebase никогда не делает autostash и не двигает другие
+ветки, редактор не открывается. Пока rebase или merge остановлен, `worktree commit` отказывает.
+До обращения к runtime каждая команда отклоняет detached HEAD (остановленный rebase считается
+своей веткой), базовую ветку и ветку `integration/*`. Для интерактивного rebase служебный каталог
+Git по-прежнему должен быть доступен на запись: откройте его парой вызовов выше.
+
 **Пустой каталог после `worktree remove`.** Сессия, которая открыла запись в worktree парой `EnterWorktree` с `path` и `ExitWorktree` с `action: keep`, держит его путь в конфигурации песочницы до своего конца. Перед каждой командой песочница заново создаёт по этому пути пустой каталог как точку монтирования, поэтому каталог появляется снова после `worktree remove`, хотя git этот worktree уже не показывает. Кроме того, песочница создаёт маски относительно рабочего каталога сессии: после `cd` в `.harness/.sandboxes/worktrees/` или `.claude/worktrees/` там появляется каталог `.claude/` с `.cc-writes` и пустыми файлами вроде `settings.json`. Ни то, ни другое не worktree, и `git worktree prune` их не убирает. `harness health` называет такие каталоги отдельно и не выдаёт предупреждение. `harness cleanup --mode hard` удаляет каталог, в котором есть только каталоги и пустые файлы; каталог, который ещё монтирует живая сессия, остаётся, и причина указана в `skipped`. Запускайте очистку после конца этой сессии. Повторный `worktree create` с тем же путём работает поверх пустого каталога.
 
 **Auto-gc и потерянный issue worktree.** `git commit` и `git fetch` запускают auto-gc, который чистит reflog всех worktree; в песочнице `.git/worktrees` доступен только на чтение, и gc падает с `cannot lock ref 'worktrees/<name>/HEAD'` после успешной команды. Git-команды coordinator и сессия агента (блок `env` в `.claude/settings.local.json`, который `harness update` добавляет, если файл не задаёт ни одну из этих переменных) передают `gc.auto=0` через `GIT_CONFIG_COUNT`, поэтому gc не запускается. Когда репозиторию нужна сборка мусора, выполните `git gc` в терминале вне песочницы. Если git больше не показывает issue worktree batch, `dispatch preflight` и self-report worker отказывают до работы роли: сообщение говорит, что worktree потерян и что его каталог отсутствует или пуст, а remedy — `git worktree prune && git worktree add <path> <branch>` вне песочницы и затем пара вызовов для права записи сессии.

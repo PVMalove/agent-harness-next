@@ -73,7 +73,6 @@ from harness.orchestration.core.workspace import (
     _agent_inbox,
     _integration_ref,
     _prepare_agent_inbox,
-    _require_writable_worktree,
 )
 from harness.orchestration.dispatch_preflight import (
     PreflightError,
@@ -81,6 +80,7 @@ from harness.orchestration.dispatch_preflight import (
 from harness.orchestration.dispatch_preflight import (
     prepare as prepare_dispatch,
 )
+from harness.orchestration.worktree_lifecycle import require_committable_worktree
 from harness.orchestration.ledger.ledger_ops import (
     store_is_authority,
     _ledger_lock,
@@ -582,9 +582,10 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
     except PreflightError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
     # A writer commits in the issue worktree: a session that cannot write it learns so here,
-    # before the brief exists, not from the writer's failed commit (#1126).
+    # before the brief exists, not from the writer's failed commit (#1126). Read-only git
+    # metadata passes while the runtime commits for the writer (#1246).
     if core_config._role(repo, args.role)["mode"] == "write":
-        _require_writable_worktree(batch["worktree"])
+        require_committable_worktree(repo, batch["worktree"])
     return prepared.to_dict()
 
 

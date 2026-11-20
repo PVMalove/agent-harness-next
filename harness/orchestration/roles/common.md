@@ -118,6 +118,21 @@ allowed paths. Protected branches and `integration/*` are never direct write tar
 active writer; role handoffs are sequential. A commit is evidence only after the required checks pass and its
 SHA is included in the completion report.
 
+When `git add`, `git commit`, `git rebase` or `git merge` fails because the worktree's Git admin
+directory is read-only (`Unable to create '.../.git/worktrees/<name>/index.lock': Read-only file system`),
+run the same step through the runtime with
+`python .harness/orchestration/coordinator.py --repo <main checkout> worktree <command> --path <worktree> ...`:
+
+- `commit --message "<title>"`, adding `--pathspec <path>` for each file of a partial commit;
+- `rebase --onto <target> --upstream <old base>` for `git rebase --onto <target> <old base>`;
+- `merge --revision <commit>`;
+- after a conflict, edit the files the answer lists in `conflicts`, then `rebase --continue` or
+  `merge --continue` (both stage every change of the worktree); `rebase --skip` drops the stopped
+  commit. `--abort` exists, but the role rules that forbid aborting still apply.
+
+This is the route the coordinator's preflight accepted, not a workaround. If such a command refuses,
+stop with a `tooling_blocker` for it.
+
 Never work around a hook, the safety classifier, the ledger or another tool that blocks a legitimate
 action: do not repeat the blocked action in another command form, through another tool, a script
 file, `eval` or another interpreter, or by splitting the command. Following the remedy the tool
