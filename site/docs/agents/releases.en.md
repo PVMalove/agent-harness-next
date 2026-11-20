@@ -19,6 +19,7 @@ a GitHub Release with two Assets:
 The Release Notes body is taken from the `[X.Y.Z]` section in `CHANGELOG.md`.
 
 The archive contains `harness/`, `skills/`, `global/`, `global-skills/`, `bin/`, `third_party/`,
+the `native/` sources to build `harness-runtime`, the built web console `harness/console/frontend/dist/`,
 `README.md`, and the license files. `docs/`, `tests/`, and `.github/` are not in the archive.
 
 ## Release

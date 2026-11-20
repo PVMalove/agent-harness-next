@@ -24,6 +24,7 @@ def test_release_archive_excludes_repository_docs_and_checks_version(
         "README.md": "# Agent Harness\n",
         "LICENSE": "MIT\n",
         "third_party/example/LICENSE": "upstream license\n",
+        "native/harness-runtime/Cargo.toml": "[workspace]\n",
         "docs/README.md": "# Source only\n",
         "docs/LICENSE": "source-only license\n",
         "tests/test_example.py": "pass\n",
@@ -45,6 +46,7 @@ def test_release_archive_excludes_repository_docs_and_checks_version(
             "README.md",
             "LICENSE",
             "third_party/example/LICENSE",
+            "native/harness-runtime/Cargo.toml",
         }
     assert checksum.read_text(encoding="utf-8").endswith(f"  {archive.name}\n")
     assert "First release." in notes.read_text(encoding="utf-8")

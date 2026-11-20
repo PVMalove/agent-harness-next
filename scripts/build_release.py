@@ -24,6 +24,9 @@ ARCHIVE_ROOTS = (
     "global-skills/",
     "bin/",
     "third_party/",
+    # The Rust sources of harness-runtime: `harness update` looks for its release build in the
+    # harness checkout, and 2.0 needs the runtime (upgrade guide, step 1).
+    "native/",
 )
 VERSION_HEADING = re.compile(r"^## \[([^]]+)\](?: - [0-9]{4}-[0-9]{2}-[0-9]{2})?\s*$")
 CHANGELOG_CATEGORIES = frozenset(
