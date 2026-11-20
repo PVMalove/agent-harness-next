@@ -76,8 +76,9 @@ def test_ask_matt_routes_through_the_harness_setup() -> None:
 def test_wayfinder_hands_the_cleared_map_to_to_spec() -> None:
     text = _text(ENGINEERING / "wayfinder/SKILL.md")
     assert (
-        "run `/to-spec` with the map as its input, then `/publish-epic` and `/to-tickets`"
-        in text
+        "When the map has no open tickets, hand off: offer the developer `/to-spec` "
+        "with the map as its input, then `/publish-epic` and `/to-tickets`, "
+        "to run manually; never invoke them." in text
     )
 
 
