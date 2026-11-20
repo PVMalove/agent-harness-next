@@ -90,6 +90,28 @@ describe("the Harness commands panel", () => {
     expect(screen.getByText("Код возврата: 0")).toBeTruthy();
   });
 
+  test("a job that finished with a non-zero exit code is shown as failed", () => {
+    const { socket } = renderHarness();
+    act(() => fireEvent.click(screen.getByRole("button", { name: "Запустить diff" })));
+    const start = socket.request("job.start");
+    act(() =>
+      socket.reply(
+        jobReply(start.id, "job.start", {
+          command_id: "diff",
+          mutating: false,
+          output: [line(1)],
+          cursor: 1,
+          phase: "completed",
+          done: true,
+          returncode: 3,
+        }),
+      ),
+    );
+    expect(screen.getByText("Не удалась")).toBeTruthy();
+    expect(screen.queryByText("Завершена")).toBeNull();
+    expect(screen.getByText("Код возврата: 3")).toBeTruthy();
+  });
+
   test("an irreversible command asks first and sends only the typed word it was given", () => {
     const { socket } = renderHarness();
     act(() => fireEvent.click(screen.getByRole("button", { name: "Запустить uninstall-apply" })));
