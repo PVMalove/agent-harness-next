@@ -1424,6 +1424,8 @@ def _store_epoch(root_dir: Path) -> bool:
 
 # Runs in the analysed repository's own orchestration tree: loading its coordinator aliases that
 # tree as `harness`, so this report reads the store even from a project without orchestration.
+# That tree may predate `runtime_client.read_state`, so the script checks `records` itself, the
+# same way: an answer without a records object is `invalid_response`, never an empty store.
 _STORE_READ = """import importlib.util, json, sys, uuid
 from pathlib import Path
 spec = importlib.util.spec_from_file_location("coordinator", sys.argv[1])
@@ -1437,7 +1439,11 @@ try:
 except RuntimeClientError as exc:
     print(json.dumps({"error": exc.code}))
 else:
-    print(json.dumps({"records": reply.result.get("records") or {}}))
+    records = reply.result.get("records")
+    if isinstance(records, dict):
+        print(json.dumps({"records": records}))
+    else:
+        print(json.dumps({"error": "invalid_response"}))
 """
 
 
@@ -1473,7 +1479,9 @@ def _store_call(repo: Path, payload: JsonObject) -> JsonObject:
     if not isinstance(answer, dict) or "error" in answer:
         raise _StoreUnavailable(str(answer.get("error") if isinstance(answer, dict) else answer))
     records = answer.get("records")
-    return records if isinstance(records, dict) else {}
+    if not isinstance(records, dict):
+        raise _StoreUnavailable("invalid_response")
+    return records
 
 
 def _materialize_store(repo: Path, target: Path) -> str | None:

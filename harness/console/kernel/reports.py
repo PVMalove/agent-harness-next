@@ -227,26 +227,26 @@ class StoreUnreadable(Exception):
 
 def _runtime_read(repo: Path, timeout_seconds: float) -> StoreRead:
     """``state.read`` through the project's runtime; the console never starts the runtime."""
-    from ...orchestration.runtime_client import RuntimeClient, RuntimeClientError
+    from ...orchestration.runtime_client import (
+        RuntimeClient,
+        RuntimeClientError,
+        read_state,
+    )
 
     client = RuntimeClient(repo)
 
     def read(collections: Sequence[str], paths: Sequence[str]) -> Mapping[str, object]:
         try:
-            reply = client.call(
-                "state.read",
+            return read_state(
+                client,
+                {"collections": list(collections), "paths": list(paths)},
                 operation_id=f"console.ledger-{uuid.uuid4().hex}",
-                payload={"collections": list(collections), "paths": list(paths)},
                 timeout_seconds=timeout_seconds,
-            )
+            ).records
         except RuntimeClientError as exc:
             raise StoreUnreadable(
                 f"runtime store не ответил на state.read ({exc.code})"
             ) from exc
-        records = reply.result.get("records")
-        if not isinstance(records, dict):
-            raise StoreUnreadable("runtime store ответил на state.read без записей")
-        return records
 
     return read
 

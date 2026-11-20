@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from harness.orchestration.core import state_view
 from harness.orchestration.core.constants import STATE_REL
@@ -306,7 +306,11 @@ class _SnapshotRead:
         filter_: state_view.Filter | None = None,
         /,
     ) -> tuple[dict[str, JsonObject], int | None, dict[str, int]]:
-        from harness.orchestration.runtime_client import FILTER_PROTOCOL_MINOR, RuntimeClientError
+        from harness.orchestration.runtime_client import (
+            FILTER_PROTOCOL_MINOR,
+            RuntimeClientError,
+            read_state,
+        )
 
         payload: JsonObject = {
             "collections": list(collections),
@@ -316,10 +320,10 @@ class _SnapshotRead:
         if filter_ is not None:
             payload["filter"] = filter_.payload()
         try:
-            reply = self._client.call(
-                "state.read",
+            read = read_state(
+                self._client,
+                payload,
                 operation_id=f"state.read-{uuid.uuid4().hex}",
-                payload=payload,
                 timeout_seconds=READ_TIMEOUT_SECONDS,
                 requires_minor=FILTER_PROTOCOL_MINOR if filter_ is not None else 0,
             )
@@ -331,21 +335,15 @@ class _SnapshotRead:
             if exc.facts.get("reason") == "answer_too_large":
                 raise state_view.AnswerTooLarge(exc.message) from exc
             raise
-        snapshot = reply.result.get("snapshot")
-        if self._snapshot is None and isinstance(snapshot, str):
-            self._snapshot = snapshot
-            generation = reply.result.get("generation_revision")
-            self._generation = generation if isinstance(generation, int) else None
-        records = reply.result.get("records")
-        revisions = reply.result.get("revisions")
+        if self._snapshot is None and read.snapshot is not None:
+            self._snapshot = read.snapshot
+            self._generation = read.generation_revision
         return (
-            (records if isinstance(records, dict) else {}),
-            reply.revision,
+            cast(dict[str, JsonObject], read.records),
+            read.revision,
             {
                 path: revision
-                for path, revision in (
-                    revisions if isinstance(revisions, dict) else {}
-                ).items()
+                for path, revision in read.revisions.items()
                 if isinstance(revision, int)
             },
         )
