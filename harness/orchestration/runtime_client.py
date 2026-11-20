@@ -644,6 +644,8 @@ class _UnixSocket:
             if stat.S_ISLNK(info.st_mode)
             else "is not a directory"
             if not stat.S_ISDIR(info.st_mode)
+            else "ownership cannot be verified on this platform"
+            if not hasattr(os, "getuid")
             else "belongs to another user"
             if info.st_uid != os.getuid()
             else "is open to the group or to others"
@@ -658,8 +660,8 @@ class _UnixSocket:
                 domain=FailureDomain.POLICY,
             )
 
-    def prepare(self, directory: Path) -> None:
-        """A platform without Unix domain sockets, or an untrusted directory, is refused."""
+    @staticmethod
+    def _address_family() -> socket.AddressFamily:
         if not hasattr(socket, "AF_UNIX"):
             raise RuntimeClientError(
                 "runtime_unavailable",
@@ -667,11 +669,17 @@ class _UnixSocket:
                 remedy="run the coordinator on Linux or macOS",
                 domain=FailureDomain.ENVIRONMENT_PREPARATION,
             )
+        family: socket.AddressFamily = socket.AF_UNIX
+        return family
+
+    def prepare(self, directory: Path) -> None:
+        """A platform without Unix domain sockets, or an untrusted directory, is refused."""
+        self._address_family()
         self.check_directory(directory)
 
     def connect(self, address: Path, remaining: Callable[[], float]) -> _Transport:
         """A socket whose connect and later operations time out with the time left."""
-        connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection = socket.socket(self._address_family(), socket.SOCK_STREAM)
         try:
             connection.settimeout(max(remaining(), 0.001))
             connection.connect(str(address))
