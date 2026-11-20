@@ -11,6 +11,8 @@ from types import SimpleNamespace
 
 from harness.bin import harness as harness_cli
 from harness.health.project_files import frontmatter_metadata
+from harness.orchestration.core.constants import STATE_REL
+from harness.seed_links import RULES_POINTER
 
 from scripts.clean_room.support import (
     HARNESS,
@@ -109,6 +111,9 @@ def run(ctx: SimpleNamespace) -> None:
     check_technical_english(foundation)
 
     # An existing import in either direction already reaches a mandatory source.
+    # Later entry-point cases check only the Technical English link; the Codex rules
+    # pointer is already present there.
+    old_agents += "\n" + RULES_POINTER
     (foundation / "AGENTS.md").write_text(
         old_agents + "\n@CLAUDE.md\n", encoding="utf-8"
     )
@@ -560,6 +565,7 @@ def run(ctx: SimpleNamespace) -> None:
     check_hook_settings_merge(pv_project)
     check_tracker_from_origin(test_root)
     check_package_root_without_init(test_root)
+    check_runtime_rules(test_root)
     to_spec_source = ROOT / "skills" / "first-party" / "engineering" / "to-spec"
     for discovery in (".harness", ".claude", ".agents"):
         for relative in (
@@ -1078,3 +1084,100 @@ def check_package_root_without_init(test_root) -> None:
             "update did not retire only .harness/__init__.py: "
             f"removed {removed}, added {added}, changed {changed}"
         )
+
+
+def check_runtime_rules(test_root) -> None:
+    """Runtime rules (ADR 0039): свежая установка, старый путь правил, правки проекта, указатель
+    Codex в существующем AGENTS.md и закреплённый batch."""
+    project = test_root / "rules_project"
+    project.mkdir(parents=True)
+    run_step(["git", "init", "-q"], cwd=project, check=True)
+    run_ok(
+        HARNESS + ["init", str(project), "--capability", "engineering-suite"],
+        quiet=True,
+    )
+    rules_source = ROOT / "harness" / "project" / "rules"
+    expected = sorted(path.name for path in rules_source.glob("*.md"))
+    installed = sorted(path.name for path in (project / ".claude/rules").iterdir())
+    if installed != expected or len(installed) != 4:
+        sys.exit(f"fresh install did not seed the runtime rules: {installed}")
+    agents = project / "AGENTS.md"
+    if RULES_POINTER not in agents.read_text(encoding="utf-8"):
+        sys.exit("fresh AGENTS.md has no Codex read pointer to .claude/rules/")
+    if any(
+        ".claude/rules" in item["diff"]
+        for item in capture_json(HARNESS + ["diff", str(project), "--json"])[
+            "seed_link_proposals"
+        ]
+    ):
+        sys.exit("diff proposed a rules pointer for a fresh AGENTS.md")
+
+    # A pinned batch snapshot under the coordinator state is never touched by update.
+    pinned = project / STATE_REL / "batches/batch-pinned/snapshot/docs/agents/git-workflow.md"
+    pinned.parent.mkdir(parents=True)
+    pinned_bytes = b"### 1. Fundamental Constraints & Tooling\n* **Zero Direct Commits:** pinned\n"
+    pinned.write_bytes(pinned_bytes)
+
+    # An older release: the old section 1 in the guide, no rule files yet.
+    lock_path = project / ".harness" / "harness.lock"
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    guide = project / "docs/agents/git-workflow.md"
+    old_guide = (
+        b"# Git workflow\n\n### 1. Fundamental Constraints & Tooling\n"
+        b"* **Zero Direct Commits:** old release text\n"
+    )
+    guide.write_bytes(old_guide)
+    lock["seed_files"]["docs/agents/git-workflow.md"] = hashlib.sha256(old_guide).hexdigest()
+    for name in ("git-delivery.md", "worktree-conventions.md"):
+        (project / ".claude/rules" / name).unlink()
+        lock["seed_files"].pop(f".claude/rules/{name}")
+    lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+    output = capture(HARNESS + ["update", str(project)])
+    if guide.read_bytes() != (ROOT / "harness/project/instructions/git-workflow.md").read_bytes():
+        sys.exit("update did not replace the unedited old git-workflow.md")
+    if "docs/agents/git-workflow.md (устарел по версии)" not in output:
+        sys.exit("update did not report the backed-up old git-workflow.md")
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    for name in ("git-delivery.md", "worktree-conventions.md"):
+        rule = project / ".claude/rules" / name
+        if rule.read_bytes() != (rules_source / name).read_bytes():
+            sys.exit(f"update did not install the new rule {name}")
+        if lock["seed_files"].get(f".claude/rules/{name}") != hashlib.sha256(
+            rule.read_bytes()
+        ).hexdigest():
+            sys.exit(f"update recorded no baseline for the new rule {name}")
+
+    # Project-edited guide and rule stay byte for byte; the warning names the move.
+    edited = {
+        "docs/agents/git-workflow.md": guide.read_bytes() + b"\n* **Local rule:** keep.\n",
+        ".claude/rules/karpathy-guidelines.md": b"# Local karpathy edit\n",
+    }
+    for relative, data in edited.items():
+        (project / relative).write_bytes(data)
+    output = capture(HARNESS + ["update", str(project)])
+    for relative, data in edited.items():
+        if (project / relative).read_bytes() != data:
+            sys.exit(f"update overwrote the project-edited {relative}")
+    if "Источник правил переехал" not in output or ".claude/rules/git-delivery.md" not in output:
+        sys.exit("update did not say that the rule source of the edited guide moved")
+
+    # An existing AGENTS.md without the pointer: same patch from update and diff, file intact.
+    existing = agents.read_text(encoding="utf-8").replace(RULES_POINTER, "")
+    agents.write_text(existing, encoding="utf-8")
+    update_output = capture(HARNESS + ["update", str(project)])
+    diff_output = capture(HARNESS + ["diff", str(project)])
+    if agents.read_text(encoding="utf-8") != existing:
+        sys.exit("update changed an existing AGENTS.md")
+    if "diff --git a/AGENTS.md" not in update_output:
+        sys.exit("update did not propose the Codex rules pointer")
+    patch = update_output[update_output.index("diff --git ") :]
+    if patch != diff_output[diff_output.index("diff --git ") :]:
+        sys.exit("diff and update proposed different rules pointers")
+    apply_patch(patch, project)
+    if RULES_POINTER not in agents.read_text(encoding="utf-8"):
+        sys.exit("approved patch did not add the rules pointer")
+    if capture_json(HARNESS + ["diff", str(project), "--json"])["seed_link_proposals"]:
+        sys.exit("approved rules pointer was proposed again")
+
+    if pinned.read_bytes() != pinned_bytes:
+        sys.exit("update changed a pinned batch snapshot")

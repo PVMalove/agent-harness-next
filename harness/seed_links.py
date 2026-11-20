@@ -8,6 +8,23 @@ import re
 from pathlib import Path
 
 
+RULES_POINTER = (
+    "Runtime rules are in `.claude/rules/*.md`. Claude Code loads them automatically. Codex does not\n"
+    "load that directory: at the start of every session, read each file in\n"
+    "[.claude/rules/](.claude/rules/) and follow it as a mandatory rule.\n"
+)
+
+
+def _active(text: str) -> str:
+    """Drop fenced code: examples there are not active entry-point instructions."""
+    return re.sub(r"```.*?```|~~~.*?~~~", "", text, flags=re.DOTALL)
+
+
+def agents_rules_pointer(text: str) -> bool:
+    """Whether AGENTS.md text points Codex at `.claude/rules/` outside fenced code."""
+    return ".claude/rules" in _active(text)
+
+
 def _mandatory(paragraph: str) -> bool:
     text = " ".join(paragraph.lower().split())
     return all(token in text for token in ("must read", "before", "english", "handoff"))
@@ -43,8 +60,7 @@ def propose_contract_links(repo: Path, templates: Path) -> list[dict[str, str]]:
     transitions: dict[Path, set[Path]] = {}
     paragraphs: dict[Path, list[str]] = {}
     for path, text in texts.items():
-        # Examples in fenced code are not active entry-point instructions.
-        active = re.sub(r"```.*?```|~~~.*?~~~", "", text, flags=re.DOTALL)
+        active = _active(text)
         paragraphs[path] = active.split("\n\n")
         transitions[path] = set()
         for paragraph in paragraphs[path]:
@@ -86,15 +102,35 @@ def propose_contract_links(repo: Path, templates: Path) -> list[dict[str, str]]:
     for path in entries:
         resolved = path.resolve()
         original = texts.get(resolved, "")
-        if resolved not in needed:
+        additions: list[str] = []
+        reasons: list[str] = []
+        if resolved in needed:
+            if resolved in direct:
+                additions.append(
+                    "Before the first English handoff, agents must read the shared Technical English contract linked above.\n"
+                )
+                reasons.append(
+                    "Existing contract reference has no recognized mandatory reading instruction; review this addition."
+                )
+            else:
+                target = Path(os.path.relpath(contract, path.parent)).as_posix()
+                additions.append(
+                    f"Before the first English handoff, agents must read\n[Technical English]({target}).\n"
+                )
+                reasons.append(
+                    "No mandatory path to the installed shared contract was found."
+                )
+        # AGENTS.md is the Codex entry point; Codex does not load .claude/rules/ itself.
+        if resolved == agents and not agents_rules_pointer(original):
+            additions.append(RULES_POINTER)
+            reasons.append(
+                "No Codex read pointer to the runtime rules in .claude/rules/ was found."
+            )
+        if not additions:
             continue
-        if resolved in direct:
-            addition = "Before the first English handoff, agents must read the shared Technical English contract linked above.\n"
-            reason = "Existing contract reference has no recognized mandatory reading instruction; review this addition."
-        else:
-            target = Path(os.path.relpath(contract, path.parent)).as_posix()
-            addition = f"Before the first English handoff, agents must read\n[Technical English]({target}).\n"
-            reason = "No mandatory path to the installed shared contract was found."
+        # One diff per file: two diffs of one file do not apply one after the other.
+        addition = "\n".join(additions)
+        reason = " ".join(reasons)
         adapted = (
             original
             + (

@@ -210,7 +210,9 @@ def test_publish_epic_owns_labels_branch_and_grill_docs() -> None:
 
 def test_instructions_name_publish_epic_as_the_epic_owner() -> None:
     workflow = _text(ROOT / "harness/project/instructions/git-workflow.md")
-    assert "First, `/publish-epic` may commit" in workflow
+    assert "First, `/publish-epic` may commit" in _text(
+        ROOT / "harness/project/rules/git-delivery.md"
+    )
     assert "`/publish-epic` publishes the epic" in workflow
     labels = _text(ROOT / "harness/project/instructions/triage-labels.md")
     assert "`/publish-epic` applies `status::specs`" in labels

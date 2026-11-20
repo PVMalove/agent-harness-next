@@ -90,3 +90,7 @@ and `max` reasoning effort. Do not apply this rule outside Codex.
 
 Before the first English handoff, agents must read
 [Technical English](.harness/instructions/technical-english.md).
+
+Runtime rules are in `.claude/rules/*.md` (source `harness/project/rules/`). Claude Code loads them
+automatically. Codex does not load that directory: at the start of every session, read each file in
+[.claude/rules/](.claude/rules/) and follow it as a mandatory rule.

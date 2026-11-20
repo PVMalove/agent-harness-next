@@ -21,6 +21,12 @@ upstream files are preserved byte for byte; their frontmatter and invocation set
 the original skill. Project-owned integrations are described in `.harness/integrations.json` with
 the path, SHA-256, runtime target, and activation check; secret values are not stored there.
 
+The two runtimes receive the project rules in `.claude/rules/` differently. Claude Code loads them
+automatically. Codex does not read that directory and supports no path-scoped rules: the Runtime
+section of `AGENTS.md` tells it to read each file in `.claude/rules/` at the start of every session.
+For Codex this is an explicit read through a pointer, not automatic loading or enforcement
+(ADR 0039).
+
 Project hooks connect to the same two runtimes, but not through links to `.harness/skills/`:
 `harness init`, `adopt`, and `update` merge the managed entries into `.claude/settings.local.json` for
 Claude Code and into `.codex/hooks.json` for Codex, and they do not touch user entries. For Codex,

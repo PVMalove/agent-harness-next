@@ -97,11 +97,11 @@
 | Delivery: metadata коммитов и PR | automatic enforcement | всегда | `block-public-attribution.sh` | без переноса |
 | Runtime: Technical English | mandatory rule (триггер обязательного чтения) | перед первой английской передачей | `harness/seed_links.py:29` | без переноса |
 | Runtime: skills, REGISTRY, Repo Map, integrations | mandatory rule | всегда | Claude Code, Codex | #1160 |
+| Runtime: указатель на `.claude/rules/` | mandatory rule (триггер обязательного чтения) | всегда | Codex; `harness/seed_links.py` | #1160 (ADR 0039) |
 
-Шаблон не ссылается на `.claude/rules/`, поэтому правила из `harness/project/rules/` до Codex не
-доходят. Это проверено командой
-`rg -n 'rules|karpathy|token-eff' harness/project/AGENTS.md.tmpl` — совпадений нет. Пробел
-закрывает #1160: указатель в разделе Runtime или другой поддерживаемый способ.
+До #1160 шаблон не ссылался на `.claude/rules/`, и правила из `harness/project/rules/` до Codex не
+доходили. #1160 добавил в раздел Runtime указатель: Codex в начале каждой сессии читает каждый
+файл `.claude/rules/` (ADR 0039).
 
 **`CLAUDE.md` проекта** — render-once из `CLAUDE_MD_SEED` (`harness/uninstall.py:36`): строка
 `@AGENTS.md`. Указатель; срез — без переноса.
@@ -117,15 +117,15 @@ Frontmatter `paths:` нет, поэтому Claude Code грузит файл в
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| Вступление, Tradeoff, 1. Think before coding, 2. Simplicity first, 3. Surgical changes, 4. Goal-driven execution | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
+| Вступление, Tradeoff, 1. Think before coding, 2. Simplicity first, 3. Surgical changes, 4. Goal-driven execution | mandatory rule | всегда | Claude Code автоматически; Codex — явное чтение по указателю из `AGENTS.md` | #1160 |
 
 **`harness/project/rules/token-efficiency.md`** — seed → `.claude/rules/token-efficiency.md`, без
 `paths:`. Совместимость — политика `SeedInstall`.
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| Operational Principles | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
-| Protocol | mandatory rule | всегда | Claude Code; Codex — нет | #1160 |
+| Operational Principles | mandatory rule | всегда | Claude Code автоматически; Codex — явное чтение по указателю из `AGENTS.md` | #1160 |
+| Protocol | mandatory rule | всегда | Claude Code автоматически; Codex — явное чтение по указателю из `AGENTS.md` | #1160 |
 
 ### 4. Инвентарь: общие процедуры
 
@@ -160,7 +160,7 @@ Windows, правила тестов и QA). Это допустимое отл�
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| 1. Fundamental Constraints: issue first, ветка, без auto-merge, project-only metadata | mandatory rule | всегда при delivery | все skills delivery, `pr-composer` | #1160 |
+| 1. Fundamental Constraints: issue first, ветка, без auto-merge, project-only metadata | mandatory rule | всегда при delivery | все skills delivery, `pr-composer` | #1160: перенесено в `harness/project/rules/git-delivery.md`; здесь указатель с именами правил |
 | 1. Fundamental Constraints: части, которые проверяют hooks | automatic enforcement | Bash | `check-branch-name.sh`, `tracker-issue.py`, `block-direct-master.sh`, `block-pr-merge.sh`, `block-public-attribution.sh` | без переноса |
 | 2. Workflow Sequence | shared procedure | по запросу | skills implement, fast-implement, to-guide, to-pull-requests, to-spec, to-tickets, triage, wayfinder; `require-qa-gate.sh` | #1162 |
 | 3. PR Body Template (русский и английский шаблоны) | shared procedure | по запросу | `harness/project/agents/pr-composer.md`, `to-pull-requests` | без переноса |
@@ -208,7 +208,7 @@ Windows, правила тестов и QA). Это допустимое отл�
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
 | Вступление, When to use it; Conventions: Base ref, Cleanup, Managed harness worktrees | shared procedure | по запросу | skills implement, fast-implement | без переноса |
-| Conventions: provisioning-сессия не входит в worktree; не менять конфигурацию инструментов ради worktree; git-workflow действует в worktree | mandatory rule | при работе в worktree | Claude Code, Codex | #1160 |
+| Conventions: provisioning-сессия не входит в worktree; не менять конфигурацию инструментов ради worktree; git-workflow действует в worktree | mandatory rule | при работе в worktree | Claude Code, Codex | #1160: перенесено в `harness/project/rules/worktree-conventions.md`; здесь пункт-указатель |
 | Conventions: Branch naming still applies | automatic enforcement | EnterWorktree | `check-worktree-branch-name.sh` (только Claude Code) | без переноса |
 | Coordinator issue worktree | skill-specific procedure (implement) | по skill | implement | #1162 |
 
@@ -399,9 +399,9 @@ Helpers без собственного события: `harness/project/hooks/h
 | automatic enforcement | `.claude/settings.local.json`, hooks таблицы раздела 7 с колонкой «Claude Code: да»; строгость поведенческих hooks задаёт `hook_policy` | `.codex/hooks.json` после доверия; hooks с колонкой «Codex: да» |
 
 Runtime без механизма загрузки получает требование явного чтения. Автоматическую загрузку или
-enforcement для такого runtime карта не обещает. Поддерживает ли Codex правила по путям через
-вложенные `AGENTS.md`, карта не утверждает: #1160 проверяет это по документации Codex до того, как
-выбрать механизм.
+enforcement для такого runtime карта не обещает. Правил по путям у Codex нет: вложенный `AGENTS.md`
+выбирается по рабочему каталогу при старте, а не по путям файлов. Решение и ссылки на документацию
+Codex — в ADR 0039.
 
 ### 9. Совместимость при миграции
 
