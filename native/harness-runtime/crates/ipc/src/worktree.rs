@@ -597,11 +597,11 @@ fn commit_request(payload: Option<&Value>) -> Result<CommitRequest<'_>, ErrorBod
         }
     };
     for spec in pathspecs.iter().flatten() {
-        let relative = Path::new(spec);
-        if relative.is_absolute()
-            || relative
-                .components()
-                .any(|component| component == Component::ParentDir)
+        // Not `is_absolute()`: on Windows a rooted path without a drive ("/etc/passwd") and a
+        // drive-relative one ("C:x") are both relative to it, and both leave the worktree.
+        if Path::new(spec)
+            .components()
+            .any(|component| !matches!(component, Component::Normal(_) | Component::CurDir))
         {
             return Err(ErrorBody::new(
                 ErrorCode::PolicyDenied,
