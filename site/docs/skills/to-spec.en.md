@@ -2,7 +2,9 @@
 
 Run `/to-spec` explicitly (`$to-spec` in Codex) after `/grilling`, `/grill-me`, or `/grill-with-docs`. The skill carries
 the goal, accepted choices with their option numbers, and reasons for rejecting alternatives
-into the specification. For a direct invocation, first approve the files the skill can read. The
+into the specification. It honours the grilling verdict: on `kill` it stops and names the reason;
+on `needs-clarification` it carries the blocking unknowns into the open questions and asks whether
+to write a partial spec. For a direct invocation, first approve the files the skill can read. The
 skill reads files only within the approved scope and never changes code, tests, project
 configuration, `CONTEXT.md`, ADRs, or Discovery Context.
 
@@ -25,7 +27,10 @@ configuration, `CONTEXT.md`, ADRs, or Discovery Context.
 Once you approve the path, the skill saves the specification in its task folder under
 `docs/tasks/`. For a child task this is the epic folder, where the skill first looks for
 `artifacts/discovery-context.md`. The document describes file and contract changes, edge cases,
-and verifiable acceptance criteria. For a complex epic, `Goal & Scope` identifies the first
+and verifiable acceptance criteria. Each functional requirement gets an ID `R<n>`, and the
+`## Acceptance & Verification Criteria` table ties it to an observable result and a check:
+`/to-tickets` uses these IDs to check ticket coverage, and `/to-pull-requests --release` to match the
+epic's check results. For a complex epic, `Goal & Scope` identifies the first
 end-to-end scenario to demonstrate, why it comes first, and how to verify it independently of
 later slices. If the write fails, the skill returns the full text in chat.
 

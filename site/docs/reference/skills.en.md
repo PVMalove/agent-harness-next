@@ -9,16 +9,16 @@ changed, and this is expected.
 
 | Skill | What is changed |
 | --- | --- |
-| `triage` | A namespaced taxonomy of state labels and a separate execution-mode axis instead of the upstream names. |
+| `triage` | A namespaced taxonomy of state labels, separate execution-mode and route (`pipeline::*`) axes instead of the upstream names; the outcome follows the grilling verdict. |
 | `to-spec` | Converts grilling decisions and approved Discovery Context into a local technical specification. |
 | `to-tickets` | Splits an approved specification into verifiable tickets with waves and a traceability matrix, links them to the epic, and does not rewrite its decisions. With `--review <epic>`, rechecks the published tickets against the epic criteria without writing. |
 | `implement` | Gates with approval, separate roles, mandatory review and QA checks, an issue branch from the integration branch, an early blocker report, and a recovery route. |
-| `ask-matt` | Takes the developer's choice into account: a two-axis review, or a move to commit and push. |
-| `code-review` | Outputs the report in the language from the project configuration. |
+| `ask-matt` | Takes the developer's choice into account: a two-axis review, or a move to commit and push. Its precondition is `harness update` and `/setup-labels`, not the upstream label setup. |
+| `code-review` | Outputs the report in the language from the project configuration; the Standards axis carries the code-smell baseline, the Spec axis takes the ticket and epic bounds and reports a status for each acceptance criterion. |
 | `diagnosing-bugs` | Before hypotheses, looks for past fixes through a read-only search of the project memory, if memory is enabled; reproduction stays mandatory. |
 | `tdd` | Adds refactoring after a green test and verifiable test rules: one behavior at an agreed seam, an independent expectation, deterministic clocks and RNG, the same DBMS for SQL. |
 | `grilling` | When memory is enabled, looks for precedents before the first design round; pointers do not replace explicit consent to an artifact. |
-| `grill-me` | A thin wrapper over the project version with a single final choice: a specification or plan edits. |
+| `grill-me` | A thin wrapper over the project version: the `/grilling` interview and approved Discovery Context, without editing `CONTEXT.md` or ADRs. |
 | `grill-with-docs` | The same wrapper plus maintenance of the glossary and architectural decisions. |
 | `wayfinder` | Map tickets carry the execution mode and state; taking a ticket puts it into progress. |
 
@@ -49,7 +49,7 @@ changed, and this is expected.
 
 | Skill | Manual only | Description |
 | --- | --- | --- |
-| `grill-me` | yes | Working out a plan without a link to code. |
+| `grill-me` | yes | Stress-testing a plan and collecting Discovery Context; reads domain docs only. |
 | `grilling` | no | A stress test of a plan, decision, or idea. |
 | `handoff` | yes | Handing over context to another session or model. |
 | `teach` | yes | Explain a new concept in the context of this project. |
@@ -70,7 +70,7 @@ These skills were added specially for this build — they do not exist upstream.
 | `qa-gate` (skill) | A full local quality run from `qa_gate_commands` in an isolated fork before a PR. |
 | `to-guide` (skill) | A guide with prompts for manually implementing a `hitl` ticket. |
 | `setup-labels` (skill) | One-time creation and update of tracker labels from the project vocabulary. |
-| `to-pull-requests` (skill) | The manual publication and completion path: branch check, PR/MR body, ticket closure. |
+| `to-pull-requests` (skill) | The manual publication and completion path: branch check, PR/MR body, ticket closure; with `--release <epic>`, the release PR of the integration branch and the epic closure. |
 | `fast-implement` (skill) | A single-pass path without gates for small tasks. |
 | `delivery-stats` (skill) | A cost report for a closed epic: tokens, cache, code volume, comparison with the baseline. |
 | `architect` (skill) | Manual comparison of architectural options; when memory is enabled, looks for precedents. |

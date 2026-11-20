@@ -1,6 +1,6 @@
 ---
 name: wayfinder
-description: Plan a huge chunk of work — more than one agent session can hold — as a shared map of decision tickets on your issue tracker, and resolve them one at a time until the way to the destination is clear.
+description: Charts an effort too big for one session as a tracker map of decision tickets, resolving one per session. Use explicitly for foggy multi-session work; use /to-spec for a scoped feature. Never builds the deliverable.
 disable-model-invocation: true
 ---
 
@@ -11,6 +11,8 @@ The destination varies per effort, and naming it is the first act of charting �
 ## Plan, don't do
 
 Wayfinder is **planning** by default: each ticket resolves a decision, and the map is done when the way is clear — nothing left to decide before someone goes and does the thing. The pull to just do the work is usually the signal you've reached the edge of the map and it's time to hand off. An effort can override this in its **Notes** — carrying execution into the map itself — but absent that, produce decisions, not deliverables.
+
+When the map has no open tickets, hand off: run `/to-spec` with the map as its input, then `/publish-epic` and `/to-tickets`. Go straight to an implementation ticket only when the effort turned out small.
 
 ## Refer by name
 
@@ -68,7 +70,7 @@ A session **claims** a ticket by assigning it to the dev driving the map, **firs
 
 Blocking uses the tracker's **native** dependency relationship where the tracker doc uses one — essential because it renders the frontier _visually_ in the tracker's own UI, so the human sees what's takeable without opening the map. Otherwise — local markdown, or GitLab, whose blocking links are a Premium feature — it uses the body convention the tracker doc names. A ticket is **unblocked** when every ticket blocking it is closed; the **frontier** is the open, unblocked, unclaimed children — the edge of the known.
 
-The answer isn't part of the body — it's recorded on resolution (see [Work through the map](#work-through-the-map)). Assets created while resolving a ticket are linked from the issue, not pasted in.
+The answer isn't part of the body — it's recorded on resolution (see [references/work.md](references/work.md)). Assets created while resolving a ticket are linked from the issue, not pasted in.
 
 ## Ticket Types
 
@@ -104,25 +106,5 @@ Ruling something out of scope is a scoping act, not a step on the route. When a 
 
 Two modes. Either way, **never resolve more than one ticket per session** — with the exception of research tickets.
 
-### Chart the map
-
-User invokes with a loose idea.
-
-1. **Name the destination.** Run a `/grilling` and `/domain-modeling` session to pin down what this map is finding its way to — the spec, decision, or change. The destination fixes the scope, so it's settled first.
-2. **Map the frontier.** Grill again, **breadth-first** this time: fan out across the whole space rather than deep on any one thread, surfacing the open decisions and the first steps takeable now. **If this surfaces no fog** — the way to the destination is already clear, the whole journey small enough for one session — you don't need a map. Stop and ask the user how they'd like to proceed.
-3. **Create the map** (label `wayfinder:map`): Destination and Notes filled in, Decisions-so-far empty, the fog sketched into **Not yet specified**.
-4. **Create the tickets you can specify now** as child issues of the map, each carrying its `wayfinder:<type>` label, the matching `hitl`/`afk` label, and `status::ready` (see [Tickets](#tickets)) — then wire blocking edges in a **second pass** (issues need ids before they can reference each other). Wiring sorts them into the frontier and the blocked; everything you can't yet specify stays in the fog — the **Not yet specified** section.
-5. **Fire the research subagents.** For each `research` ticket you just created, spin up a `/research` subagent to resolve it in parallel, capturing its findings on an issue branch for that research ticket, named per `branch_pattern` in `.harness/project.json` (`docs/agents/git-workflow.md`), with a context pointer from the ticket.
-6. Stop — charting is one session's work; it hand-resolves nothing.
-
-### Work through the map
-
-User invokes with a map (URL or number). A ticket is **optional** — without one, you pick the next decision, not the user.
-
-1. Load the **map** — the low-res view, not every ticket body.
-2. Choose the ticket. If the user named one, use it. Otherwise take the first frontier ticket in order. **Claim it**: assign it to yourself before any work, and set `status::in-progress` — the same convention `/fast-implement` and `/to-guide` use (`docs/agents/triage-labels.md`).
-3. Resolve it — **zoom as needed**: fetch the full body of any related or closed ticket on demand; invoke the skills the `## Notes` block names and the ones its ticket type calls for (see [Ticket Types](#ticket-types)).
-4. Record the resolution: post the answer as a **resolution comment**, **close** the issue, and **append a context pointer** to the map's Decisions-so-far.
-5. Add newly-surfaced tickets (create-then-wire); graduate any fog the answer has made specifiable, clearing each graduated patch from **Not yet specified** so it lives only as its new ticket. If the answer reveals a ticket — this one or another — sits beyond the destination, **rule it out of scope** rather than resolving it on the route. If the decision invalidates other parts of the map, update or delete those tickets.
-
-The user may run unblocked tickets in parallel, so expect other sessions to be editing the tracker concurrently.
+- **Chart the map** — the user invokes with a loose idea. Read [references/chart.md](references/chart.md).
+- **Work through the map** — the user invokes with a map (URL or number). Read [references/work.md](references/work.md).

@@ -13,11 +13,12 @@ skill changes nothing and returns a report with a blocker that names it.
 The ticket's `## Relevant Files (Discovery Context)`, `## Contract touchpoints` and
 `## Out of scope` bound the change; a path outside them needs the human's approval. The work is
 complete when the `Verify` commands of the acceptance criteria, the targeted tests, and lint and
-typecheck from `qa_gate_commands` have run. The seam is agreed with the human before the first test, then the work goes through `/tdd`. The skill
-finishes with a human-readable report in the chat with five sections: changes, checks (pass, fail or
-not run), unverified items, risks and blockers. The skill does not commit, push, open a PR, run code
+typecheck from `qa_gate_commands` have run or are listed as unverified with the reason. The seam is agreed with the human before the first test, then the work goes through `/tdd`. The skill
+finishes with a human-readable report in the chat with five sections: changes, checks (each acceptance criterion with its `[R<n>]` IDs and `Verify` command, then other
+commands; pass, fail or not run), unverified items, risks and blockers. The skill does not commit, push, open a PR, run code
 review or change tracker labels. In `/fast-implement` it runs the implementation steps, and
-`/fast-implement` keeps review, commit, push and the `/to-pull-requests` handoff.
+`/fast-implement` keeps review, commit, push and the `/to-pull-requests` handoff. For a labeled afk
+ticket (`pipeline::*`), the description points to `/fast-implement` or `/implement` instead.
 
 ## Orchestration role `developer`
 

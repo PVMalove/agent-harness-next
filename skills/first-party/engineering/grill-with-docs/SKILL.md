@@ -1,6 +1,6 @@
 ---
 name: grill-with-docs
-description: Stress-test an idea or plan with /domain-modeling. Update explicitly approved terms in CONTEXT.md and consider ADRs for significant decisions. Use /grill-me for interview and Discovery Context only.
+description: "Runs /grilling with /domain-modeling: updates explicitly approved CONTEXT.md terms and considers ADRs for significant decisions. Use explicitly to also maintain domain docs; use /grill-me for Discovery Context only."
 disable-model-invocation: true
 ---
 

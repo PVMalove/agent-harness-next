@@ -1,7 +1,12 @@
 # /code-review — Two-axis review
 
-`/code-review` reviews the diff since a fixed point (commit, branch, tag, or merge-base) along two
-axes in parallel subagents and shows the reports side by side. The skill never changes code.
+`/code-review` reviews the diff since a fixed point (commit, branch, tag, or a PR/MR's target branch)
+along two axes in parallel subagents and shows the reports side by side. The skill reports findings
+only and never changes code; running the project's checks is the job of `/qa-gate`.
+
+When the user names a PR or MR, its target branch is the fixed point: the skill reads the target and
+source branches, runs `git fetch origin <target>` and compares against `origin/<target>`. The current
+checkout must be the source branch; otherwise the skill tells the user and does not switch branches.
 
 - **Standards:** whether the code follows the repository's documented standards. On top of them
   applies the Fowler code-smell baseline from `references/smell-baseline.md`. A repository standard

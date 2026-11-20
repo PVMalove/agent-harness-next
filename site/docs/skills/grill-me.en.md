@@ -15,7 +15,7 @@
 
 ```yaml
 name: grill-me
-description: Stress-test an idea or plan and collect approved Discovery Context without editing CONTEXT.md or ADRs. Use /grill-with-docs when you also want to maintain the domain glossary or record architectural decisions.
+description: Runs the /grilling interview to stress-test an idea or plan and collects approved Discovery Context without editing CONTEXT.md or ADRs. Use explicitly before /to-spec; use /grill-with-docs to also update domain docs.
 disable-model-invocation: true
 ```
 

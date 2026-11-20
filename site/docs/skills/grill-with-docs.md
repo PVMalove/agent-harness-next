@@ -15,7 +15,7 @@
 
 ```yaml
 name: grill-with-docs
-description: Проверяет идею или план вместе с /domain-modeling. Записывает согласованные термины в CONTEXT.md и предлагает ADR для значимых решений. Для интервью и Discovery Context используйте /grill-me.
+description: Запускает /grilling вместе с /domain-modeling: записывает явно одобренные термины в CONTEXT.md и рассматривает ADR для значимых решений. Вызывайте явно, когда нужно заодно вести доменные документы; если нужен только Discovery Context, используйте /grill-me.
 disable-model-invocation: true
 ```
 

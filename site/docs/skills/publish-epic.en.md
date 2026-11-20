@@ -21,7 +21,13 @@ Before any tracker or Git command, the skill shows a plan and waits for explicit
 The skill publishes the epic to GitHub, GitLab, or `.scratch/<feature-slug>/spec.md` of the local
 tracker and renames the task folder after the epic number. It then creates the integration branch
 from `base_branch`, commits the approved grill docs to it, and pushes it when the branch is absent
-on the remote. It reuses an existing branch without a reset or force-push. On a partial failure the
+on the remote. It reuses an existing branch without a reset or force-push.
+
+The grill docs are not always committed. When the branch already exists on the remote, the skill does
+not commit to it or switch the worktree: the docs stay uncommitted, to be committed on the first child
+ticket's issue branch and merged through its PR. With a local tracker, the skill commits the docs but
+does not push. Without a remote, it only creates the local branch, and the docs stay uncommitted. On a
+partial failure the
 skill reports the state and the exact recovery action and never recreates the epic.
 
 Finally, the skill offers to run `/to-tickets` manually. [Git and epic workflow](../agents/git-workflow.md)

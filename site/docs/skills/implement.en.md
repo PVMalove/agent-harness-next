@@ -283,7 +283,10 @@ the operator did not make. `human_approval_gate: tty` requires confirmation on t
 terminal for transitions that still need human approval. When you choose a recovery route for
 `retry` or `abandon`, show the decision packet's `route_preview` (with the `--reason-category` or
 `--retry-role` you intend to pass to `batch decide`) and follow the Recovery route table in
-`.harness/orchestration/playbook.md` (situation → route → who approves → evidence). Report each
+`.harness/orchestration/playbook.md` (situation → route → who approves → evidence). When a route
+is `rebase` (`next_action: rebase`, also shown as `route_preview.accept`), create
+`dispatch create --role rebaser`; after its accepted report, run the risk assessment and go to QA,
+never to a new code-review. Report each
 startup failure under its own classification (unsupported flag, missing or refused self-report,
 capacity, rate-limit, service-unavailable) together with its recovery route.
 
@@ -443,9 +446,11 @@ another checkout as your actual directory. Confirm your active model and the pro
 Proceed only after a successful self-report; escalate a mismatch or unavailable model identity.
 Immediately after self-report and at least every <heartbeat.every_seconds> seconds while working, run:
 <coordinator CLI> dispatch heartbeat --dispatch <dispatch_id>
-Context Package <context_package_id>: start from its starting_files, symbol_graph and
-related_tests. For a starting file with non-empty sections, read only the start_line–end_line
-ranges the task needs.
+Context Package <context_package_id>: start from its summary in the brief. Read only the indicated
+start_line–end_line ranges needed for the task.
+For more, read one section of the pinned package:
+<coordinator CLI> context-package show --dispatch <dispatch_id> --section <section>
+(for example related_tests, precedent_cards, memory or goal).
 Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
@@ -455,8 +460,8 @@ or {"status": "present", "details": "<Russian description>"} when present. A non
 details; present requires a non-empty description. Put other explanations in output. Strings, translated
 statuses, passed and not-run are invalid; no aliases or old report formats are accepted.
 Then run:
-<coordinator CLI> report submit --file "<report_staging_path>"
-Completion means the report is recorded in the ledger. Include the submit result in your final reply.
+<coordinator CLI> report submit --compact --file "<report_staging_path>"
+Confirm the ledger receipt in one line. Relay any blocked transition or required next action.
 If submission fails before recording, return the command and error as a blocker; keep the report file.
 If the result includes completion, relay it to the coordinator for report complete; the report is
 already recorded, so submit it only once. Chat text alone does not complete the dispatch.

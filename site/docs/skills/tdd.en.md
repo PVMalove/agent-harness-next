@@ -17,6 +17,9 @@ deterministically at the boundary, and it checks SQL and transactions on the sam
 in an isolated environment. Refactor follows Green. Coverage is a signal, not a goal. The skill adds
 flaky-test and seed policies only when the project already requires them.
 
+The model invokes the skill when asked for TDD or test-first work. When the cause of a failure is still
+unexplained, the skill description points to `/diagnosing-bugs`.
+
 The vendor version kept the examples and the substitution rules in separate `tests.md` and `mocking.md`.
 In the first-party version the substitution rules are in `SKILL.md`, and the examples are in
 [`examples.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/tdd/examples.md).
@@ -57,7 +60,8 @@ Check the expectation against the requirement before you implement, and do not w
 expectation for the sake of Green; a justified contract change needs a new call and a new check. For `needs_skeleton`, write only types and signatures without logic
 and repeat the call. A compile, import, fixture, or environment error does not count as Red, and a test
 that is green at once does not count as a cycle. After three consecutive failed calls on one test, stop
-and return a blocker. The full protocol is described in `developer.md` of the orchestration roles. The
+and return a blocker. The full protocol is in `tdd/references/test-author.md`, and for the orchestration
+developer role in `harness/orchestration/roles/references/developer-test-author.md`. The
 `/fast-implement` short route runs the same protocol in one session: the seam there is the one the
 developer agreed before the first test, not one taken from the architect brief, and an unavailable author
 keeps the ordinary route with the reason stated.

@@ -15,7 +15,7 @@
 
 ```yaml
 name: qa-gate
-description: Run this project's full local quality gate (the lint/typecheck/test commands from .harness/project.json) and report pass or fail. Use before opening a PR, or whenever the full set of local checks is requested.
+description: Runs the project's full local quality gate (qa_gate_commands in .harness/project.json) and reports pass/fail only. Use before opening a PR or when asked for the full check/test suite; not for one targeted test.
 context: fork
 background: false
 ```
@@ -28,6 +28,7 @@ Run this project's quality gate and report the result. Nothing more — do not r
    `.harness/project.json` and `.harness/skills/qa-gate/scripts/test_summary.py` from there; run
    every command with the current checkout as the working directory, not the main worktree.
    Read `qa_gate_commands` from that `.harness/project.json` — an ordered list of shell commands (for example, `["make check", "make test"]` or `["ruff check .", "mypy .", "pytest"]`). If the file or the field is missing, tell the user to fill it in (run `harness init`/`update` again or edit `.harness/project.json` directly) and stop.
+   This gate never runs `pre_qa_commands` or the QA workflow overlays from `.harness/orchestration.json`: only the `/implement` QA gate does. A project check the fast route also needs belongs in `qa_gate_commands`.
 2. Read the optional `shell` field from the same file. `"bash"` (or the field absent) means this
    checkout runs commands through bash: Linux, macOS, or a Windows checkout where `bash` on `PATH`
    is really Git Bash/WSL and not the System32 WSL launcher stub. `"powershell"` means the commands run

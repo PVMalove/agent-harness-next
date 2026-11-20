@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: Review the changes since a fixed point (commit, branch, tag, or merge-base) along two axes — Standards (does the code follow this repo's documented coding standards?) and Spec (does the code match what the originating issue/spec asked for?). Runs both reviews in parallel sub-agents and reports them side by side. Use when the user wants to review a branch, a PR, work-in-progress changes, or asks to "review since X".
+description: Reviews the changes since a fixed point (commit, branch, tag, or a PR's target) against this repo's coding standards and the originating issue's acceptance criteria, in two parallel sub-agents. Use when asked to review a branch, a PR, or work in progress; reports findings only, never edits code (use /qa-gate for checks).
 ---
 
 Two-axis review of the diff between `HEAD` and a fixed point the user supplies. Never edit code;
@@ -67,6 +67,7 @@ Launch the `code-review-standards` and `code-review-spec` subagents defined in `
 - The diff command and commit list.
 - The path or fetched contents of the spec, and of the parent epic's specification and the ticket's
   scope sections when step 2 found them.
+- The ticket's `## Acceptance criteria` verbatim, so the sub-agent reports a status for each.
 
 If the spec is missing, skip the `code-review-spec` sub-agent and note this in the final report.
 

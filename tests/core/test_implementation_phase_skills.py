@@ -25,7 +25,8 @@ def _text(path: Path) -> str:
 
 
 @pytest.mark.parametrize(
-    "name", ["fast-implement", "to-guide", "architect", "to-pull-requests"]
+    "name",
+    ["fast-implement", "to-guide", "architect", "to-pull-requests", "setup-labels"],
 )
 def test_explicit_skills_need_an_explicit_codex_call(name: str) -> None:
     assert _frontmatter(_skill(name))["disable-model-invocation"] == "true"

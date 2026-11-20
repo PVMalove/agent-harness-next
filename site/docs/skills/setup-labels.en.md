@@ -15,17 +15,17 @@
 
 ```yaml
 name: setup-labels
-description: Create or update this repository's GitHub or GitLab labels (status::*, hitl/afk, task-report::required, resolution::wontfix, wayfinder:*), so that they match docs/agents/triage-labels.md. Run it once for each repository before the first use of triage, publish-epic, to-tickets, implement, to-guide, or wayfinder.
+description: Creates or updates the GitHub or GitLab labels listed in docs/agents/triage-labels.md. Run once per repo before the first /triage, /publish-epic, /to-tickets or /wayfinder; not for the local markdown tracker.
 disable-model-invocation: true
 ```
 
 ### Setup Labels
 
-`gh issue edit --add-label`/`gh issue create --label` fail on a label that does not exist yet: `gh` never creates it automatically. GitLab does the opposite: a `--label` with a missing label silently creates it with GitLab's default color, so a label applied to a ticket before this skill runs stays wrongly colored. This skill creates every label that the triage taxonomy of this repository needs, with its canonical color, so run it before the first `/publish-epic` or `/to-tickets` run.
+`gh issue edit --add-label`/`gh issue create --label` fail on a label that does not exist yet: `gh` never creates it automatically. GitLab does the opposite: a `--label` with a missing label silently creates it with GitLab's default color, so a label applied to a ticket before this skill runs stays wrongly colored. This skill creates every label that the triage taxonomy of this repository needs, with its canonical color, so run it before the first `/triage`, `/publish-epic` or `/to-tickets` run. A local markdown tracker has no labels, so this skill does not apply to it.
 
 #### Process
 
-1. **Read the tables.** Pull every `Label` / `Color` row from `docs/agents/triage-labels.md` — the taxonomy tables (category, execution mode, workflow state, context labels) and the Wayfinder addendum. Name and hex color only, skip the `Applied by` column; on GitHub skip `Meaning` too, and on GitLab keep its first sentence as the label description. If the file does not exist, ask the user to run `harness update` — it creates the file from the harness templates — and stop.
+1. **Read the tables.** Pull every `Label` / `Color` row from `docs/agents/triage-labels.md` — the type, execution mode, status and context-label tables, the Wayfinder addendum, and the pipeline hint (`pipeline::*`). Skip a table without a `Color` column (`priority::*`, `severity::*`, `env::*`): those labels stay the project's choice. Name and hex color only, skip the `Applied by` column; on GitHub skip `Meaning` too, and on GitLab keep its first sentence as the label description. If the file does not exist, ask the user to run `harness update` — it creates the file from the harness templates — and stop.
 2. **Show the plan.** List every label that will be created or updated, together with its color. Confirm with the maintainer before changing the tracker: this changes the shared state of the repository and requires the same discipline as any step of this repository that mutates the tracker (see `docs/agents/issue-tracker.md`).
 3. **Apply.**
    - **GitHub:** for each label, run `gh label create "<name>" --color "<hex>" --force`. `--force` makes the operation idempotent: it updates the color of an existing label instead of failing, and it touches nothing else (issues that already carry this label are unchanged).

@@ -61,6 +61,8 @@ never performs them.
 3. Build test-first with `/tdd` at the agreed seams.
 4. Run typechecking and single test files as you go. Finish with the checks the `developer` skill
    requires, including every `Verify` command; the full suite runs in `/qa-gate` before the PR.
+   That gate runs only `qa_gate_commands`: `pre_qa_commands` and the QA workflow overlays apply to
+   `/implement` alone.
 5. Ask the developer: “Провести code review?” Wait for the answer. On yes, run `/code-review`,
    address the requested changes, and rerun the relevant tests. On no, record the decline.
 6. Ask the developer for explicit permission to commit and push. Wait for the answer.

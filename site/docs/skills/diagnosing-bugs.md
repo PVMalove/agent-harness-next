@@ -2,8 +2,18 @@
 
 Источник: [`SKILL.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/diagnosing-bugs/SKILL.md).
 В `engineering-suite` этот first-party override сохраняет upstream-цикл диагностики. От upstream он
-отличается двумя правками: добавлен шаг поиска по памяти проекта, а из фазы построения цикла обратной
-связи убран призыв «Be aggressive. Be creative. Refuse to give up.».
+отличается такими правками:
+
+- добавлен шаг поиска по памяти проекта;
+- из фазы построения цикла обратной связи убран призыв «Be aggressive. Be creative. Refuse to give
+  up.»;
+- описание называет границу со `/tdd`: диагностика ищет причину через красный цикл обратной связи, а
+  `/tdd` берут, когда причина уже известна;
+- в `SKILL.md` остаётся первый способ построить цикл, падающий тест. Остальные способы по порядку,
+  ветки для нестабильного бага и для регрессии производительности вынесены в
+  [`references/feedback-loops.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/diagnosing-bugs/references/feedback-loops.md).
+  Агент читает его, если падающий тест не даёт красного цикла;
+- исправление применяется в issue-ветке тикета по правилу Issue First из `docs/agents/git-workflow.md`.
 
 Если память проекта включена, интерактивная сессия после фиксации симптома и до ранжирования гипотез
 один раз выполняет `harness memory search . "<симптом, ошибка и модуль>"`, чтобы найти прошлые фиксы.

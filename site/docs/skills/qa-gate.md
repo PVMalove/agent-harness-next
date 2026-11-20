@@ -15,7 +15,7 @@
 
 ```yaml
 name: qa-gate
-description: Запустите полный локальный гейт качества этого проекта (команды lint/typecheck/test из .harness/project.json) и сообщите об успехе или провале. Используйте перед открытием PR или всякий раз, когда запрошен полный набор локальных проверок.
+description: Запускает полный локальный гейт качества проекта (qa_gate_commands в .harness/project.json) и сообщает только об успехе или провале. Используйте перед открытием PR или когда просят полный набор проверок и тестов; не для одного целевого теста.
 context: fork
 background: false
 ```
@@ -28,6 +28,7 @@ background: false
    `.harness/project.json` и `.harness/skills/qa-gate/scripts/test_summary.py`. Каждую команду
    запускайте из текущего checkout, никогда из основного worktree.
    Прочитайте `qa_gate_commands` из этого `.harness/project.json`. Это упорядоченный список shell-команд, например `["make check", "make test"]` или `["ruff check .", "mypy .", "pytest"]`. Если файла или поля нет, попросите пользователя заполнить его (снова запустить `harness init`/`update` или отредактировать `.harness/project.json` вручную) и остановитесь.
+   Этот гейт не выполняет `pre_qa_commands` и оверлеи QA из `.harness/orchestration.json`: их выполняет только QA-гейт `/implement`. Проверку, нужную и быстрому маршруту, проект кладёт в `qa_gate_commands`.
 2. Прочитайте из того же файла необязательное поле `shell`. Значение `"bash"` или отсутствие поля значит, что
    checkout запускает команды через bash: Linux, macOS или Windows, где `bash` в `PATH` действительно Git Bash или WSL,
    а не заглушка WSL-launcher из System32. Значение `"powershell"` значит, что команды идут через PowerShell. Выбирайте его
