@@ -197,6 +197,24 @@ def _ns(**values: object) -> argparse.Namespace:
     return argparse.Namespace(**values)
 
 
+DEVELOPER_SKILL_SOURCE = (
+    Path(__file__).resolve().parents[2]
+    / "skills"
+    / "first-party"
+    / "engineering"
+    / "developer"
+    / "SKILL.md"
+)
+
+
+def _install_developer_skill(repo: Path) -> Path:
+    """The developer skill installed where engineering-suite puts it; a developer send needs it."""
+    installed = repo / ".harness" / "skills" / "developer" / "SKILL.md"
+    installed.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(DEVELOPER_SKILL_SOURCE, installed)
+    return installed
+
+
 def _init_repo(tmp: Path) -> Path:
     """A minimal git repository with an 'origin' remote, a zero-config `.harness/project.json`, a
     real architect role manifest and the seed files the context builder needs -- everything
@@ -222,6 +240,7 @@ def _init_repo(tmp: Path) -> Path:
         encoding="utf-8"
     )
     (roles_dst / "architect.md").write_text(architect_manifest, encoding="utf-8")
+    _install_developer_skill(repo)
     _git(repo, "add", "-A")
     _git(repo, "commit", "-m", "seed")
     _git(repo, "branch", "-M", "master")

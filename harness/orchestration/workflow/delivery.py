@@ -35,6 +35,7 @@ from harness.orchestration import (
 from harness.errors import INTERNAL_INVARIANT_REMEDY
 from harness.storage import storage_path
 from harness.orchestration.core import config as core_config
+from harness.orchestration.core.developer_skill import developer_skill
 from harness.orchestration.core import state_view
 from harness.orchestration.core import utils
 from harness.orchestration.core.config import (
@@ -368,6 +369,8 @@ class _Handoff:
     brief_path: Path
     adapter_preflight: JsonObject | None
     access_evidence: JsonObject
+    # The installed developer skill a developer worker is told to read (#1161); None otherwise.
+    developer_skill: JsonObject | None = None
 
 
 def send_dispatch(args: argparse.Namespace) -> JsonObject:
@@ -398,6 +401,11 @@ def send_dispatch(args: argparse.Namespace) -> JsonObject:
         "report_staging_path": dispatch.get("report_staging_path")
         or str(_agent_inbox(repo) / f"{dispatch['dispatch_id']}.json"),
         "next_role_action": "dispatch self-report",
+        **(
+            {"developer_skill": handoff.developer_skill}
+            if handoff.developer_skill is not None
+            else {}
+        ),
         **(
             {"adapter_preflight": handoff.adapter_preflight}
             if handoff.adapter_preflight
@@ -495,6 +503,8 @@ def _reserve_handoff(
     # The worktree may have become unwritable since preflight: refuse before the launch.
     if dispatch.get("access") == "write":
         _require_writable_worktree(dispatch["worktree"])
+    # A developer is told to read the installed skill: refuse before anything is recorded.
+    skill = developer_skill(repo) if dispatch.get("role") == "developer" else None
     if transport == "in-process":
         require_in_process_artifacts(repo, root, role=dispatch["role"], prepare=True)
     brief_path = _worker_brief_path(repo, root, dispatch)
@@ -526,6 +536,7 @@ def _reserve_handoff(
         brief_path=brief_path,
         adapter_preflight=adapter_preflight,
         access_evidence=access_evidence,
+        developer_skill=skill,
     )
     if not relaunch and entry is not None:
         # The guard above proved this is the batch's own entry for the dispatch.
