@@ -44,7 +44,7 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 
 | Label | Color | Applied by | Meaning |
 | --- | --- | --- | --- |
-| `task-report::required` | gray `#6a737d` | `/publish-epic`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Applied by default to every ticket unless you say to skip it. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
+| `task-report::required` | gray `#6a737d` | `/publish-epic`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
 | `resolution::wontfix` | gray `#c2c2c2` | `/triage` | The request was explicitly rejected. Applied at close time; see `.out-of-scope/` handling in `triage/OUT-OF-SCOPE.md`. |
 
 ### 4. Priority (`priority::*`) — optional, purely informational
@@ -71,8 +71,7 @@ Nothing consumes this automatically yet; it exists so a maintainer can flag impa
 
 ### 6. Environment (`env::*`) — target-project only, optional
 
-Which deployed environment an issue or PR relates to. Not part of this harness repository's own
-taxonomy — only seeded into target projects that track deployments.
+Which deployed environment an issue or PR relates to; for projects that track deployments.
 
 | Label | Meaning |
 | --- | --- |

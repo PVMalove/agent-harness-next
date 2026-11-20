@@ -114,10 +114,8 @@ with `--min-recall` and `--max-noise` (finite values in `[0, 1]`). Exit code 0 m
 FAIL; invalid inputs also exit nonzero. A degraded search always fails, even with relaxed thresholds.
 Invalid dataset/options use the common `HarnessError` diagnostic (`ERROR` and `REMEDY`) and
 exit code 2. Quality failure still returns 1 and contains the measured report.
-The source repository's `tests/memory/baseline_fts5.json` records the measured FTS5 result and
-dataset/corpus SHA-256 hashes for the vector-layer comparison. A recorded failed quality gate is
-evidence of retrieval noise, not a reason to weaken its thresholds.
+A recorded failed quality gate is evidence of retrieval noise, not a reason to weaken its
+thresholds.
 Label all useful sources with concrete source evidence before comparing engines. If an annotation
 correction changes the scores, preserve the original measurement and record the revision explicitly;
-it is not an improvement in retrieval. The source repository retains its initial single-label run
-in `baseline_fts5_initial.json` alongside the corrected multi-label baseline.
+it is not an improvement in retrieval.

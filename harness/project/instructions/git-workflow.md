@@ -23,7 +23,7 @@ integration branch is the PR target for child work. A separate release PR target
 1. **Initialization (Branching):**
    An isolated issue branch is created for each task from the epic's exact integration branch — never from whatever branch happens to already be checked out. If the task has no epic, use `base_branch`.
    * **Format:** must match `branch_pattern` in `.harness/project.json` (default: `feature/issue-<ID>-<short-slug>`, where `<ID>` is the tracker issue number and `<short-slug>` is a short task description — transliterated, words separated by hyphens or underscores).
-   * **Command:** `git fetch origin <integration-branch> && git switch -c feature/issue-<ID>-<slug> --track origin/<integration-branch>`. For an epic-less task, replace `<integration-branch>` with the required `base_branch` from `.harness/project.json`. A coordinator creates the branch with `git worktree add --no-track` instead (see `.harness/skills/implement/references/issue-worktree.md`, installed with `engineering-suite`); `git push -u` in step 2 then sets the upstream.
+   * **Command:** `git fetch origin <integration-branch> && git switch -c feature/issue-<ID>-<slug> --track origin/<integration-branch>`. For an epic-less task, replace `<integration-branch>` with the required `base_branch` from `.harness/project.json`. A coordinator creates the issue worktree with `coordinator.py worktree create` instead (see `.harness/skills/implement/references/issue-worktree.md`, installed with `engineering-suite`); `git push -u` in step 2 then sets the upstream.
 2. **Post-branch Push:**
    * Immediately after creating the branch, push it to the remote (`origin`) so it exists there: `git push -u origin feature/issue-<ID>-<slug>`.
 3. **Implementation & Quality Assurance (TDD):**
@@ -33,7 +33,7 @@ integration branch is the PR target for child work. A separate release PR target
    * Commit messages follow the **Semantic Commit Messages** standard (e.g., `feat: ...`, `fix: ...`, `refactor: ...`).
 5. **Continuous Push:**
    * Push commits to the remote (`origin`) both while implementing the task and after addressing code-review feedback: `git push origin feature/issue-<ID>-<slug>`. Never leave finished commits sitting only in the local repo.
-6. **Integration (Pull Request):** *(local markdown tracker: skip this step and step 7 — see "Issue First" above; `/to-pull-requests` sets the ticket's `**Workflow:**` to `done` after the developer confirms the merge.)*
+6. **Integration (Pull Request):** *(local markdown tracker: skip this step and step 7 — see Issue First in `.claude/rules/git-delivery.md`; `/to-pull-requests` sets the ticket's `**Workflow:**` to `done` after the developer confirms the merge.)*
    * First run the `qa-gate` skill (see [issue-tracker.md](./issue-tracker.md)'s "When a skill says…" conventions for how tickets are referenced) and only proceed once it passes. A project with the backend-orchestration opt-in validates the accepted QA evidence of the exact SHA instead, as `/to-pull-requests` step 3 describes.
    * **Confirm before opening:** then, before creating the PR, explicitly ask the developer whether the branch is ready to be opened as a pull request, and state the QA result in that question. Do not run `gh pr create`/`glab mr create` just because implementation, tests, and code-review are done — wait for an explicit go-ahead. Silence, or the mere fact that the task is otherwise complete, does not count as consent.
    * If the PR body template in [§3](#3-pr-body-template) has more structure than a short summary, follow it directly. A developer may instead configure and run `pr-composer` manually in the coding application; give it `.harness/.sandboxes/pr_body/pr-body-<issue>-<slug>.md`, pass that path to `--body-file` (`--description-file` on GitLab) below, and delete it only after the PR/MR is created successfully.
@@ -86,7 +86,7 @@ What needs to happen when deploying to other environments — DB migrations, new
 -->
 ```
 
-Read `language` from `.harness/project.json` (default `ru`) to pick the section headings. The headings are output text in the project language. Do not translate them.
+Read `language` from `.harness/project.json` (default `ru`) to pick the section headings. The headings are output text in the project language: copy the headings of that language block verbatim.
 
 When `.harness/project.json` has a `pr_checklist`, address each relevant item in the matching
 body section with project evidence. Use section 7 for rollout and deployment items. Mark a relevant
