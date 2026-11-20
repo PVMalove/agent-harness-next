@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from ..errors import HarnessError
+from .core.constants import BATCH_WRITER_ROLES
 
 # Local Git plumbing only; a slow disk or a huge repository is the worst expected case.
 GIT_TIMEOUT_SECONDS = 60
@@ -33,7 +34,7 @@ WORKER_ROLES_REQUIRING_ISSUE_WORKTREE = frozenset(
 )
 # Roles that write in the issue worktree itself; other roles run in the checkout they select.
 ISSUE_WORKTREE_WRITER_ROLES = frozenset(
-    {"architect", "developer", "conflict-resolver", "rebaser"}
+    {"architect", *BATCH_WRITER_ROLES, "conflict-resolver", "rebaser"}
 )
 
 

@@ -600,6 +600,7 @@ def _known_candidate(
     repo: Path, root: Path, batch: JsonObject, entries: list[JsonObject]
 ) -> str | None:
     """The writer's commit: a validated report or committed checkpoint is progress, not acceptance."""
+    from harness.orchestration.core.constants import batch_writer_role
     from harness.orchestration.core.git_utils import _candidate_commit
     from harness.orchestration.workflow.history import (
         _current_developer_candidate,
@@ -610,7 +611,7 @@ def _known_candidate(
     candidate = _current_developer_candidate(repo, root, batch)
     for entry in reversed(entries):
         if (
-            entry.get("role") in {"developer", "conflict-resolver"}
+            entry.get("role") in {batch_writer_role(batch), "conflict-resolver"}
             and entry.get("purpose", "work") == "work"
         ):
             if entry.get("report"):

@@ -226,6 +226,11 @@ def build_parser(
     create.add_argument("--branch", required=True)
     create.add_argument("--worktree", required=True)
     create.add_argument(
+        "--writer-role",
+        choices=defaults.BATCH_WRITER_ROLES,
+        help="implementation owner of the batch (default: developer)",
+    )
+    create.add_argument(
         "--allowed-path",
         action="append",
         help="repo-relative path or glob the batch's writer may change; repeated; the batch's explicit write scope",
@@ -303,6 +308,7 @@ def build_parser(
     _common(batch_preflight)
     batch_preflight.add_argument("--ticket", required=True)
     batch_preflight.add_argument("--allowed-path", action="append")
+    batch_preflight.add_argument("--writer-role", choices=defaults.BATCH_WRITER_ROLES)
     batch_preflight.add_argument("--definition-of-done", action="append", required=True)
     batch_preflight.add_argument("--dependency", action="append")
     batch_preflight.add_argument("--expected-file", action="append")
@@ -460,8 +466,8 @@ def build_parser(
     )
     decide.add_argument(
         "--retry-role",
-        choices=["developer"],
-        help="force a developer retry where the coordinator would re-run the same candidate",
+        choices=defaults.BATCH_WRITER_ROLES,
+        help="force a retry by the batch's planned writer",
     )
     decide.add_argument(
         "--commit-plan-file",
@@ -580,8 +586,8 @@ def build_parser(
     )
     packet.add_argument(
         "--retry-role",
-        choices=["developer"],
-        help="preview the retry route as batch decide computes it with --retry-role developer; the preview does not check the developer-retry budget",
+        choices=defaults.BATCH_WRITER_ROLES,
+        help="preview a forced retry by the planned writer without checking the retry budget",
     )
     packet.add_argument(
         "--commit-plan-file",

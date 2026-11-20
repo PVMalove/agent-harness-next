@@ -36,6 +36,7 @@ from harness.orchestration.core.config import (
     _roles_dir,
 )
 from harness.orchestration.core.constants import (
+    BATCH_WRITER_ROLES,
     ACCEPTED_DECISIONS,
     ATTENTION_EVENT_KINDS,
     ATTENTION_STATE_FIELDS,
@@ -68,6 +69,7 @@ from harness.orchestration.core.constants import (
     POLICY_BRIEF_FIELDS,
     PRE_APPROVAL_LEGACY_PLAN_FIELDS,
     PRE_SCOPE_PLAN_FIELDS,
+    batch_writer_role,
     RECOVERY_ROUTES,
     RecoveryRoute,
     RetryReason,
@@ -527,7 +529,8 @@ def _latest_developer_candidate(repo: Path, root: Path, batch: JsonObject) -> st
         # A conflict-resolver (issue #534) produces the candidate of its own resolver batch, and a
         # rebaser (issue #1010) the rebased copy of the accepted candidate.
         if (
-            item.get("role") in {"developer", "conflict-resolver", "rebaser"}
+            item.get("role")
+            in {batch_writer_role(batch), "conflict-resolver", "rebaser"}
             and item.get("purpose", "work") == "work"
         ):
             report = _pending_report(root, batch, item)
@@ -556,7 +559,7 @@ def _retry_pinned_candidate(repo: Path, root: Path, batch: JsonObject) -> str | 
     previous = _last_decided_entry(batch)
     if (
         previous is None
-        or previous.get("role") != "developer"
+        or previous.get("role") != batch_writer_role(batch)
         or previous["decision"].get("decision") != "retry"
     ):
         return None
@@ -583,7 +586,9 @@ def _retry_handoff(
     developer_report: JsonObject | None = None
     commit_plan: JsonValue = None
     for item in reversed(entries):
-        if item.get("role") != "developer" or not isinstance(item.get("report"), str):
+        if item.get("role") != batch_writer_role(batch) or not isinstance(
+            item.get("report"), str
+        ):
             continue
         developer_brief = _load_dispatch(root, item["dispatch_id"])
         if developer_brief.get("purpose", "work") == "work":
@@ -1019,7 +1024,12 @@ def _validate_batch_integrity(root: Path, batch: JsonObject) -> None:
             remedy="the batch supersedes link diverged from its immutable plan -- "
             + INTERNAL_INVARIANT_REMEDY,
         )
-    for field in ("approval_policy", "communication_policy", "allowed_paths"):
+    for field in (
+        "approval_policy",
+        "communication_policy",
+        "allowed_paths",
+        "writer_role",
+    ):
         if (field in batch) != (field in plan):
             raise CoordinatorError(
                 "batch record is incomplete",
@@ -1027,7 +1037,11 @@ def _validate_batch_integrity(root: Path, batch: JsonObject) -> None:
             )
     # A batch planned before explicit scopes existed has no allowed_paths on either record and was
     # bounded by its zone; both stay valid. A scope present on both records must be identical.
-    if batch.get("allowed_paths") != plan.get("allowed_paths"):
+    if (
+        batch.get("allowed_paths") != plan.get("allowed_paths")
+        or batch.get("writer_role") != plan.get("writer_role")
+        or batch_writer_role(batch) not in BATCH_WRITER_ROLES
+    ):
         raise CoordinatorError(
             "batch record does not match its immutable plan",
             remedy="the batch record diverged from its immutable plan -- "
@@ -1507,7 +1521,10 @@ def _validate_dispatch(
             dispatch.get("purpose"),
             dispatch["transition"].get("next_action"),
         )
-        not in {("developer", "work", "developer-retry"), ("rebaser", "work", "rebase")}
+        not in {
+            (batch_writer_role(batch), "work", "developer-retry"),
+            ("rebaser", "work", "rebase"),
+        }
     ):
         raise CoordinatorError(
             "dispatch rebase_target_commit must be null or, on a developer-retry or rebaser "
@@ -1545,9 +1562,23 @@ def _validate_dispatch(
             remedy="the dispatch record has an invalid purpose -- "
             + INTERNAL_INVARIANT_REMEDY,
         )
+    if (
+        dispatch.get("purpose") == "work"
+        and dispatch.get("role") in BATCH_WRITER_ROLES
+        and dispatch["role"] != batch_writer_role(batch)
+    ):
+        raise CoordinatorError(
+            "dispatch writer role does not match its immutable batch plan",
+            remedy=INTERNAL_INVARIANT_REMEDY,
+        )
     package_id = dispatch.get("context_package_id")
     package_sha = dispatch.get("context_package_sha256")
-    if dispatch["role"] in {"architect", "developer", "verification", "code-review"}:
+    if dispatch["role"] in {
+        "architect",
+        *BATCH_WRITER_ROLES,
+        "verification",
+        "code-review",
+    }:
         if not isinstance(package_id, str) or not isinstance(package_sha, str):
             raise CoordinatorError(
                 "architect, developer, verification and code-review briefs require a Context Package reference",
@@ -1573,7 +1604,9 @@ def _validate_dispatch(
         if summary is not None:
             expected_summary = (
                 _review_context_summary(
-                    package, dispatch["review_scope"], dispatch.get("carried_items") or {}
+                    package,
+                    dispatch["review_scope"],
+                    dispatch.get("carried_items") or {},
                 )
                 if dispatch["role"] == "code-review"
                 and isinstance(summary, dict)
@@ -1615,6 +1648,14 @@ def _validate_dispatch(
         )
     if "transition" in dispatch:
         _validate_transition_binding(dispatch, batch)
+        if "writer_role" in batch and (
+            dispatch["transition"].get("writer_role") != batch["writer_role"]
+            or dispatch["transition"].get("allowed_paths") != batch.get("allowed_paths")
+        ):
+            raise CoordinatorError(
+                "dispatch approval does not match its planned writer and scope",
+                remedy=INTERNAL_INVARIANT_REMEDY,
+            )
     for field in (
         "ticket",
         "branch",
@@ -1737,7 +1778,9 @@ def _validate_dispatch(
             remedy="pass --candidate-commit for a review or QA dispatch",
         )
     if dispatch["purpose"] == "publish":
-        if dispatch["role"] != "developer" or not isinstance(candidate, str):
+        if dispatch["role"] != batch_writer_role(batch) or not isinstance(
+            candidate, str
+        ):
             raise CoordinatorError(
                 "publish dispatches must be pinned developer briefs",
                 remedy="only a pinned developer brief may be published",

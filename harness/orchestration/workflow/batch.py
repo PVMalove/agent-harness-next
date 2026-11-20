@@ -35,10 +35,12 @@ from harness.orchestration.core.config import (
 )
 from harness.orchestration.core.constants import (
     ATTENTION_STATE_FIELDS,
+    BATCH_WRITER_ROLES,
     LIVE_DISPATCH_STATES,
     PLAN_FIELDS,
     TERMINAL_BATCH_STATES,
     BatchState,
+    batch_writer_role,
 )
 from harness.orchestration.core.git_utils import (
     _fetch_ref_tip,
@@ -205,22 +207,67 @@ def _reject_duplicate_work(root: Path, ticket: str, branch: str, worktree: str) 
 
 
 def _reject_role_ceiling_overflow(
-    repo: Path, config: JsonObject, allowed_paths: list[str]
+    repo: Path, config: JsonObject, allowed_paths: list[str], role: str
 ) -> None:
-    """Refuse a scope wider than the developer role's write ceiling before a batch exists."""
+    """Check the selected owner's assignment and write ceiling before planning.
+
+    Args:
+        repo: Project checkout used to load the role manifest.
+        config: Validated project orchestration configuration.
+        allowed_paths: Repository-relative paths and globs requested for the batch.
+        role: Implementation role selected for the batch.
+
+    Raises:
+        CoordinatorError: A specialist lacks a write-mode assignment or the requested scope
+            exceeds the role's configured write ceiling.
+    """
     plans = config.get("assignment_plans")
-    plan = plans.get("developer") if isinstance(plans, dict) else None
+    plan = plans.get(role) if isinstance(plans, dict) else None
+    if role != "developer":
+        if not isinstance(plan, dict):
+            raise CoordinatorError(
+                f"role {role!r} has no assignment plan",
+                remedy=f"configure assignment_plans[{role!r}] before planning this batch",
+            )
+        if core_config._role(repo, role).get("mode") != "write":
+            raise CoordinatorError(
+                f"batch writer {role!r} must have a write-mode manifest",
+                remedy=f"install the write-mode manifest for {role!r}",
+            )
     if not isinstance(plan, dict) or not core_config._configured(repo):
         return
     try:
-        ceiling = role_write_ceiling(config, plan, "developer")
+        ceiling = role_write_ceiling(config, plan, role)
     except ContractError as exc:
         raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
     if not paths_inside(allowed_paths, ceiling):
         raise CoordinatorError(
-            f"allowed_paths {allowed_paths} exceed the developer write ceiling {ceiling}",
-            remedy="narrow --allowed-path, or widen assignment_plans['developer'].write_paths in the project orchestration config",
+            f"allowed_paths {allowed_paths} exceed the {role} write ceiling {ceiling}",
+            remedy=f"narrow --allowed-path, or widen assignment_plans[{role!r}].write_paths in the project orchestration config",
         )
+
+
+def _planned_writer(args: argparse.Namespace) -> str:
+    """Resolve the intended implementation owner for an unapproved plan.
+
+    Args:
+        args: Batch command arguments with an optional ``writer_role``.
+
+    Returns:
+        The selected role, defaulting to ``developer`` for an omitted argument.
+
+    Raises:
+        CoordinatorError: The value is outside the supported implementation roles.
+    """
+    role = getattr(args, "writer_role", None)
+    if role is None:
+        return "developer"
+    if role not in BATCH_WRITER_ROLES:
+        raise CoordinatorError(
+            f"invalid batch writer role {role!r}",
+            remedy=f"select --writer-role from {', '.join(BATCH_WRITER_ROLES)}",
+        )
+    return cast(str, role)
 
 
 def _legacy_zone_paths(config: JsonObject, zone: object) -> list[str]:
@@ -350,6 +397,17 @@ def _scope_preflight(
 
 
 def preflight_batch(args: argparse.Namespace) -> JsonObject:
+    """Check the requested scope and owner before creating a batch.
+
+    Args:
+        args: Batch preflight arguments, including the ticket, scope, and optional owner.
+
+    Returns:
+        The scope preflight result and the owner when explicitly selected.
+
+    Raises:
+        CoordinatorError: The assignment, scope, or estimated batch size fails preflight.
+    """
     repo = _repo(args)
     config = core_config._config(repo)
     ticket = getattr(args, "ticket", None)
@@ -364,17 +422,35 @@ def preflight_batch(args: argparse.Namespace) -> JsonObject:
     dependencies = _strings(
         getattr(args, "dependency", None) or ["none"], "dependencies"
     )
-    return _scope_preflight(
+    allowed_paths = _allowed_paths(args)
+    role = _planned_writer(args)
+    if getattr(args, "writer_role", None) is not None:
+        _reject_role_ceiling_overflow(repo, config, allowed_paths, role)
+    result = _scope_preflight(
         config,
         ticket.strip(),
-        _allowed_paths(args),
+        allowed_paths,
         definition_of_done,
         dependencies,
         args,
     )
+    if getattr(args, "writer_role", None) is not None:
+        result["writer_role"] = role
+    return result
 
 
 def create_batch(args: argparse.Namespace) -> JsonObject:
+    """Create a planned batch and store its immutable scope and owner.
+
+    Args:
+        args: Batch creation arguments, including the ticket, issue checkout, and write scope.
+
+    Returns:
+        The new batch record in the ``planned`` state.
+
+    Raises:
+        CoordinatorError: The request fails scope, assignment, checkout, or lifecycle checks.
+    """
     repo = _repo(args)
     config = core_config._config(repo)
     ticket = getattr(args, "ticket", None)
@@ -412,7 +488,8 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
         )
     _validate_worktree(repo, worktree)
     _require_writable_worktree(worktree)
-    _reject_role_ceiling_overflow(repo, config, allowed_paths)
+    writer_role = _planned_writer(args)
+    _reject_role_ceiling_overflow(repo, config, allowed_paths, writer_role)
     # Nullable for epic-less tasks: falls back to the project's base_branch, the same field
     # `_validate_branch` falls back to, rather than inventing a second convention.
     fetch_ref = (
@@ -482,6 +559,8 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
         "risk_escalations": [],
         "risk_reassessment_required": False,
     }
+    if getattr(args, "writer_role", None) is not None:
+        record["writer_role"] = writer_role
     # Frozen like the command lists, and only when configured: a legacy batch keeps its shape.
     if isinstance(config.get("retry_verification"), dict):
         record["retry_verification"] = config["retry_verification"]
@@ -522,6 +601,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
                 {
                     **{field: record[field] for field in PLAN_FIELDS},
                     "goal": record["goal"],
+                    **({"writer_role": writer_role} if "writer_role" in record else {}),
                     # The link is immutable: integrity compares it with the batch's own copy.
                     **(
                         {"supersedes": record["supersedes"]}
@@ -725,13 +805,18 @@ def resume_batch(args: argparse.Namespace) -> JsonObject:
             )
         next_action = batch.get("next_action")
         if not isinstance(next_action, str):
-            if latest.get("role") == "developer" and _accepted_architect(batch):
-                next_action = "developer"
+            if latest.get("role") == batch_writer_role(batch) and _accepted_architect(
+                batch
+            ):
+                next_action = (
+                    "publish" if latest.get("purpose") == "publish" else "developer"
+                )
             else:
                 next_action = latest.get("role")
         if not isinstance(next_action, str) or next_action not in {
             "architect",
             "developer",
+            "developer-retry",
             "verification",
             "code-review",
             "qa",

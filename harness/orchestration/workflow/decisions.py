@@ -27,13 +27,15 @@ from harness.orchestration.core.config import (
 from harness.orchestration.core.check_results import check_counts_as_success
 from harness.orchestration.core.report_evidence import evidence_is_none
 from harness.orchestration.core.constants import (
+    BATCH_WRITER_ROLES,
+    batch_writer_role,
     FailureDomain,
     BLOCK_BYPASS_REASON_CATEGORY,
     BLOCK_BYPASS_STAGES,
     DEVELOPER_REASON_CATEGORIES,
     DEVELOPER_RETRY_DECISIONS,
     INCOMPLETE_ITEM_TARGET_ROLES,
-    NEXT_ACTION_DISPATCH_ROLE,
+    dispatch_role_for_action,
     OPERATIONAL_REASON_CATEGORIES,
     RETRY_REASON_CATEGORIES,
     RecoveryRoute,
@@ -535,7 +537,7 @@ def _developer_retry_count(batch: JsonObject) -> int:
         1
         for decision in batch.get("coordinator_decisions", [])
         if decision.get("decision") in DEVELOPER_RETRY_DECISIONS
-        and decision.get("next_role") == "developer"
+        and decision.get("next_role") == batch_writer_role(batch)
         and not (
             isinstance(decision.get("routing"), dict)
             and decision["routing"].get("route") == "tooling-retry"
@@ -732,6 +734,7 @@ def _retry_routing(
     narrowed: bool = False,
     explicit_by: str = "approver",
     developer_forced: bool = False,
+    writer_role: str = "developer",
 ) -> JsonObject:
     """Decide where a ``retry`` goes, from structured report data only (no I/O).
 
@@ -958,7 +961,7 @@ def _retry_routing(
                 remedy="name the cause with --reason-category: one of "
                 f"{', '.join(DEVELOPER_REASON_CATEGORIES)} when the code is at fault, or an "
                 "operational one (verification-infrastructure, transport, tooling) with its "
-                "structured evidence; pass --retry-role developer to take a developer retry on your "
+                f"structured evidence; pass --retry-role {writer_role} to take a writer retry on your "
                 "own approval; or block the batch",
                 failure=failure,
             )
@@ -1055,9 +1058,22 @@ def _narrowed_routing(
 
 
 def _reporting_stage(dispatch: JsonObject, report: JsonObject) -> str:
-    """The pipeline stage a report closes: ``publish`` is a purpose of the developer role."""
+    """Identify the lifecycle stage that a completion report closes.
+
+    Args:
+        dispatch: Approved brief that sets the dispatch purpose.
+        report: Completion report whose role matches the dispatch.
+
+    Returns:
+        ``publish`` for a publication, ``developer`` for implementation work by any writer,
+        or the reporting role for other stages.
+    """
+    if dispatch.get("purpose") == "publish":
+        return "publish"
     return (
-        "publish" if dispatch.get("purpose") == "publish" else cast(str, report["role"])
+        "developer"
+        if report["role"] in BATCH_WRITER_ROLES
+        else cast(str, report["role"])
     )
 
 
@@ -1865,15 +1881,14 @@ def decide_batch(args: argparse.Namespace) -> JsonObject:
             decision_entry["next_role"] = routing["next_role"]
         batch.setdefault("coordinator_decisions", []).append(decision_entry)
         if routing is not None:
-            batch["required_next_role"] = NEXT_ACTION_DISPATCH_ROLE[
-                routing["next_action"]
-            ]
+            next_action = routing["next_action"]
+            batch["required_next_role"] = dispatch_role_for_action(batch, next_action)
             batch["retry_candidate_required"] = (
                 routing["next_action"] == "developer-retry"
             )
             batch["next_action"] = routing["next_action"]
         elif args.decision in {"accept", "override-warning"}:
-            if report["role"] == "developer":
+            if report["role"] in BATCH_WRITER_ROLES:
                 if batch.get("base_rebase_required"):
                     # Only legacy batches imported from ledger 1.x by `harness-runtime migrate`
                     # carry this flag; 2.x code never sets it (ADR 0014 removed the gate).
@@ -2028,11 +2043,13 @@ def _decide_retry_route(
 ) -> JsonObject:
     """Where the batch goes after a ``retry`` decision on the pending report."""
     forced = getattr(args, "retry_role", None)
-    if forced not in {None, "developer"}:
+    owner = batch_writer_role(batch)
+    if forced not in {None, owner}:
         raise CoordinatorError(
-            "--retry-role only accepts developer",
-            remedy="omit --retry-role to let the coordinator route the retry, or pass developer to force a developer retry",
+            f"--retry-role only accepts the planned writer {owner}",
+            remedy=f"omit --retry-role or pass {owner} to force a writer retry",
         )
+    force_writer = forced is not None
     narrowed = bool(getattr(args, "narrowed", False))
     if narrowed and forced is not None:
         raise CoordinatorError(
@@ -2069,11 +2086,14 @@ def _decide_retry_route(
             for item in batch.get("context_pressure", [])
         ),
         narrowed=narrowed,
-        developer_forced=forced == "developer",
+        developer_forced=force_writer,
+        writer_role=owner,
     )
     if (
-        forced == "developer"
-        and not (stage == "developer" and routing["route"] == RecoveryRoute.TOOLING_RETRY)
+        force_writer
+        and not (
+            stage == "developer" and routing["route"] == RecoveryRoute.TOOLING_RETRY
+        )
         and failure_domains.domain_of(routing) != FailureDomain.CODE_TEST
     ):
         # A human who takes the developer retry on their own decision is the proof of it. Only a
@@ -2083,7 +2103,7 @@ def _decide_retry_route(
             **routing,
             "failure": failure_domains.approver(
                 FailureDomain.CODE_TEST,
-                "--retry-role developer",
+                f"--retry-role {owner}",
                 _approver_source(getattr(args, "approved_by", None)),
             ).to_json(),
         }
@@ -2130,13 +2150,13 @@ def _decide_retry_route(
         routing = {**routing, "candidate_commit": dispatch.get("candidate_commit")}
     if hint is not None:
         routing["classifier_hint"] = {"category": hint.category, "basis": hint.basis}
-    if forced == "developer" and routing["next_action"] != "developer-retry":
+    if force_writer and routing["next_action"] != "developer-retry":
         routing = {
             **routing,
             "route": "developer-retry",
-            "next_role": "developer",
+            "next_role": owner,
             "next_action": "developer-retry",
-            "rationale": f"{routing['rationale']} The approver forced a developer retry with --retry-role developer.",
+            "rationale": f"{routing['rationale']} The approver forced a writer retry with --retry-role {owner}.",
         }
     if routing["next_action"] == "developer-retry":
         # The closed list the developer-retry brief carries (issue #503), recorded with the route.
@@ -2174,8 +2194,12 @@ def _decide_retry_route(
             stage,
             report,
             current_candidate,
-            developer_forced=forced == "developer",
+            developer_forced=force_writer,
         )
+    if routing["next_action"] == "developer-retry":
+        routing["next_role"] = owner
+    if stage == "developer":
+        routing["previous_role"] = dispatch["role"]
     _require_route(routing["route"])
     return routing
 

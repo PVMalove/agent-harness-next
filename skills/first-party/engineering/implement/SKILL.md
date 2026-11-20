@@ -57,13 +57,16 @@ work. Ticket status is part of that pre-flight, after the write-access probe in 
 and make sure it carries `status::blocked`); otherwise replace its `status::*` label with
 `status::in-progress` exactly as `/fast-implement` Pre-flight steps 1–2 do, and confirm it is the
 only `status::*` label. A failed label write is a blocker, not a warning. Before `batch create`, run the batch-level preflight with bounded expected files, services and
-diff size. Pin the writer's explicit scope with `--allowed-path` (repeat it; a path or glob inside
-the developer's write ceiling): batches with overlapping files run in parallel in their own
-worktrees, and a change outside the scope is rejected. If it rejects the ticket, split it with `/to-tickets`; never ask an architect to discover
+diff size. Confirm the implementation owner from the ticket and the role manifests. Pass the
+same `--writer-role database-migrations` or `--writer-role messaging-integration` to `batch
+preflight` and `batch create` for specialist work. The default owner is `developer`. If compatible
+slices need different owners, use dependent tickets. Pin the writer's explicit scope with
+`--allowed-path` (repeat it for every path or glob inside the selected role's write ceiling).
+Independent batches use separate worktrees, within the project's concurrency budget. If preflight rejects the ticket, split it with `/to-tickets`; never ask an architect to discover
 whether an oversized ticket should have been split. When creating the batch with `batch create`,
 specify `--required-gate review --required-gate qa`: the full implement pipeline explicitly sets
 both independent Standards/Spec review and serialized clean-room QA gates. Before dispatching the
-write-role (`developer`) worker, verify that these mandatory gates are recorded in the batch's
+planned writer, verify that these mandatory gates are recorded in the batch's
 `required_gates`; halt early if missing rather than sending a worker into a risk-gate omission.
 
 ## Batch preparation
@@ -117,6 +120,7 @@ Start these steps only after the ticket pre-flight above (blockers, `status::in-
 
 ## Dispatch handoffs
 
+Use the planned writer as `--role` for implementation, its retries and `--purpose publish`.
 For each handoff, choose the worker checkout and pass its absolute path as `--worktree` to
 `dispatch preflight`. Show `batch decision-packet`, then create an approved immutable brief. Pass
 the same explicit `--worktree` to `dispatch send`; code-review also keeps `--checkout`. Preflight
@@ -152,7 +156,7 @@ and unrun checks; the coordinator decision packet returns an explicit recovery r
 `block`, or a human-selected `abandon`) without registering a candidate or weakening `completed`
 report validation.
 
-Before the architect accept and before every write-role dispatch, read `references/commit-plan.md`:
+Before the architect accept and before a `developer` work dispatch, read `references/commit-plan.md`:
 the immutable brief carries an ordered commit plan, and the developer's report maps every commit to
 the entries it closes.
 

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY
 from harness.orchestration.core import utils
-from harness.orchestration.core.constants import ACCEPTED_DECISIONS
+from harness.orchestration.core.constants import ACCEPTED_DECISIONS, batch_writer_role
 from harness.orchestration.core.config import (
     _reject_sensitive,
     _role,
@@ -504,7 +504,10 @@ def assess_risk(args: argparse.Namespace) -> JsonObject:
             "developer_triggers": developer_triggers,
             # A resolver batch holds only a conflict resolution, which adds no behaviour: the
             # repeat review is waived, and QA of the new pair still has to pass (issue #534).
-            "review_required": bool(matched) and batch.get("kind") != "resolver",
+            "review_required": (
+                bool(matched) or batch_writer_role(batch) != "developer"
+            )
+            and batch.get("kind") != "resolver",
             "review_scope": list(changed_files),
             "created_at": utils._now(),
         }

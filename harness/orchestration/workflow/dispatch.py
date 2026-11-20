@@ -38,7 +38,9 @@ from harness.orchestration.core import config as core_config
 from harness.orchestration.core import utils
 from harness.orchestration.core.constants import (
     ACCEPTED_DECISIONS,
+    BATCH_WRITER_ROLES,
     ContextPackageFreshness,
+    batch_writer_role,
 )
 from harness.orchestration.core.config import (
     _adaptive_continuation_policy,
@@ -459,7 +461,18 @@ def _bind_dispatch_approval(
 
 
 def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
-    """Render one deterministic dispatch proposal without writing a brief or starting a worker."""
+    """Check the selected role and worker checkout before approving a dispatch.
+
+    Args:
+        args: Dispatch preflight arguments, including the batch, role, and optional checkout.
+
+    Returns:
+        A preview of the assignment, checkout, startup SHA, and verification commands.
+
+    Raises:
+        CoordinatorError: The assignment or checkout is invalid, or the planned writer is not
+            eligible to start work.
+    """
     repo = _repo(args)
     root = _state_root(args, repo)
     config = core_config._config(repo)
@@ -472,6 +485,35 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
     with _ledger_lock(ledger):
         batch = _load_batch(root, args.batch)
         _validate_batch_integrity(root, batch)
+        if (
+            args.purpose == "work"
+            and args.role in BATCH_WRITER_ROLES
+            and ("writer_role" in batch or args.role != "developer")
+        ):
+            if args.role != batch_writer_role(batch):
+                raise CoordinatorError(
+                    "dispatch does not match the coordinator-prepared next action",
+                    remedy=f"preflight the planned writer {batch_writer_role(batch)}",
+                )
+            if not _accepted_architect(batch):
+                raise CoordinatorError(
+                    "writer preflight requires an accepted architect report",
+                    remedy="accept the architect completion report for this batch",
+                )
+            if (
+                batch.get("state") != "awaiting-approval"
+                or batch.get("next_action")
+                not in {None, "developer", "developer-retry"}
+                or any(
+                    entry.get("state") == "reported" and "decision" not in entry
+                    for entry in active_dispatches(batch)
+                )
+            ):
+                raise CoordinatorError(
+                    "the batch is not awaiting a new writer dispatch",
+                    remedy="finish the current dispatch and record its decision before preparing another writer",
+                )
+            _resolve_assignment(repo, config, args.role, args.runtime)
         candidate = (
             _candidate_commit(repo, args.candidate_commit)
             if args.candidate_commit
@@ -617,7 +659,12 @@ def _proposed_transition(
         if isinstance(routing, dict)
         and (
             (routing.get("route"), next_action, role_name, purpose)
-            == ("rebase-fix-forward", "developer-retry", "developer", "work")
+            == (
+                "rebase-fix-forward",
+                "developer-retry",
+                batch_writer_role(batch),
+                "work",
+            )
             # A rebase, or a repeated one, binds the target its routing record carries (#1010).
             or (next_action, role_name, purpose)
             == (rebaser.REBASE_NEXT_ACTION, rebaser.REBASER_ROLE, "work")
@@ -986,11 +1033,18 @@ def _execution_section(
 
 
 def create_dispatch(args: argparse.Namespace) -> JsonObject:
-    """Create one approved immutable dispatch brief, or, with ``propose``, render its transition.
+    """Propose a dispatch or create its approved immutable brief.
 
-    A proposal is the dry run a human approves: it registers the shared Context Package the brief
-    would pin and returns the canonical transition with its digest, but writes no brief. Creation
-    then requires the same digest, so an approval is valid for exactly the transition it was shown.
+    Args:
+        args: Batch, role, purpose, and candidate. Set ``propose`` to request a proposal or supply
+            the approval fields required by the batch policy to create a brief.
+
+    Returns:
+        The canonical transition and approval digest for a proposal, or the approved dispatch
+        and its brief after creation. A proposal can register a shared Context Package.
+
+    Raises:
+        CoordinatorError: The transition, role assignment, candidate, or approval is invalid.
     """
     repo = _repo(args)
     root = _state_root(args, repo)
@@ -1030,7 +1084,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         purpose = args.purpose
         rewind_writer = bool(
             batch.get("rewind_writer_pending")
-            and role_name in {"developer", "conflict-resolver"}
+            and role_name in {*BATCH_WRITER_ROLES, "conflict-resolver"}
             and purpose == "work"
             and not batch.get("environmental_restart")
         )
@@ -1050,14 +1104,15 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     remedy="finish or abandon this bounded batch, or explicitly adjust retry_policy before a new human approval",
                 )
         next_action = batch.get("next_action")
+        writer_role = batch_writer_role(batch)
         required = {
-            None: {("architect", "work"), ("developer", "work")},
-            "developer": {("developer", "work")},
+            None: {("architect", "work"), (writer_role, "work")},
+            "developer": {(writer_role, "work")},
             "code-review": {("code-review", "work")},
             # A low-risk candidate goes straight to QA, but the fixed pipeline may still review it.
             "qa": {("qa", "work"), ("code-review", "work")},
-            "publish": {("developer", "publish")},
-            "developer-retry": {("developer", "work")},
+            "publish": {(writer_role, "publish")},
+            "developer-retry": {(writer_role, "work")},
             "verification": {("verification", "work")},
             # A retried architect report gets a new architect, never a developer.
             "architect": {("architect", "work")},
@@ -1084,13 +1139,13 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         # The architect step cannot be skipped, whatever the entry point: no coding dispatch exists
         # for a batch whose architect report has not been accepted.
         if (
-            role_name == "developer"
+            role_name in BATCH_WRITER_ROLES
             and purpose == "work"
             and not _accepted_architect(batch)
         ):
             raise CoordinatorError(
-                "a developer dispatch requires an accepted architect report for the same batch",
-                remedy="accept an architect completion report for this batch before dispatching a developer",
+                f"a {role_name} dispatch requires an accepted architect report for the same batch",
+                remedy=f"accept an architect completion report for this batch before dispatching {role_name}",
             )
         role, ceiling, profile_id, model, effort, transport, resolved_runtime = (
             _resolve_assignment(
@@ -1127,16 +1182,27 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         requested_delta_review_of = getattr(args, "delta_review_of", None)
         if args.candidate_commit is not None:
             candidate = _candidate_commit(repo, args.candidate_commit)
+        if role_name != "developer" and role_name == writer_role and purpose == "work":
+            expected_start = (
+                _current_developer_candidate(repo, root, batch)
+                or batch.get("branch_start_commit")
+                or batch["base_commit"]
+            )
+            if candidate is not None and candidate != expected_start:
+                raise CoordinatorError(
+                    "writer candidate must match the planned batch snapshot",
+                    remedy=f"omit --candidate-commit or use {expected_start}",
+                )
         if role_name in {"verification", "code-review", "qa"} and candidate is None:
             raise CoordinatorError(
                 f"{role_name} dispatch requires candidate_commit",
                 remedy=f"pass --candidate-commit before dispatching the {role_name} role",
             )
         if purpose == "publish":
-            if role_name != "developer" or candidate is None:
+            if role_name != writer_role or candidate is None:
                 raise CoordinatorError(
-                    "publish requires a developer role and candidate_commit",
-                    remedy="publish requires a developer role and a pinned candidate_commit",
+                    f"publish requires the planned writer {writer_role} and candidate_commit",
+                    remedy="publish requires the planned writer and a pinned candidate_commit",
                 )
             if candidate != _latest_developer_candidate(repo, root, batch):
                 raise CoordinatorError(
@@ -1218,7 +1284,10 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                 )
             if risk["review_required"]:
                 # A candidate an accepted rebase carried keeps the review of its origin (#1010).
-                reviewed = {candidate, *rebaser.rebased_origins(batch, cast(str, candidate))}
+                reviewed = {
+                    candidate,
+                    *rebaser.rebased_origins(batch, cast(str, candidate)),
+                }
                 accepted_review = any(
                     item.get("role") == "code-review"
                     and item.get("state") == "reported"
@@ -1286,7 +1355,12 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         if role_name == rebaser.REBASER_ROLE:
             # The rebaser carries the latest accepted candidate, never an unaccepted one.
             snapshot_commit = _latest_developer_candidate(repo, root, batch)
-        if role_name in {"architect", "developer", "verification", "code-review"}:
+        if role_name in {
+            "architect",
+            *BATCH_WRITER_ROLES,
+            "verification",
+            "code-review",
+        }:
             snapshot_commit = (
                 candidate
                 or _current_developer_candidate(repo, root, batch)
@@ -1458,6 +1532,9 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
         transition[operational_guards.ACCESS_TRANSITION_FIELD] = access_plan[
             "plan_digest"
         ]
+        if "writer_role" in batch:
+            transition["writer_role"] = writer_role
+            transition["allowed_paths"] = batch["allowed_paths"]
         if runtime_images is not None:
             transition = operational_guards.bind_transition(
                 transition, {"runtime_images": runtime_images}
@@ -1656,7 +1733,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
             else None,
             "carried_items": carried,
             "accepted_design": _accepted_design(root, batch)
-            if role_name == "developer" and purpose == "work"
+            if role_name in BATCH_WRITER_ROLES and purpose == "work"
             else None,
             # The human-approved target a rebase-fix-forward developer-retry rebases onto.
             "rebase_target_commit": transition.get("rebase_target_sha"),
@@ -1746,7 +1823,7 @@ def create_dispatch(args: argparse.Namespace) -> JsonObject:
                     "dispatch_id": dispatch_id,
                     **approval,
                     "note": "new code attempt after human rewind",
-                    "next_role": "developer",
+                    "next_role": writer_role,
                 }
             )
             batch.pop("rewind_writer_pending", None)

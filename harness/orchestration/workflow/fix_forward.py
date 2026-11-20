@@ -10,7 +10,11 @@ from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 
-from harness.orchestration.core.constants import ACCEPTED_DECISIONS
+from harness.orchestration.core.constants import (
+    ACCEPTED_DECISIONS,
+    BATCH_WRITER_ROLES,
+    SPECIALIST_WRITER_ROLES,
+)
 from harness.orchestration.core.git_utils import (
     _candidate_commit,
     _changed_files_between,
@@ -55,7 +59,7 @@ def _retried_attempt(
     )
     if (
         retried is None
-        or retried.get("role") != "developer"
+        or retried.get("role") != brief.get("role")
         or retried["decision"].get("decision") != "retry"
     ):
         return None
@@ -192,7 +196,7 @@ def _accepted(entry: JsonObject) -> bool:
 
 def _developer_work(root: Path, entry: JsonObject) -> JsonObject | None:
     """The brief of a developer work entry, or ``None`` for any other entry."""
-    if entry.get("role") != "developer":
+    if entry.get("role") not in BATCH_WRITER_ROLES:
         return None
     brief = _load_dispatch(root, entry["dispatch_id"])
     return brief if brief.get("purpose", "work") == "work" else None
@@ -385,6 +389,17 @@ class FixForwardHistory:
         commit_sha = report["commit_sha"]
         if changed_files:
             resolved = _resolve_report_commit(repo, commit_sha)
+            if role.get("name") in SPECIALIST_WRITER_ROLES:
+                branch = dispatch.get("branch")
+                if not isinstance(branch, str) or not _git_is_ancestor(
+                    repo, resolved, branch
+                ):
+                    raise CoordinatorError(
+                        "specialist report candidate is not on its issue branch",
+                        remedy="commit the approved changes in the batch's issue worktree and report its SHA",
+                    )
+                if rebase_target is None:
+                    _require_fix_forward(repo, dispatch, resolved)
             if rebase_target is not None:
                 if not _git_is_ancestor(repo, rebase_target, resolved):
                     raise CoordinatorError(
@@ -408,7 +423,7 @@ class FixForwardHistory:
         # need the repository, like the changed_files check above.
         planned = bool(dispatch.get("commit_plan"))
         closure = carried_items.CLOSURE_FIELD in report
-        if role.get("name") == "developer" and (planned or closure):
+        if role.get("name") in BATCH_WRITER_ROLES and (planned or closure):
             if not changed_files:
                 commit_map = report.get("commit_map")
                 if isinstance(commit_map, list) and commit_map:

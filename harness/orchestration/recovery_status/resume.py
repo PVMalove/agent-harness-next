@@ -215,7 +215,7 @@ def _continue_stop(
 
 def _next_transition(root: Path, survey: Survey) -> JsonObject | None:
     """The command that continues the batch; a new transition needs its own approval."""
-    from harness.orchestration.core.constants import NEXT_ACTION_DISPATCH_ROLE
+    from harness.orchestration.core.constants import dispatch_role_for_action
     from harness.orchestration.ledger.ledger_ops import _load_dispatch_status
 
     batch = survey.batch
@@ -242,10 +242,7 @@ def _next_transition(root: Path, survey: Survey) -> JsonObject | None:
                 "reason": "a worker may still run; no second one is started",
             }
     action = str(batch.get("next_action"))
-    # A recovered stage names its role itself (``developer`` after a resume-stop).
-    role = NEXT_ACTION_DISPATCH_ROLE.get(
-        action, action if action in {"developer", "architect"} else None
-    )
+    role = dispatch_role_for_action(batch, action)
     if role is None or batch.get("state") in TERMINAL_BATCH_STATES:
         return None
     purpose = " --purpose publish" if action == "publish" else ""
