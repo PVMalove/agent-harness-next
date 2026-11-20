@@ -312,3 +312,19 @@ class TransitionEnumerationTests(unittest.TestCase):
                     else:
                         self.assertNotIn("risk_reassessment_candidate", batch)
                         self.assertNotIn("risk_reassessment_pending_next", batch)
+
+
+class StageRankCoverageTests(unittest.TestCase):
+    def test_every_dispatchable_writer_and_next_action_role_has_a_stage_rank(self) -> None:
+        # `batch rewind` ranks every active dispatch by its role (#1251): a missing role is a
+        # KeyError instead of a refusal with a remedy.
+        from harness.orchestration.core.constants import (
+            BATCH_WRITER_ROLES,
+            NEXT_ACTION_DISPATCH_ROLE,
+        )
+        from harness.orchestration.workflow.recovery import STAGE_RANKS
+
+        dispatchable = set(BATCH_WRITER_ROLES) | set(NEXT_ACTION_DISPATCH_ROLE.values())
+        self.assertEqual(dispatchable - set(STAGE_RANKS), set())
+        for role in BATCH_WRITER_ROLES:
+            self.assertEqual(STAGE_RANKS[role], STAGE_RANKS["developer"], role)

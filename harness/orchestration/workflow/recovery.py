@@ -8,6 +8,7 @@ from typing import cast
 
 from harness.orchestration import operational_hold
 from harness.orchestration.core import utils
+from harness.orchestration.core.constants import SPECIALIST_WRITER_ROLES
 from harness.orchestration.core.utils import (
     CoordinatorError,
     JsonObject,
@@ -44,6 +45,8 @@ REWIND_STAGES = (
 STAGE_RANKS = {
     "architect": 0,
     "developer": 1,
+    # A pinned specialist writer holds the developer stage of its batch (BATCH_WRITER_ROLES).
+    **dict.fromkeys(SPECIALIST_WRITER_ROLES, 1),
     "developer-retry": 1,
     "resolve-conflict": 1,
     "conflict-resolver": 1,
