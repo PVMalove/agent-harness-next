@@ -144,7 +144,8 @@ command name does not depend on the clone path. Add to `sandbox.excludedCommands
 ```
 
 An excluded command still goes through the runtime permission check. A write into `.claude/` may
-ask for confirmation.
+ask for confirmation. On a project with a version-3 `ledger.json`, `harness update` with the approval flags
+runs migrate: only a human runs that command ([upgrade to 2.0](../guides/upgrade-2-0.md)).
 
 ??? quote ah-skill-text "Agent prompt: global layer"
 

@@ -109,7 +109,10 @@ coordinator останавливается, сообщает о нём разр�
    `git worktree list` не показывает worktree. Создайте его через `worktree create` и добейтесь
    `"writable": true` от `worktree check` до `batch create`. При отказе подготовьте сессию по
    инструкции для своего runtime и повторите проверку. Работайте из основного checkout.
-3. **Scope batch.** Запустите `batch preflight` с теми же флагами scope, что и у `batch create`.
+3. **Scope batch.** Запустите `batch preflight` с теми же значениями `--ticket`,
+   `--definition-of-done`, `--allowed-path`, `--expected-*`, `--dependency` и `--writer-role`, что
+   и у `batch create`; флагов `--goal`, `--prohibited-change`, `--branch`, `--worktree`,
+   `--integration-ref` и `--required-gate` у preflight нет.
    Сначала переведите тикет на английский: `batch create` отклоняет кириллицу в `--goal`,
    `--definition-of-done` и `--prohibited-change`. Команды, пути и ID оставьте дословными.
    Сопоставьте разделы тикета: каждый пункт `## Acceptance criteria` → `--definition-of-done`,
@@ -172,8 +175,8 @@ coordinator останавливается, сообщает о нём разр�
 До `batch create` запустите preflight на уровне batch с ограниченными ожидаемыми файлами, сервисами и
 размером diff. Закрепите явный scope writer через `--allowed-path` (повторяйте флаг; путь или glob
 внутри потолка записи developer). Batch с пересекающимися файлами работают параллельно в своих
-worktree, а изменение вне scope отклоняется. Если preflight отклонил тикет, разделите его через
-`/to-tickets`. Никогда не поручайте architect выяснять, нужно ли было делить слишком большой тикет.
+worktree, а изменение вне scope отклоняется. Если preflight отклонил тикет, остановитесь и предложите
+разработчику разделить его через `/to-tickets`. Никогда не поручайте architect выяснять, нужно ли было делить слишком большой тикет.
 При `batch create` укажите `--required-gate review --required-gate qa`: полный конвейер implement
 явно задаёт оба независимых gate, review по Standards/Spec и serialized clean-room QA. До dispatch
 write-роли (`developer`) проверьте, что эти обязательные gate записаны в `required_gates` batch. Если
@@ -495,7 +498,8 @@ module-owned guidance:
   специалиста каждой роли.
 - Вывод `--help` и `remedy` CLI coordinator отвечает за синтаксис команд и операционное
   восстановление.
-- `.harness/instructions/git-workflow.md` отвечает за границы issue-ветки, коммита, push и PR.
+- `.claude/rules/git-delivery.md` задаёт обязательные правила веток, коммитов, merge и подтверждения
+  PR; `.harness/instructions/git-workflow.md` описывает процедуру issue-ветки, push и PR.
 - `references/issue-worktree.md` отвечает за создание issue worktree и его восстановление.
 
 Следуйте этим файлам, не дублируя и не ослабляя здесь их правила. В частности, не придумывайте

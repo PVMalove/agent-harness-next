@@ -11,7 +11,7 @@ repository at that path and copies a verifiable snapshot into it.
 | `init` | First installation into a project that has no harness | yes |
 | `adopt` | Installation over a project that already has its own skills with the same names | yes |
 | `diff` | Compares the project with the locked snapshot | no |
-| `update` | Pulls in a new version of the capability | yes |
+| `update` | Pulls in a new version of the capability; on a version-3 ledger with `--approved-by`, `--approved-at` and `--reason` it runs `harness-runtime migrate` ([upgrade to 2.0](../guides/upgrade-2-0.md)) | yes |
 | `registry` | Rebuilds the project skill registry | yes |
 | `lock-project-skills` | Fixes the hashes of the skills that the project itself owns | yes |
 | `memory build/search/rebuild/sync/eval` | Local memory index and pointers to allowed sources | `build`, `rebuild`, `sync` — yes; `search`, `eval` — no |
@@ -70,6 +70,7 @@ consumer.
 | `story_points` | Estimation scale and thresholds for routing to `pipeline::fast` / `pipeline::full` |
 | `memory` | Enables the local project memory |
 | `memory_policy` | Allowed sources, redact rules, threshold, and memory budget |
+| `pr_checklist` | Up to 32 single-line project questions that PR preparation answers |
 
 Inside `tracker`, only `type`, `host`, and `project` are allowed. Certificates, proxies, and credentials
 are not written here: they stay in the personal configuration of the tracker CLI. Inside `hook_policy`, escalations
@@ -167,6 +168,7 @@ is not running, orchestration commands refuse with `[runtime_unavailable]`.
 | `context-package` | Registration of a deterministic context package |
 | `report` | Intake of role reports (`report submit`) and the report policy steps (`report complete`) |
 | `recovery` | Status, reload, resume, fix, and abort of a stopped batch |
+| `worktree` | Issue worktree creation and removal, the in-process writer commit, rebase, and merge through the runtime, session access preparation and check |
 
 The gate order and batch handling are described in the [`/implement`](../guides/implement.md) guide.
 

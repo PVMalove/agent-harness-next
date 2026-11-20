@@ -261,8 +261,8 @@ const UPDATE={
 @@ -1 +1 @@
 -1.5.1
 +2.0.0`},
-    {path:'.harness/instructions/git-workflow.md',kind:'keep',seed:true,title:'Локальные изменения сохраняются',explain:'Seed-файл. В обычном режиме остаётся вашим; в seed-режиме можно отметить для перезаписи.',diff:`--- проект/docs/agents/git-workflow.md
-+++ после обновления/docs/agents/git-workflow.md
+    {path:'.harness/instructions/git-workflow.md',kind:'keep',seed:true,title:'Локальные изменения сохраняются',explain:'Seed-файл. В обычном режиме остаётся вашим; в seed-режиме можно отметить для перезаписи.',diff:`--- проект/.harness/instructions/git-workflow.md
++++ после обновления/.harness/instructions/git-workflow.md
 @@ -18,3 +18,4 @@
  ## PR
 --Use Related to for integration PRs.

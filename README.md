@@ -57,7 +57,8 @@ Context Package и статус принятого QA. Настройка Runtim
 которого запущен установщик. `harness self-update [--ref <ветка>]` переводит этот клон на последний
 коммит ветки `origin`. Чтобы агент мог запускать `harness update`, добавьте в
 `sandbox.excludedCommands` шаблоны `harness update *`, `harness health *` и `harness self-update *`.
-Исключённая команда всё равно проходит проверку разрешений runtime. Подробнее — в
+Исключённая команда всё равно проходит проверку разрешений runtime. На проекте с `ledger.json`
+версии 3 `harness update` с флагами approval выполняет migrate: её запускает только человек. Подробнее — в
 [быстром старте](https://pvmalove.github.io/agent-harness-next/getting-started/).
 
 ## Состав `engineering-suite`

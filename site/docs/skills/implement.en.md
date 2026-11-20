@@ -108,7 +108,10 @@ Start these steps only after the ticket pre-flight in "The coordinator contract"
    `references/issue-worktree.md`. Confirm `"writable": true` from
    `worktree check` before `batch create`. If access is missing, follow Session write access for
    this runtime and repeat the check. Stay in the main checkout.
-3. **Batch scope.** Run `batch preflight` with the same scope flags as `batch create`. Translate the
+3. **Batch scope.** Run `batch preflight` with the same `--ticket`, `--definition-of-done`,
+   `--allowed-path`, `--expected-*`, `--dependency` and `--writer-role` values as `batch create`;
+   preflight takes no `--goal`, `--prohibited-change`, `--branch`, `--worktree`,
+   `--integration-ref` or `--required-gate`. Translate the
    ticket into English first: `batch create` rejects Cyrillic in `--goal`, `--definition-of-done`,
    and `--prohibited-change`. Keep commands, paths, and IDs verbatim. Map the ticket sections:
    each `## Acceptance criteria` item → `--definition-of-done`, each `## Out of scope` item →
@@ -172,8 +175,8 @@ blocker, not a warning.
 Before `batch create`, run the batch-level preflight with bounded expected files, services, and diff
 size. Pin the writer's explicit scope with `--allowed-path` (repeat it; a path or glob inside the
 developer's write ceiling): batches with overlapping files run in parallel in their own worktrees,
-and a change outside the scope is rejected. If the preflight rejects the ticket, split it with
-`/to-tickets`. Never ask an architect to discover whether an oversized ticket should have been split.
+and a change outside the scope is rejected. If the preflight rejects the ticket, stop and offer the
+developer `/to-tickets` to split it. Never ask an architect to discover whether an oversized ticket should have been split.
 When you call `batch create`, pass `--required-gate review --required-gate qa`: the full implement
 pipeline explicitly sets both independent gates, the Standards/Spec review and the serialized
 clean-room QA. Before the write-role (`developer`) dispatch, verify that these mandatory gates are
@@ -495,7 +498,8 @@ module-owned guidance:
 - `.harness/orchestration/roles/` owns the boundary, the required proof, and the specialist trigger of each role.
 - The `--help` output and the `remedy` of the coordinator CLI own the command syntax and the
   operational recovery.
-- `.harness/instructions/git-workflow.md` owns the issue-branch, commit, push, and PR boundaries.
+- `.claude/rules/git-delivery.md` owns the mandatory branch, commit, merge, and PR-confirmation
+  rules; `.harness/instructions/git-workflow.md` owns the issue-branch, push, and PR procedure.
 - `references/issue-worktree.md` owns the issue worktree creation and its recovery.
 
 Follow these files without duplicating or weakening their rules. Do not invent token metrics:

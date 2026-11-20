@@ -261,8 +261,8 @@ const UPDATE={
 @@ -1 +1 @@
 -1.5.1
 +2.0.0`},
-    {path:'.harness/instructions/git-workflow.md',kind:'keep',seed:true,title:'Local changes are preserved',explain:'Seed file. In normal mode it stays yours; in seed mode you can mark it for overwrite.',diff:`--- project/docs/agents/git-workflow.md
-+++ updated/docs/agents/git-workflow.md
+    {path:'.harness/instructions/git-workflow.md',kind:'keep',seed:true,title:'Local changes are preserved',explain:'Seed file. In normal mode it stays yours; in seed mode you can mark it for overwrite.',diff:`--- project/.harness/instructions/git-workflow.md
++++ updated/.harness/instructions/git-workflow.md
 @@ -18,3 +18,4 @@
  ## PR
 --Use Related to for integration PRs.

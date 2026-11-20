@@ -13,7 +13,7 @@
   ветки для нестабильного бага и для регрессии производительности вынесены в
   [`references/feedback-loops.md`](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/diagnosing-bugs/references/feedback-loops.md).
   Агент читает его, если падающий тест не даёт красного цикла;
-- исправление применяется в issue-ветке тикета по правилу Issue First из `.harness/instructions/git-workflow.md`.
+- исправление применяется в issue-ветке тикета по правилу Issue First из `.claude/rules/git-delivery.md`.
 
 Если память проекта включена, интерактивная сессия после фиксации симптома и до ранжирования гипотез
 один раз выполняет `harness memory search . "<симптом, ошибка и модуль>"`, чтобы найти прошлые фиксы.

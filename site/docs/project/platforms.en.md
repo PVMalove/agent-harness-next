@@ -22,7 +22,8 @@ No CI job checks macOS, so running on it is not confirmed. Rootless Docker is no
 | Job | What it checks |
 | --- | --- |
 | `lint` | ruff, mypy, `cargo fmt --check`, Clippy, public Git metadata |
-| `rust` | `cargo test` of the `native/harness-runtime` workspace and the debug build of `harness-runtime` for the other jobs |
+| `rust` | `cargo test` of the `native/harness-runtime` workspace |
+| `runtime-build` | The one debug build of `harness-runtime` that the other Linux jobs download |
 | `docs` | Strict build of the public site |
 | `verify` | Full `make verify`: harness tests and the clean-room install |
 | `console-spa` | Web console build, Vitest, and Playwright in Chromium |
