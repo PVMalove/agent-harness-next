@@ -573,6 +573,163 @@ def test_commit_refuses_a_detached_worktree_before_asking(
     assert runtime.calls == []
 
 
+def _answering(result: dict[str, object]) -> mock.Mock:
+    runtime = mock.Mock()
+    runtime.call.return_value = RuntimeReply(hello={}, result=result, revision=None)
+    return runtime
+
+
+@pytest.mark.parametrize(
+    ("arguments", "payload"),
+    [
+        (
+            ("--onto", "main", "--upstream", "base"),
+            {"action": "start", "onto": "main", "upstream": "base"},
+        ),
+        (("--continue",), {"action": "continue"}),
+        (("--skip",), {"action": "skip"}),
+        (("--abort",), {"action": "abort"}),
+    ],
+)
+def test_rebase_sends_each_action_to_the_runtime(
+    repo: Path,
+    arguments: tuple[str, ...],
+    payload: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-17-seventeen")
+    answer = {"path": str(tree), "in_progress": True, "conflicts": ["README.md"]}
+    runtime = _answering(answer)
+
+    code, out, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "rebase",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        *arguments,
+    )
+
+    assert code == 0, err
+    assert json.loads(out) == answer
+    runtime.call.assert_called_once()
+    call = runtime.call.call_args
+    assert call.args == ("worktree.rebase",)
+    assert call.kwargs["payload"] == {"path": str(tree), **payload}
+    assert call.kwargs["requires_minor"] == 9
+
+
+@pytest.mark.parametrize(
+    ("arguments", "payload"),
+    [
+        (("--revision", "main"), {"action": "start", "revision": "main"}),
+        (
+            ("--revision", "main", "--message", "chore: merge"),
+            {"action": "start", "revision": "main", "message": "chore: merge"},
+        ),
+        (("--continue",), {"action": "continue"}),
+        (("--abort",), {"action": "abort"}),
+    ],
+)
+def test_merge_sends_each_action_to_the_runtime(
+    repo: Path,
+    arguments: tuple[str, ...],
+    payload: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-18-eighteen")
+    runtime = _answering({"path": str(tree), "in_progress": False, "conflicts": []})
+
+    code, _, err = _run(
+        monkeypatch,
+        capsys,
+        runtime,
+        "merge",
+        "--repo",
+        str(repo),
+        "--path",
+        str(tree),
+        *arguments,
+    )
+
+    assert code == 0, err
+    call = runtime.call.call_args
+    assert call.args == ("worktree.merge",)
+    assert call.kwargs["payload"] == {"path": str(tree), **payload}
+
+
+@pytest.mark.parametrize(
+    ("command", "arguments", "parsed"),
+    [
+        ("rebase", ("--onto", "main"), True),
+        ("rebase", ("--continue", "--upstream", "main"), True),
+        ("merge", ("--abort", "--message", "chore: merge"), True),
+        ("rebase", ("--continue", "--abort"), False),
+        ("merge", (), False),
+    ],
+)
+def test_rebase_and_merge_refuse_arguments_that_do_not_go_together(
+    repo: Path,
+    command: str,
+    arguments: tuple[str, ...],
+    parsed: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    tree = _issue_worktree(repo, "feature/issue-19-nineteen")
+    runtime = mock.Mock()
+    argv = (command, "--repo", str(repo), "--path", str(tree), *arguments)
+
+    if parsed:
+        code, _, _ = _run(monkeypatch, capsys, runtime, *argv)
+        assert code == 2
+    else:
+        with pytest.raises(SystemExit) as refused:
+            _run(monkeypatch, capsys, runtime, *argv)
+        assert refused.value.code == 2
+    runtime.call.assert_not_called()
+
+
+def test_a_stopped_rebase_keeps_its_branch_for_the_check(
+    repo: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def stopped_rebase(branch: str) -> Path:
+        tree = _issue_worktree(repo, branch)
+        (tree / "README.md").write_text("ours\n", encoding="utf-8")
+        _git(tree, "commit", "--quiet", "-am", "feat: ours")
+        (repo / "README.md").write_text(f"theirs {branch}\n", encoding="utf-8")
+        _git(repo, "commit", "--quiet", "-am", "chore: theirs")
+        failed = subprocess.run(
+            ["git", "-C", str(tree), "rebase", "main"], capture_output=True, check=False
+        )
+        assert failed.returncode != 0
+        assert _git(tree, "rev-parse", "--abbrev-ref", "HEAD") == "HEAD"
+        return tree
+
+    issue = stopped_rebase("feature/issue-20-twenty")
+    protected = stopped_rebase("integration/team")
+    runtime = _answering({"in_progress": False})
+
+    allowed, _, err = _run(
+        monkeypatch, capsys, runtime, "rebase", "--repo", str(repo),
+        "--path", str(issue), "--abort",
+    )
+    refused, _, refusal = _run(
+        monkeypatch, capsys, runtime, "rebase", "--repo", str(repo),
+        "--path", str(protected), "--continue",
+    )
+
+    assert allowed == 0, err
+    assert refused == 2
+    assert "issue branch" in refusal
+    assert runtime.call.call_count == 1
+
+
 def test_a_writable_worktree_commits_through_git(repo: Path) -> None:
     tree = _issue_worktree(repo, "feature/issue-14-fourteen")
     probe = mock.Mock(return_value=True)
@@ -711,6 +868,32 @@ def test_the_real_runtime_creates_and_removes_a_managed_worktree(
         assert json.loads(committed.stdout)["head"] == _git(tree, "rev-parse", "HEAD")
         assert _git(tree, "log", "-1", "--format=%s") == "feat: commit through the runtime"
         assert _git(tree, "status", "--porcelain") == ""
+
+        # A rebase onto a moved tip stops on a conflict, and the resolution goes on.
+        base = _git(tree, "rev-parse", "HEAD")
+        (tree / "added.txt").write_text("ours\n", encoding="utf-8")
+        assert support.coordinator(
+            project, "worktree", "commit", "--path", str(tree), "--message", "feat: ours"
+        ).returncode == 0
+        _git(project, "checkout", "--quiet", "-b", "moved", "master")
+        (project / "added.txt").write_text("theirs\n", encoding="utf-8")
+        _git(project, "add", "added.txt")
+        _git(project, "commit", "--quiet", "-m", "chore: theirs")
+        _git(project, "checkout", "--quiet", "master")
+        rebase = ("worktree", "rebase", "--path", str(tree))
+
+        stopped = support.coordinator(
+            project, *rebase, "--onto", "moved", "--upstream", base
+        )
+
+        assert stopped.returncode == 0, stopped.stderr
+        assert json.loads(stopped.stdout)["conflicts"] == ["added.txt"]
+        (tree / "added.txt").write_text("both\n", encoding="utf-8")
+        finished = support.coordinator(project, *rebase, "--continue")
+        assert finished.returncode == 0, finished.stderr
+        assert json.loads(finished.stdout)["in_progress"] is False
+        assert _git(tree, "rev-parse", "--abbrev-ref", "HEAD") == branch
+        assert _git(tree, "merge-base", "--is-ancestor", "moved", "HEAD") == ""
 
         removed = support.coordinator(
             project, "worktree", "remove", "--path", str(tree)

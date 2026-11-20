@@ -5,7 +5,8 @@ An agent sandbox mounts the repository's ``.git/worktrees`` read-only, so ``git 
 ``git worktree remove`` of a sandboxed coordinator stop half done. The runtime works outside the
 sandbox: it runs the same git commands for a path under the managed worktree directories. These
 commands only ask it; they never fall back to a local git command. The same read-only mount stops
-``git add`` and ``git commit`` of an in-process writer, so the runtime commits for it as well.
+``git add``, ``git commit``, ``git rebase`` and ``git merge`` of an in-process writer, so the
+runtime runs them for it as well: ``worktree commit``, ``worktree rebase`` and ``worktree merge``.
 """
 
 from __future__ import annotations
@@ -29,7 +30,8 @@ from harness.storage import sandboxes_root
 # The protocol minor that added ``worktree.create`` and ``worktree.remove``. A fixed floor, not
 # ``PROTOCOL_VERSION[1]``: a later minor keeps it.
 WORKTREE_PROTOCOL_MINOR = 8
-# The protocol minor that added ``worktree.commit`` (#1246).
+# The protocol minor that added ``worktree.commit``, ``worktree.rebase`` and ``worktree.merge``
+# (#1246).
 WORKTREE_COMMIT_PROTOCOL_MINOR = 9
 # How long a write-access check waits for the runtime to answer ``status``.
 RUNTIME_PROBE_SECONDS = 5.0
@@ -94,21 +96,43 @@ def remove_worktree(args: argparse.Namespace) -> JsonObject:
     return _ask(args, "worktree.remove", {"path": str(path)})
 
 
-def commit_worktree(args: argparse.Namespace) -> JsonObject:
-    """``worktree commit``: the runtime stages and commits the changes of a managed worktree.
+def _issue_worktree(args: argparse.Namespace) -> Path:
+    """The worktree of ``--path``, on an issue branch.
 
-    The branch is checked here because the hooks that guard a ``git commit`` never see this
-    command: the worktree must be on an issue branch, never the base or an ``integration/*`` one.
+    The branch is checked here because the hooks that guard ``git commit``, ``git rebase`` and
+    ``git merge`` never see these commands: the worktree must be on an issue branch, never the base
+    or an ``integration/*`` one. A stopped rebase detaches HEAD; its branch is the one it rebases.
     """
     repo = _repo(args)
     path = _absolute(repo, args.path)
     branch = _git(path, "rev-parse", "--abbrev-ref", "HEAD")
     if branch == "HEAD":
-        raise CoordinatorError(
-            f"the worktree {path} has a detached HEAD",
-            remedy="check out the issue branch in the worktree, then repeat the command",
-        )
+        for state in ("rebase-merge", "rebase-apply"):
+            head_name = Path(
+                _git(
+                    path,
+                    "rev-parse",
+                    "--path-format=absolute",
+                    "--git-path",
+                    f"{state}/head-name",
+                )
+            )
+            if head_name.is_file():
+                branch = head_name.read_text(encoding="utf-8").strip()
+                branch = branch.removeprefix("refs/heads/")
+                break
+        else:
+            raise CoordinatorError(
+                f"the worktree {path} has a detached HEAD",
+                remedy="check out the issue branch in the worktree, then repeat the command",
+            )
     _validate_branch(repo, branch)
+    return path
+
+
+def commit_worktree(args: argparse.Namespace) -> JsonObject:
+    """``worktree commit``: the runtime stages and commits the changes of a managed worktree."""
+    path = _issue_worktree(args)
     if args.message_file is not None:
         try:
             message = Path(args.message_file).read_text(encoding="utf-8")
@@ -123,6 +147,54 @@ def commit_worktree(args: argparse.Namespace) -> JsonObject:
     if args.pathspec:
         payload["pathspecs"] = list(args.pathspec)
     return _ask(args, "worktree.commit", payload, WORKTREE_COMMIT_PROTOCOL_MINOR)
+
+
+def _action(args: argparse.Namespace) -> str:
+    """The action of ``worktree rebase`` or ``worktree merge``: a flag, or ``start``."""
+    for action in ("continue", "skip", "abort"):
+        if getattr(args, action, False):
+            return action
+    return "start"
+
+
+def rebase_worktree(args: argparse.Namespace) -> JsonObject:
+    """``worktree rebase``: the runtime rebases, continues, skips or aborts in a managed worktree.
+
+    A conflict is an answer, not an error: ``in_progress`` is true and ``conflicts`` lists the
+    unmerged paths to resolve before ``--continue``.
+    """
+    action = _action(args)
+    if (action == "start") != (args.upstream is not None):
+        raise CoordinatorError(
+            "--onto and --upstream go together",
+            remedy="pass --onto <target> --upstream <old base>, or one of --continue, --skip, --abort",
+        )
+    path = _issue_worktree(args)
+    payload: JsonObject = {"path": str(path), "action": action}
+    if action == "start":
+        payload["onto"] = args.onto
+        payload["upstream"] = args.upstream
+    return _ask(args, "worktree.rebase", payload, WORKTREE_COMMIT_PROTOCOL_MINOR)
+
+
+def merge_worktree(args: argparse.Namespace) -> JsonObject:
+    """``worktree merge``: the runtime merges, continues or aborts in a managed worktree.
+
+    A conflict is an answer, not an error, as in ``worktree rebase``.
+    """
+    action = _action(args)
+    if action != "start" and args.message is not None:
+        raise CoordinatorError(
+            "--message applies to a new merge",
+            remedy="pass --message only with --revision",
+        )
+    path = _issue_worktree(args)
+    payload: JsonObject = {"path": str(path), "action": action}
+    if action == "start":
+        payload["revision"] = args.revision
+        if args.message is not None:
+            payload["message"] = args.message
+    return _ask(args, "worktree.merge", payload, WORKTREE_COMMIT_PROTOCOL_MINOR)
 
 
 def runtime_commits(repo: Path) -> bool:

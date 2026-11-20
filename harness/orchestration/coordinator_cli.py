@@ -198,7 +198,47 @@ def build_parser(
         "Default: every change of the worktree",
     )
     worktree_commit.set_defaults(handler=handlers.commit_worktree)
-    for worktree_command in (worktree_create, worktree_remove, worktree_commit):
+    worktree_rebase = worktree_commands.add_parser(
+        "rebase",
+        help="Rebase a managed worktree's branch, or continue, skip or abort it, through the runtime",
+    )
+    worktree_rebase.add_argument("--path", required=True, help="worktree directory")
+    rebase_action = worktree_rebase.add_mutually_exclusive_group(required=True)
+    rebase_action.add_argument("--onto", help="start: the commit to rebase onto")
+    for flag, text in (
+        ("--continue", "stage every change of the worktree and go on"),
+        ("--skip", "drop the commit that stopped the rebase"),
+        ("--abort", "restore the branch as it was before the rebase"),
+    ):
+        rebase_action.add_argument(flag, action="store_true", help=text)
+    worktree_rebase.add_argument(
+        "--upstream",
+        help="start, with --onto: the old base; the commits above it are carried",
+    )
+    worktree_rebase.set_defaults(handler=handlers.rebase_worktree)
+    worktree_merge = worktree_commands.add_parser(
+        "merge",
+        help="Merge a commit into a managed worktree's branch, or continue or abort, through the runtime",
+    )
+    worktree_merge.add_argument("--path", required=True, help="worktree directory")
+    merge_action = worktree_merge.add_mutually_exclusive_group(required=True)
+    merge_action.add_argument("--revision", help="start: the commit to merge")
+    for flag, text in (
+        ("--continue", "stage every change of the worktree and commit the merge"),
+        ("--abort", "restore the branch as it was before the merge"),
+    ):
+        merge_action.add_argument(flag, action="store_true", help=text)
+    worktree_merge.add_argument(
+        "--message", help="start: the merge commit message instead of Git's"
+    )
+    worktree_merge.set_defaults(handler=handlers.merge_worktree)
+    for worktree_command in (
+        worktree_create,
+        worktree_remove,
+        worktree_commit,
+        worktree_rebase,
+        worktree_merge,
+    ):
         # The runtime serves one repository and reads no coordinator state: no `--state-dir` here.
         worktree_command.add_argument(
             "--repo", default=argparse.SUPPRESS, help="target project root"
