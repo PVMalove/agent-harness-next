@@ -39,6 +39,12 @@ POSIX_ONLY = unittest.skipIf(
 
 class ClaudeWorkerAdapterTest(unittest.TestCase):
     def setUp(self) -> None:
+        # QA itself runs in the container executor (HARNESS_EXECUTOR=docker). The host-prompt
+        # tests must not inherit it; container tests set the variable explicitly.
+        host_env = {k: v for k, v in os.environ.items() if k != "HARNESS_EXECUTOR"}
+        env_patch = mock.patch.dict(os.environ, host_env, clear=True)
+        env_patch.start()
+        self.addCleanup(env_patch.stop)
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         root = Path(tmp.name).resolve()
