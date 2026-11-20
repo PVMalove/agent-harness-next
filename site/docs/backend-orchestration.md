@@ -39,7 +39,9 @@ Python читает и меняет их через протокол runtime. П
 
 ## Язык и доказательства {#language-evidence}
 
-Перед первым английским handoff прочитайте [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/instructions/technical-english.md).
+Языковые правила [Technical English](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/rules/technical-english.md) и
+[Technical Russian](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/rules/technical-russian.md) лежат в `.claude/rules/`: Claude Code загружает их
+сам, а промпт каждого воркера называет их вместе с контрактом роли.
 Передачу между ролями, checkpoint и state evidence роли пишут на английском. Completion report для
 coordinator роль пишет на русском с `"report_language": "ru"`. Команды, пути и SHA не переводите.
 

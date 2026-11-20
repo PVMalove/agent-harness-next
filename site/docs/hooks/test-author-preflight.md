@@ -115,5 +115,5 @@ production-код не изменён. Изолированный `HOME` с ре
 [test-author-preflight.sh](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/test-author-preflight.sh),
 [test_preflight.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_preflight.py),
 [claude_probe.py](https://github.com/PVMalove/agent-harness-next/blob/master/scripts/clean_room/claude_probe.py),
-[docs/agents/test-author.md](../agents/test-author.md),
+[.harness/instructions/test-author.md](../agents/test-author.md),
 ADR 0035, ADR 0033

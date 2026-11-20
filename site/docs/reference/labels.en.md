@@ -19,7 +19,7 @@ does the work: a ticket can be `status::ready` and `hitl`, and these are two dif
 task takes the short path, a large one takes the full cycle with gates.
 
 The optional informational axes `priority::*`, `severity::*`, and `env::*` (target project only) are
-described in the target project's `docs/agents/triage-labels.md`.
+described in the target project's `.harness/instructions/triage-labels.md`.
 
 ## The single-label rule
 

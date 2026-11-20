@@ -26,7 +26,7 @@ python .harness/orchestration/coordinator.py --repo . context-package register \
 `context_builder.py` does not call an LLM and works from pinned base/candidate commits. The package contains
 the exact diff, 5–10 starting files with reasons, a bounded symbol/dependency graph, related tests,
 short ADR/precedent cards, the SHA-256 of each included file, the byte size, and a conservative token
-estimate. Byte-for-byte identical files (for example, the mirror `docs/agents/*` ↔
+estimate. Byte-for-byte identical files (for example, the mirror `.harness/instructions/*` ↔
 `harness/project/instructions/*`) stay starting files, but the estimate counts their content once;
 the reason for the second copy names the original and requires keeping the copies identical. A Markdown file
 enters the package as a table of contents if its estimate is not less than

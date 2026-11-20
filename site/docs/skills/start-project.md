@@ -184,7 +184,7 @@ capability — `engineering-suite` или `backend-orchestration`, это дей
   `"access": "install-allowed"` и SHA-256 проверенного индекса в `sha256`. Это изменение — решение владельца
   после проверки индекса и пресета.
 - `pr_checklist` в `.harness/project.json` содержит до 32 однострочных вопросов проекта, на которые каждое
-  тело PR отвечает свидетельствами проекта (`docs/agents/git-workflow.md`). У `harness init` нет флага для него:
+  тело PR отвечает свидетельствами проекта (`.harness/instructions/git-workflow.md`). У `harness init` нет флага для него:
   добавьте его через пресет или правкой файла, затем запустите `harness health`.
 
 ##### Явный вызов

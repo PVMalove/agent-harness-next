@@ -26,7 +26,7 @@ merged one to the merge checks, the ticket closure and the cleanup.
    criterion appears with its command and result; a criterion without evidence goes under Not
    verified & risks. The ticket's `Out of scope` and the epic's Non-Goals state what the PR
    deliberately does not change. The footer (`Closes #<ID>` or `Related to #<ID>`) is chosen by
-   `docs/agents/git-workflow.md` §2 step 6 → Ticket footer; the skill keeps no copy of that rule.
+   `.harness/instructions/git-workflow.md` §2 step 6 → Ticket footer; the skill keeps no copy of that rule.
 5. The separate readiness question names the QA result and, in an opt-in project, `candidate_sha`,
    `target_sha` and `qa_source`. PR metadata follows the "Project-Only Metadata" rule of §1.
 6. A `task-report::required` report is published in the `## Completion report` format of
@@ -41,7 +41,7 @@ merged one to the merge checks, the ticket closure and the cleanup.
 
 The skill checks the merge and, for an opt-in project, the tree of the merge commit
 (`--merge-commit`, `merge-tree-mismatch`). It then closes the ticket or verifies its auto-close with
-the commands of `docs/agents/git-workflow.md` §2 step 7 → Close the ticket after merge, and
+the commands of `.harness/instructions/git-workflow.md` §2 step 7 → Close the ticket after merge, and
 moves to `status::ready` the tickets that no longer have an open blocker. Drafts in `docs/tasks/` are
 not tickets. A managed worktree is removed with `coordinator.py worktree remove`, a session worktree
 with the runtime's tool. When the sandbox blocks the removal, the skill hands you the command.

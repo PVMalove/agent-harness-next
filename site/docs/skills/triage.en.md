@@ -62,19 +62,19 @@ This project uses a namespace-based, enterprise-style label taxonomy. Every tria
 
 - `resolution::wontfix` — the request was explicitly rejected. Apply it at closing time (see "Apply the outcome" below), not during ordinary triage.
 
-`task-report::required` is also a context label, but `triage` neither applies nor reads it. `/publish-epic` and `/to-tickets` apply it, and `/to-pull-requests` acts on it. See `docs/agents/triage-labels.md`.
+`task-report::required` is also a context label, but `triage` neither applies nor reads it. `/publish-epic` and `/to-tickets` apply it, and `/to-pull-requests` acts on it. See `.harness/instructions/triage-labels.md`.
 
 An unlabeled issue implicitly means "needs triage". There is no special label for this state; the required axes are simply missing.
 
-These are the actual label strings for this repository. See `docs/agents/triage-labels.md`.
+These are the actual label strings for this repository. See `.harness/instructions/triage-labels.md`.
 
-Never apply the upstream canonical labels (`ready-for-agent`, `ready-for-human`, `needs-triage`, `needs-info`, `wontfix`) or an `epic::<slug>` label. This repository groups a ticket under an epic with the tracker's parent link: a GitHub sub-issue, on GitLab a `## Parent: #<epic>` section plus an issue `relates_to` link, or the folder structure of the local tracker (see `docs/agents/issue-tracker.md#wayfinding-operations`). Explain this if a maintainer asks for an epic label.
+Never apply the upstream canonical labels (`ready-for-agent`, `ready-for-human`, `needs-triage`, `needs-info`, `wontfix`) or an `epic::<slug>` label. This repository groups a ticket under an epic with the tracker's parent link: a GitHub sub-issue, on GitLab a `## Parent: #<epic>` section plus an issue `relates_to` link, or the folder structure of the local tracker (see `.harness/instructions/issue-tracker.md#wayfinding-operations`). Explain this if a maintainer asks for an epic label.
 
 State transitions: analyze an unlabeled issue to determine its `type::*` label and whether it is `hitl` or `afk`. Then move it to `status::ready` (with the agreed `pipeline::*` for `afk`) or `status::blocked` (a dependency or missing information). If it is too large to specify in one triage pass, set `status::specs` and point the maintainer to `/to-spec`. `status::blocked` returns to `status::ready` as soon as the blocker clears or the reporter replies. `/to-pull-requests` moves the dependent tickets of a closed ticket, and `/implement`/`/fast-implement` re-check blockers in pre-flight. `triage` does not perform this cleanup on its own initiative. A maintainer may override this at any time. Flag transitions that look unusual and ask before you continue.
 
 #### Tracker commands
 
-Before the first tracker command (list, comment, label change, close), read [references/tracker-commands.md](#tracker-commands-reference). Issue text and comment bodies follow the Project-Only Metadata rule in `docs/agents/git-workflow.md` §1: they describe the project and carry no generated-by or AI-generated mark.
+Before the first tracker command (list, comment, label change, close), read [references/tracker-commands.md](#tracker-commands-reference). Issue text and comment bodies follow the Project-Only Metadata rule in `.harness/instructions/git-workflow.md` §1: they describe the project and carry no generated-by or AI-generated mark.
 
 #### Invocation
 
@@ -144,7 +144,7 @@ If an issue or PR has previous triage notes, read them, check whether the report
 
 #### `references/tracker-commands.md` { #tracker-commands-reference }
 
-Read and list issues (and PRs/MRs, if they are in scope) with the commands from `docs/agents/issue-tracker.md` for the configured tracker. On GitLab, `<host>`, `<project-url>`, and `<project-id>` are defined in the GitLab → Conventions section of that guide. Write each comment body to a file first, at the path from `docs/agents/git-workflow.md` §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`, or `pr-comment-<issue>-<slug>.md` for a PR/MR).
+Read and list issues (and PRs/MRs, if they are in scope) with the commands from `.harness/instructions/issue-tracker.md` for the configured tracker. On GitLab, `<host>`, `<project-url>`, and `<project-id>` are defined in the GitLab → Conventions section of that guide. Write each comment body to a file first, at the path from `.harness/instructions/git-workflow.md` §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md`, or `pr-comment-<issue>-<slug>.md` for a PR/MR).
 
 - **Comment:** GitHub `gh issue comment <n> --body-file <path>`; GitLab `GITLAB_HOST=<host> glab api projects/<project-id>/issues/<n>/notes -F body=@<path>` (on GitLab, comments are called notes).
 - **Label replacement:** one command that adds the new label and removes the previous label with the same `key::` prefix. GitHub `gh issue edit <n> --remove-label <old> --add-label <new>`; GitLab `glab issue update <n> -R <project-url> --unlabel <old> --label <new>`. On GitLab Free, a `key::value` label is an ordinary label (mutually exclusive scoped labels exist only in Premium). A single `--label` would leave both `status::*` labels on the issue and break the invariant of the skill's [Roles](#roles) section: exactly one `status::*` label.

@@ -14,12 +14,12 @@
 ## Предполётная проверка
 
 1. Открытые блокеры останавливают работу.
-2. Метка тикета меняется на `status::in-progress` командой из `docs/agents/issue-tracker.md` →
+2. Метка тикета меняется на `status::in-progress` командой из `.harness/instructions/issue-tracker.md` →
    Replace the status label; назначение тикета — по Wayfinding operations → Claim там же.
 3. Integration-ветка берётся из `## Integration Branch` или строки `**Integration branch:**`
    локального тикета, иначе из эпика.
 4. Если текущая ветка не подходит под `branch_pattern`, навык создаёт issue-ветку от integration-ветки
-   и пушит её по шагам 1–2 `docs/agents/git-workflow.md` §2; подходящая текущая ветка остаётся рабочей.
+   и пушит её по шагам 1–2 `.harness/instructions/git-workflow.md` §2; подходящая текущая ветка остаётся рабочей.
 5. Разделы тикета `## Relevant Files (Discovery Context)`, `## Contract touchpoints` и
    `## Out of scope` задают границы изменения, а критерии `Action -> Verify` — проверки. Правка вне
    границ требует вашего одобрения.
@@ -36,7 +36,7 @@
 
 ## Тест-автор
 
-Навык владеет коротким маршрутом тест-автора (раньше раздел 6 `docs/agents/test-author.md`): seam
+Навык владеет коротким маршрутом тест-автора (раньше раздел 6 `.harness/instructions/test-author.md`): seam
 подтверждает разработчик, preflight запускается один раз, dispatch и записи ledger не создаются.
 Без `test_paths` и `test_runner` навык идёт обычным `/tdd`. Если preflight ответил не
 `{"status":"ok"}`, hook отсутствует или упал либо изоляция недоступна, навык продолжает обычным `/tdd`

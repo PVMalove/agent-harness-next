@@ -1,12 +1,12 @@
 # claude-agent-harness
 
 Глоссарий терминов проекта, который разворачивает переносимый набор скиллов и правил для
-coding agents. Операционные процессы и архитектурные решения находятся в `docs/agents/` и
+coding agents. Операционные процессы и архитектурные решения находятся в `harness/project/instructions/` и
 `docs/adr/`, а не в этом файле.
 
 Актуальный словарь триаж-меток (`type::*`, `priority::*`, `severity::*`, `status::*`,
 `resolution::wontfix`, `hitl`/`afk`, `pipeline::*`) описан в
-[triage-labels.md](docs/agents/triage-labels.md) — не дублируется здесь.
+[triage-labels.md](harness/project/instructions/triage-labels.md) — не дублируется здесь.
 
 ## Термины
 

@@ -107,7 +107,7 @@ disable-model-invocation: true
 
 #### Предусловие
 
-**`harness update`** раскладывает в `docs/agents/` описание issue tracker, меток триажа и доменных документов из шаблонов harness. Затем один раз запустите **`/setup-labels`**, если трекер — GitHub или GitLab. Не запускайте здесь `/setup-matt-pocock-skills`: он пишет словарь меток upstream, который `/triage` запрещает.
+**`harness update`** раскладывает в `.harness/instructions/` описание issue tracker, меток триажа и доменных документов из шаблонов harness. Затем один раз запустите **`/setup-labels`**, если трекер — GitHub или GitLab. Не запускайте здесь `/setup-matt-pocock-skills`: он пишет словарь меток upstream, который `/triage` запрещает.
 
 </div>
 

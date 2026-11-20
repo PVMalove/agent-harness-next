@@ -9,14 +9,13 @@ updates come with a separate command.
 ```text
 <repo>/
 ├── .harness/            # managed snapshot: lock, skill registry, configuration
-│   ├── docs/            # contracts for agents: technical-english and project-memory
+│   ├── instructions/    # guides and contracts for agents
 │   ├── skills/          # installed skills
 │   ├── project.json     # language, branches, checks, hooks, memory
 │   └── orchestration/   # appears with the backend-orchestration capability
 ├── .agents/             # skills visible through native skill discovery
-├── .claude/             # runtime rules, agents, hooks, and local settings
+├── .claude/             # runtime rules (language rules included), agents, hooks, settings
 ├── docs/
-│   ├── agents/          # operational guides for agents
 │   └── adr/             # architectural decisions of the project (kept by skills)
 ├── AGENTS.md            # cross-runtime contract of the project
 ├── CLAUDE.md            # entry point for Claude Code
@@ -33,9 +32,16 @@ until you explicitly request their replacement.
 ## Contracts for agents
 
 The project receives the operational guides
-`docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. These are
+`.harness/instructions/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. These are
 the documents an agent follows to do the work: branches and commits, tracker work, labels, temporary
-artifacts, worktrees, and the test zone.
+artifacts, worktrees, and the test zone. The guides are seed files: the project edits them for itself,
+and an update never silently overwrites those edits. `harness update` moves the guides from the former
+`docs/agents/` directory together with the project's edits.
+
+Every install receives the language rules `.claude/rules/technical-english.md` and
+`.claude/rules/technical-russian.md`. Claude Code loads them into every session by itself; Codex reads
+them through the pointer in `AGENTS.md`. The first rule governs English handoffs between agents, the
+second governs Russian text for a human: chat replies, documentation, the changelog, and reports.
 
 The release guide and the Russian subagent descriptions stay in the source harness repository: in the target
 project, they are either not needed or depend on its own rules.

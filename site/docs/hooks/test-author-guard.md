@@ -57,5 +57,5 @@ Guard разрешает ровно три вида вызовов:
 [test-author-guard.py](https://github.com/PVMalove/agent-harness-next/blob/master/harness/project/hooks/test-author-guard.py),
 [test_guard.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_guard.py),
 [test_compatibility.py](https://github.com/PVMalove/agent-harness-next/blob/master/tests/test_author/test_compatibility.py),
-[docs/agents/test-author.md](../agents/test-author.md),
+[.harness/instructions/test-author.md](../agents/test-author.md),
 ADR 0035

@@ -12,7 +12,7 @@ Chat). Код, ревью, `qa-gate` и PR остаются за человек�
    `## Contract touchpoints` и сверяются с кодом. Раздел `## Out of scope` в руководство не попадает.
    Файл вне границ навык отмечает как требующий одобрения мейнтейнера.
 3. Навык назначает тикет на мейнтейнера и меняет метку на `status::in-progress` командами из
-   `docs/agents/issue-tracker.md` (Wayfinding operations → Claim и Replace the status label).
+   `.harness/instructions/issue-tracker.md` (Wayfinding operations → Claim и Replace the status label).
 
 ## Руководство
 
@@ -23,7 +23,7 @@ Chat). Код, ревью, `qa-gate` и PR остаются за человек�
 3. шаги с промптами;
 4. проверка;
 5. действия после реализации: команды трекера проекта для футера и закрытия тикета навык берёт из
-   `docs/agents/git-workflow.md` §2, шаги 6–7, и подставляет реальные значения.
+   `.harness/instructions/git-workflow.md` §2, шаги 6–7, и подставляет реальные значения.
 
 Каждый промпт самодостаточен, начинается с теста и ссылается на критерий приёмки и его команду
 `Verify`. Проверка берётся из критериев `Action -> Verify` тикета или раздела

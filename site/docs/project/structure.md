@@ -9,14 +9,13 @@
 ```text
 <repo>/
 ├── .harness/            # управляемый снимок: lock, реестр скиллов, конфигурация
-│   ├── docs/            # контракты для агентов: technical-english и project-memory
+│   ├── instructions/    # руководства и контракты для агентов
 │   ├── skills/          # установленные скиллы
 │   ├── project.json     # язык, ветки, проверки, hooks, память
 │   └── orchestration/   # появляется вместе с capability backend-orchestration
 ├── .agents/             # skills, видимые через нативный поиск скиллов
-├── .claude/             # rules, agents, hooks и локальные настройки runtime
+├── .claude/             # rules (включая языковые), agents, hooks и настройки runtime
 ├── docs/
-│   ├── agents/          # операционные руководства для агентов
 │   └── adr/             # архитектурные решения проекта (ведут скиллы)
 ├── AGENTS.md            # кросс-рантаймовый контракт проекта
 ├── CLAUDE.md            # точка входа для Claude Code
@@ -33,9 +32,16 @@
 ## Контракты для агентов
 
 Установщик кладёт в проект операционные руководства
-`docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. По
+`.harness/instructions/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`. По
 ним агент выполняет работу: ветки и коммиты, работа с трекером, метки, временные артефакты, worktree и
-тестовая зона.
+тестовая зона. Руководства — seed-файлы: проект правит их под себя, и обновление не перезаписывает
+правки молча. `harness update` переносит руководства из прежнего каталога `docs/agents/` вместе с
+правками проекта.
+
+В любую установку попадают языковые правила `.claude/rules/technical-english.md` и
+`.claude/rules/technical-russian.md`. Claude Code загружает их в каждую сессию сам, Codex читает по
+указателю из `AGENTS.md`. Первое правило задаёт английский текст передач между агентами, второе —
+русский текст для человека: ответы в чате, документацию, журнал изменений и отчёты.
 
 Руководство по выпуску и русские описания субагентов остаются в исходном репозитории harness: в
 целевом проекте они либо не нужны, либо зависят от его собственных правил.

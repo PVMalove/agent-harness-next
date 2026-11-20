@@ -8,7 +8,7 @@
 Blocking of direct commits and pushes to protected branches (master, main, base_branch, integration/*) according to the "Zero Direct Commits" rule.
 ```
 ## 2. Full description
-The script is a pre-hook (PreToolUse) for the bash command execution tool. Its main task is to enforce the "Zero Direct Commits" rule (described in `docs/agents/git-workflow.md`) deterministically. The rule prohibits the agent from making changes (commits and pushes) directly to protected branches.
+The script is a pre-hook (PreToolUse) for the bash command execution tool. Its main task is to enforce the "Zero Direct Commits" rule (described in `.harness/instructions/git-workflow.md`) deterministically. The rule prohibits the agent from making changes (commits and pushes) directly to protected branches.
 
 **How it works:**
 1. `direct_commits.py` makes the decision on the fail-closed principle: the command is allowed only with code `0` and the word `allow` in its output. A missing Python, any other code, and a partial copy of the module give code `2`.
