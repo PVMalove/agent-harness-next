@@ -38,10 +38,9 @@ the sanitized reason; no executor is substituted. The current protected adapter 
 and `.claude/hooks/test-author-preflight.sh`; other runtimes keep ordinary TDD until a protected adapter
 exists for them.
 
-The full route with an external Claude executor calls the native `Agent(test-author)` without model or
-effort overrides (`model: inherit`), so the developer's approved settings are kept. An in-process worker
-passes each handoff to `.harness/health/test_author.py run --repo <worker worktree> --brief <brief path>
---prompt-file <path>`. The short route passes each prompt file to
+The developer role alone defines the executor and the handoff of the full route:
+`.harness/orchestration/roles/references/developer-test-author.md`; `tdd/references/test-author.md`
+points to it instead of restating the route. The short route passes each prompt file to
 `.harness/health/test_author.py run --repo . --prompt-file <path>`, so the project model and effort apply
 even when the current session uses other settings. Details:
 [test author guide](../agents/test-author.md).

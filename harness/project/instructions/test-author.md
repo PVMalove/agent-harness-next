@@ -66,6 +66,42 @@ selection of the executor. To switch the author to Claude Code, add `claude` wit
 has several runtimes, select `claude` in `assignment_plans.developer.default_runtime`. Without a
 developer plan, `test_author.runtime` of `.harness/project.json` sets the runtime.
 
+### Opt-in
+
+The test author is off while `.harness/project.json` has no `test_paths` and
+`test_runner`. A new project gets them with the flags `harness init --test-path` and
+`--test-runner-command`. An old project without these fields does not change: `/fast-implement`
+follows the usual `/tdd`. To turn the author on in an old project, add both fields by hand and run
+`harness health`.
+
+### Protected environment
+
+The tests of the author run only through `.claude/hooks/run-test.sh`.
+The optional fields `test_runner.build` (`command` and `artifact_paths`) and `test_runner.database`
+(`engine`, `test_ids`, `command`, `ready_command`) prepare fresh artifacts and a separate test
+database inside the sandbox. They are set with the flags `--test-build-command`,
+`--test-artifact-path`, `--test-database-engine`, `--test-database-test-id`,
+`--test-database-command`, and `--test-database-ready-command`, together with
+`--test-runner-command`. The build writes only into empty artifact directories created in advance,
+the test reads them without write access, and the database starts only for the matching
+`test_ids`. Pure domain logic needs no database.
+
+### Supported versions and environments
+
+- Only Claude Code has a protected adapter now; a selection of Codex or another runtime stays in
+  the diagnostics and gives `runtime_unsupported`. The harness does not pin a minimum Claude Code
+  version: preflight statically checks the agent, the scoped hook, and the guard, and the own check
+  of the harness (`make test-author-probe`, which needs `claude` and a login) confirms that the hook
+  fires in a live session.
+- Linux only, with bubblewrap 0.9.0+ and unprivileged user namespaces. On Windows and macOS the
+  runner answers `isolation_unavailable`, and preflight turns the author off.
+- The checkout must not be in `/tmp`, `/run`, `/dev`, or `/proc`. The build needs a compiler or the
+  tools of `test_runner.build.command`; SQL tests need the tools of the selected DBMS (in the checks
+  of the harness: `postgres`, `initdb`, `psql`, and `pg_isready` in `PATH`). Without them only the
+  matching run refuses, not the whole project.
+- The hook needs `python3` (or `python`) in `PATH`, and the project must be accepted in the trust
+  dialog of Claude Code.
+
 ## 3. Protection
 
 The frontmatter of the installed `.claude/agents/test-author.md` attaches
@@ -160,7 +196,7 @@ The cycle is guidance for the developer, not a new role, state, or ledger record
    not change.
 
 The optional `test_runner.build` and `test_runner.database` set up the build and a separate test
-database (see section 6). Test-author does not change artifacts: its `Write` and `Edit` stay in
+database (see section 2). Test-author does not change artifacts: its `Write` and `Edit` stay in
 `test_paths`. If protection is unavailable, the author is turned off.
 
 The runner starts the database only for the matching `test_runner.database.test_ids`; pure domain
@@ -175,90 +211,17 @@ is not a Red.
 
 ## 6. The short `/fast-implement` route
 
-`/fast-implement` uses the same test author and the same cycle from section 5, but without the steps
-of the coordinator, the architect, and independent QA: the developer session runs the cycle itself,
-from the ticket to the push. Only the origin of the seam is different: it does not come from the
-architect brief, but is agreed with the developer before the first test. The skill names the
-requirement, the seam, the public signatures, and the existing fixtures, stops until the developer
-answers, and does not write a test on a seam that is not agreed. The handoff to the author, the
-check of the expectation, the skeleton, the ban on weakening an accepted expectation, and the limit
-of three failed calls in a row are the same as in the full route. Local retries do not create a
-dispatch or ledger state.
-
-**Opt-in.** The test author is off while `.harness/project.json` has no `test_paths` and
-`test_runner`. A new project gets them with the flags `harness init --test-path` and
-`--test-runner-command`. An old project without these fields does not change: `/fast-implement`
-follows the usual `/tdd`. To turn the author on in an old project, add both fields by hand and run
-`harness health`.
-
-**Protected environment.** The tests of the author run only through `.claude/hooks/run-test.sh`.
-The optional fields `test_runner.build` (`command` and `artifact_paths`) and `test_runner.database`
-(`engine`, `test_ids`, `command`, `ready_command`) prepare fresh artifacts and a separate test
-database inside the sandbox. They are set with the flags `--test-build-command`,
-`--test-artifact-path`, `--test-database-engine`, `--test-database-test-id`,
-`--test-database-command`, and `--test-database-ready-command`, together with
-`--test-runner-command`. The build writes only into empty artifact directories created in advance,
-the test reads them without write access, and the database starts only for the matching
-`test_ids`. Pure domain logic needs no database.
-
-**Supported versions and environments.**
-
-- Only Claude Code has a protected adapter now; a selection of Codex or another runtime stays in
-  the diagnostics and gives `runtime_unsupported`. The harness does not pin a minimum Claude Code
-  version: preflight statically checks the agent, the scoped hook, and the guard, and the own check
-  of the harness (`make test-author-probe`, which needs `claude` and a login) confirms that the hook
-  fires in a live session.
-- Linux only, with bubblewrap 0.9.0+ and unprivileged user namespaces. On Windows and macOS the
-  runner answers `isolation_unavailable`, and preflight turns the author off.
-- The checkout must not be in `/tmp`, `/run`, `/dev`, or `/proc`. The build needs a compiler or the
-  tools of `test_runner.build.command`; SQL tests need the tools of the selected DBMS (in the checks
-  of the harness: `postgres`, `initdb`, `psql`, and `pg_isready` in `PATH`). Without them only the
-  matching run refuses, not the whole project.
-- The hook needs `python3` (or `python`) in `PATH`, and the project must be accepted in the trust
-  dialog of Claude Code.
-
-**Fallback to the usual route.** If preflight answered anything other than `{"status":"ok"}`, the
-hook is missing or failed, or isolation is unavailable, `/fast-implement` continues with the usual
-`/tdd` in the same session, names the sanitized reason to the developer in one line, and does not
-start an unprotected author. This outcome adds no steps of the coordinator, the architect, or QA and
-does not change the ledger.
+The `fast-implement` skill owns this route: the agreed seam, the single preflight, the absence of
+coordinator, architect and QA steps, and the fallback to the usual `/tdd`. Read
+`.harness/skills/fast-implement/SKILL.md` → Test author (installed with `engineering-suite`). The
+configuration it uses is in section 2, and the cycle is in section 5.
 
 ## 7. The full `/implement` route
 
-The author works beside an external developer in its worker
-worktree, with the runtime, model and effort of the developer brief. The supported adapter starts
-the developer in that checkout, so the runtime, the scoped hook and the runner refer to the same
-code. Install the harness in the worker checkout and enable `test_paths` and `test_runner` there; do
-not copy the orchestration state of the main checkout. A worktree of a trusted repository needs no
-trust dialog of its own; if the main checkout is not trusted, open it in Claude Code and accept the
-dialog. Neither the installer, the developer nor a headless launch makes that trust decision for
-you.
-
-The external developer runs the common preflight with `--repo <worker_worktree> --brief <brief
-path>`. For the protected Claude adapter this is `.claude/hooks/test-author-preflight.sh --worktree
-<worker_worktree> --brief <brief path>`. Only the exact `{"status":"ok"}` enables the next step. The
-approved brief must also allow `Agent(test-author)` or `Agent`; otherwise the reason of the
-developer is `agent_tool_unavailable`. The new orchestration template gives the named permission
-only to the developer. Existing projects with a tool policy enable it explicitly in
-`tool_policy.roles.developer` and keep the other tools. Explicit restrictions are never widened
-automatically; the tool list is bound to the digest before the approval (ADR 0024).
-
-The author writes in the `test_paths` of the worker and uses its runner. The developer passes one
-specific test path in the brief scope and the log root from the adapter prompt:
-`<main>/.harness/.sandboxes/runs/`. Linked worktrees share these logs; `run_id` points to
-`isolated-test-<run_id>/log.txt` under that root. The adapter gives access to the evidence, and the
-scoped guard keeps its write and Bash limits. The code, the tests and the Git status of the main
-checkout stay unchanged; the shared runtime logs stay in its ignored sandbox.
-
-A preflight of the main checkout with the `--worktree` of a separate worker answers
-`checkout_mismatch`: its guard and runner serve only the main checkout. An in-process developer
-therefore calls the author through the launcher of its worktree:
-`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <brief path> --prompt-file <file>`.
-The launcher checks the preflight of the worker and starts the author with the guard and the runner
-of that worktree; the brief permission rule is the same. Any preflight refusal or an unavailable
-tool to call the author keeps the usual TDD in the worker, with the reason, without a blocker and
-without new ledger records. The runtime selection comes from the developer; a missing protected
-adapter for it keeps the usual TDD, without a substitute executor.
+The developer role owns this route: preflight in the worker checkout, the executor, the brief
+permission, the log root and the in-process launcher. Read
+`.harness/orchestration/roles/references/developer-test-author.md` (installed with
+`backend-orchestration`); this guide does not restate it.
 
 This release verifies Python tests through unittest and pytest. Rust tests in
 `native/harness-runtime/crates/*/tests` are not supported by this solution: no write zones and no

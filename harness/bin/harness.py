@@ -23,6 +23,7 @@ import tempfile
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal, NamedTuple
 
 # Captured before the forced UTF-8 below so `harness health` can still warn about the console's
 # own encoding (harness.health.checks.environment.check_output_encoding).
@@ -1088,30 +1089,65 @@ def baselined_seed_files(
     }
 
 
-# Seed guides whose mandatory rules moved to runtime rules (ADR 0039): the old section is a
-# pointer now, so a project-edited copy keeps rule text that no runtime loads as a rule.
-SEED_MOVED_SECTIONS: dict[str, tuple[str, str]] = {
+class MovedSection(NamedTuple):
+    """Раздел seed-руководства, источник которого переехал: правило или процедура."""
+
+    section: str
+    target: str
+    kind: Literal["rule", "procedure"]
+
+
+# Seed guides whose rules (ADR 0039) or procedures (ADR 0037) moved to another owner: the old section
+# is a pointer now, so a project-edited copy keeps text that no runtime reads as its source.
+SEED_MOVED_SECTIONS: dict[str, tuple[MovedSection, ...]] = {
     "docs/agents/git-workflow.md": (
-        "раздел 1 (Fundamental Constraints & Tooling)",
-        ".claude/rules/git-delivery.md",
+        MovedSection(
+            "раздел 1 (Fundamental Constraints & Tooling)",
+            ".claude/rules/git-delivery.md",
+            "rule",
+        ),
     ),
     "docs/agents/worktrees.md": (
-        "правила Conventions",
-        ".claude/rules/worktree-conventions.md",
+        MovedSection(
+            "правила Conventions", ".claude/rules/worktree-conventions.md", "rule"
+        ),
+        MovedSection(
+            "раздел Coordinator issue worktree",
+            ".harness/skills/implement/references/issue-worktree.md",
+            "procedure",
+        ),
+    ),
+    "docs/agents/test-author.md": (
+        MovedSection(
+            "раздел 6 (короткий маршрут /fast-implement)",
+            ".harness/skills/fast-implement/SKILL.md",
+            "procedure",
+        ),
+        MovedSection(
+            "раздел 7 (полный маршрут /implement)",
+            ".harness/orchestration/roles/references/developer-test-author.md",
+            "procedure",
+        ),
     ),
 }
 
 
-def moved_section_notice(relative: str) -> str | None:
-    """Строка о переезде источника правил для seed-файла или None."""
-    moved = SEED_MOVED_SECTIONS.get(relative)
-    if moved is None:
-        return None
-    section, target = moved
-    return (
-        f"Источник правил переехал: {section} → {target} — локальный текст старого раздела "
-        "больше не грузится как правило; сверьте правку с новым файлом"
-    )
+def moved_section_notices(relative: str) -> list[str]:
+    """Строки о переезде источников правил и процедур seed-файла; пустой список, если их нет."""
+    notices = []
+    for moved in SEED_MOVED_SECTIONS.get(relative, ()):
+        if moved.kind == "rule":
+            notices.append(
+                f"Источник правил переехал: {moved.section} → {moved.target} — локальный текст "
+                "старого раздела больше не грузится как правило; сверьте правку с новым файлом"
+            )
+        else:
+            notices.append(
+                f"Источник процедуры переехал: {moved.section} → {moved.target} — локальный "
+                "текст старого раздела больше не читается как источник; сверьте правку с новым "
+                "файлом"
+            )
+    return notices
 
 
 FORCED_REASON = "перезаписан по флагу"
@@ -1228,8 +1264,7 @@ class SeedInstall:
 
     @staticmethod
     def _report_moved(relative: str) -> None:
-        notice = moved_section_notice(relative)
-        if notice is not None:
+        for notice in moved_section_notices(relative):
             print(f"    {notice}")
 
     def forced(self, relative: str) -> bool:
@@ -1655,9 +1690,9 @@ def cmd_diff(args: argparse.Namespace) -> int:
             name = group_of[relative]
             print(f"  seed_differing: {relative} ({SEED_GROUP_LABELS[name]})")
             print(f"    {hints[name].replace('{path}', relative)}")
-            notice = moved_section_notice(relative)
-            if notice is not None and name != "outdated":
-                print(f"    {notice}")
+            if name != "outdated":
+                for notice in moved_section_notices(relative):
+                    print(f"    {notice}")
         print_contract_proposals(proposals)
     return 0 if result["state"] == "clean" else 1
 

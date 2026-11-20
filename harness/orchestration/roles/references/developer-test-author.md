@@ -36,8 +36,11 @@ TDD without a provider substitution. The current protected adapter supports an `
 developer: its process, preflight, guard and runner must all serve the brief's canonical
 `worker_worktree`. Install the project harness in that worker checkout before dispatch. Preflight
 takes the project root from Git; `CLAUDE_PROJECT_DIR` is optional, and a different value gives
-`project_dir_mismatch`. A linked worktree of a repository whose main checkout is trusted in Claude
-Code needs no trust entry of its own. Do not copy state or trust from the main checkout.
+`project_dir_mismatch`. Enable `test_paths` and `test_runner` in that checkout too. A linked worktree
+of a repository whose main checkout is trusted in Claude Code needs no trust entry of its own. Trust
+is the human's decision: if the main checkout is not trusted, the human opens it in Claude Code and
+accepts the dialog; neither the installer, the developer nor a headless launch makes it. Do not copy
+state or trust from the main checkout.
 
 Only exactly `{"status":"ok"}` and an `Agent(test-author)` or `Agent` permission in the approved brief
 allow calling the named author without model/effort overrides (no `model` or `effort` line in its

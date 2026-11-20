@@ -26,7 +26,7 @@
 1. **Инициализация (ветвление).**
    Для каждой задачи создаётся изолированная ветка от точной integration-ветки эпика, а не от той ветки, которая случайно уже выбрана. Если у задачи нет эпика, используйте `base_branch`.
    * **Формат:** должен соответствовать `branch_pattern` из `.harness/project.json` (по умолчанию `feature/issue-<ID>-<short-slug>`, где `<ID>` означает номер задачи в трекере, а `<short-slug>` означает короткое транслитерированное описание задачи со словами через дефис или подчёркивание).
-   * **Команда:** `git fetch origin <integration-branch> && git switch -c feature/issue-<ID>-<slug> --track origin/<integration-branch>`. Для задачи без эпика замените `<integration-branch>` на обязательный `base_branch` из `.harness/project.json`. Coordinator создаёт ветку через `git worktree add --no-track` (см. [worktrees.md](worktrees.md#coordinator-issue-worktree)); `git push -u` на шаге 2 затем задаёт upstream.
+   * **Команда:** `git fetch origin <integration-branch> && git switch -c feature/issue-<ID>-<slug> --track origin/<integration-branch>`. Для задачи без эпика замените `<integration-branch>` на обязательный `base_branch` из `.harness/project.json`. Coordinator создаёт ветку через `git worktree add --no-track` (см. `.harness/skills/implement/references/issue-worktree.md`, ставится с `engineering-suite`; [перевод](../skills/implement.md#issue-worktree)); `git push -u` на шаге 2 затем задаёт upstream.
 2. **Push после создания ветки.**
    * Сразу после создания ветки отправьте её в удалённый репозиторий (`origin`), чтобы она там существовала: `git push -u origin feature/issue-<ID>-<slug>`.
 3. **Реализация и контроль качества (TDD).**

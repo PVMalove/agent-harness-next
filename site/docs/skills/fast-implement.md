@@ -14,11 +14,12 @@
 ## Предполётная проверка
 
 1. Открытые блокеры останавливают работу.
-2. Метка тикета меняется на `status::in-progress`.
+2. Метка тикета меняется на `status::in-progress` командой из `docs/agents/issue-tracker.md` →
+   Replace the status label; назначение тикета — по Wayfinding operations → Claim там же.
 3. Integration-ветка берётся из `## Integration Branch` или строки `**Integration branch:**`
    локального тикета, иначе из эпика.
 4. Если текущая ветка не подходит под `branch_pattern`, навык создаёт issue-ветку от integration-ветки
-   и пушит её; подходящая текущая ветка остаётся рабочей.
+   и пушит её по шагам 1–2 `docs/agents/git-workflow.md` §2; подходящая текущая ветка остаётся рабочей.
 5. Разделы тикета `## Relevant Files (Discovery Context)`, `## Contract touchpoints` и
    `## Out of scope` задают границы изменения, а критерии `Action -> Verify` — проверки. Правка вне
    границ требует вашего одобрения.
@@ -32,5 +33,14 @@
 разрешения на commit и push и пушит issue-ветку. В конце он предлагает вручную запустить
 `/to-pull-requests <ticket>`. Метка `status::in-progress` остаётся на тикете: после слияния
 `/to-pull-requests` закрывает тикет и переводит разблокированные зависимые тикеты в `status::ready`.
+
+## Тест-автор
+
+Навык владеет коротким маршрутом тест-автора (раньше раздел 6 `docs/agents/test-author.md`): seam
+подтверждает разработчик, preflight запускается один раз, dispatch и записи ledger не создаются.
+Без `test_paths` и `test_runner` навык идёт обычным `/tdd`. Если preflight ответил не
+`{"status":"ok"}`, hook отсутствует или упал либо изоляция недоступна, навык продолжает обычным `/tdd`
+в той же сессии, одной строкой называет причину и незащищённого автора не запускает. Конфигурация
+описана в разделе 2 [руководства тест-автора](../agents/test-author.md).
 
 [Исходный SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/fast-implement/SKILL.md)

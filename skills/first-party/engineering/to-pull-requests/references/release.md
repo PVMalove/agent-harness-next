@@ -69,8 +69,9 @@ Follow `docs/agents/git-workflow.md` §3 and store the body at
 changed, write one line per child: `#<pr> <title> (#<ticket>)`. Under Verification, give the `/qa-gate`
 result, the results by epic criterion and the release candidate SHA. Under Not verified & risks,
 list unverified criteria, including the legacy case above, children without a merged PR, and any
-check that did not run. The footer is `Closes #<epic>` when `<base-branch>` is the repository default
-branch (resolved as in skill step 4), otherwise `Related to #<epic>`.
+check that did not run. Choose the footer (`Closes #<epic>` or `Related to #<epic>`) by
+`docs/agents/git-workflow.md` §2 step 6 → Ticket footer, with `<epic>` for `<ID>` and `<base-branch>`
+as the target.
 
 ## 5. Confirm and open
 
@@ -90,10 +91,9 @@ GitHub `gh pr checks <n>`, GitLab the pipeline of the MR. Never merge it.
 
 Act only after the developer confirms the merge.
 
-- Check the merge as in skill step 7, with `<base-branch>` as the expected target.
-- `Closes #<epic>`: verify that the epic is closed; if it is still open, close it explicitly and tell
-  the developer why the tracker did not. `Related to #<epic>`: close it explicitly — GitHub:
-  `gh issue close <epic> --reason completed`; GitLab: `glab issue close <epic> -R <project-url>`.
+- Check the merge, then close or verify the epic by its footer, as
+  `docs/agents/git-workflow.md` §2 step 7 → Close the ticket after merge describes, with `<epic>` for
+  `<ID>` and `<base-branch>` as the expected target.
 - Offer `/delivery-stats <epic>`. Never delete `<integration-branch>`; that is the developer's call.
 
 ## Local markdown tracker

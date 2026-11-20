@@ -1,10 +1,12 @@
 """Контракт навыков фазы реализации: вход из /to-tickets, гейты, ссылки и поставка (#1210)."""
 
+import re
 from pathlib import Path
 
 import pytest
 
-from harness.bin.harness import package_files
+from harness.bin.harness import package_files, seed_template_files
+from scripts.clean_room.install_and_update import check_workflow_procedures
 from tests.core.test_developer_skill import _frontmatter, _section
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -116,10 +118,26 @@ IMPLEMENT_REFERENCES = (
     "auto-path",
     "claude-code-runtime",
     "commit-plan",
+    "issue-worktree",
     "recovery",
     "test-author",
     "workers",
 )
+
+
+def test_issue_worktree_procedure_lives_in_the_implement_reference() -> None:
+    reference = _text(ENGINEERING / "implement/references/issue-worktree.md")
+    for marker in (
+        "coordinator.py worktree create --repo .",
+        "harness worktree-venv",
+        "**Session write access.**",
+        "**Recovery after a partial failure.**",
+        "`docs/agents/git-workflow.md`",
+    ):
+        assert marker in reference, marker
+    core = _text(_skill("implement"))
+    assert "`docs/agents/worktrees.md` → Coordinator issue worktree" not in core
+    assert "`docs/agents/worktrees.md` → Session write access" not in core
 
 
 def test_implement_core_names_each_reference_with_its_condition() -> None:
@@ -161,3 +179,59 @@ def test_engineering_suite_ships_the_implement_references() -> None:
             files[f".harness/skills/{relative}"]
             == (ENGINEERING / relative).read_bytes()
         )
+
+
+TRACKER_COPIES = (
+    "--add-label status::in-progress",
+    "--label status::in-progress",
+    "--add-assignee @me",
+    "--assignee @me",
+    "gh issue close",
+    "glab issue close",
+    "defaultBranchRef",
+)
+
+
+@pytest.mark.parametrize("name", ["fast-implement", "to-guide", "implement"])
+def test_skills_reference_the_tracker_contract_instead_of_copying_it(name: str) -> None:
+    """#1162: status swap and claim commands live in docs/agents/issue-tracker.md."""
+    text = _text(_skill(name))
+    copied = [marker for marker in TRACKER_COPIES if marker in text]
+    assert not copied, copied
+    if name != "implement":
+        assert "`docs/agents/issue-tracker.md` → Replace the status label" in text
+        assert "`docs/agents/issue-tracker.md` → Wayfinding operations → Claim" in text
+
+
+def test_skills_name_no_worktree_commands_outside_the_reference() -> None:
+    for name in ("fast-implement", "to-guide", "implement", "to-pull-requests"):
+        assert "worktree create --repo" not in _text(_skill(name)), name
+    preflight = _section(_skill("fast-implement"), "Pre-flight")
+    assert "`docs/agents/git-workflow.md` §2 steps 1–2" in preflight
+
+
+INSTALLED_PATH = re.compile(r"`((?:docs/agents|\.harness)/[A-Za-z0-9_./-]+\.(?:md|py|json|sh))`")
+
+
+def test_named_installed_paths_are_delivered() -> None:
+    """Every docs/agents/*.md or .harness/... path these skills name ships with the install."""
+    shipped = set(package_files(["backend-orchestration"]))
+    shipped |= set(seed_template_files(ROOT, orchestration_enabled=True))
+    shipped.add(".harness/project.json")  # written by `harness init`, not a template
+    sources = [
+        path
+        for name in ("fast-implement", "to-guide", "implement", "to-pull-requests", "tdd")
+        for path in (ENGINEERING / name).rglob("*.md")
+    ]
+    missing = {
+        f"{source.relative_to(ENGINEERING)}: {match}"
+        for source in sources
+        for match in INSTALLED_PATH.findall(source.read_text(encoding="utf-8"))
+        if "<" not in match and match not in shipped
+    }
+    assert not missing, sorted(missing)
+
+
+def test_clean_room_checks_the_procedure_routes(tmp_path: Path) -> None:
+    """Fresh install and update keep the Claude Code and Codex procedure routes (#1162)."""
+    check_workflow_procedures(tmp_path)

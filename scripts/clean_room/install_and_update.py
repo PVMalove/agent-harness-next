@@ -566,6 +566,7 @@ def run(ctx: SimpleNamespace) -> None:
     check_tracker_from_origin(test_root)
     check_package_root_without_init(test_root)
     check_runtime_rules(test_root)
+    check_workflow_procedures(test_root)
     to_spec_source = ROOT / "skills" / "first-party" / "engineering" / "to-spec"
     for discovery in (".harness", ".claude", ".agents"):
         for relative in (
@@ -1181,3 +1182,107 @@ def check_runtime_rules(test_root) -> None:
 
     if pinned.read_bytes() != pinned_bytes:
         sys.exit("update changed a pinned batch snapshot")
+
+
+WORKFLOW_SKILLS = ("implement", "fast-implement", "to-guide", "to-pull-requests")
+INSTALLED_TARGET = re.compile(
+    r"`((?:docs/agents|\.harness)/[A-Za-z0-9_./-]+\.(?:md|py|json|sh))`"
+)
+ISSUE_WORKTREE = ".harness/skills/implement/references/issue-worktree.md"
+PROCEDURE_GUIDES = ("docs/agents/worktrees.md", "docs/agents/test-author.md")
+
+
+def check_workflow_procedures(test_root) -> None:
+    """Маршруты процедур (ADR 0037, #1162): цели указателей после свежей установки для Claude Code
+    и Codex, замена старых руководств при update и предупреждение о переезде у правленой копии."""
+    project = test_root / "procedures_project"
+    project.mkdir(parents=True)
+    run_step(["git", "init", "-q"], cwd=project, check=True)
+    run_ok(
+        HARNESS + ["init", str(project), "--capability", "backend-orchestration"],
+        quiet=True,
+    )
+    sources = [project / relative for relative in PROCEDURE_GUIDES]
+    for name in WORKFLOW_SKILLS:
+        skill = project / ".harness" / "skills" / name
+        sources += [skill / "SKILL.md", *sorted((skill / "references").glob("*.md"))]
+    for source in sources:
+        for target in INSTALLED_TARGET.findall(source.read_text(encoding="utf-8")):
+            if "<" not in target and not (project / target).is_file():
+                sys.exit(f"{source.relative_to(project)} names a missing {target}")
+    for guide, target in (
+        ("docs/agents/worktrees.md", ISSUE_WORKTREE),
+        ("docs/agents/test-author.md", ".harness/skills/fast-implement/SKILL.md"),
+        (
+            "docs/agents/test-author.md",
+            ".harness/orchestration/roles/references/developer-test-author.md",
+        ),
+    ):
+        if target not in (project / guide).read_text(encoding="utf-8"):
+            sys.exit(f"{guide} does not point to {target}")
+
+    # Claude Code: the runtime rule names the procedure and the native skill route resolves it.
+    rule = (project / ".claude/rules/worktree-conventions.md").read_text(encoding="utf-8")
+    if ISSUE_WORKTREE not in rule:
+        sys.exit("worktree-conventions.md does not name the coordinator procedure")
+    claude_route = project / ".claude/skills/implement/references/issue-worktree.md"
+    if not claude_route.is_file():
+        sys.exit("Claude Code skill route does not reach issue-worktree.md")
+    # Codex: AGENTS.md points at the rules, and the Codex skill route reaches the procedures.
+    if RULES_POINTER not in (project / "AGENTS.md").read_text(encoding="utf-8"):
+        sys.exit("AGENTS.md has no Codex read pointer to .claude/rules/")
+    for relative in (
+        ".agents/skills/implement/references/issue-worktree.md",
+        ".agents/skills/fast-implement/SKILL.md",
+    ):
+        if not (project / relative).is_file():
+            sys.exit(f"Codex skill route does not reach {relative}")
+
+    # An older release: full procedure sections in the unedited guides are replaced with a backup.
+    lock_path = project / ".harness" / "harness.lock"
+    lock = json.loads(lock_path.read_text(encoding="utf-8"))
+    old_guides = {
+        "docs/agents/worktrees.md": (
+            b"# Parallel work: git worktrees\n\n## Coordinator issue worktree\n\n"
+            b"python .harness/orchestration/coordinator.py worktree create --repo .\n"
+        ),
+        "docs/agents/test-author.md": (
+            b"# Test-author\n\n## 6. The short `/fast-implement` route\n\nold text\n\n"
+            b"## 7. The full `/implement` route\n\nold text\n"
+        ),
+    }
+    for relative, data in old_guides.items():
+        (project / relative).write_bytes(data)
+        lock["seed_files"][relative] = hashlib.sha256(data).hexdigest()
+    lock_path.write_text(json.dumps(lock, indent=2) + "\n", encoding="utf-8")
+    output = capture(HARNESS + ["update", str(project)])
+    instructions = ROOT / "harness" / "project" / "instructions"
+    for relative in old_guides:
+        name = relative.rsplit("/", 1)[1]
+        if (project / relative).read_bytes() != (instructions / name).read_bytes():
+            sys.exit(f"update did not replace the unedited old {relative}")
+        if f"{relative} (устарел по версии)" not in output:
+            sys.exit(f"update did not report the backed-up old {relative}")
+
+    # Project-edited guides stay byte for byte, and the warning names each new procedure source.
+    edited = {
+        relative: (project / relative).read_bytes() + b"\nLocal note.\n"
+        for relative in PROCEDURE_GUIDES
+    }
+    for relative, data in edited.items():
+        (project / relative).write_bytes(data)
+    output = capture(HARNESS + ["update", str(project)])
+    for relative, data in edited.items():
+        if (project / relative).read_bytes() != data:
+            sys.exit(f"update overwrote the project-edited {relative}")
+    for target in (
+        ISSUE_WORKTREE,
+        ".harness/skills/fast-implement/SKILL.md",
+        ".harness/orchestration/roles/references/developer-test-author.md",
+    ):
+        if f"→ {target}" not in output:
+            sys.exit(f"update did not name the moved procedure source {target}")
+    if "Источник процедуры переехал" not in output:
+        sys.exit("update did not say that a procedure source moved")
+    if (project / "docs" / "adr").exists():
+        sys.exit("install or update copied the repository docs/ into the target")

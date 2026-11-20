@@ -123,7 +123,7 @@ def test_pr_body_reads_the_ticket_and_the_verification_evidence() -> None:
 
 
 def test_completion_report_has_one_source_in_the_memory_format() -> None:
-    assert "`## Completion report` format of `docs/agents/project-memory.md`" in _text(PR_SKILL)
+    assert "`## Completion report` format of `.harness/instructions/project-memory.md`" in _text(PR_SKILL)
     guide = _text(ENGINEERING / "to-guide/references/guide-template.md")
     assert "`/to-pull-requests` step 6" in guide
     assert "gh issue comment" not in guide
@@ -144,3 +144,35 @@ def test_delivery_stats_states_when_to_call_it() -> None:
     assert "Use explicitly after the epic's release PR is merged" in description
     metadata = (skill / "agents/openai.yaml").read_text(encoding="utf-8")
     assert 'default_prompt: "Use $delivery-stats ' in metadata
+
+
+TICKET_FOOTER = "`docs/agents/git-workflow.md` §2 step 6 → Ticket footer"
+CLOSE_AFTER_MERGE = "`docs/agents/git-workflow.md` §2 step 7 → Close the ticket after merge"
+
+
+def test_publication_skills_reference_the_footer_and_closure_contract() -> None:
+    """#1162: the footer choice and the closure check have one source, git-workflow.md §2."""
+    core = _text(PR_SKILL)
+    release = _text(REFERENCES / "release.md")
+    guide = _text(ENGINEERING / "to-guide/references/guide-template.md")
+    for text in (core, release, guide):
+        assert TICKET_FOOTER in text
+        assert CLOSE_AFTER_MERGE in text
+        for copy in ("defaultBranchRef", "gh issue close", "glab issue close"):
+            assert copy not in text, copy
+    assert "**Check the tree.**" in core
+    workflow = _text(INSTRUCTIONS / "git-workflow.md")
+    assert "* **Ticket footer:**" in workflow
+    assert "* **Close the ticket after merge:**" in workflow
+
+
+def test_artifacts_procedure_is_its_own_section() -> None:
+    text = (INSTRUCTIONS / "artifacts.md").read_text(encoding="utf-8")
+    headings = [line for line in text.splitlines() if line.startswith("#")]
+    assert headings[0] == "# Artifacts & Scratchpads"
+    assert headings.index("## Task artifacts and scratchpads") < headings.index(
+        "## Local runtime storage"
+    )
+    procedure = _section(INSTRUCTIONS / "artifacts.md", "Task artifacts and scratchpads")
+    assert "docs/tasks/" in procedure
+    assert "harness cleanup" not in procedure
