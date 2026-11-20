@@ -23,22 +23,19 @@ On GitLab, every `glab` command takes `-R <project-url>` and every `glab api` ca
    `## Contract touchpoints`, verify them in the code, and keep `## Out of scope` out of the guide.
    Use the parent specification's accepted decisions and the project's glossary and ADRs. If the
    work needs a file outside that scope, name it in the guide as needing the maintainer's approval.
-3. **Claim it.** Assign the ticket to the maintainer (`gh issue edit <n> --add-assignee @me`;
-   GitLab `glab issue update <n> -R <project-url> --assignee @me`; or the local tracker's equivalent)
-   before any other write, so a concurrent session does not pick the same ticket.
+3. **Claim it.** Assign the ticket to the maintainer with the claim of
+   `docs/agents/issue-tracker.md` → Wayfinding operations → Claim before any other write, so a
+   concurrent session does not pick the same ticket.
 4. **Mark it in progress.** Replace the current `status::*` label (`status::ready`, a cleared
-   `status::blocked`, or a `status::specs` the user agreed to proceed with); a ticket carries exactly one:
-   - GitHub: `gh issue edit <n> --remove-label status::ready --remove-label status::blocked --remove-label status::specs --add-label status::in-progress`,
-     then confirm with `gh issue view <n> --json labels --jq '[.labels[].name]'`.
-   - GitLab: `glab issue update <n> -R <project-url> --unlabel status::ready,status::blocked,status::specs --label status::in-progress`,
-     then confirm with `glab issue view <n> -R <project-url> -F json`.
-   - Local tracker: set the `**Workflow:**` line to `status::in-progress`.
-   If the label write fails, stop and report it.
+   `status::blocked`, or a `status::specs` the user agreed to proceed with) with `status::in-progress`
+   by `docs/agents/issue-tracker.md` → Replace the status label (`docs/agents/triage-labels.md` →
+   State machine step 5; local tracker: the `**Workflow:**` line). Read the ticket back and confirm it
+   carries exactly one `status::*` label. If the label write fails, stop and report it.
 
 ## Write the guide
 
-5. Read `references/guide-template.md` and fill it. In its section 5 keep only this project's
-   tracker commands and fill in `<project-url>`, `<host>`, `<project-id>`, `<target-branch>`,
+5. Read `references/guide-template.md` and fill it. In its section 5 write only this project's
+   tracker commands, taken from `docs/agents/git-workflow.md` §2 steps 6–7, and fill in `<project-url>`, `<host>`, `<project-id>`, `<target-branch>`,
    `<ID>`, `<title>` and `<slug>` with real values (`<title>` in single quotes, each apostrophe as
    `'\''`, or `''` in PowerShell); only the PR/MR number stays a placeholder. Write the whole guide,
    prompts included, in the `language` from `.harness/project.json` (default `ru`).

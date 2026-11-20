@@ -18,8 +18,8 @@ are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions.
 2. **An epic** (`status::specs`, or the parent of a decomposition): pick the first open, unblocked,
    unclaimed `afk` + `pipeline::fast` child of the lowest execution wave. On GitHub/GitLab use the
    `/wayfinder` frontier query (`docs/agents/issue-tracker.md#wayfinding-operations`) scoped to the
-   epic's children, and claim the ticket (`gh issue edit <n> --add-assignee @me`; GitLab
-   `glab issue update <n> -R <project-url> --assignee @me`) before any other write. On the local
+   epic's children, and claim the ticket by `docs/agents/issue-tracker.md` → Wayfinding operations →
+   Claim before any other write. On the local
    tracker take the first issue file in filename order with `**Workflow:** status::ready`. If none
    qualifies, say why: only `hitl` tickets remain (offer `/to-guide`), only `pipeline::full` ones
    remain (offer `/implement`), nothing is unblocked, or everything is claimed.
@@ -30,19 +30,16 @@ are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions.
 
 1. **Blockers.** Read them from the tracker (native dependencies, `Blocked by` lines or the
    `**Blocked by:**` field). If any is open, stop, name it, and make sure the ticket is `status::blocked`.
-2. **Mark it in progress** before creating the branch or editing any file. Replace the `status::*`
-   label; a ticket carries exactly one:
-   - GitHub: `gh issue edit <n> --remove-label status::ready --remove-label status::blocked --add-label status::in-progress`,
-     then confirm with `gh issue view <n> --json labels --jq '[.labels[].name]'`.
-   - GitLab: `glab issue update <n> -R <project-url> --unlabel status::ready,status::blocked --label status::in-progress`,
-     then confirm with `glab issue view <n> -R <project-url> -F json`.
-   - Local tracker: set the `**Workflow:**` line to `status::in-progress`.
-   A failed label write stops the run.
+2. **Mark it in progress** before creating the branch or editing any file: replace the `status::*`
+   label (`status::ready` or a cleared `status::blocked`) with `status::in-progress` by
+   `docs/agents/issue-tracker.md` → Replace the status label (local tracker: the `**Workflow:**`
+   line). Read the ticket back and confirm it carries exactly one `status::*` label. A failed label
+   write stops the run.
 3. **Integration branch.** Take it from the ticket's `## Integration Branch` section (the
    `**Integration branch:**` line on the local tracker), else from its parent epic. A ticket without
    an epic uses `base_branch`. A missing value for a child ticket is a blocker; never infer it.
-4. **Issue branch.** The current branch must match `branch_pattern`. Otherwise fetch the integration
-   branch, create `feature/issue-<ID>-<slug>` from it, and push it with `git push -u origin <branch>`.
+4. **Issue branch.** The current branch must match `branch_pattern`. Otherwise create and push it
+   from the integration branch by `docs/agents/git-workflow.md` §2 steps 1–2.
 5. **Scope.** The ticket's `## Relevant Files (Discovery Context)`, `## Contract touchpoints` and
    `## Out of scope` bound the change, and its `Action -> Verify` criteria are its checks. A change
    outside them needs the developer's explicit approval before it is made.
