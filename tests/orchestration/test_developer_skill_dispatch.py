@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,6 +18,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from harness.orchestration import coordinator
+from harness.orchestration.core import workspace
 from harness.orchestration.core.developer_skill import INSTRUCTION
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger import ledger_ops
@@ -167,3 +170,74 @@ def test_resume_without_the_skill_refuses_before_any_ledger_change(
     assert routing._batch_record(brief["batch_id"]) == batch_before
     _installed(routing).write_bytes(saved)
     assert _resume(routing, brief, checkpoint)["state"] == "dispatched"
+
+
+def test_a_pinned_runtime_snapshot_names_the_project_install(routing: Routing) -> None:
+    """A batch on a pinned snapshot resolves the skill in the project, not in the snapshot."""
+    source = workspace.MODULE_ROOT.parent
+    sha256 = workspace._runtime_package_sha256(source)
+    state_root = ledger_ops._state_root(routing._args(), routing.repo)
+    snapshot = workspace._store_runtime_snapshot(state_root, source, sha256) / "harness"
+    assert not list(snapshot.rglob("SKILL.md"))
+    script = (
+        "import json, sys\n"
+        "from pathlib import Path\n"
+        "sys.path.insert(0, sys.argv[1])\n"
+        "from harness.orchestration.core import developer_skill as module\n"
+        "assert Path(module.__file__).is_relative_to(Path(sys.argv[1]))\n"
+        "print(json.dumps(module.developer_skill(Path(sys.argv[2]))))\n"
+    )
+
+    pinned = subprocess.run(
+        [sys.executable, "-I", "-c", script, str(snapshot.parent), str(routing.repo)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    path = str(_installed(routing).resolve())
+    assert json.loads(pinned.stdout) == {
+        "path": path,
+        "instruction": INSTRUCTION.format(path=path),
+    }
+    assert not Path(path).is_relative_to(state_root)
+
+
+def test_a_developer_report_records_without_new_fields(routing: Routing) -> None:
+    """The completion report keeps its schema: send adds nothing a worker must report."""
+    brief = _developer_brief(routing)
+    before = _stored_brief(routing, brief["dispatch_id"])
+    routing._start(brief["dispatch_id"])
+    candidate, changed = routing._developer_commit("skill")
+
+    receipt = routing._submit(
+        brief["dispatch_id"], routing._developer_report(brief, candidate, changed)
+    )
+
+    assert receipt["state"] == "reported"
+    assert _stored_brief(routing, brief["dispatch_id"]) == before
+
+
+def test_a_blocked_report_naming_the_missing_skill_records_the_ordinary_way(
+    routing: Routing,
+) -> None:
+    """A worker that cannot read the skill stops with an ordinary blocked report."""
+    brief = _developer_brief(routing)
+    routing._start(brief["dispatch_id"])
+    path = str(_installed(routing).resolve())
+    report = routing._base_report(
+        brief,
+        "developer",
+        outcome="blocked",
+        commit_sha=brief["snapshot_commit"],
+        changed_files=[],
+        checks_run=routing._checks(brief, "not_run"),
+        blockers={
+            "status": "present",
+            "details": f"установленный developer skill недоступен: {path}",
+        },
+    )
+
+    receipt = routing._submit(brief["dispatch_id"], report)
+
+    assert receipt["state"] == "reported"
