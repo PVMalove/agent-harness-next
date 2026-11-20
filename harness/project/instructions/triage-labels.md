@@ -44,7 +44,7 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 
 | Label | Color | Applied by | Meaning |
 | --- | --- | --- | --- |
-| `task-report::required` | gray `#6a737d` | `/publish-epic`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Applied by default to every ticket unless you say to skip it. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
+| `task-report::required` | gray `#6a737d` | `/publish-epic`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
 | `resolution::wontfix` | gray `#c2c2c2` | `/triage` | The request was explicitly rejected. Applied at close time; see `.out-of-scope/` handling in `triage/OUT-OF-SCOPE.md`. |
 
 ### 4. Priority (`priority::*`) — optional, purely informational
@@ -71,8 +71,7 @@ Nothing consumes this automatically yet; it exists so a maintainer can flag impa
 
 ### 6. Environment (`env::*`) — target-project only, optional
 
-Which deployed environment an issue or PR relates to. Not part of this harness repository's own
-taxonomy — only seeded into target projects that track deployments.
+Which deployed environment an issue or PR relates to; for projects that track deployments.
 
 | Label | Meaning |
 | --- | --- |
@@ -130,7 +129,7 @@ A local-markdown-tracked ticket (`.scratch/<feature>/issues/NN-*.md`) has no Git
 
 This field block is the vocabulary that [issue-tracker.md](./issue-tracker.md)'s `Workflow:` line refers to. Wayfinder's own `Status: claimed/resolved` line (same source doc) is an orthogonal claim/lock marker for the file and coexists with these fields rather than replacing them.
 
-`status::*`'s values are the same strings as the GitHub/GitLab labels, plus a terminal `done`, which `/to-pull-requests` sets after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `docs/agents/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](./issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
+`status::*`'s values are the same strings as the GitHub/GitLab labels, plus a terminal `done`, which `/to-pull-requests` sets after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `.harness/instructions/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](./issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
 
 ## Adapting this taxonomy per project
 

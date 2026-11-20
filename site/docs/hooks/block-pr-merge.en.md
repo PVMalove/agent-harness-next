@@ -8,7 +8,7 @@
 Ban on PR/MR auto-merge / Blocking of the agent running the commands `gh pr merge` and `glab mr merge` (including the alias `glab mr accept`) to keep merging under manual control.
 ```
 ## 2. Full description
-This script is an interceptor (a PreToolUse hook for Bash) that implements the "Zero Auto-Merge" policy described in the workflow documentation `docs/agents/git-workflow.md`, in the same way for GitHub (`gh`) and GitLab (`glab`).
+This script is an interceptor (a PreToolUse hook for Bash) that implements the "Zero Auto-Merge" policy described in the workflow documentation `.harness/instructions/git-workflow.md`, in the same way for GitHub (`gh`) and GitLab (`glab`).
 The hook's responsibility is to stop the AI agent from completing the lifecycle of a Pull Request or Merge Request on its own by merging it.
 
 `pr_commands.py` makes the decision on the fail-closed principle: merge text is prohibited everywhere, except in commands from a short allowlist of inert programs and in heredoc data that `cat` or `tee` writes to a file. A program that is not in the allowlist is considered able to run its arguments or its input.

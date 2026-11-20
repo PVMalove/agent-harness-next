@@ -223,10 +223,9 @@ permission, the log root and the in-process launcher. Read
 `.harness/orchestration/roles/references/developer-test-author.md` (installed with
 `backend-orchestration`); this guide does not restate it.
 
-This release verifies Python tests through unittest and pytest. Rust tests in
-`native/harness-runtime/crates/*/tests` are not supported by this solution: no write zones and no
-separate runner were added for them. A configurable argv is not itself restricted to Python, but it
-does not establish the support of another stack. Usual Rust QA stays required for Rust changes.
+This release verifies Python tests through unittest and pytest. A configurable argv is not itself
+restricted to Python, but it does not establish the support of another stack; other stacks keep
+their usual QA.
 
 ## 8. Diagnostics and live check
 
@@ -264,16 +263,4 @@ fixes it — a command or a fragment of the configuration:
 Guard and probe run scripts of the project, so their lines are skipped before the trust.
 
 Health runs no Claude process, no selected test, no build and no database, and changes no trust.
-The isolation probe creates and removes a temporary sandbox under the shared `runs/`. A static
-`preflight: ok` does not prove that the scoped hook fires live. `make test-author-probe` checks
-that: it needs a Claude Code login and quota. It uses the runtime, model and effort of the
-developer plan of the source project, not a separate model of its own. An unsupported runtime
-adapter fails explicitly. The supported probe confirms the guard, a behavior Red and an external
-developer that calls the author in a worker worktree; a fixture developer then proves Green of the
-unchanged test.
-
-Each CLI call leaves a sanitized `test-author-probe-*.json` in the shared
-`.harness/.sandboxes/reports/`: checkout, stage, exit code, time, usage and cost reported by the
-runtime, and a separate limit. Unknown metrics stay `null`; a limit is not usage. The reports
-survive the removal of the clean-room project, without full transcripts or credentials. The share
-of a subscription quota can be absent from the runtime data and is never calculated from USD.
+The isolation probe creates and removes a temporary sandbox under the shared `runs/`.

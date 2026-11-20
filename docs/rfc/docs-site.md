@@ -33,7 +33,7 @@ Rust runtime и локальный runtime-store.
    инкрементальные проверки, hooks и веб-консоль.
 5. Показать интерактивную демонстрацию веб-консоли.
 6. Использовать маскота как часть публичного бренда.
-7. Сохранить `docs/agents/`, `docs/adr/`, `docs/hooks/`, `docs/skills/` как источник для агентов;
+7. Сохранить `.harness/instructions/`, `docs/adr/`, `docs/hooks/`, `docs/skills/` как источник для агентов;
    сайт ссылается на них, а не дублирует.
 8. Не добавлять зависимость в основной Python-пакет.
 
@@ -184,7 +184,7 @@ site/
 | `/reference/configuration/` | project.schema + orchestration.schema | P1 |
 | `/reference/hooks/` | docs/hooks + ADR 0024 | P1 |
 | `/reference/labels/` | triage-labels | P2 |
-| `/reference/agents/` | docs/agents/README | P2 |
+| `/reference/agents/` | .harness/instructions/README | P2 |
 | `/reference/adr/` | docs/adr/ | P2 |
 | `/reference/changelog/` | CHANGELOG | P2 |
 | `/architecture/` | ARCHITECTURE | P0 |
@@ -297,11 +297,11 @@ alt-тексты для диаграмм и маскота, семантичес
 
 - `scripts/verification/paths.py` — `HARNESS_GUIDE`;
 - `scripts/verification/docs_sync.py` — `HARNESS_GUIDE`, `ARCHITECTURE.md`, перечисление
-  `docs/agents/{...}.md`;
+  `.harness/instructions/{...}.md`;
 - `scripts/clean_room/backend_orchestration.py`, `scripts/clean_room/install_and_update.py`;
 - `tests/orchestration/test_ci_scenarios.py`;
 - `skills/first-party/engineering/implement/SKILL.md`;
-- `docs/agents/README.md`, `docs/README.md`, `docs/backend-orchestration.md`, `README.md`.
+- `.harness/instructions/README.md`, `docs/README.md`, `docs/backend-orchestration.md`, `README.md`.
 
 После удаления файлов `make verify` должен оставаться зелёным. Для сайта добавляется
 `mkdocs build --strict` в `pages.yml` и проверка ссылок.

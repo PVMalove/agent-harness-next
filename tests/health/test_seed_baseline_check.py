@@ -69,8 +69,8 @@ def test_a_lock_without_seed_files_warns_with_the_record_command(repo: Path) -> 
         {"../x.md": None},
         {"/abs/x.md": None},
         {"docs\\agents\\x.md": None},
-        {"docs/agents/x.md": "NOT-HEX"},
-        {"docs/agents/x.md": "A" * 64},
+        {".harness/instructions/x.md": "NOT-HEX"},
+        {".harness/instructions/x.md": "A" * 64},
     ],
     ids=["not-object", "parent", "absolute", "backslash", "not-hex", "upper-hex"],
 )
@@ -81,7 +81,7 @@ def test_a_malformed_seed_baseline_fails(repo: Path, value: object) -> None:
 
 
 def test_null_baseline_is_valid(repo: Path) -> None:
-    edit_lock(repo, seed_files={"docs/agents/x.md": None})
+    edit_lock(repo, seed_files={".harness/instructions/x.md": None})
 
     assert check(repo)["status"] == "ok"
 

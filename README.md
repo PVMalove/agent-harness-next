@@ -62,11 +62,11 @@ Context Package и статус принятого QA. Настройка Runtim
 
 ## Состав `engineering-suite`
 
-В `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`, `developer`, `publish-epic`.
+В `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`, `setup-matt-pocock-skills`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`, `developer`, `publish-epic`.
 
-Сборка разворачивает проектные руководства `docs/agents/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`
-и общий контракт `.harness/instructions/technical-english.md`. Корневой `docs/` остаётся документацией
-исходного репозитория и в целевой проект не переносится.
+Сборка разворачивает проектные руководства `.harness/instructions/{agent-prompt,artifacts,git-workflow,issue-tracker,test-author,triage-labels,worktrees}.md`
+и runtime rules в `.claude/rules/`. Корневой `docs/` остаётся документацией исходного репозитория и
+в целевой проект не переносится.
 
 ## Документация
 
@@ -75,7 +75,7 @@ Context Package и статус принятого QA. Настройка Runtim
 - [Архитектура](https://pvmalove.github.io/agent-harness-next/architecture/) — слои, runtime, store и безопасность.
 - [Справочник](https://pvmalove.github.io/agent-harness-next/reference/) — CLI, конфигурация, hooks и агенты.
 - [Демо](https://pvmalove.github.io/agent-harness-next/demo/) — веб-консоль на демонстрационных данных.
-- [ADR](./docs/adr/) и [правила Git](./docs/agents/git-workflow.md) — действующие контракты и рабочий процесс.
+- [ADR](./docs/adr/) и [правила Git](./harness/project/instructions/git-workflow.md) — действующие контракты и рабочий процесс.
 - [CONTEXT.md](./CONTEXT.md) — глоссарий проекта; [docs/README.md](./docs/README.md) — индекс внутренней документации.
 
 ## Разработка
@@ -92,19 +92,19 @@ coordinator лишь нормализует enum-поля в памяти с п�
 отказывает, а `harness cleanup` оставляет worktree на месте. Как держать процесс запущенным и
 проверять его, описано в разделе [«Runtime» быстрого старта](./site/docs/getting-started/index.md#runtime).
 
-При любой capability установщик ставит общий
-[контракт технического английского](./harness/project/instructions/technical-english.md) как
-`.harness/instructions/technical-english.md` и обновляет его в составе управляемого snapshot. `diff` и
-`update` показывают отдельный unified diff недостающих обязательных ссылок для существующих
-`AGENTS.md`, `CLAUDE.md` и установленных agent seeds. Команды сохраняют пользовательские инструкции.
-После просмотра и явного согласования человек или уполномоченный агент применяет только эти
-добавления обычным редактированием или patch. Подключённые входы требуют прочитать общий контракт
-до первого English handoff. Повторное обновление не предлагает уже подключённые ссылки.
+При любой capability установщик ставит языковые правила
+[технического английского](./harness/project/rules/technical-english.md) и
+[технического русского](./harness/project/rules/technical-russian.md) в `.claude/rules/` и обновляет
+их в составе управляемого snapshot. Claude Code загружает их сам, Codex читает по указателю из
+`AGENTS.md`. Для существующих `AGENTS.md`, `CLAUDE.md` и установленных agent seeds `update`
+показывает unified diff: недостающий указатель на `.claude/rules/` и ссылки на переехавшие пути.
+Проектные файлы команда не меняет: diff применяет человек или уполномоченный агент после
+просмотра.
 
 `backend-orchestration` проводит тикет через роли и coordinator: `/implement` ведёт этапы architect,
 developer, review и QA, `/to-pull-requests` готовит ветку к публикации.
 PR требует отдельного подтверждения; изменения проходят через issue, ветку и PR по
-[правилам Git](./docs/agents/git-workflow.md); полный гейт — `make verify`. Заметки о выпуске — в
+[правилам Git](./harness/project/instructions/git-workflow.md); полный гейт — `make verify`. Заметки о выпуске — в
 [CHANGELOG.md](./CHANGELOG.md), порядок выпуска — в [releases.md](./site/docs/agents/releases.md).
 
 Проект распространяется по лицензии [MIT](./LICENSE). Лицензия закреплённого upstream-snapshot

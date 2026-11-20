@@ -95,7 +95,7 @@ TRACKER_PROJECT_RULE = (
     "without a leading or trailing slash"
 )
 # The optional `test_paths` and `test_runner` fields (site/docs/hooks/run-test.md and
-# docs/agents/test-author.md): both settings are required for test-author activation. A `test_paths`
+# .harness/instructions/test-author.md): both settings are required for test-author activation. A `test_paths`
 # glob is relative - no leading slash or backslash, no drive letter - and has no `..` segment.
 # `project.schema.json` repeats the pattern verbatim; tests keep the two in step.
 TEST_PATH_PATTERN = r"^(?![/\\])(?![A-Za-z]:)(?!(?:.*[/\\])?\.\.(?:[/\\]|$)).+$"

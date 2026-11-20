@@ -62,19 +62,19 @@ disable-model-invocation: true
 
 - `resolution::wontfix`: запрос явно отклонён. Метка ставится при закрытии (см. «Применение результата» ниже), а не в обычном triage.
 
-`task-report::required` тоже контекстная метка, но `triage` её не ставит и не читает. Её ставят `/publish-epic` и `/to-tickets`, а `/to-pull-requests` действует по ней. См. `docs/agents/triage-labels.md`.
+`task-report::required` тоже контекстная метка, но `triage` её не ставит и не читает. Её ставят `/publish-epic` и `/to-tickets`, а `/to-pull-requests` действует по ней. См. `.harness/instructions/triage-labels.md`.
 
 Issue без меток по умолчанию значит «нужен triage». Отдельной метки для этого состояния нет: просто нет обязательных осей.
 
-Это реальные строки меток этого репозитория. См. `docs/agents/triage-labels.md`.
+Это реальные строки меток этого репозитория. См. `.harness/instructions/triage-labels.md`.
 
-Никогда не ставьте канонические upstream-метки (`ready-for-agent`, `ready-for-human`, `needs-triage`, `needs-info`, `wontfix`) или метку `epic::<slug>`. Этот репозиторий привязывает тикет к эпику родительской связью трекера: sub-issue в GitHub, раздел `## Parent: #<epic>` и связь issue `relates_to` в GitLab или структура каталогов локального markdown-трекера (см. `docs/agents/issue-tracker.md#wayfinding-operations`). Если мейнтейнер просит метку эпика, объясните это.
+Никогда не ставьте канонические upstream-метки (`ready-for-agent`, `ready-for-human`, `needs-triage`, `needs-info`, `wontfix`) или метку `epic::<slug>`. Этот репозиторий привязывает тикет к эпику родительской связью трекера: sub-issue в GitHub, раздел `## Parent: #<epic>` и связь issue `relates_to` в GitLab или структура каталогов локального markdown-трекера (см. `.harness/instructions/issue-tracker.md#wayfinding-operations`). Если мейнтейнер просит метку эпика, объясните это.
 
 Переходы состояний. Разберите issue без меток: определите метку `type::*` и режим `hitl` или `afk`, затем поставьте `status::ready` (для `afk` вместе с согласованной `pipeline::*`) или `status::blocked` (зависимость или нехватка сведений). Если issue слишком велик, чтобы описать его за один проход triage, поставьте `status::specs` и направьте мейнтейнера к `/to-spec`. `status::blocked` возвращается в `status::ready`, когда блокер снят или автор ответил. Зависимые тикеты закрытого тикета переводит `/to-pull-requests`, а `/implement`/`/fast-implement` перепроверяют блокеры в pre-flight. `triage` по своей инициативе такую проверку не запускает. Мейнтейнер может переопределить состояние в любой момент. Если переход выглядит необычно, отметьте это и спросите, прежде чем продолжать.
 
 #### Команды трекера
 
-Перед первой командой трекера (список, комментарий, смена метки, закрытие) прочитайте [references/tracker-commands.md](#tracker-commands-reference). Текст issue и тела комментариев следуют правилу Project-Only Metadata из `docs/agents/git-workflow.md` §1: они описывают проект и не содержат пометок generated-by или AI-generated.
+Перед первой командой трекера (список, комментарий, смена метки, закрытие) прочитайте [references/tracker-commands.md](#tracker-commands-reference). Текст issue и тела комментариев следуют правилу Project-Only Metadata из `.harness/instructions/git-workflow.md` §1: они описывают проект и не содержат пометок generated-by или AI-generated.
 
 #### Вызов
 
@@ -144,7 +144,7 @@ Issue без меток по умолчанию значит «нужен triage
 
 #### `references/tracker-commands.md` { #tracker-commands-reference }
 
-Читайте и перечисляйте issues (и PR/MR, если они входят в область) командами из `docs/agents/issue-tracker.md` для настроенного трекера. В GitLab `<host>`, `<project-url>` и `<project-id>` заданы в разделе GitLab → Conventions этого руководства. Тело каждого комментария сначала запишите в файл по пути из `docs/agents/git-workflow.md` §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md` или `pr-comment-<issue>-<slug>.md` для PR/MR).
+Читайте и перечисляйте issues (и PR/MR, если они входят в область) командами из `.harness/instructions/issue-tracker.md` для настроенного трекера. В GitLab `<host>`, `<project-url>` и `<project-id>` заданы в разделе GitLab → Conventions этого руководства. Тело каждого комментария сначала запишите в файл по пути из `.harness/instructions/git-workflow.md` §1 (`.harness/.sandboxes/pr_body/issue-comment-<issue>-<slug>.md` или `pr-comment-<issue>-<slug>.md` для PR/MR).
 
 - **Комментарий:** GitHub `gh issue comment <n> --body-file <path>`; GitLab `GITLAB_HOST=<host> glab api projects/<project-id>/issues/<n>/notes -F body=@<path>` (в GitLab комментарии называются notes).
 - **Замена метки:** одна команда добавляет новую метку и снимает прежнюю с тем же префиксом `key::`. GitHub `gh issue edit <n> --remove-label <old> --add-label <new>`; GitLab `glab issue update <n> -R <project-url> --unlabel <old> --label <new>`. В GitLab Free метка `key::value` обычная (взаимоисключающие scoped labels есть только в Premium). Поэтому голый `--label` оставит на issue обе метки `status::*` и нарушит правило из раздела скилла [Роли](#roles): ровно одна метка `status::*`.

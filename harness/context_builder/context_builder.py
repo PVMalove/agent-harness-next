@@ -856,7 +856,7 @@ def build_context_package(
         path: hashlib.sha256(content.encode("utf-8")).hexdigest()
         for path, content in contents.items()
     }
-    # A byte-identical copy (e.g. a docs/agents template mirror) adds no information: keep it as a
+    # A byte-identical copy (e.g. an installed template mirror) adds no information: keep it as a
     # pointer that states the mirror invariant and charge its content once, to the first path.
     first_by_hash: dict[str, str] = {}
     mirror_of: dict[str, str] = {}

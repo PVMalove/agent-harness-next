@@ -107,7 +107,7 @@ def test_inventory_includes_hook_and_template_provenance(tmp_path: Path) -> None
     hook.write_bytes(hook.read_bytes() + b"\n# local\n")
     user_hook = hook.with_name("local.sh")
     user_hook.write_text("#!/bin/sh\n")
-    template = tmp_path / "docs/agents/git-workflow.md"
+    template = tmp_path / ".harness/instructions/git-workflow.md"
     template.unlink()
 
     result = harness("inventory", str(tmp_path), "--json")
@@ -126,8 +126,8 @@ def test_inventory_includes_hook_and_template_provenance(tmp_path: Path) -> None
         hooks[".codex/hooks.json"]["package_source"]
         == "harness/project/codex-hooks.json.tmpl"
     )
-    assert templates["docs/agents/git-workflow.md"] == {
-        "path": "docs/agents/git-workflow.md",
+    assert templates[".harness/instructions/git-workflow.md"] == {
+        "path": ".harness/instructions/git-workflow.md",
         "package_source": "harness/project/instructions/git-workflow.md",
         "status": "missing",
     }

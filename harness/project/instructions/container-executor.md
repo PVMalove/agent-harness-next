@@ -13,9 +13,8 @@ the commands in this guide, and the harness only runs the image ids that `dispat
 
 Real smokes in CI cover two environments: rootful Docker on a Linux GitHub Actions runner
 (job `docker-smoke`), and rootless Podman on Fedora with SELinux enforcing and cgroup v2.
-The Podman host delegates cpu, memory and pids to the user. Its `podman-smoke` workflow runs on
-the repository owner's self-hosted runner. Both smokes drive the public coordinator commands
-with a real Git worktree, a real runtime store and real containers. They check these results:
+The Podman host delegates cpu, memory and pids to the user. Both smokes drive the public
+coordinator commands with a real Git worktree, a real runtime store and real containers. They check these results:
 
 - A worker dispatch (`dispatch propose`, `dispatch create`, `dispatch send`) runs its adapter in a
   container, and the files the worker writes belong to the host user.
@@ -492,7 +491,7 @@ in the logs saved at its exit.
 
 Managed hooks (`.claude/settings.local.json` and `.claude/hooks/`) are not tracked by Git, so
 an issue worktree does not have them, on the host or in a container. Only hooks in tracked
-files run. Delivering hooks to a worktree is a separate open task.
+files run.
 
 `harness health` (`orchestration.worker_binaries`) checks, for each role in a container, that
 the engine is on the `PATH` of `harness-runtime serve` and that the worker and proxy images are

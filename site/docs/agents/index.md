@@ -3,7 +3,7 @@
 Здесь собраны операционные руководства Harness Next и русские описания проектных агентов.
 Руководства artifacts, git-workflow, issue-tracker, test-author, triage-labels и worktrees
 соответствуют шаблонам `harness/project/instructions/`. `harness init` разворачивает эти шаблоны в
-`docs/agents/` целевого проекта: по этим документам работают агенты. `releases.md` и
+`.harness/instructions/` целевого проекта: по этим документам работают агенты. `releases.md` и
 `console-web-home-checklist.md` относятся только к этому репозиторию. Сам этот обзор и описания
 агентов в целевой проект не попадают. Публичные руководства по workflow и CLI
 ([руководства](../guides/workflow.md), [справочник CLI](../reference/cli.md)) и руководство по

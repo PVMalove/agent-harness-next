@@ -75,7 +75,7 @@ _RULES_LOCK: dict[str, object] = {
     "seed_files": {
         ".claude/rules/git-delivery.md": None,
         ".claude/rules/karpathy-guidelines.md": None,
-        "docs/agents/git-workflow.md": None,
+        ".harness/instructions/git-workflow.md": None,
     },
 }
 
@@ -123,7 +123,7 @@ def test_check_agents_md_needs_no_pointer_without_rule_seeds(tmp_path: Path) -> 
     (tmp_path / "AGENTS.md").write_text("# My Project\n", encoding="utf-8")
     lock: dict[str, object] = {
         "capabilities": ["engineering-suite"],
-        "seed_files": {"docs/agents/x.md": None},
+        "seed_files": {".harness/instructions/x.md": None},
     }
 
     result = checks.check_agents_md(_context(tmp_path, lock=lock))

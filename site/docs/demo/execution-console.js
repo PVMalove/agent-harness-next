@@ -261,7 +261,7 @@ const UPDATE={
 @@ -1 +1 @@
 -1.5.1
 +2.0.0`},
-    {path:'docs/agents/git-workflow.md',kind:'keep',seed:true,title:'Локальные изменения сохраняются',explain:'Seed-файл. В обычном режиме остаётся вашим; в seed-режиме можно отметить для перезаписи.',diff:`--- проект/docs/agents/git-workflow.md
+    {path:'.harness/instructions/git-workflow.md',kind:'keep',seed:true,title:'Локальные изменения сохраняются',explain:'Seed-файл. В обычном режиме остаётся вашим; в seed-режиме можно отметить для перезаписи.',diff:`--- проект/docs/agents/git-workflow.md
 +++ после обновления/docs/agents/git-workflow.md
 @@ -18,3 +18,4 @@
  ## PR
@@ -284,7 +284,7 @@ const SEED_FILES=[
   '.claude/hooks/test-author-guard.py',
   '.claude/settings.local.json',
   'AGENTS.md',
-  'docs/agents/git-workflow.md',
+  '.harness/instructions/git-workflow.md',
   'README.md'
 ];
 const PROJECTS=[

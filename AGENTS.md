@@ -22,11 +22,12 @@ logs.
 - `global/` — seed template for the target project's global agent profile; `global-skills/` and
   `bin/` — global entry skills and installer; `scripts/` — registry, drift, verification, and
   clean-room checks.
-- `docs/README.md` — documentation index; `docs/agents/` — this repository's installed copy of the
-  agent instructions (source `harness/project/instructions/`); `docs/adr/` — architectural
-  decisions; `site/docs/skills/`, `site/docs/hooks/` — Russian descriptions;
-  `docs/technical-russian.md` — Russian technical writing style guide;
+- `docs/README.md` — documentation index; `docs/adr/` — architectural decisions;
+  `site/docs/skills/`, `site/docs/hooks/` — Russian descriptions;
   `site/docs/runtime-discovery.md` — runtime skill routes.
+- `harness/project/instructions/` — shared agent procedures, installed to `.harness/instructions/`;
+  `harness/project/rules/` — runtime rules, including the Technical English and Technical Russian
+  language rules, installed to `.claude/rules/`; `harness/project/agents/` — subagents.
 - `third_party/mattpocock-skills/` — upstream manifest, lock, license, and checksums;
   `.github/workflows/` — CI.
 - `harness/CAPABILITIES.json` is the capability source of truth. `.harness/` and root
@@ -58,14 +59,15 @@ When a task matches a skill, open only its relevant `SKILL.md` through `.agents/
   revisions and retain license and provenance files.
 - Root `docs/` belongs only to this repository and must never be copied into target projects.
   Target project instructions come from `harness/project/instructions/` and other explicit templates.
-- For implementation or delivery, follow `docs/agents/git-workflow.md`: issue first, use the epic's
+- For implementation or delivery, follow `harness/project/instructions/git-workflow.md`: issue first, use the epic's
   recorded `integration/<service-or-team>` branch as the task base, create an isolated issue branch
   matching `.harness/project.json`, test before commits, use CLI-only Git and tracker operations,
   get explicit confirmation before opening a PR, and never auto-merge. Use
   `Closes #<ID>` only when the PR targets the repository's default branch, then verify the issue
   closed; for an integration PR, use `Related to #<ID>` and close the issue only after the developer
   confirms its merge. Use
-  `docs/agents/artifacts.md` and `docs/agents/worktrees.md` for their respective workflows.
+  `harness/project/instructions/artifacts.md` and `harness/project/instructions/worktrees.md` for their
+  respective workflows.
 - Keep commit messages and PR titles/bodies project-only. Runtime and model names are allowed.
   When forming a commit, never add the agent itself as an author or coauthor; human developer
   `Co-Authored-By` trailers are allowed. Do not add generated-by marks or assistant session URLs.
@@ -87,9 +89,6 @@ subagents, return their results to the primary session after they finish.
 
 Codex only: when the user explicitly asks to launch or use subagents, run them with `gpt-5.6-luna`
 and `max` reasoning effort. Do not apply this rule outside Codex.
-
-Before the first English handoff, agents must read
-[Technical English](.harness/instructions/technical-english.md).
 
 Runtime rules are in `.claude/rules/*.md` (source `harness/project/rules/`). Claude Code loads them
 automatically. Codex does not load that directory: at the start of every session, read each file in

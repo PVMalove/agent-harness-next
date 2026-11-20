@@ -192,7 +192,7 @@ Without a terminal, `harness init` takes the default for every omitted flag with
   `"access": "install-allowed"` with the reviewed index's SHA-256 in `sha256`; that change is the
   owner's decision after they review the index and the preset.
 - `pr_checklist` in `.harness/project.json` holds up to 32 single-line project questions that
-  every PR body answers with project evidence (`docs/agents/git-workflow.md`). `harness init` has no flag for it: add it through a
+  every PR body answers with project evidence (`.harness/instructions/git-workflow.md`). `harness init` has no flag for it: add it through a
   preset or by editing the file, then run `harness health`.
 
 ##### Explicit invocation

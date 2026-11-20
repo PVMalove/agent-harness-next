@@ -62,6 +62,8 @@ from harness.uninstall import (
     CLAUDE_MD_SEED,
     CONFIRM_WORD,
     GITIGNORE_LINES as RUNTIME_GITIGNORE_LINES,
+    LEGACY_INSTRUCTIONS_DIR,
+    MANAGED_RULES,
     SEED_FOLDERS,
     seed_sources,
     apply_uninstall,
@@ -346,6 +348,9 @@ def _packageable(path: Path) -> bool:
 # Managed agent instructions: the source in the project templates, the target in `.harness/` (#814).
 INSTRUCTIONS_SOURCE = PACKAGE / "project" / "instructions"
 INSTRUCTIONS_TARGET = ".harness/instructions"
+# Managed language rules: the source next to the seed rules, the target in `.claude/rules/` (#1249).
+RULES_SOURCE = PACKAGE / "project" / "rules"
+RULES_TARGET = ".claude/rules"
 
 
 def _resource_target(source: Path) -> Path:
@@ -360,12 +365,11 @@ def package_files(
     names: list[str], explicit: set[str] | None = None
 ) -> dict[str, bytes]:
     """Сформировать словарь относительных целевых путей и байтового содержимого файлов пакета."""
-    # Общий контракт технического английского ставится в любую установку, вне каталога capability:
-    # он не зависит от optional backend-orchestration.
+    # Языковые правила ставятся в любую установку, вне каталога capability: runtime грузит их
+    # из `.claude/rules/`, Codex читает по указателю из `AGENTS.md` (#1249).
     result: dict[str, bytes] = {
-        f"{INSTRUCTIONS_TARGET}/technical-english.md": (
-            INSTRUCTIONS_SOURCE / "technical-english.md"
-        ).read_bytes(),
+        f"{RULES_TARGET}/{name}": (RULES_SOURCE / name).read_bytes()
+        for name in sorted(MANAGED_RULES)
     }
     for source in selected_skills(names):
         for path in sorted(source.rglob("*")):
@@ -1100,14 +1104,14 @@ class MovedSection(NamedTuple):
 # Seed guides whose rules (ADR 0039) or procedures (ADR 0037) moved to another owner: the old section
 # is a pointer now, so a project-edited copy keeps text that no runtime reads as its source.
 SEED_MOVED_SECTIONS: dict[str, tuple[MovedSection, ...]] = {
-    "docs/agents/git-workflow.md": (
+    f"{INSTRUCTIONS_TARGET}/git-workflow.md": (
         MovedSection(
             "раздел 1 (Fundamental Constraints & Tooling)",
             ".claude/rules/git-delivery.md",
             "rule",
         ),
     ),
-    "docs/agents/worktrees.md": (
+    f"{INSTRUCTIONS_TARGET}/worktrees.md": (
         MovedSection(
             "правила Conventions", ".claude/rules/worktree-conventions.md", "rule"
         ),
@@ -1117,7 +1121,7 @@ SEED_MOVED_SECTIONS: dict[str, tuple[MovedSection, ...]] = {
             "procedure",
         ),
     ),
-    "docs/agents/test-author.md": (
+    f"{INSTRUCTIONS_TARGET}/test-author.md": (
         MovedSection(
             "раздел 6 (короткий маршрут /fast-implement)",
             ".harness/skills/fast-implement/SKILL.md",
@@ -1491,11 +1495,83 @@ def _install_hook_policy(repo: Path) -> list[str]:
     return written
 
 
+def migrate_legacy_instructions(repo: Path) -> None:
+    """Перенести seed-руководства из `docs/agents/` в `.harness/instructions/` (#1249).
+
+    Руководство переезжает вместе с правками проекта и своим baseline в lock; дальше `SeedInstall`
+    решает, обновлять ли его, по обычным правилам. Копию, равную файлу на новом месте, команда
+    удаляет. Отличающуюся копию и файлы, которые harness не ставит, она оставляет и называет."""
+    legacy = repo / LEGACY_INSTRUCTIONS_DIR
+    if legacy.is_symlink() or not legacy.is_dir():
+        return
+    names = {
+        source.name
+        for folder, _, suffixes in SEED_FOLDERS
+        if folder == "instructions"
+        for source in seed_sources(PROJECT_TEMPLATE_DIR, folder, suffixes)
+    }
+    lock = load_lock(repo)
+    baseline = read_seed_baseline(lock)
+    moved: list[str] = []
+    conflicting: list[str] = []
+    foreign: list[str] = []
+    for path in sorted(legacy.iterdir()):
+        old = f"{LEGACY_INSTRUCTIONS_DIR}/{path.name}"
+        if path.name not in names or path.is_symlink() or not path.is_file():
+            foreign.append(old)
+            continue
+        new = f"{INSTRUCTIONS_TARGET}/{path.name}"
+        target = repo / new
+        if target.exists():
+            if target.is_file() and target.read_bytes() == path.read_bytes():
+                path.unlink()
+                moved.append(new)
+            else:
+                conflicting.append(old)
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        os.replace(path, target)
+        moved.append(new)
+    if lock is not None and baseline is not None:
+        for old in [key for key in baseline if key.startswith(f"{LEGACY_INSTRUCTIONS_DIR}/")]:
+            name = old.split("/")[-1]
+            if name in names and old not in conflicting:
+                value = baseline.pop(old)
+                baseline.setdefault(f"{INSTRUCTIONS_TARGET}/{name}", value)
+        lock["seed_files"] = {key: baseline[key] for key in sorted(baseline)}
+        write_lock(repo, lock)
+    for directory in (legacy, legacy.parent):
+        if directory.is_dir() and not any(directory.iterdir()):
+            directory.rmdir()
+    if moved:
+        print(
+            f"\n[INFO] Руководства перенесены из {LEGACY_INSTRUCTIONS_DIR}/ в "
+            f"{INSTRUCTIONS_TARGET}/ вместе с правками проекта:"
+        )
+        for relative in moved:
+            print(f"  - {relative}")
+    if conflicting:
+        print(
+            f"\n[WARNING] В {LEGACY_INSTRUCTIONS_DIR}/ оставлены руководства: в "
+            f"{INSTRUCTIONS_TARGET}/ уже есть другой файл с тем же именем. Перенесите нужные "
+            "правки в новый файл и удалите старый:"
+        )
+        for relative in conflicting:
+            print(f"  - {relative}")
+    if foreign:
+        print(
+            f"\n[INFO] В {LEGACY_INSTRUCTIONS_DIR}/ оставлены файлы, которые harness не ставит:"
+        )
+        for relative in foreign:
+            print(f"  - {relative}")
+
+
 def scaffold_engineering_extras(
     repo: Path, args: argparse.Namespace, *, orchestration_enabled: bool = False
 ) -> list[str]:
     """Развернуть дополнительные файлы и настройки для набора возможностей engineering-suite."""
     written: list[str] = []
+    migrate_legacy_instructions(repo)
     seeds = SeedInstall(repo, args, orchestration_enabled=orchestration_enabled)
 
     for folder, target, suffixes in SEED_FOLDERS:
@@ -1813,6 +1889,9 @@ def artifact_provenance(repo: Path) -> JsonObject:
                 if path.suffix in suffixes and path.is_file() and not path.is_symlink()
             )
     local.update(path for path in hooks if (repo / path).is_file())
+    # Managed files share seed directories (`.harness/instructions/`, `.claude/rules/`); the lock
+    # snapshot owns them, so they are neither seeds nor project files.
+    local -= set(lock.get("files") or {})
     result.update({"hooks": [], "templates": []})
     paths = set(expected) | local if installations_with_seeds else local
     for relative in sorted(paths):

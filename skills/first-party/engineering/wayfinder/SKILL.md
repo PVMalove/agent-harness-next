@@ -24,7 +24,7 @@ The map is a single issue on this repo's issue tracker, labelled `wayfinder:map`
 
 The map is an **index**, not a store. It lists the decisions made and points at the tickets that hold their detail; a decision lives in exactly one place — its ticket — so the map never restates it, only gists it and links.
 
-**Where the map, its child tickets, blocking, and frontier queries physically live is tracker-specific.** The issue tracker should have been provided to you in `docs/agents/issue-tracker.md` — if that file is missing, tell the user to run `harness update`, which seeds it from the harness templates. Consult the tracker doc's "Wayfinding operations" section for how _this_ repo expresses them. If no tracker has been provided, default to the local-markdown tracker.
+**Where the map, its child tickets, blocking, and frontier queries physically live is tracker-specific.** The issue tracker should have been provided to you in `.harness/instructions/issue-tracker.md` — if that file is missing, tell the user to run `harness update`, which seeds it from the harness templates. Consult the tracker doc's "Wayfinding operations" section for how _this_ repo expresses them. If no tracker has been provided, default to the local-markdown tracker.
 
 ### The map body
 
@@ -64,7 +64,7 @@ Each ticket is a **child issue** of the map; the tracker's issue id is its ident
 <the decision or investigation this ticket resolves>
 ```
 
-Each ticket carries a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)) — plus the matching `hitl`/`afk` label and `status::ready`, this repo's own taxonomy for who does the work and where it sits in the pipeline (see `docs/agents/triage-labels.md`).
+Each ticket carries a `wayfinder:<type>` label — one of `research`, `prototype`, `grilling`, `task` (see [Ticket Types](#ticket-types)) — plus the matching `hitl`/`afk` label and `status::ready`, this repo's own taxonomy for who does the work and where it sits in the pipeline (see `.harness/instructions/triage-labels.md`).
 
 A session **claims** a ticket by assigning it to the dev driving the map, **first**, before any work, so concurrent sessions skip it. That assignee _is_ the claim: an open, unassigned ticket is unclaimed.
 

@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse(Bash): "Zero Direct Commits" from docs/agents/git-workflow.md, enforced deterministically.
+# PreToolUse(Bash): "Zero Direct Commits" from .harness/instructions/git-workflow.md, enforced deterministically.
 # direct_commits.py checks each git commit/push in the checkout it runs in (git -C/--work-tree/
 # --git-dir, a preceding cd, the payload cwd, then CLAUDE_PROJECT_DIR) and each push target ref.
 # Only its exit 0 with the word `allow` lets the command run, so a missing interpreter, any

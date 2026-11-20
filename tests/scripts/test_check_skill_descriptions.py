@@ -125,7 +125,7 @@ def test_an_intent_or_a_neighbour_pointer_is_not_an_invocation_condition(
     "description",
     [
         "Creates labels. Run once per repo before first use.",
-        "Creates labels listed in docs/agents/triage-labels.md. Run once per repo before first use.",
+        "Creates labels listed in .harness/instructions/triage-labels.md. Run once per repo before first use.",
     ],
 )
 def test_a_description_without_a_refusal_or_a_neighbour_fails_with_f4(

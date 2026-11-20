@@ -98,6 +98,17 @@ DEVELOPER_SKILL_INSTRUCTION = (
     "any edit with outcome blocked and name the path in blockers."
 )
 
+# The contract reads of every worker prompt (#1249). The adapter is stdlib-only and installed outside
+# the hashed orchestration package, so it repeats the literal of
+# harness/orchestration/core/worker_contract.py; a parity test keeps both equal.
+CONTRACT_ROLES_RELATIVE = ".harness/orchestration/roles"
+CONTRACT_RULES_RELATIVE = ".claude/rules"
+CONTRACT_INSTRUCTION = (
+    "Contracts: before task work, read the common role contract {roles}/common.md and your role "
+    "contract {roles}/{role}.md. Write English coordination text by {rules}/technical-english.md "
+    "and Russian report text by {rules}/technical-russian.md."
+)
+
 
 PROMPT = """\
 You are the {role} worker for dispatch {dispatch_id}.
@@ -161,6 +172,14 @@ def build_prompt(
         heartbeat=brief["liveness"]["heartbeat_every_seconds"],
         package=brief["context_package_id"],
         allowed_tools=", ".join(brief["allowed_tools"]),
+    )
+    prompt += (
+        CONTRACT_INSTRUCTION.format(
+            roles=(repo / CONTRACT_ROLES_RELATIVE).resolve(),
+            rules=(repo / CONTRACT_RULES_RELATIVE).resolve(),
+            role=brief["role"],
+        )
+        + "\n"
     )
     if brief["role"] == "developer":
         prompt += (

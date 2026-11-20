@@ -59,8 +59,7 @@ from scripts.verification.cache import (
 )
 from scripts.verification import failed_only
 from scripts.verification.docs_sync import (
-    check_docs_agents_enumeration,
-    check_docs_agents_mirror,
+    check_instructions_enumeration,
     check_diagram_previews,
     check_no_retired_path_inventory_term,
     check_pvmalove_additions_docs_sync,
@@ -171,7 +170,6 @@ def _check_global_skills() -> None:
 
 def _check_documentation() -> None:
     """Проверить согласованность документации, шаблонов и постоянных инструкций."""
-    check_docs_agents_mirror()
     check_diagram_previews()
     check_no_retired_path_inventory_term()
     grep_contains(
@@ -187,7 +185,7 @@ def _check_documentation() -> None:
     agents_seed = ROOT / "harness" / "project" / "AGENTS.md.tmpl"
     grep_contains(agents_seed, "For code discovery, run the Repo Map")
     grep_contains(agents_seed, "then use targeted `rg` searches and reads.")
-    check_docs_agents_enumeration()
+    check_instructions_enumeration()
     check_site_links()
     check_schema_docs()
     check_pvmalove_override_docs_sync()

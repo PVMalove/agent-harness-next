@@ -85,7 +85,7 @@ command for the operator without that approval. `ledger clean` deletes only orph
 #### Batch preparation
 
 The coordinator takes every procedure from agent sources only: this skill,
-`.harness/orchestration/playbook.md`, `.harness/orchestration/roles/`, the guides in `docs/agents/`,
+`.harness/orchestration/playbook.md`, `.harness/orchestration/roles/`, the guides in `.harness/instructions/`,
 and the `--help` and `remedy` output of the coordinator CLI. It does not take a procedure from a
 Russian human document (`backend-orchestration.md`, `site/docs/`, `ARCHITECTURE.md`,
 `site/docs/skills/`, `site/docs/hooks/`). It does not copy conventions from another batch and does
@@ -495,7 +495,7 @@ module-owned guidance:
 - `.harness/orchestration/roles/` owns the boundary, the required proof, and the specialist trigger of each role.
 - The `--help` output and the `remedy` of the coordinator CLI own the command syntax and the
   operational recovery.
-- `docs/agents/git-workflow.md` owns the issue-branch, commit, push, and PR boundaries.
+- `.harness/instructions/git-workflow.md` owns the issue-branch, commit, push, and PR boundaries.
 - `references/issue-worktree.md` owns the issue worktree creation and its recovery.
 
 Follow these files without duplicating or weakening their rules. Do not invent token metrics:
@@ -522,7 +522,7 @@ prohibited. Leave
 
 ### Coordinator issue worktree (`references/issue-worktree.md`) { #issue-worktree }
 
-Read this before `batch create` and whenever this session needs write access to an existing issue worktree. It is the coordinator's procedure; workers prepare their checkout as `docs/agents/worktrees.md` → Worker checkout environment describes, and the branch rules are in `docs/agents/git-workflow.md`.
+Read this before `batch create` and whenever this session needs write access to an existing issue worktree. It is the coordinator's procedure; workers prepare their checkout as `.harness/instructions/worktrees.md` → Worker checkout environment describes, and the branch rules are in `.harness/instructions/git-workflow.md`.
 
 A coordinator (`/implement`) must create the issue worktree before `batch create`. `batch create`
 refuses a worktree that `git worktree list` does not show: `worktree '<path>' is not registered by git worktree`.

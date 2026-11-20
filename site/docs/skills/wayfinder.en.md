@@ -39,7 +39,7 @@ The map is a single issue in this repository's issue tracker, labeled `wayfinder
 
 The map is an **index**, not a store. It lists the decisions made and points to the tickets that hold their details. A decision lives in exactly one place, its ticket. So the map never repeats it and shows only its gist and links.
 
-**Where the map, its child tickets, blocking edges, and frontier queries physically live depends on the tracker.** You should already have the issue tracker. If `docs/agents/issue-tracker.md` is missing, tell the user to run `harness update`. It creates the file from the harness templates. See the "Wayfinding operations" section of the tracker document to learn how these are expressed in _this_ repository. If no tracker is specified, the default is the local markdown tracker.
+**Where the map, its child tickets, blocking edges, and frontier queries physically live depends on the tracker.** You should already have the issue tracker. If `.harness/instructions/issue-tracker.md` is missing, tell the user to run `harness update`. It creates the file from the harness templates. See the "Wayfinding operations" section of the tracker document to learn how these are expressed in _this_ repository. If no tracker is specified, the default is the local markdown tracker.
 
 ##### Map body
 
@@ -79,7 +79,7 @@ Each ticket is a **child issue** of the map. The tracker's issue ID is its ident
 <the decision or investigation this ticket resolves>
 ```
 
-Each ticket has a `wayfinder:<type>` label, one of `research`, `prototype`, `grilling`, `task` (see [Ticket types](#ticket-types)). It also has the matching `hitl`/`afk` label and `status::ready`, this repository's own taxonomy, which shows who does the work and where the ticket is in the pipeline (see `docs/agents/triage-labels.md`).
+Each ticket has a `wayfinder:<type>` label, one of `research`, `prototype`, `grilling`, `task` (see [Ticket types](#ticket-types)). It also has the matching `hitl`/`afk` label and `status::ready`, this repository's own taxonomy, which shows who does the work and where the ticket is in the pipeline (see `.harness/instructions/triage-labels.md`).
 
 A session **claims** a ticket by assigning it to the developer who runs the map, **first**, before any work, so that parallel sessions skip it. This assignee is the claim: an open, unassigned ticket is unclaimed. Blocking uses the tracker's **own** dependency relation where the tracker document uses it. This matters because it shows the frontier _visually_ in the tracker's own UI, so a human sees what can be taken without opening the map. Otherwise, in local markdown or on GitLab, where blocking links exist only in Premium, a body convention that the tracker document names is used. A ticket is **unblocked** when every ticket that blocks it is closed. The **frontier** is the open, unblocked, unclaimed children: the edge of the known.
 
@@ -130,7 +130,7 @@ The user invokes the skill with a vague idea.
 2. **Map the frontier.** Grill again, this time **breadth-first**: spread across the whole space instead of going deep on any one thread. Surface the open decisions and the first steps that can be taken right now. **If no fog surfaces**, the path to the destination is already clear and the whole path is small enough for one session, so you do not need a map. Stop and ask the user how they want to proceed.
 3. **Create the map** (label `wayfinder:map`): the destination and notes are filled in, the decisions are empty for now, and the fog is drawn as **Not yet specified**.
 4. **Create the tickets you can specify now** as child issues of the map. Give each one its `wayfinder:<type>` label, the matching `hitl`/`afk` label, and `status::ready` (see [Tickets](#tickets)). Then connect the edges in a **second pass** (the tickets need IDs before they can refer to each other). The wiring sorts them into frontier and blocked. Anything you still cannot specify stays in the fog, in the **Not yet specified** section.
-5. **Launch research subagents.** For each newly created `research` ticket, deploy a `/research` subagent to resolve it in parallel. It records its results in the issue branch of that research ticket (the name follows `branch_pattern` from `.harness/project.json`, see `docs/agents/git-workflow.md`), with a context pointer from the ticket.
+5. **Launch research subagents.** For each newly created `research` ticket, deploy a `/research` subagent to resolve it in parallel. It records its results in the issue branch of that research ticket (the name follows `branch_pattern` from `.harness/project.json`, see `.harness/instructions/git-workflow.md`), with a context pointer from the ticket.
 6. Stop. Charting is the work of one session. It resolves nothing by hand.
 
 ##### `references/work.md` — work through the map { #work-the-map }
@@ -138,7 +138,7 @@ The user invokes the skill with a vague idea.
 The user invokes the skill with a map (URL or number). The ticket is **optional**: without it, you choose the next decision, not the user.
 
 1. Load the **map**: the low-resolution view, not the body of every ticket.
-2. Choose a ticket. If the user named one, use it. Otherwise, take the first frontier ticket in order. **Claim it**: assign it to yourself before any work and set `status::in-progress`. This is the same convention that `/fast-implement` and `/to-guide` use (`docs/agents/triage-labels.md`).
+2. Choose a ticket. If the user named one, use it. Otherwise, take the first frontier ticket in order. **Claim it**: assign it to yourself before any work and set `status::in-progress`. This is the same convention that `/fast-implement` and `/to-guide` use (`.harness/instructions/triage-labels.md`).
 3. Resolve it, and **zoom in as needed**: fetch the full body of any linked or closed ticket on demand. Invoke the skills that the `## Notes` block names and those that the ticket type requires (see the Ticket types section).
 4. Record the decision. Post the answer as a **decision comment**, **close** the issue, and **add a context pointer** to the "Decisions so far" item on the map.
 5. Add new tickets (create them, then wire them). Clear any fog that the answer made specifiable, and remove each graduated patch from **Not yet specified**, so that it lives only as a new ticket. If the answer shows that a ticket, this one or another, is beyond the destination, **take it out of scope** instead of resolving it on the route. If the decision invalidates other parts of the map, update or remove those tickets.

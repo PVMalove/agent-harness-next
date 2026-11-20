@@ -255,7 +255,7 @@ GLAB_AUTH_FAILURE = re.compile(r"auth login|\b401\b[^\n]*unauthorized", re.IGNOR
 
 
 class GitLabProject(NamedTuple):
-    """Явная адресация проекта GitLab (docs/agents/issue-tracker.md → GitLab → Conventions)."""
+    """Явная адресация проекта GitLab (.harness/instructions/issue-tracker.md → GitLab → Conventions)."""
 
     host: str
     # The `-R` value of every glab command.
@@ -427,7 +427,7 @@ def resolve_gitlab_scope(repo: Path, epic: int, gitlab: GitLabProject) -> JsonOb
 
     Дочерний тикет — задача того же проекта, связанная с эпиком через `relates_to`, в описании
     которой есть маркер `## Parent: #<epic>`: связь не имеет направления, поэтому маркер отсекает
-    посторонние связи (docs/agents/issue-tracker.md → Wayfinding operations).
+    посторонние связи (.harness/instructions/issue-tracker.md → Wayfinding operations).
     """
     parent = _glab_issue(repo, gitlab, epic)
     marker = re.compile(rf"^## Parent: #{epic}\b", re.MULTILINE)

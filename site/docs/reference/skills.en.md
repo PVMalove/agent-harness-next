@@ -21,6 +21,7 @@ changed, and this is expected.
 | `grill-me` | A thin wrapper over the project version: the `/grilling` interview and approved Discovery Context, without editing `CONTEXT.md` or ADRs. |
 | `grill-with-docs` | The same wrapper plus maintenance of the glossary and architectural decisions. |
 | `wayfinder` | Map tickets carry the execution mode and state; taking a ticket puts it into progress. |
+| `setup-matt-pocock-skills` | Records the tracker in `.harness/project.json` and keeps the guides that `harness update` installs in `.harness/instructions/`; `/setup-labels` creates the labels. |
 
 ## Engineering
 

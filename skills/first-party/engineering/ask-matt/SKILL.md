@@ -92,4 +92,4 @@ Off the main flow entirely.
 
 ## Precondition
 
-**`harness update`** seeds `docs/agents/` (issue tracker, triage labels, domain docs) from the harness templates; then run **`/setup-labels`** once on a GitHub or GitLab tracker. Don't run `/setup-matt-pocock-skills` here: it writes the upstream label vocabulary that `/triage` forbids.
+**`harness update`** seeds `.harness/instructions/` (issue tracker, triage labels, domain docs) from the harness templates; then run **`/setup-labels`** once on a GitHub or GitLab tracker. Don't run `/setup-matt-pocock-skills` here: it writes the upstream label vocabulary that `/triage` forbids.

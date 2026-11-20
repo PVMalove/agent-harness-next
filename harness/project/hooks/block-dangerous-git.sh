@@ -2,7 +2,7 @@
 # PreToolUse(Bash): blocks unconditionally destructive git commands, adapted from the upstream
 # mattpocock/skills "git-guardrails-claude-code" skill (skills/misc/, not part of the vendored
 # mattpocock-suite capability). Deliberately does NOT block `git push` outright, unlike upstream —
-# docs/agents/git-workflow.md requires pushing issue branches; push-to-base/integration is already
+# .harness/instructions/git-workflow.md requires pushing issue branches; push-to-base/integration is already
 # covered by block-direct-master.sh.
 # Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
 # JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below

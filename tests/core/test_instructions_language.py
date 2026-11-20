@@ -16,9 +16,12 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCES = sorted(
     [
         *(ROOT / "harness" / "project" / "instructions").glob("*.md"),
+        *(ROOT / "harness" / "project" / "rules").glob("*.md"),
         *(ROOT / "harness" / "project" / "agents").glob("*.md"),
     ]
 )
+# Technical Russian teaches Russian style: its quoted examples are Russian by design (#1249).
+RUSSIAN_EXAMPLES = {"technical-russian.md"}
 CYRILLIC = re.compile(r"[А-Яа-яЁё]")
 FENCE = re.compile(r"^(`{3,}|~{3,}).*?^\1\s*$", re.MULTILINE | re.DOTALL)
 CODE_SPAN = re.compile(r"`[^`\n]*`")
@@ -34,10 +37,9 @@ def test_the_instruction_sources_exist() -> None:
 
 @pytest.mark.parametrize("source", SOURCES, ids=lambda path: path.name)
 def test_an_instruction_is_written_in_english(source: Path) -> None:
-    lines = [
-        line
-        for line in _prose(source.read_text(encoding="utf-8")).splitlines()
-        if CYRILLIC.search(line)
-    ]
+    text = _prose(source.read_text(encoding="utf-8"))
+    if source.name in RUSSIAN_EXAMPLES:
+        text = re.sub(r"«[^»]*»", "", text)
+    lines = [line for line in text.splitlines() if CYRILLIC.search(line)]
 
     assert lines == []

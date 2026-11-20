@@ -8,7 +8,7 @@
 Blocking of saving drafts outside the tasks directory
 ```
 ## 2. Full description
-The script is a pre-hook (`PreToolUse(Write/Edit)`, called before the file write or edit tools run). Its main goal is to enforce the artifact storage standards (according to `docs/agents/artifacts.md` and `docs/agents/git-workflow.md`).
+The script is a pre-hook (`PreToolUse(Write/Edit)`, called before the file write or edit tools run). Its main goal is to enforce the artifact storage standards (according to `.harness/instructions/artifacts.md` and `.harness/instructions/git-workflow.md`).
 
 Internal logic:
 1. Reads JSON from STDIN and extracts `tool_input.file_path` with a JSON parser, normalizing

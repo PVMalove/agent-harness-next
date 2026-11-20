@@ -12,16 +12,16 @@ from types import SimpleNamespace
 from harness.bin import harness as harness_cli
 from harness.health.project_files import frontmatter_metadata
 from harness.orchestration.core.constants import STATE_REL
-from harness.seed_links import RULES_POINTER
+from harness.seed_links import RULES_POINTER, agents_rules_pointer
 
 from scripts.clean_room.support import (
     HARNESS,
+    LANGUAGE_RULES,
     apply_patch,
-    assert_contract_link,
     ROOT,
     capture,
     capture_json,
-    check_technical_english,
+    check_language_rules,
     count_skill_files,
     fail_json,
     fill_agents,
@@ -29,7 +29,6 @@ from scripts.clean_room.support import (
     run_fails,
     run_health,
     run_ok,
-    starts_with_text,
     run_step,
 )
 
@@ -60,162 +59,80 @@ def run(ctx: SimpleNamespace) -> None:
             "main",
         ]
     )
-    check_technical_english(foundation)
-    # Model an older standard installation with project-owned entry points.
+    check_language_rules(foundation)
+    # Model an install from before #1249 with project-owned entry points: Technical English is a
+    # managed instruction, the language rules are missing, and AGENTS.md links the old contract.
     original_entries = {
         name: (foundation / name).read_bytes() for name in ("AGENTS.md", "CLAUDE.md")
     }
-    old_agents = "# Local instructions\n\nKeep the project glossary in Russian.\n"
+    old_agents = (
+        "# Local instructions\n\nKeep the project glossary in Russian.\n\n"
+        "Before the first English handoff, agents must read\n"
+        "[Technical English](.harness/instructions/technical-english.md).\n"
+    )
     old_claude = "# Local Claude instructions\n\nRun the focused checks first.\n"
     (foundation / "AGENTS.md").write_text(old_agents, encoding="utf-8")
     (foundation / "CLAUDE.md").write_text(old_claude, encoding="utf-8")
-    contract = foundation / ".harness/instructions/technical-english.md"
-    contract.unlink()
     old_lock_path = foundation / ".harness/harness.lock"
     old_lock = json.loads(old_lock_path.read_text(encoding="utf-8"))
-    old_lock["files"].pop(".harness/instructions/technical-english.md")
+    old_contract = foundation / ".harness/instructions/technical-english.md"
+    old_contract.parent.mkdir(parents=True, exist_ok=True)
+    old_contract.write_text("# Technical English for agent coordination\n", encoding="utf-8")
+    old_lock["files"][".harness/instructions/technical-english.md"] = hashlib.sha256(
+        old_contract.read_bytes()
+    ).hexdigest()
+    for name in LANGUAGE_RULES:
+        (foundation / ".claude/rules" / name).unlink()
+        old_lock["files"].pop(f".claude/rules/{name}")
     old_lock_path.write_text(json.dumps(old_lock), encoding="utf-8")
     update_output = capture(HARNESS + ["update", str(foundation)])
-    if (
-        contract.read_bytes()
-        != (ROOT / "harness/project/instructions/technical-english.md").read_bytes()
-    ):
-        sys.exit("standard update did not deliver the managed contract")
+    if old_contract.exists():
+        sys.exit("update kept the retired technical-English contract")
     for name, original in (("AGENTS.md", old_agents), ("CLAUDE.md", old_claude)):
         if (foundation / name).read_text(encoding="utf-8") != original:
             sys.exit("update changed project-owned instructions before approval")
-        if f"--- a/{name}" not in update_output or f"+++ b/{name}" not in update_output:
-            sys.exit("update did not show a reviewable entry-point addition")
+    if "--- a/AGENTS.md" not in update_output or "+++ b/AGENTS.md" not in update_output:
+        sys.exit("update did not show a reviewable entry-point change")
+    if "--- a/CLAUDE.md" in update_output:
+        sys.exit("update proposed a change for an entry point without moved links")
     diff_output = capture(HARNESS + ["diff", str(foundation)])
     patch = diff_output[diff_output.index("diff --git ") :]
     if patch != update_output[update_output.index("diff --git ") :]:
         sys.exit("diff and update proposed different seed adaptations")
     # Approval is an ordinary edit/patch after review; the CLI never applies seeds.
     apply_patch(patch, foundation)
-    check_technical_english(foundation)
-    approved = {
+    approved = (foundation / "AGENTS.md").read_text(encoding="utf-8")
+    if (
+        "(.claude/rules/technical-english.md)" not in approved
+        or ".harness/instructions/technical-english.md" in approved
+    ):
+        sys.exit("approved patch did not move the Technical English link to the rule")
+    if not agents_rules_pointer(approved):
+        sys.exit("approved patch did not add the Codex rules pointer")
+    approved_entries = {
         name: (foundation / name).read_bytes() for name in ("AGENTS.md", "CLAUDE.md")
     }
-    for name, original in (("AGENTS.md", old_agents), ("CLAUDE.md", old_claude)):
-        if not starts_with_text(approved[name], original):
-            sys.exit("approved additions lost local instructions")
     repeated = capture(HARNESS + ["update", str(foundation)])
     repeated += capture(HARNESS + ["diff", str(foundation)])
     if "diff --git " in repeated:
-        sys.exit("repeat update proposed an already connected contract link")
+        sys.exit("repeat update proposed an already applied entry-point change")
     if any(
         (foundation / name).read_bytes() != content
-        for name, content in approved.items()
+        for name, content in approved_entries.items()
     ):
         sys.exit("repeat update changed approved project instructions")
-    check_technical_english(foundation)
-
-    # An existing import in either direction already reaches a mandatory source.
-    # Later entry-point cases check only the Technical English link; the Codex rules
-    # pointer is already present there.
-    old_agents += "\n" + RULES_POINTER
+    # A fenced example does not count as the Codex rules pointer.
     (foundation / "AGENTS.md").write_text(
-        old_agents + "\n@CLAUDE.md\n", encoding="utf-8"
+        "# Local\n\n```\nRead .claude/rules/\n```\n", encoding="utf-8"
     )
-    if capture_json(HARNESS + ["diff", str(foundation), "--json"])[
+    proposals = capture_json(HARNESS + ["diff", str(foundation), "--json"])[
         "seed_link_proposals"
-    ]:
-        sys.exit("diff proposed a duplicate for an existing entry-point transition")
-    # A passive reference needs an explicit obligation, without a second link.
-    passive = (
-        old_claude + "\nSee [Technical English](.harness/instructions/technical-english.md).\n"
-    )
-    (foundation / "CLAUDE.md").write_text(passive, encoding="utf-8")
-    proposal_output = capture(HARNESS + ["update", str(foundation)])
-    if "no recognized mandatory reading instruction" not in proposal_output:
-        sys.exit("ambiguous reference did not explain the proposed obligation")
-    patch = proposal_output[proposal_output.index("diff --git ") :]
-    if "technical-english.md" in "\n".join(
-        line
-        for line in patch.splitlines()
-        if line.startswith("+") and not line.startswith("+++")
-    ):
-        sys.exit("passive reference proposal duplicated an existing contract link")
-    apply_patch(patch, foundation)
-    if capture_json(HARNESS + ["diff", str(foundation), "--json"])[
-        "seed_link_proposals"
-    ]:
-        sys.exit("approved passive-reference obligation was proposed again")
-
-    # A valid Markdown title does not disconnect an existing mandatory link.
-    for title in ('"Shared contract"', "'Shared contract'", "(Shared contract)"):
-        titled = (
-            old_agents + "\nBefore the first English handoff, agents must read "
-            f"[Technical English](.harness/instructions/technical-english.md {title}).\n"
-        )
-        (foundation / "AGENTS.md").write_text(titled, encoding="utf-8")
-        (foundation / "CLAUDE.md").write_text(
-            old_claude + "\n@AGENTS.md\n", encoding="utf-8"
-        )
-        titled_entries = {
-            name: (foundation / name).read_bytes()
-            for name in ("AGENTS.md", "CLAUDE.md")
-        }
-        for _ in range(2):
-            if capture_json(HARNESS + ["diff", str(foundation), "--json"])[
-                "seed_link_proposals"
-            ]:
-                sys.exit(
-                    f"diff proposed a duplicate for a mandatory link with title {title}"
-                )
-            if "diff --git " in capture(HARNESS + ["update", str(foundation)]):
-                sys.exit(
-                    f"update proposed a duplicate for a mandatory link with title {title}"
-                )
-            if any(
-                (foundation / name).read_bytes() != content
-                for name, content in titled_entries.items()
-            ):
-                sys.exit(
-                    "repeated update changed entry points with a titled contract link"
-                )
-
-    # A fenced example cannot supply the obligation for a passive reference.
-    for fence in ("```", "~~~"):
-        fenced = (
-            old_agents
-            + "\nSee [Technical English](.harness/instructions/technical-english.md).\n\n"
-            + fence
-            + "\nBefore the first English handoff, agents must read the contract linked above.\n"
-            + fence
-            + "\n"
-        )
-        (foundation / "AGENTS.md").write_text(fenced, encoding="utf-8")
-        before = {
-            name: (foundation / name).read_bytes()
-            for name in ("AGENTS.md", "CLAUDE.md")
-        }
-        proposals = capture_json(HARNESS + ["diff", str(foundation), "--json"])[
-            "seed_link_proposals"
-        ]
-        if [item["path"] for item in proposals] != ["AGENTS.md"]:
-            sys.exit("fenced example suppressed the required reading obligation")
-        output = capture(HARNESS + ["update", str(foundation)])
-        if "no recognized mandatory reading instruction" not in output:
-            sys.exit("update treated a fenced example as an active reading obligation")
-        patch = output[output.index("diff --git ") :]
-        if patch != proposals[0]["diff"]:
-            sys.exit("diff and update disagree on the missing non-fenced obligation")
-        if any(
-            (foundation / name).read_bytes() != content
-            for name, content in before.items()
-        ):
-            sys.exit("update changed the fenced example before approval")
-        apply_patch(patch, foundation)
-        if not (foundation / "AGENTS.md").read_bytes().startswith(before["AGENTS.md"]):
-            sys.exit("approved obligation changed the existing fenced example")
-        if capture_json(HARNESS + ["diff", str(foundation), "--json"])[
-            "seed_link_proposals"
-        ] or "diff --git " in capture(HARNESS + ["update", str(foundation)]):
-            sys.exit("approved non-fenced obligation was proposed again")
-
+    ]
+    if [item["path"] for item in proposals] != ["AGENTS.md"]:
+        sys.exit("a fenced example suppressed the Codex rules pointer")
     for name, content in original_entries.items():
         (foundation / name).write_bytes(content)
+    check_language_rules(foundation)
 
     run_ok(HARNESS + ["diff", str(foundation)])
     if not run_fails(HARNESS + ["health", str(foundation)], quiet_all=True):
@@ -245,7 +162,7 @@ def run(ctx: SimpleNamespace) -> None:
         ]
     )
     fill_agents(project)
-    check_technical_english(project)
+    check_language_rules(project)
 
     run_ok(HARNESS + ["diff", str(project)])
     run_health(project)
@@ -352,8 +269,8 @@ def run(ctx: SimpleNamespace) -> None:
             "echo test",
         ]
     )
-    # Provenance matters: target docs/agents are intentionally identical to their
-    # templates, so comparing bytes against root docs/ would reject a valid install.
+    # Provenance matters: installed guides come only from harness/project/ templates, never from
+    # the repository's own docs/.
     root_docs = (ROOT / "docs").resolve()
     selected = ["engineering-suite"]
     sources = harness_cli.selected_skills(selected) + harness_cli.selected_resources(
@@ -362,42 +279,48 @@ def run(ctx: SimpleNamespace) -> None:
     if any(source.resolve().is_relative_to(root_docs) for source in sources):
         sys.exit("package_files selected a source from repository docs/")
     payload = harness_cli.package_files(selected)
-    if any(not path.startswith(".harness/") for path in payload):
-        sys.exit("package_files emitted a path outside .harness/")
+    language_rules = {f".claude/rules/{name}" for name in LANGUAGE_RULES}
+    if any(
+        not path.startswith(".harness/") and path not in language_rules for path in payload
+    ):
+        sys.exit("package_files emitted a path outside .harness/ and the language rules")
     for destination, expected in payload.items():
         if (pv_project / destination).read_bytes() != expected:
             sys.exit(f"installed package differs from selected source: {destination}")
-    # The managed instructions of the same template folder go to `.harness/instructions/`.
+    # Seed guides and the managed instructions of the same template folder share
+    # `.harness/instructions/`; the project gets no `docs/` from the install.
     seed_guides = harness_cli.seed_sources(
         harness_cli.PROJECT_TEMPLATE_DIR, "instructions", frozenset({".md"})
     )
-    installed_docs = pv_project / "docs" / "agents"
-    if {path.name for path in installed_docs.glob("*.md")} != {
+    installed_guides = pv_project / ".harness" / "instructions"
+    managed_guides = {
+        path.split("/")[-1] for path in payload if path.startswith(".harness/instructions/")
+    }
+    if {path.name for path in installed_guides.glob("*.md")} - managed_guides != {
         path.name for path in seed_guides
     }:
-        sys.exit("target docs/agents did not come only from project templates")
+        sys.exit("target .harness/instructions did not come only from project templates")
     for source in seed_guides:
-        if (installed_docs / source.name).read_bytes() != source.read_bytes():
+        if (installed_guides / source.name).read_bytes() != source.read_bytes():
             sys.exit(f"installed guide differs from project template: {source.name}")
+    if (pv_project / "docs").exists():
+        sys.exit("install created a docs/ directory in the target project")
     fill_agents(pv_project)
-    check_technical_english(pv_project)
-    # Existing root entry points are already connected; only the older agent seed
-    # needs adaptation. A missing final newline must survive the reviewed patch.
-    for name in ("code-review-spec.md", "code-review-standards.md"):
-        entry = pv_project / ".claude/agents" / name
-        entry.write_text(
-            entry.read_text(encoding="utf-8") + "\n@../../AGENTS.md\n", encoding="utf-8"
-        )
+    check_language_rules(pv_project)
+    # An older, locally edited agent seed still links the guides in docs/agents/; only it gets a
+    # proposal. A missing final newline must survive the reviewed patch.
     agent = pv_project / ".claude/agents/pr-composer.md"
-    test_author = pv_project / ".claude/agents/test-author.md"
     original_agent = (
-        agent.read_bytes() + b"\nLocal review instructions without final newline"
+        agent.read_text(encoding="utf-8")
+        .replace(".harness/instructions/", "docs/agents/")
+        .encode("utf-8")
+        + b"\nLocal review instructions without final newline"
     )
-    original_test_author = test_author.read_bytes()
     agent.write_bytes(original_agent)
     untouched = pv_project / "docs/local-agent-notes.md"
+    untouched.parent.mkdir(exist_ok=True)
     untouched.write_text(
-        "Local notes are not a harness entry point.\n", encoding="utf-8"
+        "Local notes are not a harness entry point: docs/agents/x.md\n", encoding="utf-8"
     )
     seed_snapshot = {
         path: path.read_bytes()
@@ -414,36 +337,20 @@ def run(ctx: SimpleNamespace) -> None:
     proposal = capture_json(HARNESS + ["diff", str(pv_project), "--json"])[
         "seed_link_proposals"
     ]
-    if [item["path"] for item in proposal] != [
-        ".claude/agents/pr-composer.md",
-        ".claude/agents/test-author.md",
-    ]:
-        sys.exit(
-            "update proposed links for already connected or unrelated entry points"
-        )
+    if [item["path"] for item in proposal] != [".claude/agents/pr-composer.md"]:
+        sys.exit("update proposed links for already connected or unrelated entry points")
     patch = output[output.index("diff --git ") :]
     expected_patch = "".join(item["diff"] for item in proposal)
     if patch != expected_patch:
         sys.exit("JSON diff differs from the visible update proposal")
     apply_patch(patch, pv_project)
-    assert_contract_link(
-        agent, pv_project / ".harness/instructions/technical-english.md", "installed agent seed"
-    )
-    assert_contract_link(
-        test_author,
-        pv_project / ".harness/instructions/technical-english.md",
-        "installed test-author seed",
-    )
-    patched = agent.read_bytes()
     # A Windows checkout writes CRLF while the fixture suffix and the patch are LF.
-    if not patched.replace(b"\r\n", b"\n").startswith(
-        original_agent.replace(b"\r\n", b"\n")
-    ):
-        sys.exit(
-            "approved agent addition lost local instructions: "
-            f"expected prefix tail {original_agent[-60:]!r}, "
-            f"got {patched[len(original_agent) - 60 : len(original_agent)]!r}"
-        )
+    patched = agent.read_bytes().replace(b"\r\n", b"\n")
+    expected_agent = original_agent.replace(b"\r\n", b"\n").replace(
+        b"docs/agents/", b".harness/instructions/"
+    )
+    if patched != expected_agent:
+        sys.exit("approved agent patch did not rewrite exactly the moved guide links")
     approved_agent = agent.read_bytes()
     if "diff --git " in capture(HARNESS + ["update", str(pv_project)]):
         sys.exit("repeat pvmalove update proposed duplicate links")
@@ -458,7 +365,6 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("repeat pvmalove update changed local instructions")
     # Keep subsequent installer baseline checks independent of approved seed edits.
     agent.write_bytes(original_agent)
-    test_author.write_bytes(original_test_author)
 
     run_health(pv_project)
     repo_map_health = find_check(
@@ -625,7 +531,7 @@ def run(ctx: SimpleNamespace) -> None:
     # The release rule must reach every installed place that states it, not only to-tickets.
     for rule_file in (
         pv_project / ".harness" / "skills" / "to-pull-requests" / "SKILL.md",
-        pv_project / "docs" / "agents" / "triage-labels.md",
+        pv_project / ".harness" / "instructions" / "triage-labels.md",
     ):
         if "accepted QA" not in rule_file.read_text(encoding="utf-8"):
             sys.exit(f"blocker release rule is missing from {rule_file.name}")
@@ -1100,7 +1006,7 @@ def check_runtime_rules(test_root) -> None:
     rules_source = ROOT / "harness" / "project" / "rules"
     expected = sorted(path.name for path in rules_source.glob("*.md"))
     installed = sorted(path.name for path in (project / ".claude/rules").iterdir())
-    if installed != expected or len(installed) != 4:
+    if installed != expected:
         sys.exit(f"fresh install did not seed the runtime rules: {installed}")
     agents = project / "AGENTS.md"
     if RULES_POINTER not in agents.read_text(encoding="utf-8"):
@@ -1122,13 +1028,13 @@ def check_runtime_rules(test_root) -> None:
     # An older release: the old section 1 in the guide, no rule files yet.
     lock_path = project / ".harness" / "harness.lock"
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
-    guide = project / "docs/agents/git-workflow.md"
+    guide = project / ".harness/instructions/git-workflow.md"
     old_guide = (
         b"# Git workflow\n\n### 1. Fundamental Constraints & Tooling\n"
         b"* **Zero Direct Commits:** old release text\n"
     )
     guide.write_bytes(old_guide)
-    lock["seed_files"]["docs/agents/git-workflow.md"] = hashlib.sha256(old_guide).hexdigest()
+    lock["seed_files"][".harness/instructions/git-workflow.md"] = hashlib.sha256(old_guide).hexdigest()
     for name in ("git-delivery.md", "worktree-conventions.md"):
         (project / ".claude/rules" / name).unlink()
         lock["seed_files"].pop(f".claude/rules/{name}")
@@ -1136,7 +1042,7 @@ def check_runtime_rules(test_root) -> None:
     output = capture(HARNESS + ["update", str(project)])
     if guide.read_bytes() != (ROOT / "harness/project/instructions/git-workflow.md").read_bytes():
         sys.exit("update did not replace the unedited old git-workflow.md")
-    if "docs/agents/git-workflow.md (устарел по версии)" not in output:
+    if ".harness/instructions/git-workflow.md (устарел по версии)" not in output:
         sys.exit("update did not report the backed-up old git-workflow.md")
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     for name in ("git-delivery.md", "worktree-conventions.md"):
@@ -1150,7 +1056,7 @@ def check_runtime_rules(test_root) -> None:
 
     # Project-edited guide and rule stay byte for byte; the warning names the move.
     edited = {
-        "docs/agents/git-workflow.md": guide.read_bytes() + b"\n* **Local rule:** keep.\n",
+        ".harness/instructions/git-workflow.md": guide.read_bytes() + b"\n* **Local rule:** keep.\n",
         ".claude/rules/karpathy-guidelines.md": b"# Local karpathy edit\n",
     }
     for relative, data in edited.items():
@@ -1186,10 +1092,10 @@ def check_runtime_rules(test_root) -> None:
 
 WORKFLOW_SKILLS = ("implement", "fast-implement", "to-guide", "to-pull-requests")
 INSTALLED_TARGET = re.compile(
-    r"`((?:docs/agents|\.harness)/[A-Za-z0-9_./-]+\.(?:md|py|json|sh))`"
+    r"`(\.harness/[A-Za-z0-9_./-]+\.(?:md|py|json|sh))`"
 )
 ISSUE_WORKTREE = ".harness/skills/implement/references/issue-worktree.md"
-PROCEDURE_GUIDES = ("docs/agents/worktrees.md", "docs/agents/test-author.md")
+PROCEDURE_GUIDES = (".harness/instructions/worktrees.md", ".harness/instructions/test-author.md")
 
 
 def check_workflow_procedures(test_root) -> None:
@@ -1211,10 +1117,10 @@ def check_workflow_procedures(test_root) -> None:
             if "<" not in target and not (project / target).is_file():
                 sys.exit(f"{source.relative_to(project)} names a missing {target}")
     for guide, target in (
-        ("docs/agents/worktrees.md", ISSUE_WORKTREE),
-        ("docs/agents/test-author.md", ".harness/skills/fast-implement/SKILL.md"),
+        (".harness/instructions/worktrees.md", ISSUE_WORKTREE),
+        (".harness/instructions/test-author.md", ".harness/skills/fast-implement/SKILL.md"),
         (
-            "docs/agents/test-author.md",
+            ".harness/instructions/test-author.md",
             ".harness/orchestration/roles/references/developer-test-author.md",
         ),
     ):
@@ -1242,11 +1148,11 @@ def check_workflow_procedures(test_root) -> None:
     lock_path = project / ".harness" / "harness.lock"
     lock = json.loads(lock_path.read_text(encoding="utf-8"))
     old_guides = {
-        "docs/agents/worktrees.md": (
+        ".harness/instructions/worktrees.md": (
             b"# Parallel work: git worktrees\n\n## Coordinator issue worktree\n\n"
             b"python .harness/orchestration/coordinator.py worktree create --repo .\n"
         ),
-        "docs/agents/test-author.md": (
+        ".harness/instructions/test-author.md": (
             b"# Test-author\n\n## 6. The short `/fast-implement` route\n\nold text\n\n"
             b"## 7. The full `/implement` route\n\nold text\n"
         ),

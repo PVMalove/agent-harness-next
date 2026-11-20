@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     Run = Callable[[list[str]], subprocess.CompletedProcess[str] | None]
 
 TIMEOUT_SECONDS = 10
-RULE = "Issue First (docs/agents/git-workflow.md)"
+RULE = "Issue First (.harness/instructions/git-workflow.md)"
 # Tracker type -> (CLI, the -R address format).
 TRACKERS = {
     "github": ("gh", "{host}/{project}"),

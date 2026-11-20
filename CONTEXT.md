@@ -1,12 +1,12 @@
 # claude-agent-harness
 
 Глоссарий терминов проекта, который разворачивает переносимый набор скиллов и правил для
-coding agents. Операционные процессы и архитектурные решения находятся в `docs/agents/` и
+coding agents. Операционные процессы и архитектурные решения находятся в `harness/project/instructions/` и
 `docs/adr/`, а не в этом файле.
 
 Актуальный словарь триаж-меток (`type::*`, `priority::*`, `severity::*`, `status::*`,
 `resolution::wontfix`, `hitl`/`afk`, `pipeline::*`) описан в
-[triage-labels.md](docs/agents/triage-labels.md) — не дублируется здесь.
+[triage-labels.md](harness/project/instructions/triage-labels.md) — не дублируется здесь.
 
 ## Термины
 
@@ -66,7 +66,7 @@ _Avoid_: шаблонные артефакты, foundation-файлы.
 заменять или добавлять скиллы.
 _Avoid_: пакет, набор скиллов.
 
-В текущем составе `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`, `developer`, `publish-epic`.
+В текущем составе `engineering-suite` переопределены в `skills/first-party/engineering/`: `to-spec`, `to-tickets`, `implement`, `ask-matt`, `code-review`, `grilling`, `grill-me`, `grill-with-docs`, `triage`, `wayfinder`, `diagnosing-bugs`, `tdd`, `setup-matt-pocock-skills`; доп. скиллы: `qa-gate`, `to-guide`, `setup-labels`, `to-pull-requests`, `fast-implement`, `delivery-stats`, `architect`, `developer`, `publish-epic`.
 
 **Vendor-скилл**:
 Скилл из байт-в-байт snapshot закреплённого upstream-источника в `skills/vendor/`, связанный с

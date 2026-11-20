@@ -11,8 +11,9 @@ from types import SimpleNamespace
 from harness.orchestration.core.constants import RECOVERY_ROUTES
 from harness.storage import storage_path
 from scripts.clean_room.support import (
-    assert_contract_link,
-    check_technical_english,
+    LANGUAGE_RULES,
+    assert_rule_link,
+    check_language_rules,
     HARNESS,
     ROOT,
     capture_json,
@@ -270,7 +271,7 @@ def run(ctx: SimpleNamespace) -> None:
         ]
     )
     fill_agents(orchestration_project)
-    check_technical_english(orchestration_project)
+    check_language_rules(orchestration_project)
     run_health(orchestration_project)
     orchestration_root = orchestration_project / ".harness" / "orchestration"
     if not (orchestration_root / "orchestration.schema.json").is_file():
@@ -468,14 +469,14 @@ def run(ctx: SimpleNamespace) -> None:
         sys.exit("backend-orchestration playbook missing")
     playbook = playbook_path.read_text(encoding="utf-8")
     _require_startup_recovery_contract(installed_implement, playbook)
-    contract = orchestration_project / ".harness/instructions/technical-english.md"
     for continuation_rule in ("integration next", "verification-failure"):
         if continuation_rule not in playbook:
             sys.exit(
                 f"installed playbook lacks the PR-continuation rule: {continuation_rule}"
             )
     for entry in (playbook_path, orchestration_root / "roles/common.md"):
-        assert_contract_link(entry, contract, entry.name)
+        for name in LANGUAGE_RULES:
+            assert_rule_link(entry, orchestration_project / ".claude/rules" / name, entry.name)
     pilot_path = orchestration_root / "pilot.md"
     if not pilot_path.is_file():
         sys.exit("backend-orchestration pilot guide missing")

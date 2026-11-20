@@ -12,7 +12,7 @@ Never create tasks, publish, or change Git state.
 
 ## Load the handoff
 
-1. Identify the task folder under `docs/tasks/` by `docs/agents/artifacts.md`, including the epic
+1. Identify the task folder under `docs/tasks/` by `.harness/instructions/artifacts.md`, including the epic
    folder for a child task. Look for `artifacts/discovery-context.md` there before treating the
    handoff as a cold start. Propose the spec file at the root of that folder.
 2. Check `docs/tasks/.../artifacts/discovery-context.md` for this task and the final grilling summary in chat.

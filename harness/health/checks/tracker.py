@@ -1,7 +1,7 @@
 """Group 'tracker': the resolved project tracker (`tracker.project`, local-only) and online checks
 of the tracker (GitHub/GitLab) this repository is hosted on (ticket #346) - authentication,
 effective permissions, network reachability, and repository labels against the canonical taxonomy
-in a target project's docs/agents/triage-labels.md.
+in a target project's .harness/instructions/triage-labels.md.
 
 `tracker.project` reads only `git remote -v` and .harness/project.json, never the network, so it
 runs without `--online` and is never skipped: it reports the tracker triple and its source, warns
@@ -54,7 +54,7 @@ from ..project_tracker import (
 GROUP = "tracker"
 
 _ONLINE_TIMEOUT_SECONDS = 10
-_TRIAGE_LABELS_REL = Path("docs/agents/triage-labels.md")
+_TRIAGE_LABELS_REL = Path(".harness/instructions/triage-labels.md")
 
 # GitLab access_level thresholds (see GitLab's own Members API): Developer (30) can push and open
 # MRs; Reporter (20) cannot push but can still manage labels. This mirrors GitHub's push/triage
@@ -594,7 +594,7 @@ def _list_repo_labels(
 
 def _canonical_labels(context: HealthContext) -> list[tuple[str, str]] | None:
     """Canonical (name, color) pairs parsed from the target project's own
-    docs/agents/triage-labels.md (`context.repo` is the project being checked, never this harness
+    .harness/instructions/triage-labels.md (`context.repo` is the project being checked, never this harness
     repository's own copy), or None when that file is missing."""
     labels_path = context.repo / _TRIAGE_LABELS_REL
     if not labels_path.is_file():

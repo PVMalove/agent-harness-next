@@ -24,7 +24,7 @@
    diff. В разделе «Проверка» каждый критерий `Action -> Verify` указан с командой и результатом;
    критерий без доказательства попадает в «Не проверено и риски». `Out of scope` тикета и Non-Goals
    эпика показывают, чего PR намеренно не меняет. Футер (`Closes #<ID>` или `Related to #<ID>`)
-   выбирается по `docs/agents/git-workflow.md` §2, шаг 6 → Ticket footer; навык не копирует это правило.
+   выбирается по `.harness/instructions/git-workflow.md` §2, шаг 6 → Ticket footer; навык не копирует это правило.
 5. Отдельный вопрос о готовности называет результат QA, а в opt-in-проекте — `candidate_sha`,
    `target_sha` и `qa_source`. Метаданные PR подчиняются правилу «Project-Only Metadata» из §1.
 6. Отчёт `task-report::required` публикуется в формате `## Completion report` из
@@ -39,7 +39,7 @@
 
 Навык проверяет merge и для opt-in — дерево merge-коммита (`--merge-commit`,
 `merge-tree-mismatch`). Затем он закрывает тикет или проверяет его автозакрытие командами из
-`docs/agents/git-workflow.md` §2, шаг 7 → Close the ticket after merge, и переводит в
+`.harness/instructions/git-workflow.md` §2, шаг 7 → Close the ticket after merge, и переводит в
 `status::ready` тикеты, у которых больше нет открытых блокеров. Черновики `docs/tasks/` тикетами не
 считаются. Управляемый worktree удаляется через `coordinator.py worktree remove`, worktree сессии —
 инструментом рантайма. Если песочница не даёт удалить worktree, навык отдаёт команду вам.

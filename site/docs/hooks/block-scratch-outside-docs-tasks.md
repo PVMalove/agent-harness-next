@@ -8,7 +8,7 @@
 Блокировка сохранения черновиков вне каталога задач
 ```
 ## 2. Полное описание
-Хук срабатывает перед записью или правкой файла (`PreToolUse(Write/Edit)`) и следит, чтобы агент хранил артефакты по правилам `docs/agents/artifacts.md` и `docs/agents/git-workflow.md`: черновики задач в `docs/tasks/`, тела PR и комментариев в `.harness/.sandboxes/pr_body/`.
+Хук срабатывает перед записью или правкой файла (`PreToolUse(Write/Edit)`) и следит, чтобы агент хранил артефакты по правилам `.harness/instructions/artifacts.md` и `.harness/instructions/git-workflow.md`: черновики задач в `docs/tasks/`, тела PR и комментариев в `.harness/.sandboxes/pr_body/`.
 
 Как хук решает:
 1. Хук читает JSON из stdin и JSON-парсером берёт `tool_input.file_path`. Windows-разделители он приводит к `/` до проверки. Путь вне проекта (`CLAUDE_PROJECT_DIR`) хук блокирует с сообщением, что путь вышел за пределы проекта. Исключение: каталог памяти Claude Code `<CLAUDE_CONFIG_DIR или ~/.claude>/projects/<slug>/memory/`, туда писать можно. Если путь не удаётся разрешить или в payload нет `tool_input.file_path`, хук тоже блокирует.

@@ -2,7 +2,7 @@
 
 One protocol for the full `/implement` route and the `/fast-implement` short route. The developer
 role's own rules are in `.harness/orchestration/roles/references/developer-test-author.md`;
-activation is described in `docs/agents/test-author.md`.
+activation is described in `.harness/instructions/test-author.md`.
 
 ## Select the executor
 

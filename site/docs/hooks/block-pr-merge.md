@@ -8,7 +8,7 @@
 Запрет автослияния PR/MR: агент не может выполнить `gh pr merge` и `glab mr merge` (включая алиас `glab mr accept`), поэтому слияние остаётся за человеком.
 ```
 ## 2. Полное описание
-Хук `PreToolUse(Bash)` не даёт агенту слить Pull Request или Merge Request. Так хук проверяет правило "Zero Auto-Merge" из `docs/agents/git-workflow.md`, одинаково для GitHub (`gh`) и GitLab (`glab`).
+Хук `PreToolUse(Bash)` не даёт агенту слить Pull Request или Merge Request. Так хук проверяет правило "Zero Auto-Merge" из `.harness/instructions/git-workflow.md`, одинаково для GitHub (`gh`) и GitLab (`glab`).
 
 Решение принимает `pr_commands.py` по принципу fail closed. Merge-текст запрещён везде, кроме двух случаев: команды из короткого allowlist инертных программ и данные heredoc, которые `cat` или `tee` записывает в файл. Программу вне allowlist хук считает способной выполнить свои аргументы или вход.
 

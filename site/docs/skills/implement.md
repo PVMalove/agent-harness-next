@@ -88,7 +88,7 @@ worktree задачи примените процедуру своего runtime
 #### Подготовка batch
 
 Coordinator берёт любую процедуру только из источников для агентов: этот скилл,
-`.harness/orchestration/playbook.md`, `.harness/orchestration/roles/`, руководства в `docs/agents/`,
+`.harness/orchestration/playbook.md`, `.harness/orchestration/roles/`, руководства в `.harness/instructions/`,
 вывод `--help` и `remedy` CLI coordinator. Coordinator не берёт процедуру из русских документов для
 людей (`backend-orchestration.md`, `site/docs/`, `ARCHITECTURE.md`, `site/docs/skills/`,
 `site/docs/hooks/`). Coordinator не копирует соглашения из другого batch и не читает файлы ledger в
@@ -495,7 +495,7 @@ module-owned guidance:
   специалиста каждой роли.
 - Вывод `--help` и `remedy` CLI coordinator отвечает за синтаксис команд и операционное
   восстановление.
-- `docs/agents/git-workflow.md` отвечает за границы issue-ветки, коммита, push и PR.
+- `.harness/instructions/git-workflow.md` отвечает за границы issue-ветки, коммита, push и PR.
 - `references/issue-worktree.md` отвечает за создание issue worktree и его восстановление.
 
 Следуйте этим файлам, не дублируя и не ослабляя здесь их правила. В частности, не придумывайте
@@ -522,7 +522,7 @@ PR, не пишите в integration-ветку и не закрывайте т�
 
 ### Worktree задачи coordinator (`references/issue-worktree.md`) { #issue-worktree }
 
-Прочитайте это перед `batch create` и всякий раз, когда сессии нужен доступ на запись в существующий worktree задачи. Это процедура coordinator; worker готовит свой checkout по разделу «Окружение worker checkout» в `docs/agents/worktrees.md`, а правила веток — в `docs/agents/git-workflow.md`.
+Прочитайте это перед `batch create` и всякий раз, когда сессии нужен доступ на запись в существующий worktree задачи. Это процедура coordinator; worker готовит свой checkout по разделу «Окружение worker checkout» в `.harness/instructions/worktrees.md`, а правила веток — в `.harness/instructions/git-workflow.md`.
 
 Coordinator (`/implement`) обязан создать worktree задачи до `batch create`. `batch create` отказывает, если `git worktree list` не показывает worktree: `worktree '<path>' is not registered by git worktree`. Coordinator выполняет команды ниже в основном checkout и в новом worktree не работает:
 

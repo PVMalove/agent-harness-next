@@ -152,7 +152,7 @@ describe("the Update Harness route", () => {
     act(() => fireEvent.click(screen.getByRole("button", { name: "Выбрать все" })));
     expect(document.querySelector("#update-seed-count")?.textContent).toBe("отмечено 2 из 2");
     expect(plan()).toBe(
-      "harness update /work/project --force-seed-file .harness/project.json --force-seed-file docs/agents/git-workflow.md",
+      "harness update /work/project --force-seed-file .harness/project.json --force-seed-file .harness/instructions/git-workflow.md",
     );
     act(() => fireEvent.click(screen.getByRole("button", { name: "Снять выбор" })));
     expect(document.querySelector("#update-seed-count")?.textContent).toBe("отмечено 0 из 2");

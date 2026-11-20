@@ -12,7 +12,7 @@
 
 ## Соглашения { #conventions }
 
-Три обязательных пункта ниже — «Сессия, которая лишь готовит worktree…», «Не меняйте конфигурацию инструментов…» и «Всё остальное из git-workflow.md…» — поставляются как runtime rule `.claude/rules/worktree-conventions.md` (источник `harness/project/rules/worktree-conventions.md`). Claude Code загружает его автоматически, Codex читает по указателю из раздела Runtime в `AGENTS.md`. В установленном `docs/agents/worktrees.md` вместо них стоит один пункт-указатель.
+Три обязательных пункта ниже — «Сессия, которая лишь готовит worktree…», «Не меняйте конфигурацию инструментов…» и «Всё остальное из git-workflow.md…» — поставляются как runtime rule `.claude/rules/worktree-conventions.md` (источник `harness/project/rules/worktree-conventions.md`). Claude Code загружает его автоматически, Codex читает по указателю из раздела Runtime в `AGENTS.md`. В установленном `.harness/instructions/worktrees.md` вместо них стоит один пункт-указатель.
 
 
 - **Правило имени ветки действует и здесь.** Параметр `name` в `EnterWorktree` задаёт имя новой ветки, но копируется не дословно: runtime добавляет префикс и заменяет `/`, так что `feature/issue-366-checkout-quote` превращается в `worktree-feature+issue-366-checkout-quote`. Такое имя не удовлетворяет `branch_pattern` из `.harness/project.json` (см. [git-workflow.md](git-workflow.md#2-workflow-sequence)). Проверьте имя ветки, которую создал инструмент, и переименуйте её до первого коммита. Для задач не оставляйте случайное имя по умолчанию.

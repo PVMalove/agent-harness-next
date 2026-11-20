@@ -65,7 +65,7 @@ deferral, or stop authorizes no write for the unresolved fork.
   but exclude declined paths from the artifact. Re-offer one only if a new decision makes it relevant.
 - After approval, write the full list as Markdown bullets, one repo-relative path per item,
   optionally followed by ` — <why it is needed>`, to `artifacts/discovery-context.md` in the task
-  folder under `docs/tasks/`, named by `docs/agents/artifacts.md` (the epic folder for a child task)
+  folder under `docs/tasks/`, named by `.harness/instructions/artifacts.md` (the epic folder for a child task)
   or by a descriptive slug before a ticket exists. While a fork is pending, hold path approvals in
   chat and persist them after selection. If the user stops first, keep them in chat.
 - If available, publish the same list to one Live Artifact and update it on subsequent approvals.
