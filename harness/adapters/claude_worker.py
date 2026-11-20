@@ -86,6 +86,19 @@ class WorkerJob(TypedDict):
     prompt: str
 
 
+# The developer skill line of a developer prompt (#1161). The adapter is stdlib-only and installed
+# outside the hashed orchestration package, so it repeats the literal of
+# harness/orchestration/core/developer_skill.py; a parity test keeps both equal.
+DEVELOPER_SKILL_RELATIVE = ".harness/skills/developer/SKILL.md"
+DEVELOPER_SKILL_INSTRUCTION = (
+    "Developer skill: read the installed developer skill {path} before implementation and apply "
+    "its scope, test-first and evidence discipline. The immutable brief and the developer role "
+    "contract stay authoritative for assignment, scope, commits and the completion report; the "
+    "skill grants no path, tool or approval. If the file is missing or unreadable, stop before "
+    "any edit with outcome blocked and name the path in blockers."
+)
+
+
 HOST_START = """\
 You are the {role} worker for dispatch {dispatch_id}.
 Brief: {brief}
@@ -183,6 +196,13 @@ def build_prompt(
         if container
         else HOST_CONTEXT.format(cli=cli, dispatch_id=brief["dispatch_id"]),
     )
+    if brief["role"] == "developer":
+        prompt += (
+            DEVELOPER_SKILL_INSTRUCTION.format(
+                path=(repo / DEVELOPER_SKILL_RELATIVE).resolve()
+            )
+            + "\n"
+        )
     if container and (brief.get("context_package_summary") or {}).get("review_focus"):
         read_context = shlex.join(
             [

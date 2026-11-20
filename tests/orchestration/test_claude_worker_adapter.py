@@ -184,6 +184,50 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
             )
         self.assertNotIn("context-package show", container)
 
+    def test_developer_prompts_carry_the_core_developer_skill_line(self) -> None:
+        from harness.orchestration.core.developer_skill import (
+            DEVELOPER_SKILL_RELATIVE,
+            INSTRUCTION,
+        )
+
+        codex_path = ADAPTER.with_name("codex_worker.py")
+        codex_spec = importlib.util.spec_from_file_location("codex_worker", codex_path)
+        assert codex_spec and codex_spec.loader
+        codex_worker = importlib.util.module_from_spec(codex_spec)
+        codex_spec.loader.exec_module(codex_worker)
+        # The stdlib-only adapters repeat the core literal; it must never drift.
+        for adapter in (claude_worker, codex_worker):
+            self.assertEqual(adapter.DEVELOPER_SKILL_INSTRUCTION, INSTRUCTION)
+            self.assertEqual(adapter.DEVELOPER_SKILL_RELATIVE, DEVELOPER_SKILL_RELATIVE)
+        line = INSTRUCTION.format(
+            path=(self.repo / DEVELOPER_SKILL_RELATIVE).resolve()
+        )
+
+        def prompts(brief: dict[str, object]) -> dict[str, str]:
+            built = {
+                "claude": claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+                "codex": codex_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+            }
+            with mock.patch.dict(os.environ, {"HARNESS_EXECUTOR": "docker"}):
+                built["container"] = claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                )
+            return built
+
+        developer = json.loads(self.brief.read_text())
+        for runtime, prompt in prompts(developer).items():
+            with self.subTest(runtime=runtime, role="developer"):
+                self.assertIn(line, prompt)
+        for role in ("architect", "code-review"):
+            brief = {**developer, "role": role, "allowed_tools": ["Read"]}
+            for runtime, prompt in prompts(brief).items():
+                with self.subTest(runtime=runtime, role=role):
+                    self.assertNotIn("Developer skill:", prompt)
+
     def test_another_role_keeps_its_original_directory_scope(self) -> None:
         brief = json.loads(self.brief.read_text())
         brief["role"] = "architect"
