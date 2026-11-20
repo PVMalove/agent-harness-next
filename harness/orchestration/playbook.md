@@ -1204,6 +1204,12 @@ same completion report comes back. For an in-process handoff, `dispatch send` re
 does not create an independent runtime: the coordinator launches that subagent immediately as its
 next action, before any unrelated discovery.
 
+For a `developer` dispatch, `dispatch send` and `dispatch resume` also return `developer_skill`:
+the absolute path of the installed developer skill (`<repo>/.harness/skills/developer/SKILL.md`)
+and the prompt line that tells the worker to read it. The brief and the developer role contract stay
+authoritative over that skill. When the skill is missing, both commands refuse before any ledger
+change, and the brief stays unchanged: install or update `engineering-suite` and repeat the command.
+
 The `backend-orchestration` capability installs standalone stdlib adapters at
 `.harness/adapters/claude_worker.py` and `.harness/adapters/codex_worker.py` through `harness init`
 or `harness adopt`. If that capability is already selected, use the ordinary managed lifecycle:

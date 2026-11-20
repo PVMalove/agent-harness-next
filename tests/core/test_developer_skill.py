@@ -185,6 +185,50 @@ class DeveloperSkillContractTests(unittest.TestCase):
         self.assertIn("`harness/orchestration/roles/developer.md`", text)
 
 
+class DeveloperDispatchReadsTheSkillTests(unittest.TestCase):
+    """Developer dispatch читает скилл, а бриф и контракт роли остаются старше."""
+
+    ROLE = ROOT / "harness" / "orchestration" / "roles" / "developer.md"
+    IMPLEMENT = (
+        ROOT / "skills" / "first-party" / "engineering" / "implement" / "SKILL.md"
+    )
+
+    def test_skill_states_the_precedence_of_brief_and_role_contract(self) -> None:
+        """Проверить раздел dispatch в скилле и старшинство брифа и контракта роли."""
+        section = _section(SKILL, "Inside a coordinator dispatch")
+        for marker in (
+            "immutable brief and `harness/orchestration/roles/developer.md` stay authoritative",
+            "grants no path, tool or approval",
+            "replaces the Evidence report",
+        ):
+            self.assertIn(marker, section)
+        self.assertNotIn(
+            "follow `harness/orchestration/roles/developer.md` and the brief instead",
+            _normalized(SKILL),
+        )
+
+    def test_role_contract_names_the_installed_skill_and_the_missing_file_path(
+        self,
+    ) -> None:
+        """Проверить, что роль ссылается на установленный скилл и блокирует без файла."""
+        section = _section(self.ROLE, "Developer skill")
+        for marker in (
+            "`.harness/skills/developer/SKILL.md`",
+            "The immutable brief and this contract stay authoritative",
+            "`outcome: blocked`",
+        ):
+            self.assertIn(marker, section)
+
+    def test_implement_worker_prompt_carries_the_dispatch_instruction(self) -> None:
+        """Проверить, что шаблон промпта implement передаёт developer_skill.instruction."""
+        text = _normalized(self.IMPLEMENT)
+        self.assertIn(
+            "<developer_skill.instruction from dispatch send or dispatch resume, verbatim>",
+            text,
+        )
+        self.assertIn("do not start the worker", text)
+
+
 class FastImplementUsesDeveloperSkillTests(unittest.TestCase):
     """fast-implement отдаёт реализацию скиллу developer и сохраняет поставку."""
 

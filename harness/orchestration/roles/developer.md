@@ -26,6 +26,17 @@ path, never in the handoff or a later worker's chat.
 Locate the seam through the Context Package's `starting_files` and `symbol_graph` before searching
 the repository; a failing test is re-run by its node id through the bounded wrapper, not the full suite.
 
+## Developer skill
+
+Before implementation, read the installed developer skill that the prompt's `Developer skill:` line
+names (`.harness/skills/developer/SKILL.md` in the main checkout) and apply its scope, test-first and
+evidence discipline. The immutable brief and this contract stay authoritative: when they conflict
+with the skill, they win, and the skill grants no path, tool or approval. The brief's
+`accepted_design.output` and allowed paths replace the skill's agreement with the human; the
+completion report replaces its Evidence report in chat; the commit plan replaces its rule that it
+never commits. When the file is missing or unreadable, stop before any edit with `outcome: blocked`
+and name the path in `blockers`; add a `tooling_blocker` only when a tool blocked the read.
+
 ## Conditional references
 
 Read a file from `references/` next to this manifest only when its condition holds:

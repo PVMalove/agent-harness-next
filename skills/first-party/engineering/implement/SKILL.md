@@ -258,6 +258,18 @@ routing rationale with an explicit source instead; never label it a human explan
 An explicit human retry with a non-empty note acknowledges only that decision's unknown reason;
 other attention findings remain independent.
 
+Every developer session (initial, continuation and developer-retry) adds one line after
+`Work within the brief`:
+
+```text
+<developer_skill.instruction from dispatch send or dispatch resume, verbatim>
+```
+
+When `dispatch send` or `dispatch resume` refuses because the installed developer skill is missing,
+do not start the worker: stop and hand its remedy to the human. A batch pinned on a runtime from
+before this field returns no `developer_skill`; then check that
+`<repo>/.harness/skills/developer/SKILL.md` exists and build the same line with that absolute path.
+
 A developer retry adds two lines from the `retry_start` of its `dispatch preflight`:
 
 ```text
