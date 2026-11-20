@@ -62,12 +62,12 @@ from harness.orchestration.core.workspace import (
     _reject_non_english,
     _runtime_snapshot_root,
     _store_runtime_snapshot,
-    _require_writable_worktree,
     _required_base_branch,
     _validate_branch,
     _validate_worktree,
 )
 from harness.orchestration.core import state_view
+from harness.orchestration.worktree_lifecycle import require_committable_worktree
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
     read_state,
@@ -487,7 +487,7 @@ def create_batch(args: argparse.Namespace) -> JsonObject:
             remedy="pass --allowed-path one or more times (for example --allowed-path 'src/orders/**', or '**' for the whole repository)",
         )
     _validate_worktree(repo, worktree)
-    _require_writable_worktree(worktree)
+    require_committable_worktree(repo, worktree)
     writer_role = _planned_writer(args)
     _reject_role_ceiling_overflow(repo, config, allowed_paths, writer_role)
     # Nullable for epic-less tasks: falls back to the project's base_branch, the same field

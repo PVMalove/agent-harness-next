@@ -74,8 +74,9 @@ EXECUTION_STATES = ("launching", "running", "stopping", "exited", "lost", "unkno
 # evidence of a Release Gate pair; minor 7 adds the ``filter`` field of ``state.read``, the
 # store-side selection of one batch or dispatch (ADR 0020, section 3); minor 8 adds
 # ``worktree.create`` and ``worktree.remove``, the managed issue worktrees a sandboxed coordinator
-# cannot create or remove itself (ADR 0038).
-PROTOCOL_VERSION = (1, 8)
+# cannot create or remove itself (ADR 0038); minor 9 adds ``worktree.commit``, a commit in such a
+# worktree whose git metadata the sandbox mounts read-only (ADR 0038, #1246).
+PROTOCOL_VERSION = (1, 9)
 # The protocol minor a filtered ``state.read`` needs (ADR 0020, section 3). A fixed floor, not
 # ``PROTOCOL_VERSION[1]``: a later minor keeps it. The floor of the recovery records, minor 5, is
 # ``RECOVERY_PROTOCOL`` in ``recovery_status/runtime.py``.

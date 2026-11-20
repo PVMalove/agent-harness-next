@@ -110,7 +110,10 @@ from harness.orchestration.ledger.ledger_admin import (
 )
 from harness.orchestration.ledger.ledger_admin import reset_ledger as reset_ledger
 from harness.orchestration.runtime_client import runtime_status as runtime_status
+from harness.orchestration.worktree_lifecycle import commit_worktree as commit_worktree
 from harness.orchestration.worktree_lifecycle import create_worktree as create_worktree
+from harness.orchestration.worktree_lifecycle import merge_worktree as merge_worktree
+from harness.orchestration.worktree_lifecycle import rebase_worktree as rebase_worktree
 from harness.orchestration.worktree_lifecycle import remove_worktree as remove_worktree
 from harness.orchestration.worktree_session import check_session as check_session
 from harness.orchestration.worktree_session import prepare_session as prepare_session
