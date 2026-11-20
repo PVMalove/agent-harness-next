@@ -100,6 +100,7 @@ _COMPILED_SCRIPTS = (
     ROOT / "bin" / "install-global.py",
     ROOT / "scripts" / "build_registry.py",
     ROOT / "scripts" / "check_license_headers.py",
+    ROOT / "scripts" / "check_skill_descriptions.py",
     ROOT / "scripts" / "verify.py",
     ROOT / "scripts" / "test_clean_room.py",
 )
@@ -234,6 +235,10 @@ def _static_checks(test_env: dict[str, str]) -> None:
     _check_global_skills()
     run_ok([sys.executable, str(ROOT / "scripts" / "build_registry.py")], env=test_env)
     run_ok(["git", "-C", str(ROOT), "diff", "--exit-code", "--", "skills/REGISTRY.md"])
+    run_ok(
+        [sys.executable, str(ROOT / "scripts" / "check_skill_descriptions.py")],
+        env=test_env,
+    )
     run_ok(
         [sys.executable, str(ROOT / "scripts" / "check_canonical_tracked_data.py")],
         env=test_env,
@@ -668,7 +673,8 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "stages:\n"
             "  1. static checks: private terms, CAPABILITIES.json syntax, Python compilation,\n"
-            "     global skills, license headers, documentation sync, vendor pin\n"
+            "     global skills, skill descriptions, license headers, documentation sync,\n"
+            "     vendor pin\n"
             "  2. skills/REGISTRY.md: rebuilt in place, then must match the committed file\n"
             "  3. mypy\n"
             "  4. pytest\n"
