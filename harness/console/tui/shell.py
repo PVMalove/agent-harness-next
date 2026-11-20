@@ -142,6 +142,7 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "orchestration.worker_binaries": CheckRoute(
         "Runtime не находит claude или codex", "Orchestration"
     ),
+    "orchestration.rebaser_route": CheckRoute("Маршрут rebase недоступен", "Orchestration"),
     "repo_map.tier": CheckRoute("Repo Map работает в ограниченном режиме", "Repo Map"),
     "memory.index": CheckRoute("Индекс памяти проекта требует внимания", "Repo Map"),
     "memory.model": CheckRoute("Модель памяти недоступна", "Repo Map"),

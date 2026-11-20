@@ -27,6 +27,7 @@ _ORCHESTRATION_CHECK_IDS = [
     "orchestration.disposable_data",
     "orchestration.adapters",
     "orchestration.worker_binaries",
+    "orchestration.rebaser_route",
 ]
 
 

@@ -828,3 +828,138 @@ def check_worker_binaries(context: HealthContext) -> CheckResult:
         else f"в PATH окружения serve нет {', '.join(missing)}; роли с транспортом "
         "external их не используют",
     )
+
+
+_REBASER_FILES = (
+    ".harness/orchestration/roles/rebaser.md",
+    ".harness/orchestration/workflow/rebaser.py",
+)
+_REBASER_FALLBACK = "маршрут rebase недоступен, сдвинутую базу ведёт developer-retry rebase-fix-forward"
+_REBASER_STORE_NOTE = "store harness-runtime должен быть собран из той же версии"
+
+
+def _pinned_without_rebaser(repo: Path) -> list[str]:
+    """Unfinished batches pinned to a runtime snapshot that ships no rebaser route.
+
+    Only reads: the snapshot is neither re-hashed nor rewritten. An unreadable ledger or one that
+    needs a migration yields nothing here; the ledger checks report it themselves."""
+    state = _LedgerState(repo)
+    if state.unreadable or state.needs_migration or not state.batches:
+        return []
+    from harness.orchestration.core import workspace
+    from harness.orchestration.core.constants import STATE_REL
+    from harness.orchestration.ledger.recovery_chain import effective_runtime, terminal
+
+    unfinished = [batch for batch in state.batches if not terminal(batch)]
+    if not unfinished:
+        return []
+    installed = workspace._runtime_hashes(workspace._runtime_snapshot_root(repo).parent)
+    state_root = (repo / STATE_REL).resolve()
+    described: list[str] = []
+    for batch in sorted(unfinished, key=lambda batch: str(batch.get("batch_id", ""))):
+        pin = effective_runtime(batch)
+        if not isinstance(pin, str) or pin in installed:
+            continue
+        snapshot = workspace._pinned_runtime_dir(state_root, pin) / "harness" / "orchestration"
+        batch_id = str(batch.get("batch_id", "?"))
+        if not snapshot.is_dir():
+            described.append(f"{batch_id} (snapshot не найден)")
+        elif not (
+            (snapshot / "roles" / "rebaser.md").is_file()
+            and (snapshot / "workflow" / "rebaser.py").is_file()
+        ):
+            described.append(batch_id)
+    return described
+
+
+def check_rebaser_route(context: HealthContext) -> CheckResult:
+    """Whether the rebase route of ADR 0034 can run: the rebaser role and its workflow are
+    installed, and the project either assigns no role (zero-config) or assigns the rebaser.
+
+    A missing role is a warning, never a failure: the developer rebase-fix-forward route stays.
+    The lock tells a version that does not ship the role from local drift of an installation that
+    did; a plain `harness update` restores a deleted managed file in both cases (clean-room
+    backend_orchestration checks it). Unfinished batches pinned to a snapshot without the rebaser are listed as information;
+    their snapshots are not rewritten."""
+    check_id = "orchestration.rebaser_route"
+    if not context.orchestration_enabled() or context.lock is None:
+        return _skipped(check_id, context)
+    version = context.lock.get("package_version", "?")
+    shipped = context.lock.get("files")
+    shipped = shipped if isinstance(shipped, dict) else {}
+    missing = [relative for relative in _REBASER_FILES if not (context.repo / relative).is_file()]
+    if missing:
+        drifted = [relative for relative in missing if relative in shipped]
+        if drifted:
+            return CheckResult(
+                id=check_id,
+                group="orchestration",
+                status="warn",
+                message=f"роль rebaser не установлена: {', '.join(drifted)} отсутствует, хотя "
+                f"harness {version} его поставил — локальное расхождение установки (см. "
+                f"files.skill_snapshot), а не дефект установщика; {_REBASER_FALLBACK}",
+                fix=Fix(
+                    text="восстановите управляемые файлы: обычный harness update возвращает "
+                    "удалённый управляемый файл установленной версии",
+                    command=context.harness_command("update", str(context.repo)),
+                ),
+            )
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="warn",
+            message=f"установленная версия harness {version} не поставляет роль rebaser; "
+            f"{_REBASER_FALLBACK}",
+            fix=Fix(
+                text="обновите harness до версии с ролью rebaser",
+                command=context.harness_command("update", str(context.repo)),
+            ),
+        )
+    try:
+        config = read_config_json(context.repo / ".harness" / "orchestration.json")
+    except (OSError, ValueError):
+        config = None
+    if not isinstance(config, dict):
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message="конфигурация оркестрации не читается: см. files.orchestration_config",
+        )
+    from harness.orchestration.workflow import rebaser
+
+    reason = rebaser.availability(
+        context.repo / ".harness" / "orchestration" / "roles",
+        config,
+    )
+    pinned = _pinned_without_rebaser(context.repo)
+    pinned_note = (
+        f"; batch-и на закреплённом runtime без rebaser ({len(pinned)}): {', '.join(pinned)}; "
+        "они завершаются на rebase-fix-forward, snapshot не переписывается"
+        if pinned
+        else ""
+    )
+    if reason == rebaser.AVAILABLE_ZERO_CONFIG:
+        message = "роль rebaser доступна без настройки (zero-config): маршрут rebase работает"
+    elif reason == rebaser.AVAILABLE_ASSIGNED:
+        message = (
+            "роль rebaser назначена проектом (assignment_plans.rebaser): маршрут rebase работает"
+        )
+    else:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="warn",
+            message=f"проект назначает роли явно, но не rebaser: {_REBASER_FALLBACK}"
+            + pinned_note,
+            fix=Fix(
+                text="добавьте assignment_plans.rebaser по образцу "
+                ".harness/orchestration.example.json, когда нет живого dispatch"
+            ),
+        )
+    return CheckResult(
+        id=check_id,
+        group="orchestration",
+        status="ok",
+        message=f"{message}; {_REBASER_STORE_NOTE}{pinned_note}",
+    )

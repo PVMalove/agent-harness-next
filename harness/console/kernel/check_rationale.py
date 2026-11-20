@@ -290,6 +290,10 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "Runtime запускает worker в окружении serve; без claude или codex в его PATH внешний worker не стартует.",
         "The runtime starts workers in the serve environment; without claude or codex on its PATH an external worker does not start.",
     ),
+    "orchestration.rebaser_route": (
+        "Без доступной роли rebaser сдвинутую базу переносит developer-retry rebase-fix-forward, а кандидат снова проходит code-review.",
+        "Without an available rebaser role a developer-retry rebase-fix-forward carries the moved base, and the candidate goes through code-review again.",
+    ),
 }
 
 
@@ -371,6 +375,7 @@ TITLES: dict[str, tuple[str, str]] = {
     "orchestration.disposable_data": ("Временные данные", "Disposable data"),
     "orchestration.adapters": ("Адаптеры worker", "Worker adapters"),
     "orchestration.worker_binaries": ("Бинарники worker", "Worker binaries"),
+    "orchestration.rebaser_route": ("Маршрут rebase", "Rebase route"),
 }
 
 

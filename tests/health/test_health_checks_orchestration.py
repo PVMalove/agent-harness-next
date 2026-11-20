@@ -54,6 +54,7 @@ _CHECK_FUNCTIONS: list[Callable[[HealthContext], CheckResult]] = [
     checks.check_disposable_data,
     checks.check_adapters,
     checks.check_worker_binaries,
+    checks.check_rebaser_route,
 ]
 
 
@@ -885,3 +886,130 @@ def test_worker_binaries_find_claude_in_user_local_bin(
     result = checks.check_worker_binaries(context)
 
     assert result.status == "ok", result.message
+
+
+# --- orchestration.rebaser_route (#1158) ------------------------------------------------------
+
+_REBASER_FILES = (
+    ".harness/orchestration/roles/rebaser.md",
+    ".harness/orchestration/workflow/rebaser.py",
+)
+
+
+def _rebaser_project(
+    repo: Path,
+    config: JsonObject | None,
+    *,
+    installed: tuple[str, ...] = _REBASER_FILES,
+    shipped: tuple[str, ...] = _REBASER_FILES,
+) -> HealthContext:
+    """A project with the rebaser files in ``installed`` on disk, a lock whose version shipped
+    ``shipped``, and ``config`` as its orchestration.json (``None``: no file)."""
+    for relative in installed:
+        path = repo / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# rebaser\n", encoding="utf-8")
+    (repo / ".harness" / "orchestration" / "roles").mkdir(parents=True, exist_ok=True)
+    if config is not None:
+        (repo / ".harness" / "orchestration.json").write_text(
+            json.dumps(config), encoding="utf-8"
+        )
+    lock: dict[str, object] = {
+        **_ORCHESTRATION_LOCK,
+        "package_version": "9.9.9",
+        "files": {relative: "0" * 64 for relative in shipped},
+    }
+    return _context(repo, lock=lock)
+
+
+def test_rebaser_route_is_ok_with_zero_config(tmp_path: Path) -> None:
+    result = checks.check_rebaser_route(_rebaser_project(tmp_path, None))
+
+    assert result.status == "ok"
+    assert "zero-config" in result.message
+    assert "store harness-runtime" in result.message
+
+
+def test_rebaser_route_is_ok_when_the_project_assigns_the_rebaser(tmp_path: Path) -> None:
+    config: JsonObject = {"assignment_plans": {"developer": {}, "rebaser": {}}}
+
+    result = checks.check_rebaser_route(_rebaser_project(tmp_path, config))
+
+    assert result.status == "ok"
+    assert "назначена проектом" in result.message
+    assert "zero-config" not in result.message
+
+
+def test_rebaser_route_warns_when_explicit_assignments_leave_out_the_rebaser(
+    tmp_path: Path,
+) -> None:
+    config: JsonObject = {"assignment_plans": {"developer": {}, "qa": {}}}
+
+    result = checks.check_rebaser_route(_rebaser_project(tmp_path, config))
+
+    assert result.status == "warn"
+    assert "не rebaser" in result.message
+    assert "rebase-fix-forward" in result.message
+    assert result.fix is not None
+    assert result.fix.command is None
+    assert "assignment_plans.rebaser" in result.fix.text
+    assert "orchestration.example.json" in result.fix.text
+
+
+def test_rebaser_route_calls_a_shipped_but_missing_file_local_drift(tmp_path: Path) -> None:
+    context = _rebaser_project(tmp_path, None, installed=_REBASER_FILES[1:])
+
+    result = checks.check_rebaser_route(context)
+
+    assert result.status == "warn"
+    assert "локальное расхождение установки" in result.message
+    assert "не дефект установщика" in result.message
+    assert _REBASER_FILES[0] in result.message
+    assert result.fix is not None
+    assert result.fix.command == context.harness_command("update", str(tmp_path))
+
+
+def test_rebaser_route_names_a_version_that_does_not_ship_the_role(tmp_path: Path) -> None:
+    context = _rebaser_project(tmp_path, None, installed=(), shipped=())
+
+    result = checks.check_rebaser_route(context)
+
+    assert result.status == "warn"
+    assert "9.9.9 не поставляет роль rebaser" in result.message
+    assert "дефект" not in result.message
+    assert result.fix is not None
+    assert result.fix.command == context.harness_command("update", str(tmp_path))
+
+
+def test_rebaser_route_lists_pinned_batches_without_the_rebaser_and_leaves_them_intact(
+    ledger: StoreLedger,
+) -> None:
+    from harness.orchestration.core import workspace
+
+    repo = ledger.repo
+    context = _rebaser_project(repo, None)
+    state_root = (repo / STATE_REL).resolve()
+    old_pin, lost_pin = "a" * 64, "b" * 64
+    snapshot = workspace._pinned_runtime_dir(state_root, old_pin) / "harness" / "orchestration"
+    (snapshot / "roles").mkdir(parents=True)
+    (snapshot / "roles" / "developer.md").write_text("# developer\n", encoding="utf-8")
+    (snapshot / "coordinator.py").write_text("# pinned\n", encoding="utf-8")
+    before = {
+        path: path.read_bytes() for path in sorted(snapshot.rglob("*")) if path.is_file()
+    }
+    _write_batch(ledger, "batch-old", "active", harness_runtime_sha256=old_pin)
+    _write_batch(ledger, "batch-lost", "active", harness_runtime_sha256=lost_pin)
+    _write_batch(ledger, "batch-done", "completed", harness_runtime_sha256=old_pin)
+
+    result = checks.check_rebaser_route(context)
+
+    assert result.status == "ok"
+    assert "без rebaser (2)" in result.message
+    assert "batch-old" in result.message
+    assert "batch-lost (snapshot не найден)" in result.message
+    assert "batch-done" not in result.message
+    assert "snapshot не переписывается" in result.message
+    after = {
+        path: path.read_bytes() for path in sorted(snapshot.rglob("*")) if path.is_file()
+    }
+    assert after == before
