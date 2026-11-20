@@ -25,6 +25,7 @@ from harness.orchestration.core.workspace import (
     _validate_branch,
 )
 from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+from harness.public_metadata import ASSISTANT_ATTRIBUTION
 from harness.storage import sandboxes_root
 
 # The protocol minor that added ``worktree.create`` and ``worktree.remove``. A fixed floor, not
@@ -134,6 +135,13 @@ def commit_worktree(args: argparse.Namespace) -> JsonObject:
     """``worktree commit``: the runtime stages and commits the changes of a managed worktree."""
     path = _issue_worktree(args)
     if args.message_file is not None:
+        # Without --pathspec the runtime stages every change: a message file inside the
+        # worktree would land in the commit it describes.
+        if Path(args.message_file).resolve().is_relative_to(path.resolve()):
+            raise CoordinatorError(
+                f"the commit message file {args.message_file} is inside the worktree {path}",
+                remedy="write the message file outside the worktree, or pass --message",
+            )
         try:
             message = Path(args.message_file).read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as exc:
@@ -143,10 +151,24 @@ def commit_worktree(args: argparse.Namespace) -> JsonObject:
             ) from exc
     else:
         message = args.message
+    _require_no_attribution(message)
     payload: JsonObject = {"path": str(path), "message": message}
     if args.pathspec:
         payload["pathspecs"] = list(args.pathspec)
     return _ask(args, "worktree.commit", payload, WORKTREE_COMMIT_PROTOCOL_MINOR)
+
+
+def _require_no_attribution(message: str) -> None:
+    """Refuse an assistant signature in a message the runtime commits.
+
+    The runtime commits without hooks, so ``block-public-attribution`` never sees these messages.
+    """
+    found = ASSISTANT_ATTRIBUTION.search(message)
+    if found is not None:
+        raise CoordinatorError(
+            f"the commit message carries an assistant attribution: {found.group(0)!r}",
+            remedy="remove the assistant signature, generated-by mark or session URL, then repeat",
+        )
 
 
 def _action(args: argparse.Namespace) -> str:
@@ -193,6 +215,7 @@ def merge_worktree(args: argparse.Namespace) -> JsonObject:
     if action == "start":
         payload["revision"] = args.revision
         if args.message is not None:
+            _require_no_attribution(args.message)
             payload["message"] = args.message
     return _ask(args, "worktree.merge", payload, WORKTREE_COMMIT_PROTOCOL_MINOR)
 
@@ -216,6 +239,16 @@ def runtime_commits(repo: Path) -> bool:
     return isinstance(features, list) and "worktree.commit" in features
 
 
+def _managed_worktree(repo: Path, worktree: Path) -> bool:
+    """Whether ``worktree`` lies strictly below a root the runtime manages worktrees in."""
+    resolved = worktree.resolve()
+    roots = (sandboxes_root(repo) / "worktrees", repo / ".claude" / "worktrees")
+    return any(
+        resolved != root.resolve() and resolved.is_relative_to(root.resolve())
+        for root in roots
+    )
+
+
 def require_committable_worktree(repo: Path, worktree: str) -> str:
     """How a writer commits in ``worktree``: ``git`` when this session can write the worktree
     and its git metadata, ``runtime`` when it can write only the worktree and the runtime serves
@@ -227,7 +260,9 @@ def require_committable_worktree(repo: Path, worktree: str) -> str:
         _probe_writable_directory(
             Path(worktree).resolve(), "issue worktree", remedy=WORKTREE_WRITE_REMEDY
         )
-        if runtime_commits(repo):
+        # The runtime commits only below its managed roots: another registered worktree would
+        # pass here and be refused at its first `worktree commit`, after the work is done.
+        if _managed_worktree(repo, Path(worktree)) and runtime_commits(repo):
             return "runtime"
         raise refusal
     return "git"
