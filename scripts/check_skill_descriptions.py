@@ -31,8 +31,9 @@ DESCRIPTION_LIMIT = 500
 # 38789a0f (docs/tasks/release-skills-audit-epic-closeout/baseline.md, before the audit 1398).
 MODEL_INVOKED_BUDGET = 1445
 # All first-party rows of skills/REGISTRY.md: 3348 before the skills audit (9bbaa9e5^), 5452 at
-# 38789a0f, 5566 after the epic #846 description rewrites, which is the budget.
-REGISTRY_BUDGET = 5566
+# 38789a0f, 5566 after the epic #846 description rewrites; #1249 adds the 225 characters of the
+# first-party setup-matt-pocock-skills override, whose vendor row was not counted.
+REGISTRY_BUDGET = 5791
 
 INVOCATION_START = re.compile(
     r"^(?:Use|Run)(?:\s+(?:it|this skill))?\s+"

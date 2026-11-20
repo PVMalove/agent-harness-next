@@ -21,6 +21,7 @@
 | `grill-me` | Тонкая обёртка над проектной версией: интервью `/grilling` и сбор одобренного Discovery Context без правки `CONTEXT.md` и ADR. |
 | `grill-with-docs` | Та же обёртка плюс ведение глоссария и архитектурных решений. |
 | `wayfinder` | Тикеты карты несут режим исполнения и состояние; занятие тикета ставит его в работу. |
+| `setup-matt-pocock-skills` | Записывает трекер в `.harness/project.json`, а руководства ведёт в `.harness/instructions/`, которые ставит `harness update`; метки создаёт `/setup-labels`. |
 
 ## Инженерные
 

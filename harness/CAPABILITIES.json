@@ -54,7 +54,8 @@
       "triage": "first-party/engineering/triage",
       "wayfinder": "first-party/engineering/wayfinder",
       "diagnosing-bugs": "first-party/engineering/diagnosing-bugs",
-      "tdd": "first-party/engineering/tdd"
+      "tdd": "first-party/engineering/tdd",
+      "setup-matt-pocock-skills": "first-party/engineering/setup-matt-pocock-skills"
     },
     "additions": [
       "first-party/engineering/qa-gate",
