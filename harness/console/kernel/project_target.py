@@ -13,7 +13,6 @@ from typing import Literal
 from harness.configuration_schema import PACKAGE
 from harness.errors import HarnessError
 from harness.health.model import JsonObject
-from harness.health.project_files import canonical_capability
 
 from .catalog import SETUP_COMMANDS, CatalogEntry
 
@@ -86,12 +85,10 @@ def inspect_target(value: str) -> ProjectTarget:
                 not isinstance(lock.get("files", {}), dict)
                 or not isinstance(capabilities, list)
                 or not all(isinstance(x, str) for x in capabilities)
-                or any(canonical_capability(name) not in known for name in capabilities)
+                or any(name not in known for name in capabilities)
             ):
                 raise ValueError
-            selected = tuple(
-                dict.fromkeys(canonical_capability(name) for name in capabilities)
-            )
+            selected = tuple(dict.fromkeys(capabilities))
     except (ValueError, KeyError, TypeError):
         raise ValueError(LOCK_BROKEN) from None
     conflicts = tuple(

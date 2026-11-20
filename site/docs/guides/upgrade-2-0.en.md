@@ -55,6 +55,9 @@ remedy (ADR 0036).
 4. Back up the `.harness/orchestration/state/` directory. `migrate` takes its own snapshot in
    `.harness/orchestration/state-snapshots/<utc>/`, but an emergency rollback needs a copy outside
    the repository.
+5. If `.harness/harness.lock` (the `capabilities` field) or `.harness/integrations.json` (the hook
+   identifiers) records the former suite name, replace it with `engineering-suite`. harness 2.0
+   accepts no other name for this suite, and `harness update` fails with `unknown capabilities`.
 
 ## Upgrade
 

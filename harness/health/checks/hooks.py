@@ -17,7 +17,6 @@ from ..hook_settings import (
     HOOK_CATALOG,
     HookSpec,
     RuntimeAdapter,
-    canonical_integration_id,
     critical_wiring,
     envelope_hook_ids,
     installed_bindings,
@@ -46,7 +45,6 @@ from ..project_files import (
     HOOK_PROFILES,
     INTEGRATIONS_REL,
     JSON_READ_ERRORS,
-    canonical_capability,
     hook_policy_problems,
 )
 
@@ -634,7 +632,7 @@ def recorded_managed_entries(repo: Path, identifier: str) -> list[str] | None:
     for entry in entries if isinstance(entries, list) else []:
         if (
             isinstance(entry, dict)
-            and canonical_integration_id(entry.get("id")) == identifier
+            and entry.get("id") == identifier
         ):
             recorded = entry.get("managed_entries")
             if isinstance(recorded, list) and all(
@@ -1173,9 +1171,7 @@ def check_policy(context: HealthContext) -> CheckResult:
             status="skipped",
             message=context.no_lock_message(),
         )
-    if not {
-        canonical_capability(name) for name in context.lock.get("capabilities") or []
-    } & set(HOOK_CAPABILITIES):
+    if not set(context.lock.get("capabilities") or []) & set(HOOK_CAPABILITIES):
         return CheckResult(
             id=CHECK_ID,
             group=GROUP,

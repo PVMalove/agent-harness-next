@@ -62,9 +62,9 @@ from scripts.verification.docs_sync import (
     check_instructions_enumeration,
     check_diagram_previews,
     check_no_retired_path_inventory_term,
-    check_pvmalove_additions_docs_sync,
-    check_pvmalove_override_docs_sync,
-    check_pvmalove_suite_summary_sync,
+    check_engineering_additions_docs_sync,
+    check_engineering_override_docs_sync,
+    check_engineering_suite_summary_sync,
 )
 from scripts.verification.instructions import (
     check_no_dispatch_specific_data_in_always_sent_files,
@@ -188,9 +188,9 @@ def _check_documentation() -> None:
     check_instructions_enumeration()
     check_site_links()
     check_schema_docs()
-    check_pvmalove_override_docs_sync()
-    check_pvmalove_additions_docs_sync()
-    check_pvmalove_suite_summary_sync()
+    check_engineering_override_docs_sync()
+    check_engineering_additions_docs_sync()
+    check_engineering_suite_summary_sync()
     check_vendor_pin()
     check_no_dispatch_specific_data_in_always_sent_files()
 

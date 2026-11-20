@@ -14,7 +14,6 @@ from string import hexdigits
 from dataclasses import dataclass
 from pathlib import Path
 
-from harness.health.project_files import canonical_capability
 
 from . import json_fields
 
@@ -171,10 +170,7 @@ def _installed_lock(repo: Path) -> dict[str, object]:
 def installed_capabilities(repo: Path) -> tuple[str, ...]:
     """The capabilities recorded in `.harness/harness.lock`; empty when there is no readable lock."""
     return tuple(
-        dict.fromkeys(
-            canonical_capability(name)
-            for name in json_fields.strings(_installed_lock(repo).get("capabilities"))
-        )
+        dict.fromkeys(json_fields.strings(_installed_lock(repo).get("capabilities")))
     )
 
 

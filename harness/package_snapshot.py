@@ -26,7 +26,6 @@ from harness.health.model import JsonObject
 from harness.health.project_files import (
     JSON_READ_ERRORS,
     LOCK_REL,
-    canonical_capability,
     digest,
     file_digest,
 )
@@ -71,7 +70,7 @@ def capabilities() -> dict[str, JsonObject]:
 
 def selected_capabilities(names: list[str] | None) -> list[str]:
     """Нормализовать и проверить переданный список возможностей."""
-    selected = [canonical_capability(name) for name in names or [DEFAULT_CAPABILITY]]
+    selected = list(names or [DEFAULT_CAPABILITY])
     catalog = capabilities()
     unknown = [name for name in selected if name not in catalog]
     if unknown:
@@ -108,7 +107,6 @@ def resolve_capability_skills(
 
     Обрабатывает наследование `extends`, переопределения `overrides` и дополнения `additions`.
     """
-    name = canonical_capability(name)
     if name in _stack:
         raise PackageError(
             f"capability cycle: {' -> '.join(_stack + (name,))}", remedy=PACKAGE_REMEDY
@@ -156,7 +154,6 @@ def resolve_capability_resources(
 
     Ресурсы сохраняют свой относительный путь при развёртывании в проектной директории `.harness/`.
     """
-    name = canonical_capability(name)
     if name in _stack:
         raise PackageError(
             f"capability cycle: {' -> '.join(_stack + (name,))}", remedy=PACKAGE_REMEDY

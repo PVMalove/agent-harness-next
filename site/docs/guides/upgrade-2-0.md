@@ -54,6 +54,10 @@ harness-runtime init --repo <repo> \
 4. Сохраните резервную копию каталога `.harness/orchestration/state/` вне репозитория. `migrate` сам
    делает снимок в `.harness/orchestration/state-snapshots/<utc>/`, но для аварийного отката нужна
    ещё и внешняя копия.
+5. Если в `.harness/harness.lock` (поле `capabilities`) или в `.harness/integrations.json`
+   (идентификаторы hooks) записано прежнее имя набора, замените его на `engineering-suite`.
+   harness 2.0 другого имени этого набора не принимает, и `harness update` отказывает с
+   `unknown capabilities`.
 
 ## Обновление
 

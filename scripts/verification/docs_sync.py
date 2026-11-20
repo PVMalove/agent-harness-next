@@ -124,7 +124,7 @@ def _site_section(path: Path, pattern: str, missing: str) -> str:
     return section.group(1)
 
 
-def check_pvmalove_override_docs_sync() -> None:
+def check_engineering_override_docs_sync() -> None:
     """Сверить таблицу переопределений на сайте с engineering-suite.overrides.
 
     Однажды wayfinder попал в overrides без строки в таблице.
@@ -144,7 +144,7 @@ def check_pvmalove_override_docs_sync() -> None:
         )
 
 
-def check_pvmalove_additions_docs_sync() -> None:
+def check_engineering_additions_docs_sync() -> None:
     """Сверить таблицу проектных скиллов на сайте с engineering-suite.additions.
 
     Однажды setup-labels попал в additions без строки в таблице.
@@ -179,7 +179,7 @@ def _check_listed(
         )
 
 
-def check_pvmalove_suite_summary_sync() -> None:
+def check_engineering_suite_summary_sync() -> None:
     """Сверить списки переопределений и дополнений в прозе CONTEXT.md.
 
     Однажды устаревшие счётчики «5 overrides, 1 addition» прожили три дня после правки только

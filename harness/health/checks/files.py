@@ -24,7 +24,6 @@ from ..project_files import (
     ORCHESTRATION_CONFIG_REL,
     REGISTRY_REL,
     SEED_CAPABILITIES,
-    canonical_capability,
     native_link_target,
     project_registry,
     seed_baseline_problems,
@@ -114,9 +113,7 @@ def check_seed_baseline(context: HealthContext) -> CheckResult:
             status="skipped",
             message=context.no_lock_message(),
         )
-    if not {
-        canonical_capability(name) for name in context.lock.get("capabilities") or []
-    } & set(SEED_CAPABILITIES):
+    if not set(context.lock.get("capabilities") or []) & set(SEED_CAPABILITIES):
         return CheckResult(
             id=check_id,
             group=group,

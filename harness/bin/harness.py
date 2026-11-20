@@ -92,7 +92,6 @@ from harness.health.checks.hooks import (
 from harness.health.hook_settings import (
     ADAPTERS,
     RuntimeAdapter,
-    canonical_integration_id,
     critical_wiring,
     merge_hooks,
     template_digests,
@@ -101,7 +100,6 @@ from harness.health.hook_settings import (
 from harness.health.model import JsonObject
 from harness.health.project_files import (
     BACKEND_ORCHESTRATION_CAPABILITY,
-    canonical_capability,
     DISCOVERY_LINKS,
     HOOK_POLICY_REL,
     INTEGRATIONS_REL,
@@ -423,7 +421,7 @@ def record_integration(
         for entry in read_integrations(repo)
         if not (
             isinstance(entry, dict)
-            and canonical_integration_id(entry.get("id")) == identifier
+            and entry.get("id") == identifier
         )
     ]
     entry: JsonObject = {
@@ -497,7 +495,7 @@ def record_runtime_events(repo: Path, changed: list[str]) -> None:
     entries: list[object] = []
     for entry in read_integrations(repo):
         if isinstance(entry, dict):
-            if canonical_integration_id(entry.get("id")) in ids:
+            if entry.get("id") in ids:
                 continue
             config = entry.get("config")
             if config in changed and (repo / str(config)).is_file():
@@ -1517,7 +1515,6 @@ def artifact_provenance(repo: Path) -> JsonObject:
     installations_with_seeds = selected & {
         ENGINEERING_CAPABILITY,
         BACKEND_ORCHESTRATION_CAPABILITY,
-        "pvmalove-suite",
     }
     grouped = {
         path: status for status, paths in seed_groups(repo).items() for path in paths
@@ -1588,7 +1585,7 @@ def installed_capabilities(repo: Path) -> set[str]:
     catalog = capabilities()
     available: set[str] = set()
     for selected in lock.get("capabilities", []):
-        name: str | None = canonical_capability(selected)
+        name: str | None = selected
         while name and name not in available:
             if name not in catalog:
                 fail(f"installed capability is unknown: {name}")
