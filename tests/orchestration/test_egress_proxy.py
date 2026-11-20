@@ -17,6 +17,7 @@ from contextlib import contextmanager
 
 from harness.bin import harness as harness_cli
 from harness.container import egress_proxy
+from scripts.clean_room.support import LANGUAGE_RULES
 
 ALLOWED = "allowed.test"
 
@@ -670,8 +671,16 @@ class PayloadDeliveryTests(unittest.TestCase):
                     payload[f".harness/container/{name}"],
                     (container / name).read_bytes(),
                 )
-        self.assertTrue(
-            all(path.startswith(".harness/") for path in payload), "outside .harness/"
+        # Since #1249 the language rules ship into .claude/rules/ beside the .harness/ payload.
+        language_rules = {f".claude/rules/{name}" for name in LANGUAGE_RULES}
+        self.assertEqual(
+            [
+                path
+                for path in payload
+                if not path.startswith(".harness/") and path not in language_rules
+            ],
+            [],
+            "outside .harness/ and the language rules",
         )
 
     def test_the_sandbox_base_image_is_a_plain_pinned_from_base(self) -> None:
