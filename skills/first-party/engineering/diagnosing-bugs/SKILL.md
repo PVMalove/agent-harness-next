@@ -120,7 +120,7 @@ If a correct seam exists:
 
 1. Turn the minimised repro into a failing test at that seam.
 2. Watch it fail.
-3. Apply the fix on the ticket's issue branch (`docs/agents/git-workflow.md`, Issue First).
+3. Apply the fix on the ticket's issue branch (`.harness/instructions/git-workflow.md`, Issue First).
 4. Watch it pass.
 5. Re-run the Phase 1 feedback loop against the original (un-minimised) scenario.
 

@@ -1,30 +1,16 @@
 # Technical English for agent coordination
 
-Agents must read this shared contract before their first English handoff.
-This is the managed source for technical-English coordination in an installed project.
-It is based on the principles of ASD-STE100 and does not claim conformance to that standard.
-Standard `update` delivers this managed source and preserves project-owned entry points.
-For an existing entry point, `diff` and `update` propose missing mandatory reading instructions
-as an additive diff. A human or explicitly authorized agent must review and approve additions
-before applying them by ordinary edit or patch. Once an approved instruction connects the
-entry point to this source, agents must read it before the first English handoff.
-New entry points created with a mandatory reference require reading from their creation.
-An existing import of a connected entry point also reaches this source; it needs no second link.
+This rule governs English agent-to-agent text.
 
 ## Scope, language, and authority
 
-This contract applies to English agent-to-agent coordination in every standard installation,
-including projects that do not select `backend-orchestration`.
-It covers handoff notes, checkpoints, state evidence, dependency explanations, messages to the
-next worker, and free coordination fields that the existing protocol requires in English.
-Coordinators and workers use the same source before the first English handoff.
+The rule covers briefs, handoff notes, checkpoints, state evidence, dependency explanations,
+messages to the next worker, and the free coordination fields that the protocol requires in English.
+Coordinators and workers follow it from their first English handoff.
 
-Follow the project's existing language policy for user-facing replies and completion reports.
-In backend orchestration, completion reports addressed to the coordinator remain Russian and
-contain `"report_language": "ru"`.
+Text a human reads — chat replies, user-facing summaries, and completion reports — follows the
+project's language policy; Russian text follows [Technical Russian](technical-russian.md).
 Exact tokens and source quotations keep their original language.
-This writing contract changes neither authority nor scope, evidence binding, or human approval.
-The immutable brief and the existing role, project, and protocol contracts retain their authority.
 
 ## Clear instructions without changing meaning
 
@@ -36,15 +22,13 @@ Put necessary conditions before the action they control.
 Use one established project term for each concept.
 Keep facts, assumptions, and requested actions distinguishable in ordinary prose.
 Label an assumption when the reader could mistake it for a verified fact.
-No fixed message template is required.
 
 Meaning takes priority over brevity.
 Preserve every material condition, negation, prohibition, and limit on scope.
 Preserve modality: `must` is an obligation, `must not` is a prohibition, and `may` is permission
 or possibility as used in the source.
 Keep uncertainty and unknown results explicit.
-If a requirement is ambiguous, escalate the ambiguity to the coordinator or requirement owner.
-Do not choose an interpretation or turn an assumption into authority.
+Keep an ambiguous requirement ambiguous in the handoff; resolve it by asking, never by paraphrase.
 
 ## Exact tokens and source fidelity
 
@@ -62,11 +46,8 @@ Before sending English coordination text, silently check:
 - Are exact tokens, quoted evidence, and paraphrased conditions faithful to the source?
 
 Revise the text until these checks pass.
-This check creates no extra message, JSON field, or mandatory report for a short request.
 
 ## Examples and counterexamples
-
-These are illustrative messages, not additional workflow permissions.
 
 | Source meaning | Clear English | Counterexample and lost meaning |
 | --- | --- | --- |
@@ -75,7 +56,5 @@ These are illustrative messages, not additional workflow permissions.
 | A runtime may provide telemetry; the result is unknown for this dispatch. | The runtime may provide token telemetry. Its availability is unknown for this dispatch. | "The runtime will provide telemetry." turns an uncertain possibility into a promise. |
 | The requested command is `make lint`; the completion field is `"report_language": "ru"`. | Run `make lint`. Keep `"report_language": "ru"` in the completion report. | "Run the lint command and set the language to Russian." loses the exact command, field name, and enum value. |
 
-During review, compare the message with its source.
-Check that every material condition, prohibition, scope limit, modality, and uncertainty survives.
-Check exact commands, identifiers, paths, SHA, test names, code, and quoted evidence verbatim.
-A shorter message passes review only when it preserves that meaning and those tokens.
+Apply the same checks when reviewing another agent's English text: a shorter message passes only
+when it preserves that meaning and those tokens.

@@ -40,9 +40,9 @@
     "✔ добавится",
     ".agents/skills/research/SKILL.md",
     "⚠ ваши правки",
-    ".harness/instructions/technical-english.md",
+    ".claude/rules/technical-english.md",
     "⚠ seed",
-    ".harness/project.json",
-    "docs/agents/git-workflow.md"
+    ".harness/instructions/git-workflow.md",
+    ".harness/project.json"
   ]
 }

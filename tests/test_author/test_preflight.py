@@ -535,7 +535,7 @@ def test_trust_given_only_to_a_parent_directory_keeps_the_author_disabled(
     )
 
     # Claude Code may trust the project through its parent, but without an entry for the exact
-    # path the preflight stays on the safe side (docs/agents/test-author.md, section 3).
+    # path the preflight stays on the safe side (.harness/instructions/test-author.md, section 3).
     assert _answer(_run(project)) == {
         "status": "disabled",
         "reason": "project_untrusted",

@@ -16,7 +16,7 @@ from harness.json_types import JsonObject
 from tests.core.test_uninstall import git, harness
 
 LOCK = ".harness/harness.lock"
-SEED_FOLDERS = ("docs/agents", ".claude/hooks", ".claude/rules", ".claude/agents")
+SEED_FOLDERS = (".harness/instructions", ".claude/hooks", ".claude/rules", ".claude/agents")
 RUNTIME_CONFIGS = (".claude/settings.local.json", ".codex/hooks.json")
 RULE = ".claude/rules/token-efficiency.md"
 OLD_BYTES = b"# old seed release\n"
@@ -74,6 +74,8 @@ def test_init_records_the_sha256_of_every_seed_file(repo: Path) -> None:
         ".harness/project.schema.json",
         ".harness/.sandboxes/scratch/.gitignore",
     }
+    # Managed instructions and language rules share these folders; the snapshot owns them.
+    expected -= set(load_lock(repo)["files"])
     assert set(recorded) == expected
     for relative, value in recorded.items():
         assert value == sha((repo / relative).read_bytes()), relative
@@ -366,7 +368,7 @@ def test_managed_skill_drift_names_the_force_backup_promise(repo: Path) -> None:
     assert "бэкапа нет" in result.stdout
 
 
-GUIDE = "docs/agents/git-workflow.md"
+GUIDE = ".harness/instructions/git-workflow.md"
 MOVED = "Источник правил переехал: раздел 1 (Fundamental Constraints & Tooling) → .claude/rules/git-delivery.md"
 
 
@@ -385,9 +387,9 @@ def test_update_warns_that_the_rule_source_of_a_modified_guide_moved(repo: Path)
 
 def test_update_warns_about_the_move_for_an_unbaselined_guide(repo: Path) -> None:
     lock = load_lock(repo)
-    del lock["seed_files"]["docs/agents/worktrees.md"]
+    del lock["seed_files"][".harness/instructions/worktrees.md"]
     save_lock(repo, lock)
-    (repo / "docs/agents/worktrees.md").write_bytes(b"# 1.x worktrees\n")
+    (repo / ".harness/instructions/worktrees.md").write_bytes(b"# 1.x worktrees\n")
 
     result = harness("update", str(repo))
 
@@ -410,11 +412,11 @@ def test_diff_hints_the_moved_rule_source_without_changing_its_json(repo: Path) 
 
 
 PROCEDURE_MOVES = {
-    "docs/agents/worktrees.md": (
+    ".harness/instructions/worktrees.md": (
         "Источник процедуры переехал: раздел Coordinator issue worktree → "
         ".harness/skills/implement/references/issue-worktree.md",
     ),
-    "docs/agents/test-author.md": (
+    ".harness/instructions/test-author.md": (
         "Источник процедуры переехал: раздел 6 (короткий маршрут /fast-implement) → "
         ".harness/skills/fast-implement/SKILL.md",
         "Источник процедуры переехал: раздел 7 (полный маршрут /implement) → "
@@ -441,12 +443,12 @@ def test_update_names_the_new_source_of_moved_procedures(repo: Path) -> None:
 
 
 def test_diff_names_every_moved_source_of_a_modified_guide(repo: Path) -> None:
-    (repo / "docs/agents/test-author.md").write_bytes(b"# local guide\n")
+    (repo / ".harness/instructions/test-author.md").write_bytes(b"# local guide\n")
 
     text = harness("diff", str(repo)).stdout
     data = json.loads(harness("diff", str(repo), "--json").stdout)
 
-    for notice in PROCEDURE_MOVES["docs/agents/test-author.md"]:
+    for notice in PROCEDURE_MOVES[".harness/instructions/test-author.md"]:
         assert f"    {notice}" in text
     assert "Источник правил переехал" not in text
     assert not any("переехал" in json.dumps(value) for value in data.values())

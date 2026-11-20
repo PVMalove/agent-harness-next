@@ -72,7 +72,7 @@ planned writer, verify that these mandatory gates are recorded in the batch's
 ## Batch preparation
 
 The coordinator must take every procedure from agent sources only: this skill, `.harness/orchestration/playbook.md`,
-`.harness/orchestration/roles/`, the guides in `docs/agents/`, and the `--help` and `remedy` output of
+`.harness/orchestration/roles/`, the guides in `.harness/instructions/`, and the `--help` and `remedy` output of
 the coordinator CLI. The coordinator must not take a procedure from a Russian human document
 (`backend-orchestration.md`, `site/docs/`, `ARCHITECTURE.md`, `site/docs/skills/`, `site/docs/hooks/`).
 The coordinator must not copy conventions from another batch and must not read ledger files in
@@ -211,7 +211,8 @@ report. Never accept or warning-override a report whose worker worked around a h
 Every worker prompt is this template, filled from the `dispatch send` result and the CLI invocation
 used to send it. The brief and Context Package carry the task; the prompt also carries the mandatory
 lifecycle. Fill `<coordinator CLI>` with the Python executable, absolute `coordinator.py` path and
-absolute `--repo` (plus `--state-dir` when supplied) used for that dispatch. Quote paths for the
+absolute `--repo` (plus `--state-dir` when supplied) used for that dispatch; fill `<repo>` with that
+absolute `--repo` and `<role>` with the dispatched role. Quote paths for the
 worker's shell. Keep this same ledger address even when the worker runs in another worktree.
 Copy the heartbeat interval from `dispatch send.heartbeat.every_seconds` verbatim.
 
@@ -230,6 +231,9 @@ another checkout as your actual directory. Confirm your active model and the pro
 Proceed only after a successful self-report; escalate a mismatch or unavailable model identity.
 Immediately after self-report and at least every <heartbeat.every_seconds> seconds while working, run:
 <coordinator CLI> dispatch heartbeat --dispatch <dispatch_id>
+Contracts: before task work, read the common role contract <repo>/.harness/orchestration/roles/common.md
+and your role contract <repo>/.harness/orchestration/roles/<role>.md. Write English coordination text
+by <repo>/.claude/rules/technical-english.md and Russian report text by <repo>/.claude/rules/technical-russian.md.
 Context Package <context_package_id>: start from its summary in the brief. Read only the indicated
 start_line–end_line ranges needed for the task.
 For more, read one section of the pinned package:
@@ -303,7 +307,7 @@ second orchestration manual. Full rules are module-owned guidance:
   evidence, parallelism, and metric rules.
 - `.harness/orchestration/roles/` owns each role's boundary, required proof, and specialist trigger.
 - The `--help` output and the `remedy` of the coordinator CLI own command syntax and operational recovery.
-- `docs/agents/git-workflow.md` owns issue-branch, commit, push, and PR boundaries.
+- `.harness/instructions/git-workflow.md` owns issue-branch, commit, push, and PR boundaries.
 - `references/issue-worktree.md` owns issue worktree creation and its recovery.
 
 Follow those files rather than duplicating or weakening their rules here. In particular, do not

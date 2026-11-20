@@ -13,7 +13,6 @@ ENGINEERING = ROOT / "skills/first-party/engineering"
 START_PROJECT = ROOT / "global-skills/start-project"
 LABELS = (
     "harness/project/instructions/triage-labels.md",
-    "docs/agents/triage-labels.md",
 )
 TYPE_LABELS = (
     "type::bug",
@@ -64,7 +63,7 @@ def test_triage_agrees_the_route_of_an_afk_ticket() -> None:
 
 def test_ask_matt_routes_through_the_harness_setup() -> None:
     text = _text(ENGINEERING / "ask-matt/SKILL.md")
-    assert "**`harness update`** seeds `docs/agents/`" in text
+    assert "**`harness update`** seeds `.harness/instructions/`" in text
     assert "run **`/setup-labels`** once" in text
     assert "Don't run `/setup-matt-pocock-skills` here" in text
     assert "(`hitl`) → **`/to-guide`**" in text

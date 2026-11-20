@@ -1,6 +1,6 @@
 #!/bin/bash
 # PreToolUse(Write|Edit, apply_patch of the second runtime): task artifacts belong in docs/tasks/,
-# while one-shot PR metadata belongs only in .harness/.sandboxes/pr_body/ (docs/agents/artifacts.md
+# while one-shot PR metadata belongs only in .harness/.sandboxes/pr_body/ (.harness/instructions/artifacts.md
 # and git-workflow.md §1).
 # Verdict envelope (hook-envelope.sh, then hook_response.py): reruns this script, answers with the
 # JSON verdict and the exit code of the hook policy. Without Python or the helpers the script below

@@ -36,7 +36,6 @@ FAST_IMPLEMENT = (
 TDD = ROOT / "skills" / "first-party" / "engineering" / "tdd" / "SKILL.md"
 TDD_AUTHOR = TDD.parent / "references" / "test-author.md"
 GUIDE = ROOT / "harness" / "project" / "instructions" / "test-author.md"
-ROOT_GUIDE = ROOT / "docs" / "agents" / "test-author.md"
 
 DEVELOPER_MARKERS = (
     "Red-Green-Refactor",
@@ -81,7 +80,7 @@ FAST_MARKERS = (
     "../tdd/references/test-author.md",
     "## Test author",
     "Fallback to the usual route.",
-    "docs/agents/test-author.md",
+    ".harness/instructions/test-author.md",
 )
 # The short route is owned by the fast-implement skill; the guide keeps a pointer.
 FAST_ROUTE = ".harness/skills/fast-implement/SKILL.md"
@@ -193,10 +192,6 @@ def test_common_contract_points_to_the_cycle() -> None:
     assert "Red-Green-Refactor cycle in `developer.md`" in " ".join(
         _text(COMMON).split()
     )
-
-
-def test_guide_copies_are_identical() -> None:
-    assert _text(GUIDE) == _text(ROOT_GUIDE)
 
 
 def test_cycle_scenario_passes_on_a_minimal_project(tmp_path: Path) -> None:

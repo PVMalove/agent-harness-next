@@ -47,19 +47,19 @@ This project uses a namespace-based, enterprise-style label taxonomy. Every tria
 
 - `resolution::wontfix` — the request was explicitly rejected. Applied at close time (see "Apply the outcome" below), not during normal triage.
 
-`task-report::required` is a context label outside the triage workflow. `/publish-epic` applies it to an epic and `/to-tickets` to child tickets. `/to-pull-requests` acts on it. See `docs/agents/triage-labels.md`.
+`task-report::required` is a context label outside the triage workflow. `/publish-epic` applies it to an epic and `/to-tickets` to child tickets. `/to-pull-requests` acts on it. See `.harness/instructions/triage-labels.md`.
 
 An unlabeled issue is implicitly "needs triage" — there is no dedicated label for that state, it's just the absence of the required axes.
 
-These are the actual label strings for this repo. See `docs/agents/triage-labels.md`.
+These are the actual label strings for this repo. See `.harness/instructions/triage-labels.md`.
 
-Never apply upstream canonical labels (`ready-for-agent`, `ready-for-human`, `needs-triage`, `needs-info`, `wontfix`) or an `epic::<slug>` label. This repo groups a ticket under an epic with the tracker's parent link — a GitHub sub-issue, on GitLab a `## Parent: #<epic>` section plus a `relates_to` issue link, or the local-markdown folder structure (see `docs/agents/issue-tracker.md#wayfinding-operations`); explain that if the maintainer asks for an epic label.
+Never apply upstream canonical labels (`ready-for-agent`, `ready-for-human`, `needs-triage`, `needs-info`, `wontfix`) or an `epic::<slug>` label. This repo groups a ticket under an epic with the tracker's parent link — a GitHub sub-issue, on GitLab a `## Parent: #<epic>` section plus a `relates_to` issue link, or the local-markdown folder structure (see `.harness/instructions/issue-tracker.md#wayfinding-operations`); explain that if the maintainer asks for an epic label.
 
 State transitions: analyze an unlabeled issue to determine its `type::*` label and whether it's `hitl` or `afk`, then place it in `status::ready` (with the agreed `pipeline::*` for `afk`) or `status::blocked` (dependency or missing info) — or, if it's too large to specify in one triage pass, `status::specs` and point the maintainer at `/to-spec`. `status::blocked` returns to `status::ready` once the blocker clears or the reporter replies — `/to-pull-requests` sweeps a closed ticket's dependents, and `/implement`/`/fast-implement` re-check blockers in pre-flight; `triage` does not run that sweep on its own initiative. The maintainer can override at any time — flag transitions that look unusual and ask before proceeding.
 
 ## Tracker commands
 
-Before the first tracker command (list, comment, label change, close), read [references/tracker-commands.md](references/tracker-commands.md). Issue text and comment bodies follow the Project-Only Metadata rule in `docs/agents/git-workflow.md` §1: they describe the project and carry no generated-by or AI-generated mark.
+Before the first tracker command (list, comment, label change, close), read [references/tracker-commands.md](references/tracker-commands.md). Issue text and comment bodies follow the Project-Only Metadata rule in `.harness/instructions/git-workflow.md` §1: they describe the project and carry no generated-by or AI-generated mark.
 
 ## Invocation
 

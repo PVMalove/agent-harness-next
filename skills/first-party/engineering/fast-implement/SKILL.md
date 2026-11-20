@@ -8,22 +8,22 @@ Invoke only on an explicit request (`/fast-implement`, or `$fast-implement` in C
 ticket in this session with no architect step, no independent QA role, and
 no coordinator approval gates. Never open a PR, run `qa-gate`, merge, close the ticket, or commit to `base_branch` or an
 `integration/*` branch. On GitLab, every `glab` command takes `-R <project-url>`; the placeholders
-are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions.
+are defined in `.harness/instructions/issue-tracker.md` → GitLab → Conventions.
 
 ## Resolve the ticket
 
 1. **A named ticket** (issue number, URL, or `.scratch/<feature>/issues/NN-*.md`): use it. Stop on
-   `hitl` (see `docs/agents/triage-labels.md`) and offer `/to-guide`. Require `pipeline::fast`, or
+   `hitl` (see `.harness/instructions/triage-labels.md`) and offer `/to-guide`. Require `pipeline::fast`, or
    `**Pipeline:** pipeline::fast` on the local tracker; without it, or on `pipeline::full`, offer `/implement`.
 2. **An epic** (`status::specs`, or the parent of a decomposition): pick the first open, unblocked,
    unclaimed `afk` + `pipeline::fast` child of the lowest execution wave. On GitHub/GitLab use the
-   `/wayfinder` frontier query (`docs/agents/issue-tracker.md#wayfinding-operations`) scoped to the
-   epic's children, and claim the ticket by `docs/agents/issue-tracker.md` → Wayfinding operations →
+   `/wayfinder` frontier query (`.harness/instructions/issue-tracker.md#wayfinding-operations`) scoped to the
+   epic's children, and claim the ticket by `.harness/instructions/issue-tracker.md` → Wayfinding operations →
    Claim before any other write. On the local
    tracker take the first issue file in filename order with `**Workflow:** status::ready`. If none
    qualifies, say why: only `hitl` tickets remain (offer `/to-guide`), only `pipeline::full` ones
    remain (offer `/implement`), nothing is unblocked, or everything is claimed.
-3. **Nothing named:** when `docs/agents/git-workflow.md` has an Issue First rule, stop and ask for an
+3. **Nothing named:** when `.harness/instructions/git-workflow.md` has an Issue First rule, stop and ask for an
    existing ticket, or to prepare one with `/to-spec`, `/publish-epic` and `/to-tickets`.
 
 ## Pre-flight
@@ -32,14 +32,14 @@ are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions.
    `**Blocked by:**` field). If any is open, stop, name it, and make sure the ticket is `status::blocked`.
 2. **Mark it in progress** before creating the branch or editing any file: replace the `status::*`
    label (`status::ready` or a cleared `status::blocked`) with `status::in-progress` by
-   `docs/agents/issue-tracker.md` → Replace the status label (local tracker: the `**Workflow:**`
+   `.harness/instructions/issue-tracker.md` → Replace the status label (local tracker: the `**Workflow:**`
    line). Read the ticket back and confirm it carries exactly one `status::*` label. A failed label
    write stops the run.
 3. **Integration branch.** Take it from the ticket's `## Integration Branch` section (the
    `**Integration branch:**` line on the local tracker), else from its parent epic. A ticket without
    an epic uses `base_branch`. A missing value for a child ticket is a blocker; never infer it.
 4. **Issue branch.** The current branch must match `branch_pattern`. Otherwise create and push it
-   from the integration branch by `docs/agents/git-workflow.md` §2 steps 1–2.
+   from the integration branch by `.harness/instructions/git-workflow.md` §2 steps 1–2.
 5. **Scope.** The ticket's `## Relevant Files (Discovery Context)`, `## Contract touchpoints` and
    `## Out of scope` bound the change, and its `Action -> Verify` criteria are its checks. A change
    outside them needs the developer's explicit approval before it is made.
@@ -70,7 +70,7 @@ never performs them.
 ## Test author
 
 The optional author runs the cycle of `../tdd/references/test-author.md` in this session; its
-configuration is in `docs/agents/test-author.md` section 2. The seam is the one the developer
+configuration is in `.harness/instructions/test-author.md` section 2. The seam is the one the developer
 confirmed in Implement step 1, never an unconfirmed one. Run the short-route preflight once; no
 dispatch or ledger record is created. Without `test_paths` and `test_runner`, follow the usual `/tdd`.
 **Fallback to the usual route.** Any preflight answer but `{"status":"ok"}`, a missing or failed

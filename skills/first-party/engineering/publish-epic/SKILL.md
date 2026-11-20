@@ -5,14 +5,14 @@ disable-model-invocation: true
 ---
 
 Invoke only on an explicit request (`/publish-epic`, or `$publish-epic` in Codex). Read
-`docs/agents/issue-tracker.md`, `docs/agents/triage-labels.md`, and `docs/agents/git-workflow.md` §1
+`.harness/instructions/issue-tracker.md`, `.harness/instructions/triage-labels.md`, and `.harness/instructions/git-workflow.md` §1
 first; if a tracker file is missing, tell the user to run `harness update` and stop. Change only the
 tracker, the epic's spec file and folder, and the integration branch, as approved below.
 
 ## Check the input
 
 1. Take the spec path from the user, or find the task folder under `docs/tasks/` by
-   `docs/agents/artifacts.md`. Publish only a spec whose status line is exactly
+   `.harness/instructions/artifacts.md`. Publish only a spec whose status line is exactly
    `**Status** — Approved`. For any other status, list its blockers and offer `/to-spec`.
 2. If the epic already exists (the folder is named `issue-<ID>-…` and the issue is open), do not
    publish it again; continue with the integration branch for that epic.
@@ -44,10 +44,10 @@ Present the plan and wait for explicit approval before any tracker or Git comman
    - GitLab: `glab issue create -R <project-url> --title '<title>' --description-file <spec path> --yes`,
      then `glab issue update <epic> -R <project-url> --label '<label>,<label>'`. The epic number is the
      last segment of the printed URL. GitLab silently creates a missing label, so `/setup-labels`
-     must have run first. Placeholders are defined in `docs/agents/issue-tracker.md` → GitLab.
+     must have run first. Placeholders are defined in `.harness/instructions/issue-tracker.md` → GitLab.
    - Local tracker: write the spec to `.scratch/<feature-slug>/spec.md` with `**Category:**`,
      `**Workflow:** status::specs`, and `**Task report:** required` lines after the title.
-3. Rename a slug-only task folder to `issue-<epic>-<slug>/` by `docs/agents/artifacts.md`.
+3. Rename a slug-only task folder to `issue-<epic>-<slug>/` by `.harness/instructions/artifacts.md`.
 
 ## Set up the integration branch
 
@@ -72,7 +72,7 @@ action; never recreate the epic.
      `git add -- <path>...`; never `git add -A`, `git add .`, or `git commit -a`.
   3. Commit as a standalone command, without `&&`, `;`, a pipe, or a variable:
      `git commit -m 'docs: <short epic summary>'`, following the commit rules in
-     `docs/agents/git-workflow.md`. The `block-direct-master` hook allows it only in this form, with
+     `.harness/instructions/git-workflow.md`. The `block-direct-master` hook allows it only in this form, with
      an index of grill docs only, while the branch is absent on `origin`.
   4. If the hook blocks the commit, stop and do not push. Report the hook message, that the docs
      stay staged, and the recovery: remove the cause and repeat sub-step 3.

@@ -9,6 +9,7 @@ seed-файлы из шаблонов `harness/project/`, `AGENTS.md`, `CLAUDE.m
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -40,27 +41,31 @@ GITIGNORE_LINES = ("/docs/tasks/", "/.harness/.sandboxes/")
 # Template folders `init`/`adopt` seed, in seeding order: (folder in harness/project, target in
 # the project, seeded file suffixes). The CLI copies exactly these, so uninstall finds them all.
 SEED_FOLDERS: tuple[tuple[str, str, frozenset[str]], ...] = (
-    ("instructions", "docs/agents", frozenset({".md"})),
+    ("instructions", ".harness/instructions", frozenset({".md"})),
     ("hooks", ".claude/hooks", frozenset({".sh", ".py"})),
     ("rules", ".claude/rules", frozenset({".md"})),
     ("agents", ".claude/agents", frozenset({".md"})),
 )
+# Seed target of the shared guides before #1249; `update` moves the guides found there.
+LEGACY_INSTRUCTIONS_DIR = "docs/agents"
 # Instructions of `harness/project/instructions/` that are managed files, not seeds: the CLI installs
-# them into `.harness/instructions/` (`technical-english.md` in every install, the others with their
-# capability), and `update` overwrites them as any managed file (#814).
-MANAGED_INSTRUCTIONS = frozenset(
-    {"technical-english.md", "project-memory.md", "container-executor.md"}
-)
+# them into `.harness/instructions/` with their capability, and `update` overwrites them as any
+# managed file (#814).
+MANAGED_INSTRUCTIONS = frozenset({"project-memory.md", "container-executor.md"})
+# Rules of `harness/project/rules/` that are managed files, not seeds: the language rules go into
+# `.claude/rules/` of every install, `update` overwrites them as any managed file (#1249).
+MANAGED_RULES = frozenset({"technical-english.md", "technical-russian.md"})
+_MANAGED_TEMPLATES = {"instructions": MANAGED_INSTRUCTIONS, "rules": MANAGED_RULES}
 
 
 def seed_sources(templates: Path, folder: str, suffixes: frozenset[str]) -> list[Path]:
-    """The seed templates of one `SEED_FOLDERS` folder, without the managed instructions."""
+    """The seed templates of one `SEED_FOLDERS` folder, without its managed files."""
     return [
         source
         for source in sorted((templates / folder).iterdir())
         if source.is_file()
         and source.suffix in suffixes
-        and not (folder == "instructions" and source.name in MANAGED_INSTRUCTIONS)
+        and source.name not in _MANAGED_TEMPLATES.get(folder, frozenset())
     ]
 
 
@@ -81,7 +86,7 @@ _PRUNE_DIRS = (
     ".claude",
     ".codex",
     ".agents",
-    "docs/agents",
+    LEGACY_INSTRUCTIONS_DIR,
     "docs",
 )
 
@@ -131,9 +136,12 @@ def seed_templates() -> dict[str, bytes | None]:
 
 
 def _harness_backups(repo: Path, managed: set[str]) -> list[str]:
-    """Файлы `.harness/`, которых нет в lock-файле: их создал или изменил проект."""
+    """Файлы `.harness/`, которых нет в lock-файле: их создал или изменил проект.
+
+    Seed-файлы внутри `.harness/` здесь не учитываются: их сверяет с шаблоном цикл seed-файлов."""
     root = repo / HARNESS_DIR
     backups: list[str] = []
+    seeded = set(seed_templates())
     template = PROJECT_TEMPLATE_DIR / "project.schema.json"
     for path in sorted(root.rglob("*")):
         if path.is_symlink() or not path.is_file():
@@ -142,6 +150,7 @@ def _harness_backups(repo: Path, managed: set[str]) -> list[str]:
         relative = f"{HARNESS_DIR}/{inner}"
         if (
             relative in managed
+            or relative in seeded
             or inner in _NO_BACKUP_FILES
             or inner.startswith(_NO_BACKUP_PREFIXES)
             or "__pycache__" in path.parts
@@ -156,14 +165,14 @@ def _harness_backups(repo: Path, managed: set[str]) -> list[str]:
     return backups
 
 
-def _managed_files(repo: Path) -> set[str]:
-    """Пути снимка из `harness.lock`; при отсутствии или порче lock-файла — пустое множество."""
+def _managed_files(repo: Path) -> dict[str, object]:
+    """Снимок из `harness.lock`: путь → хэш; при отсутствии или порче lock-файла — пустой словарь."""
     try:
         lock = json.loads((repo / LOCK_REL).read_text(encoding="utf-8"))
     except (OSError, ValueError):
-        return set()
+        return {}
     files = lock.get("files") if isinstance(lock, dict) else None
-    return set(files) if isinstance(files, dict) else set()
+    return dict(files) if isinstance(files, dict) else {}
 
 
 def _adapter_removal_plan(
@@ -236,7 +245,7 @@ def plan_uninstall(repo: Path) -> UninstallPlan:
             blocked = "ledger оркестрации не читается: проверьте его перед удалением"
         elif active:
             blocked = "есть активные batch оркестрации: завершите или отмените их перед удалением"
-        backup.extend(_harness_backups(checkout, _managed_files(checkout)))
+        backup.extend(_harness_backups(checkout, set(_managed_files(checkout))))
         adapters, preserved = _adapter_removal_plan(checkout)
         if preserved:
             skipped.extend(preserved)
@@ -278,6 +287,19 @@ def plan_uninstall(repo: Path) -> UninstallPlan:
         if path.is_symlink() or not path.is_file():
             continue
         changed = pristine is None or path.read_bytes() != pristine
+        if changed:
+            backup.append(relative)
+        # A seed inside .harness/ goes with that directory; a separate item would remove it twice.
+        if not relative.startswith(f"{HARNESS_DIR}/"):
+            remove.append({"kind": "file", "path": relative, "backup": changed})
+
+    # Managed files outside .harness/ (the language rules in .claude/rules/) go one by one; a file
+    # that differs from its snapshot hash is the project's edit and is backed up first.
+    for relative, recorded in sorted(_managed_files(checkout).items()):
+        path = checkout / relative
+        if relative.startswith(f"{HARNESS_DIR}/") or path.is_symlink() or not path.is_file():
+            continue
+        changed = hashlib.sha256(path.read_bytes()).hexdigest() != recorded
         remove.append({"kind": "file", "path": relative, "backup": changed})
         if changed:
             backup.append(relative)

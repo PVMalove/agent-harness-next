@@ -36,7 +36,7 @@ else:
     sys.dont_write_bytecode = True
     import pr_commands  # sibling in the installed hooks directory (sys.path[0])
 
-GUIDE = "(docs/agents/git-workflow.md)"
+GUIDE = "(.harness/instructions/git-workflow.md)"
 ISSUE_BRANCH = f"работай на issue-ветке {GUIDE}."
 CALL_TEXT = re.compile(r"\bgit\b[\s\S]*\b(?:commit|push)\b")
 # `commit`/`push` as a whole token: not a part of an option (`--commit-plan-file`) or a name.

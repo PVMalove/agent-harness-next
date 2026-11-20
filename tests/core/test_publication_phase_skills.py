@@ -10,7 +10,6 @@ ENGINEERING = ROOT / "skills/first-party/engineering"
 PR_SKILL = ENGINEERING / "to-pull-requests/SKILL.md"
 REFERENCES = ENGINEERING / "to-pull-requests/references"
 INSTRUCTIONS = ROOT / "harness/project/instructions"
-INSTALLED = ROOT / "docs/agents"
 
 
 def _text(path: Path) -> str:
@@ -94,9 +93,6 @@ def test_git_workflow_names_the_release_step_and_runs_qa_before_confirmation() -
     assert "**Release (integration → base_branch):**" in text
     assert "`/to-pull-requests --release <epic>`" in text
     assert text.index("run the `qa-gate` skill") < text.index("**Confirm before opening:**")
-    assert (INSTALLED / "git-workflow.md").read_bytes() == (
-        INSTRUCTIONS / "git-workflow.md"
-    ).read_bytes()
 
 
 def test_pr_metadata_follows_the_git_workflow_rule() -> None:
@@ -146,8 +142,8 @@ def test_delivery_stats_states_when_to_call_it() -> None:
     assert 'default_prompt: "Use $delivery-stats ' in metadata
 
 
-TICKET_FOOTER = "`docs/agents/git-workflow.md` §2 step 6 → Ticket footer"
-CLOSE_AFTER_MERGE = "`docs/agents/git-workflow.md` §2 step 7 → Close the ticket after merge"
+TICKET_FOOTER = "`.harness/instructions/git-workflow.md` §2 step 6 → Ticket footer"
+CLOSE_AFTER_MERGE = "`.harness/instructions/git-workflow.md` §2 step 7 → Close the ticket after merge"
 
 
 def test_publication_skills_reference_the_footer_and_closure_contract() -> None:

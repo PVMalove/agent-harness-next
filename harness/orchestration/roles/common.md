@@ -5,8 +5,9 @@ explicit allowed paths, `definition_of_done`, prohibited changes, issue branch, 
 required verification commands. A role does not amend the brief; material new information is escalated for a
 new coordinator decision.
 
-Before the first English handoff, every worker must read
-[Technical English](../../instructions/technical-english.md).
+Every worker writes English coordination text by the
+[Technical English](../../../.claude/rules/technical-english.md) rule and Russian report text by the
+[Technical Russian](../../../.claude/rules/technical-russian.md) rule.
 
 Use English for all agent-to-agent protocol text: handoff notes, checkpoints, state evidence,
 dependency explanations, and messages to the next worker. Treat `.harness/orchestration/state/` as a
@@ -107,7 +108,7 @@ SHA through recognized 429 handling or human `startup-failure` authorization wit
 Never manufacture a checkpoint, completion, checks or remaining DoD to make continuation possible.
 
 Prepare the issue worktree for the brief's checks without touching the main checkout's environment,
-as the worktrees guide (`docs/agents/worktrees.md`, "Worker checkout environment") describes: a
+as the worktrees guide (`.harness/instructions/worktrees.md`, "Worker checkout environment") describes: a
 Python venv linked by `harness worktree-venv`, browsers for an e2e suite in the main checkout's
 `.harness/.sandboxes/cache/`, and a build before e2e. Never shift file mtimes to keep a tool from
 re-syncing a shared environment. When a check needs a download that the sandbox's network blocks,

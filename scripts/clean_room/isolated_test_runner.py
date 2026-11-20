@@ -315,7 +315,7 @@ def _check_shipped_files(project: Path) -> None:
         ".claude/agents/test-author.md",
         ".claude/hooks/test-author-guard.py",
         ".claude/hooks/test-author-preflight.sh",
-        "docs/agents/test-author.md",
+        ".harness/instructions/test-author.md",
         ".harness/skills/tdd/SKILL.md",
     ):
         if not (project / relative).is_file():

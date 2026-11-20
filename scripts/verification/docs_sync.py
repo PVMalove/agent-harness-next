@@ -1,4 +1,4 @@
-"""Согласованность документации с каталогом capability и зеркалом инструкций агентов.
+"""Согласованность документации с каталогом capability и шаблонами инструкций агентов.
 
 Каждая проверка ловит расхождение, которое уже однажды попадало в релиз: текст, продублированный
 вручную в нескольких документах, расходится с источником правды.
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from scripts.verification.paths import (
     CAPABILITIES,
-    DOCS_AGENTS_TEMPLATE,
+    INSTRUCTION_TEMPLATES,
     MANAGED_INSTRUCTIONS,
     ROOT,
     SITE_PROJECT_STRUCTURE,
@@ -27,8 +27,7 @@ DIAGRAM_PREVIEW_LINK = re.compile(r"\]\(([^)]*diagrams/previews/[^)]+\.png)\)")
 STATIC_IMAGE_ROOTS = (ROOT / "docs", ROOT / "site" / "docs")
 PATH_INVENTORY_ROOTS = (
     ROOT / "skills" / "first-party" / "engineering" / "to-tickets",
-    ROOT / "docs" / "agents",
-    DOCS_AGENTS_TEMPLATE,
+    INSTRUCTION_TEMPLATES,
     ROOT / "site" / "docs",
     ROOT / "README.md",
 )
@@ -57,49 +56,6 @@ def load_engineering_suite() -> EngineeringSuite:
 def _documented(pattern: str, text: str) -> set[str]:
     """Имена в обратных кавычках, найденные в тексте по шаблону строки таблицы или списка."""
     return set(re.findall(pattern, text, re.MULTILINE))
-
-
-# Шаблоны-заготовки, которые проект заполняет сам: с копией сверяются текст до первого `## `
-# и список заголовков `## `, а тела секций у этого репозитория свои.
-PROJECT_FILLED_TEMPLATES = frozenset({"agent-prompt.md"})
-
-
-def _filled_template_shape(text: str) -> tuple[str, list[str]]:
-    """Вводный текст до первого заголовка `## ` и сами заголовки `## ` по порядку."""
-    lines = text.split("\n")
-    headings = [line for line in lines if line.startswith("## ")]
-    first = next(
-        (i for i, line in enumerate(lines) if line.startswith("## ")), len(lines)
-    )
-    return "\n".join(lines[:first]).strip(), headings
-
-
-def check_docs_agents_mirror() -> None:
-    """Проверить, что docs/agents/*.md совпадают с seed-инструкциями harness/project/instructions/*.md.
-
-    docs/agents — собственная копия файлов, которые scaffold_engineering_extras разворачивает в каждый
-    проект engineering-suite. Обе копии правятся вручную, поэтому расхождение ловится здесь.
-    У заготовок из PROJECT_FILLED_TEMPLATES сверяются только вводный текст и заголовки секций.
-    """
-    for template in sorted(DOCS_AGENTS_TEMPLATE.glob("*.md")):
-        if template.name in MANAGED_INSTRUCTIONS:
-            continue
-        counterpart = ROOT / "docs" / "agents" / template.name
-        if not counterpart.is_file():
-            sys.exit(f"{template} has no docs/agents counterpart: {counterpart}")
-        if template.name in PROJECT_FILLED_TEMPLATES:
-            if _filled_template_shape(
-                normalized_text(template)
-            ) != _filled_template_shape(normalized_text(counterpart)):
-                sys.exit(
-                    f"docs/agents/{template.name} intro or sections have drifted from "
-                    f"harness/project/instructions/{template.name}"
-                )
-            continue
-        if normalized_text(template) != normalized_text(counterpart):
-            sys.exit(
-                f"docs/agents/{template.name} has drifted from harness/project/instructions/{template.name}"
-            )
 
 
 def check_diagram_previews() -> None:
@@ -135,25 +91,27 @@ def check_no_retired_path_inventory_term() -> None:
                 )
 
 
-def check_docs_agents_enumeration() -> None:
-    """Проверить перечисление docs/agents/{...}.md на странице структуры сайта.
+def check_instructions_enumeration() -> None:
+    """Проверить перечисление .harness/instructions/{...}.md на странице структуры сайта.
 
     Страница вручную перечисляет файлы, которые разворачивает scaffold_engineering_extras.
     Однажды список в документе разошёлся с шаблонами.
     """
     names = {
         path.stem
-        for path in DOCS_AGENTS_TEMPLATE.glob("*.md")
+        for path in INSTRUCTION_TEMPLATES.glob("*.md")
         if path.name not in MANAGED_INSTRUCTIONS
     }
     for doc in (SITE_PROJECT_STRUCTURE,):
-        match = re.search(r"docs/agents/\{([a-z0-9,-]+)\}\.md", normalized_text(doc))
+        match = re.search(
+            r"\.harness/instructions/\{([a-z0-9,-]+)\}\.md", normalized_text(doc)
+        )
         if not match:
-            sys.exit(f"{doc}: no docs/agents/{{...}}.md enumeration found")
+            sys.exit(f"{doc}: no .harness/instructions/{{...}}.md enumeration found")
         listed = set(match.group(1).split(","))
         if listed != names:
             sys.exit(
-                f"{doc}: docs/agents/{{...}}.md enumeration {sorted(listed)} does not match "
+                f"{doc}: .harness/instructions/{{...}}.md enumeration {sorted(listed)} does not match "
                 f"harness/project/instructions/*.md seeds {sorted(names)}"
             )
 

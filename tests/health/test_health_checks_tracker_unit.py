@@ -406,7 +406,7 @@ sys.exit(1)
     # Now prove the check-and-fix path never treats that late label as missing, nor calls
     # `label create` for it: the canonical table asks for it (already present, past the old
     # cutoff) plus one genuinely missing label, so fix_labels does run.
-    triage_labels = tmp_path / "docs" / "agents" / "triage-labels.md"
+    triage_labels = tmp_path / ".harness" / "instructions" / "triage-labels.md"
     triage_labels.parent.mkdir(parents=True, exist_ok=True)
     triage_labels.write_text(
         "| Label | Color | Meaning |\n"

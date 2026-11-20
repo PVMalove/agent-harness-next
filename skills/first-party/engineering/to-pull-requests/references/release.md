@@ -20,7 +20,7 @@ the same as in the skill.
 - GitHub: `gh api repos/<owner>/<repo>/issues/<epic>/sub_issues --paginate --jq '.[] | [.number, .state, .title] | @tsv'`.
 - GitLab: `GITLAB_HOST=<host> glab api --paginate projects/<project-id>/issues/<epic>/links`; keep the
   linked issues of this project whose description carries `## Parent: #<epic>`, as in the frontier
-  query of `docs/agents/issue-tracker.md`.
+  query of `.harness/instructions/issue-tracker.md`.
 
 Continue only when every child ticket is closed. Otherwise list the open ones and stop: an open child is
 unmerged or unconfirmed work, and the release would ship without it or with half of it.
@@ -64,13 +64,13 @@ SHA as the release candidate before running checks.
 
 ## 4. Prepare the body
 
-Follow `docs/agents/git-workflow.md` §3 and store the body at
+Follow `.harness/instructions/git-workflow.md` §3 and store the body at
 `.harness/.sandboxes/pr_body/pr-body-<epic>-release.md`. The summary comes from the epic. Under What
 changed, write one line per child: `#<pr> <title> (#<ticket>)`. Under Verification, give the `/qa-gate`
 result, the results by epic criterion and the release candidate SHA. Under Not verified & risks,
 list unverified criteria, including the legacy case above, children without a merged PR, and any
 check that did not run. Choose the footer (`Closes #<epic>` or `Related to #<epic>`) by
-`docs/agents/git-workflow.md` §2 step 6 → Ticket footer, with `<epic>` for `<ID>` and `<base-branch>`
+`.harness/instructions/git-workflow.md` §2 step 6 → Ticket footer, with `<epic>` for `<ID>` and `<base-branch>`
 as the target.
 
 ## 5. Confirm and open
@@ -92,7 +92,7 @@ GitHub `gh pr checks <n>`, GitLab the pipeline of the MR. Never merge it.
 Act only after the developer confirms the merge.
 
 - Check the merge, then close or verify the epic by its footer, as
-  `docs/agents/git-workflow.md` §2 step 7 → Close the ticket after merge describes, with `<epic>` for
+  `.harness/instructions/git-workflow.md` §2 step 7 → Close the ticket after merge describes, with `<epic>` for
   `<ID>` and `<base-branch>` as the expected target.
 - Offer `/delivery-stats <epic>`. Never delete `<integration-branch>`; that is the developer's call.
 

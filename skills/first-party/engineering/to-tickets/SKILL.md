@@ -5,7 +5,7 @@ disable-model-invocation: true
 ---
 
 Invoke only on an explicit request (`/to-tickets`, or `$to-tickets` in Codex). Read
-`docs/agents/issue-tracker.md` and `docs/agents/triage-labels.md` first; if either is missing, tell
+`.harness/instructions/issue-tracker.md` and `.harness/instructions/triage-labels.md` first; if either is missing, tell
 the user to run `harness update`. For decomposition, read the specification, its approved paths, and
 the tracker. Before approval, write only local plan drafts. After approval, write ticket files,
 tracker issues, and the epic appends in `references/publish.md`. Never edit production code, tests,
@@ -53,7 +53,7 @@ tracker issues, and the epic appends in `references/publish.md`. Never edit prod
   Estimate, assign Discovery Context, and run the advisory sub-agent passes as described there.
   If the runtime cannot dispatch a sub-agent, stop and report it.
 - Draft the epic's `## Architecture invariants` and `## Implementation discipline` sections when the
-  epic lacks them, using `docs/agents/agent-prompt.md`. Write only rules that hold for every ticket.
+  epic lacks them, using `.harness/instructions/agent-prompt.md`. Write only rules that hold for every ticket.
 
 ## Approve the plan
 

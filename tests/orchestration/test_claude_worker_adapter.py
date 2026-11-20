@@ -234,6 +234,57 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
                 with self.subTest(runtime=runtime, role=role):
                     self.assertNotIn("Developer skill:", prompt)
 
+    def test_every_worker_prompt_names_the_core_contract_reads(self) -> None:
+        from harness.orchestration.core.worker_contract import (
+            INSTRUCTION,
+            ROLES_RELATIVE,
+            RULES_RELATIVE,
+        )
+
+        codex_path = ADAPTER.with_name("codex_worker.py")
+        codex_spec = importlib.util.spec_from_file_location("codex_worker", codex_path)
+        assert codex_spec and codex_spec.loader
+        codex_worker = importlib.util.module_from_spec(codex_spec)
+        codex_spec.loader.exec_module(codex_worker)
+        # The stdlib-only adapters repeat the core literal; it must never drift.
+        for adapter in (claude_worker, codex_worker):
+            self.assertEqual(adapter.CONTRACT_INSTRUCTION, INSTRUCTION)
+            self.assertEqual(adapter.CONTRACT_ROLES_RELATIVE, ROLES_RELATIVE)
+            self.assertEqual(adapter.CONTRACT_RULES_RELATIVE, RULES_RELATIVE)
+        # The in-process route copies the template of the implement skill.
+        skill = (
+            Path(__file__).resolve().parents[2]
+            / "skills/first-party/engineering/implement/SKILL.md"
+        ).read_text(encoding="utf-8")
+        template = INSTRUCTION.format(
+            roles=f"<repo>/{ROLES_RELATIVE}", rules=f"<repo>/{RULES_RELATIVE}", role="<role>"
+        )
+        self.assertIn(template, " ".join(skill.split()))
+
+        developer = json.loads(self.brief.read_text())
+        for role in ("developer", "code-review"):
+            brief = {**developer, "role": role}
+            line = INSTRUCTION.format(
+                roles=(self.repo / ROLES_RELATIVE).resolve(),
+                rules=(self.repo / RULES_RELATIVE).resolve(),
+                role=role,
+            )
+            built = {
+                "claude": claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+                "codex": codex_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                ),
+            }
+            with mock.patch.dict(os.environ, {"HARNESS_EXECUTOR": "docker"}):
+                built["container"] = claude_worker.build_prompt(
+                    brief, self.brief, self.repo, self.worktree, self.sha
+                )
+            for runtime, prompt in built.items():
+                with self.subTest(runtime=runtime, role=role):
+                    self.assertIn(line, prompt)
+
     def test_another_role_keeps_its_original_directory_scope(self) -> None:
         brief = json.loads(self.brief.read_text())
         brief["role"] = "architect"

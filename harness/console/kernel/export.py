@@ -4,7 +4,7 @@
 
 Экран описывает своё содержимое как `MarkdownDocument`; функция `export_markdown` выполняет рендеринг
 и записывает новый датированный файл (`export_text` аналогично записывает любой другой готовый текст,
-например JSON карты репозитория) в каталог `docs/tasks/` целевого репозитория (см. docs/agents/artifacts.md):
+например JSON карты репозитория) в каталог `docs/tasks/` целевого репозитория (см. .harness/instructions/artifacts.md):
 собственную папку тикета `docs/tasks/issue-<N>-*/artifacts/`, папку эпика, содержащую тикет в `tickets/`,
 или новую папку `docs/tasks/issue-<N>-console-export/artifacts/`; при отсутствии номера тикета используется
 общая папка `docs/tasks/console-exports/`. Существующий файл никогда не перезаписывается.

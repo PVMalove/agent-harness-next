@@ -132,12 +132,12 @@ def test_issue_worktree_procedure_lives_in_the_implement_reference() -> None:
         "harness worktree-venv",
         "**Session write access.**",
         "**Recovery after a partial failure.**",
-        "`docs/agents/git-workflow.md`",
+        "`.harness/instructions/git-workflow.md`",
     ):
         assert marker in reference, marker
     core = _text(_skill("implement"))
-    assert "`docs/agents/worktrees.md` → Coordinator issue worktree" not in core
-    assert "`docs/agents/worktrees.md` → Session write access" not in core
+    assert "`.harness/instructions/worktrees.md` → Coordinator issue worktree" not in core
+    assert "`.harness/instructions/worktrees.md` → Session write access" not in core
 
 
 def test_implement_core_names_each_reference_with_its_condition() -> None:
@@ -194,27 +194,27 @@ TRACKER_COPIES = (
 
 @pytest.mark.parametrize("name", ["fast-implement", "to-guide", "implement"])
 def test_skills_reference_the_tracker_contract_instead_of_copying_it(name: str) -> None:
-    """#1162: status swap and claim commands live in docs/agents/issue-tracker.md."""
+    """#1162: status swap and claim commands live in .harness/instructions/issue-tracker.md."""
     text = _text(_skill(name))
     copied = [marker for marker in TRACKER_COPIES if marker in text]
     assert not copied, copied
     if name != "implement":
-        assert "`docs/agents/issue-tracker.md` → Replace the status label" in text
-        assert "`docs/agents/issue-tracker.md` → Wayfinding operations → Claim" in text
+        assert "`.harness/instructions/issue-tracker.md` → Replace the status label" in text
+        assert "`.harness/instructions/issue-tracker.md` → Wayfinding operations → Claim" in text
 
 
 def test_skills_name_no_worktree_commands_outside_the_reference() -> None:
     for name in ("fast-implement", "to-guide", "implement", "to-pull-requests"):
         assert "worktree create --repo" not in _text(_skill(name)), name
     preflight = _section(_skill("fast-implement"), "Pre-flight")
-    assert "`docs/agents/git-workflow.md` §2 steps 1–2" in preflight
+    assert "`.harness/instructions/git-workflow.md` §2 steps 1–2" in preflight
 
 
 INSTALLED_PATH = re.compile(r"`((?:docs/agents|\.harness)/[A-Za-z0-9_./-]+\.(?:md|py|json|sh))`")
 
 
 def test_named_installed_paths_are_delivered() -> None:
-    """Every docs/agents/*.md or .harness/... path these skills name ships with the install."""
+    """Every .harness/instructions/*.md or .harness/... path these skills name ships with the install."""
     shipped = set(package_files(["backend-orchestration"]))
     shipped |= set(seed_template_files(ROOT, orchestration_enabled=True))
     shipped.add(".harness/project.json")  # written by `harness init`, not a template

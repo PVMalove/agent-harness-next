@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import IO, TypedDict, Unpack
 
 from harness.gate_runner.gate_runner import sanitise
+from harness.seed_links import agents_rules_pointer
 from harness.storage import storage_path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -284,18 +285,12 @@ def run_hook(
     )
 
 
-def assert_contract_link(doc: Path, contract: Path, label: str) -> None:
-    """Проверить, что документ ровно один раз ссылается на контракт и требует прочитать его до handoff."""
+def assert_rule_link(doc: Path, rule: Path, label: str) -> None:
+    """Проверить, что документ ровно один раз ссылается на установленное правило."""
     text = doc.read_text(encoding="utf-8")
-    links = re.findall(r"\[[^\]]+\]\(([^)]+technical-english\.md)\)", text)
-    if len(links) != 1 or (doc.parent / links[0]).resolve() != contract.resolve():
-        sys.exit(f"{label} does not reach the shared technical-English contract")
-    paragraph = next(
-        part for part in text.split("\n\n") if "technical-english.md" in part
-    )
-    normalized = " ".join(paragraph.split()).lower()
-    if "must read" not in normalized or "before" not in normalized:
-        sys.exit(f"{label} technical-English reference is not mandatory")
+    links = re.findall(rf"\[[^\]]+\]\(([^)]*{re.escape(rule.name)})\)", text)
+    if len(links) != 1 or (doc.parent / links[0]).resolve() != rule.resolve():
+        sys.exit(f"{label} does not reach the installed rule {rule.name}")
 
 
 def apply_patch(patch: str, cwd: Path) -> None:
@@ -319,22 +314,25 @@ def starts_with_text(data: bytes, text: str) -> bool:
     return data.replace(b"\r\n", b"\n").startswith(text.encode("utf-8"))
 
 
-def check_technical_english(project: Path) -> None:
-    """Проверить доставку управляемого контракта и достижимость из новых точек входа."""
-    contract = project / ".harness/instructions/technical-english.md"
-    if not contract.is_file():
-        sys.exit("standard install did not deliver the technical-English contract")
-    delivered = contract.read_bytes()
-    if delivered != (ROOT / "harness/project/instructions/technical-english.md").read_bytes():
-        sys.exit("installed technical-English contract differs from its shared source")
+LANGUAGE_RULES = ("technical-english.md", "technical-russian.md")
+
+
+def check_language_rules(project: Path) -> None:
+    """Проверить доставку языковых правил и путь к ним для Claude Code и Codex (#1249).
+
+    Правила — managed-файлы `.claude/rules/`, которые Claude Code грузит сам; Codex читает их по
+    указателю из `AGENTS.md`. Старого контракта в `.harness/instructions/` нет."""
     lock = json.loads((project / ".harness/harness.lock").read_text(encoding="utf-8"))
-    if (
-        lock["files"].get(".harness/instructions/technical-english.md")
-        != hashlib.sha256(delivered).hexdigest()
-    ):
-        sys.exit("technical-English contract is not managed by the snapshot lock")
-    if list((project / ".harness").rglob("technical-english.md")) != [contract]:
-        sys.exit("installation contains more than one technical-English contract")
-    assert_contract_link(project / "AGENTS.md", contract, "AGENTS.md")
-    if "@AGENTS.md" not in (project / "CLAUDE.md").read_text(encoding="utf-8"):
-        assert_contract_link(project / "CLAUDE.md", contract, "CLAUDE.md")
+    for name in LANGUAGE_RULES:
+        rule = project / ".claude/rules" / name
+        if not rule.is_file():
+            sys.exit(f"standard install did not deliver the language rule {name}")
+        delivered = rule.read_bytes()
+        if delivered != (ROOT / "harness/project/rules" / name).read_bytes():
+            sys.exit(f"installed language rule differs from its source: {name}")
+        if lock["files"].get(f".claude/rules/{name}") != hashlib.sha256(delivered).hexdigest():
+            sys.exit(f"language rule is not managed by the snapshot lock: {name}")
+    if list((project / ".harness").rglob("technical-english.md")):
+        sys.exit("installation still contains the old technical-English contract")
+    if not agents_rules_pointer((project / "AGENTS.md").read_text(encoding="utf-8")):
+        sys.exit("AGENTS.md does not point Codex to the runtime rules")

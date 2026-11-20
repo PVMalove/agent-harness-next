@@ -7,7 +7,7 @@
       "AGENTS.md"
     ],
     "local_changed": [
-      ".harness/instructions/technical-english.md"
+      ".claude/rules/technical-english.md"
     ],
     "missing": [],
     "package_changed": [
@@ -17,7 +17,7 @@
     "retired": [],
     "seed_differing": [
       ".harness/project.json",
-      "docs/agents/git-workflow.md"
+      ".harness/instructions/git-workflow.md"
     ],
     "seed_link_proposals": [],
     "state": "drift",

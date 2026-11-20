@@ -2,8 +2,8 @@
 
 Read this before `batch create` and whenever this session needs write access to an existing issue
 worktree. It is the coordinator's procedure; workers prepare their checkout as
-`docs/agents/worktrees.md` → Worker checkout environment describes, and the branch rules are in
-`docs/agents/git-workflow.md`.
+`.harness/instructions/worktrees.md` → Worker checkout environment describes, and the branch rules are in
+`.harness/instructions/git-workflow.md`.
 
 A coordinator (`/implement`) must create the issue worktree before `batch create`. `batch create`
 refuses a worktree that `git worktree list` does not show: `worktree '<path>' is not registered by git worktree`.
@@ -21,7 +21,7 @@ harness worktree-venv . .harness/.sandboxes/worktrees/issue-<ID>-<slug>
 
 - `<integration-branch>` is the ticket's `## Integration Branch` value. If the ticket has no such section, use its `## Git base` value, then the same section of its parent epic. For a task without an epic, use `base_branch` from `.harness/project.json`. If the value is absent for a ticket that has an epic, stop and report a blocker. Do not guess it.
 - In a manual `git worktree add -b`, `--no-track` is required. Without it, the command writes the upstream of the new branch to `.git/config`. In a sandbox, `.git/config` can be write-protected. The command then stops half done: the branch exists, but the worktree does not.
-- `git push -u origin feature/issue-<ID>-<slug>` (see `docs/agents/git-workflow.md` section 2, step 2) sets the upstream later. It writes `.git/config` too, so it can fail the same way in a sandbox. If it fails, push with `git push origin feature/issue-<ID>-<slug>` and tell the developer that the upstream is not set.
+- `git push -u origin feature/issue-<ID>-<slug>` (see `.harness/instructions/git-workflow.md` section 2, step 2) sets the upstream later. It writes `.git/config` too, so it can fail the same way in a sandbox. If it fails, push with `git push origin feature/issue-<ID>-<slug>` and tell the developer that the upstream is not set.
 - `harness worktree-venv` makes the worktree's `.harness/.venv` a symlink to the main checkout's venv, so brief checks such as `make lint` run without `make bootstrap`. It links only when the worktree's `uv.lock` and `pyproject.toml` match the main checkout. Otherwise it answers `"status": "refused"` with the differing files and a remedy: a separate venv in the worktree (`UV_PROJECT_ENVIRONMENT=.harness/.venv uv sync --locked`). Do not run `make bootstrap` in a worktree with a linked venv: through the link it re-syncs the main checkout's venv. Run the command again after the recovery `git worktree add` below.
 - Pass the absolute path of the worktree as `--worktree`, the branch as `--branch`, and the integration branch as `--integration-ref` to `batch create`. For a task without an epic, omit `--integration-ref`.
 

@@ -5,8 +5,9 @@ This playbook is the runtime-neutral coordination contract for the optional
 dispatch work, select a provider, or require a runtime adapter. An adapter may translate
 these records into its own commands later, but it must preserve the rules below.
 
-Before the first English handoff, the coordinator must read
-[Technical English](../instructions/technical-english.md).
+The coordinator writes English coordination text by the
+[Technical English](../../.claude/rules/technical-english.md) rule and Russian text for the user by
+the [Technical Russian](../../.claude/rules/technical-russian.md) rule.
 
 ## Authority and invariants
 

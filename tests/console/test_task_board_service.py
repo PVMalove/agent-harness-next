@@ -359,7 +359,7 @@ def test_screen_service_without_a_board_is_not_found(tmp_path: Path) -> None:
 def test_board_prompt_takes_the_blocks_of_the_project_prompt_file(tmp_path: Path) -> None:
     reader, clock = FakeReader(), Clock()
     sut = TaskBoardService(tmp_path, clock=clock, reader=reader, ledger=_ledger)  # type: ignore[arg-type]
-    template = tmp_path / "docs" / "agents" / "agent-prompt.md"
+    template = tmp_path / ".harness" / "instructions" / "agent-prompt.md"
 
     async def scenario() -> tuple[str, str]:
         without = str(_cards(await sut.board("#862"))[0]["prompt"])

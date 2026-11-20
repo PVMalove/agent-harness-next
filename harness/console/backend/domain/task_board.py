@@ -138,7 +138,7 @@ class PromptTemplate:
 
 NO_TEMPLATE = PromptTemplate()
 # The project file with the fixed blocks of the agent prompt, relative to the repository.
-PROMPT_TEMPLATE_PATH = "docs/agents/agent-prompt.md"
+PROMPT_TEMPLATE_PATH = ".harness/instructions/agent-prompt.md"
 
 
 @dataclass(frozen=True)

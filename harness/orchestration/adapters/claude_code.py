@@ -32,6 +32,11 @@ from harness.orchestration.core.developer_skill import (
     DEVELOPER_SKILL_RELATIVE,
     INSTRUCTION as DEVELOPER_SKILL_INSTRUCTION,
 )
+from harness.orchestration.core.worker_contract import (
+    INSTRUCTION as CONTRACT_INSTRUCTION,
+    ROLES_RELATIVE,
+    RULES_RELATIVE,
+)
 from harness.orchestration.core.utils import (
     CoordinatorError,
     JsonObject,
@@ -144,9 +149,13 @@ def _prompt(args: argparse.Namespace, brief: JsonObject) -> str:
         if brief["role"] == "developer"
         else ""
     )
+    contracts = CONTRACT_INSTRUCTION.format(
+        roles=(Path(args.repo).resolve() / ROLES_RELATIVE).resolve(),
+        rules=(Path(args.repo).resolve() / RULES_RELATIVE).resolve(),
+        role=brief["role"],
+    )
     return f"""You are the {brief['role']} worker for dispatch {brief['dispatch_id']}.
-Read {Path(args.repo).resolve() / '.harness/instructions/technical-english.md'} before English coordination.
-Read {Path(args.repo).resolve() / '.harness/orchestration/roles/common.md'} and the role manifest in that directory.
+{contracts}
 Immutable brief: {Path(args.brief).resolve()}
 Report staging path: {brief['report_staging_path']}
 Expected worktree: {brief['worktree']}

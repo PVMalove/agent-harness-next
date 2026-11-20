@@ -24,7 +24,7 @@ before making a coverage claim. If the specification leaves the acceptance outco
 report the gap in the specification itself.
 
 Read the current bodies of all linked child tickets, open and closed. The placeholders follow the
-conventions in `docs/agents/issue-tracker.md`.
+conventions in `.harness/instructions/issue-tracker.md`.
 
 - GitHub: list the children with
   `gh api repos/<owner>/<repo>/issues/<epic>/sub_issues --paginate --jq '.[] | [.number, .state, .title] | @tsv'`,

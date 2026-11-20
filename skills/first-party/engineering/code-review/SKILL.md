@@ -16,7 +16,7 @@ must not launch a runtime-specific adapter, choose a provider or model, or chang
 branch. Write both sub-agent briefs and the aggregated report in the
 `language` from `.harness/project.json` (default `ru`), whatever the prompt's language.
 
-The issue tracker should have been provided to you. If `docs/agents/issue-tracker.md` is missing, tell the user to run `harness update`, which seeds it from the harness templates. On GitLab, every `glab` command takes `-R <project-url>`; `<project-url>` and the other GitLab placeholders (`<host>`, `<project-id>`) are defined in `docs/agents/issue-tracker.md` → GitLab → Conventions.
+The issue tracker should have been provided to you. If `.harness/instructions/issue-tracker.md` is missing, tell the user to run `harness update`, which seeds it from the harness templates. On GitLab, every `glab` command takes `-R <project-url>`; `<project-url>` and the other GitLab placeholders (`<host>`, `<project-id>`) are defined in `.harness/instructions/issue-tracker.md` → GitLab → Conventions.
 
 ## Process
 
@@ -37,7 +37,7 @@ delta-review), read `references/gated-route.md`.
 
 Look for the originating spec, in this order:
 
-1. Issue references in the commit messages or the named PR/MR (`#123`, `Closes #45`, `Related to #45`, etc.) — fetch via the workflow in `docs/agents/issue-tracker.md`: GitHub `gh issue view <n> --comments`; GitLab `glab issue view <n> -R <project-url> --comments`. A GitLab `!67` is a merge request, not an issue: read it with `glab mr view 67 -R <project-url> --comments` (GitHub PR: `gh pr view <n> --comments`) and take its ticket from the `Closes #<ID>`/`Related to #<ID>` footer.
+1. Issue references in the commit messages or the named PR/MR (`#123`, `Closes #45`, `Related to #45`, etc.) — fetch via the workflow in `.harness/instructions/issue-tracker.md`: GitHub `gh issue view <n> --comments`; GitLab `glab issue view <n> -R <project-url> --comments`. A GitLab `!67` is a merge request, not an issue: read it with `glab mr view 67 -R <project-url> --comments` (GitHub PR: `gh pr view <n> --comments`) and take its ticket from the `Closes #<ID>`/`Related to #<ID>` footer.
 2. A path the user passed as an argument.
 3. A spec file under `docs/`, `specs/`, or `.scratch/` matching the branch name or feature.
 4. If nothing is found, ask the user where the spec is. If they say there isn't one, the **Spec** sub-agent will skip and report "no spec available".

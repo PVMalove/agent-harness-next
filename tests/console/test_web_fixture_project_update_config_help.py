@@ -74,8 +74,8 @@ DRIFT: dict[str, object] = {
     "added": [".agents/skills/research/SKILL.md"],
     "missing": [],
     "retired": [],
-    "local_changed": [".harness/instructions/technical-english.md"],
-    "seed_differing": [".harness/project.json", "docs/agents/git-workflow.md"],
+    "local_changed": [".claude/rules/technical-english.md"],
+    "seed_differing": [".harness/project.json", ".harness/instructions/git-workflow.md"],
     "unchanged": 240,
     "seed_link_proposals": [],
 }

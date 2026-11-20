@@ -1,5 +1,5 @@
 #!/bin/bash
-# PreToolUse(Bash): "Zero Auto-Merge" from docs/agents/git-workflow.md, enforced deterministically.
+# PreToolUse(Bash): "Zero Auto-Merge" from .harness/instructions/git-workflow.md, enforced deterministically.
 # pr_commands.py blocks `gh pr merge` and `glab mr merge`/`accept` text unless every command bash
 # would run is an allowlisted inert one (echo, cat, grep, git commit, gh pr comment, ...) or the
 # text is only heredoc data: a quoted-delimiter body that cat or tee writes to a file with its own
@@ -21,5 +21,5 @@ fi
 if VERDICT="$("$PY" "$SCRIPT_DIR/pr_commands.py" merge)" && [ "$VERDICT" = "allow" ]; then
   exit 0
 fi
-echo "Zero Auto-Merge: 'gh pr merge' и 'glab mr merge'/'accept' запрещены агенту — мердж в основную ветку выполняет только разработчик вручную (docs/agents/git-workflow.md). Упоминание merge допускается только в командах echo/printf/cat/grep/head/tail/wc, git commit и текстовых подкомандах gh/glab без \$, обратных кавычек, комментариев и скобок. В цепочке с другими командами merge-текст допустим только в теле heredoc с разделителем в кавычках (<<'EOF'), которое cat или tee записывает в файл своим перенаправлением stdout (> файл) вне конвейера, если этот файл, cat/tee и exec не называет другая часть команды. Heredoc на stdin оболочки или интерпретатора (bash, python3 -) и запуск записанного файла блокируются." >&2
+echo "Zero Auto-Merge: 'gh pr merge' и 'glab mr merge'/'accept' запрещены агенту — мердж в основную ветку выполняет только разработчик вручную (.harness/instructions/git-workflow.md). Упоминание merge допускается только в командах echo/printf/cat/grep/head/tail/wc, git commit и текстовых подкомандах gh/glab без \$, обратных кавычек, комментариев и скобок. В цепочке с другими командами merge-текст допустим только в теле heredoc с разделителем в кавычках (<<'EOF'), которое cat или tee записывает в файл своим перенаправлением stdout (> файл) вне конвейера, если этот файл, cat/tee и exec не называет другая часть команды. Heredoc на stdin оболочки или интерпретатора (bash, python3 -) и запуск записанного файла блокируются." >&2
 exit 2
