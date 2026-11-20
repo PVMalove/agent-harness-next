@@ -7,12 +7,15 @@ import hashlib
 import json
 import re
 import sys
+from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 from harness.bin import harness as harness_cli
 from harness.health.project_files import frontmatter_metadata
 from harness.orchestration.core.constants import STATE_REL
 from harness.seed_links import RULES_POINTER, agents_rules_pointer
+from harness.uninstall import seed_sources
 
 from scripts.clean_room.support import (
     HARNESS,
@@ -125,9 +128,10 @@ def run(ctx: SimpleNamespace) -> None:
     (foundation / "AGENTS.md").write_text(
         "# Local\n\n```\nRead .claude/rules/\n```\n", encoding="utf-8"
     )
-    proposals = capture_json(HARNESS + ["diff", str(foundation), "--json"])[
-        "seed_link_proposals"
-    ]
+    proposals = cast(
+        list[dict[str, str]],
+        capture_json(HARNESS + ["diff", str(foundation), "--json"])["seed_link_proposals"],
+    )
     if [item["path"] for item in proposals] != ["AGENTS.md"]:
         sys.exit("a fenced example suppressed the Codex rules pointer")
     for name, content in original_entries.items():
@@ -289,7 +293,7 @@ def run(ctx: SimpleNamespace) -> None:
             sys.exit(f"installed package differs from selected source: {destination}")
     # Seed guides and the managed instructions of the same template folder share
     # `.harness/instructions/`; the project gets no `docs/` from the install.
-    seed_guides = harness_cli.seed_sources(
+    seed_guides = seed_sources(
         harness_cli.PROJECT_TEMPLATE_DIR, "instructions", frozenset({".md"})
     )
     installed_guides = pv_project / ".harness" / "instructions"
@@ -334,9 +338,10 @@ def run(ctx: SimpleNamespace) -> None:
     output = capture(HARNESS + ["update", str(pv_project)])
     if any(path.read_bytes() != content for path, content in seed_snapshot.items()):
         sys.exit("pvmalove update modified an unapproved seed")
-    proposal = capture_json(HARNESS + ["diff", str(pv_project), "--json"])[
-        "seed_link_proposals"
-    ]
+    proposal = cast(
+        list[dict[str, str]],
+        capture_json(HARNESS + ["diff", str(pv_project), "--json"])["seed_link_proposals"],
+    )
     if [item["path"] for item in proposal] != [".claude/agents/pr-composer.md"]:
         sys.exit("update proposed links for already connected or unrelated entry points")
     patch = output[output.index("diff --git ") :]
@@ -372,14 +377,16 @@ def run(ctx: SimpleNamespace) -> None:
     )
     if repo_map_health["status"] != "warn":
         sys.exit("health did not mark the degraded Repo Map tier as a warning")
-    if not repo_map_health["message"].startswith("Repo Map: tier=minimal"):
+    repo_map_message = str(repo_map_health["message"])
+    if not repo_map_message.startswith("Repo Map: tier=minimal"):
         sys.exit("health did not report the degraded Repo Map tier")
     if (
         "provenance: offline parser bundle unavailable"
-        not in repo_map_health["message"]
+        not in repo_map_message
     ):
         sys.exit("health did not report missing Repo Map bundle provenance")
-    repo_map_fix = repo_map_health["fix"]["text"] if repo_map_health["fix"] else ""
+    repo_map_fix_entry = cast(dict[str, str] | None, repo_map_health["fix"])
+    repo_map_fix = repo_map_fix_entry["text"] if repo_map_fix_entry else ""
     if "установите offline parser bundle" not in repo_map_fix:
         sys.exit("health did not provide the offline Repo Map remedy")
     if "uv run" in repo_map_fix:
@@ -400,7 +407,7 @@ def run(ctx: SimpleNamespace) -> None:
     corrupt_bundle_health = find_check(
         capture_json(HARNESS + ["health", str(pv_project), "--json"]), "repo_map.tier"
     )
-    if not corrupt_bundle_health["message"].startswith("Repo Map: tier=minimal"):
+    if not str(corrupt_bundle_health["message"]).startswith("Repo Map: tier=minimal"):
         sys.exit("health accepted a corrupt Repo Map bundle as full tier")
     if corrupt_bundle_health["status"] == "ok":
         sys.exit("health reported a corrupt Repo Map bundle as full tier")
@@ -581,7 +588,7 @@ def run(ctx: SimpleNamespace) -> None:
             "conflict",
             "retired",
         )
-        for path in pv_drift[key]
+        for path in cast(list[str], pv_drift[key])
         if path.startswith(".harness/skills/tdd/")
     ]
     if tdd_drift:
@@ -712,7 +719,7 @@ def run(ctx: SimpleNamespace) -> None:
     ctx.target_home = target_home
 
 
-def check_hook_settings_merge(pv_project) -> None:
+def check_hook_settings_merge(pv_project: Path) -> None:
     """`update` сливает managed hook-записи: добавляет недостающую, сохраняет запись пользователя,
     не трогает правку managed-записи и при повторном запуске ничего не меняет."""
     config = ".claude/settings.local.json"
@@ -770,17 +777,17 @@ def check_hook_settings_merge(pv_project) -> None:
     )
 
     second_config = ".codex/hooks.json"
-    second = pv_project / second_config
-    second_document = json.loads(second.read_text(encoding="utf-8"))
+    second_settings = pv_project / second_config
+    second_document = json.loads(second_settings.read_text(encoding="utf-8"))
     for group in second_document["hooks"]["PreToolUse"]:
         group["hooks"] = [
             hook
             for hook in group["hooks"]
             if "block-pr-merge.sh" not in hook["command"]
         ]
-    second.write_text(json.dumps(second_document, indent=2) + "\n", encoding="utf-8")
+    second_settings.write_text(json.dumps(second_document, indent=2) + "\n", encoding="utf-8")
     output = capture(HARNESS + ["update", str(pv_project)])
-    restored = second.read_text(encoding="utf-8")
+    restored = second_settings.read_text(encoding="utf-8")
     if restored.count("block-pr-merge.sh") != 1:
         sys.exit(
             "update did not restore the removed managed entry of the second runtime"
@@ -796,7 +803,7 @@ def check_hook_settings_merge(pv_project) -> None:
         sys.exit("the second runtime hook adapter is not recorded in the integrations")
 
 
-def check_tracker_field(pv_project) -> None:
+def check_tracker_field(pv_project: Path) -> None:
     """Поле tracker в установленном проекте (docs/adr/0011): discovery обоих runtime и health.
 
     Проект без origin получает при установке project.json без поля tracker. С добавленным полем
@@ -844,14 +851,14 @@ def check_tracker_field(pv_project) -> None:
     )
     if (
         invalid["status"] != "fail"
-        or "tracker has unknown field(s): unexpected" not in invalid["message"]
+        or "tracker has unknown field(s): unexpected" not in str(invalid["message"])
     ):
         sys.exit("health accepted an unknown key inside the tracker field")
     project_json.write_bytes(original)
     run_health(pv_project)
 
 
-def check_tracker_from_origin(test_root) -> None:
+def check_tracker_from_origin(test_root: Path) -> None:
     """Поле tracker из GitLab- и GitHub-origin при установке (docs/adr/0011).
 
     Install без терминала и флагов трекера выводит тип, хост с портом и проект с подгруппами из
@@ -903,13 +910,13 @@ def check_tracker_from_origin(test_root) -> None:
         if find_check(report, "files.project_json")["status"] != "ok":
             sys.exit(f"the {name} tracker field written by install failed health")
         tracker = find_check(report, "tracker.project")
-        if tracker["status"] != "ok" or not tracker["message"].endswith(
+        if tracker["status"] != "ok" or not str(tracker["message"]).endswith(
             "(источник: поле tracker)"
         ):
             sys.exit(f"health did not resolve the {name} tracker from the field")
 
 
-def _project_bytes(project) -> dict[str, bytes]:
+def _project_bytes(project: Path) -> dict[str, bytes]:
     """Байты каждого файла проекта вне `.git` по POSIX-пути от корня проекта."""
     return {
         path.relative_to(project).as_posix(): path.read_bytes()
@@ -918,7 +925,7 @@ def _project_bytes(project) -> dict[str, bytes]:
     }
 
 
-def check_package_root_without_init(test_root) -> None:
+def check_package_root_without_init(test_root: Path) -> None:
     """Установка без `.harness/__init__.py` (#626).
 
     После `harness install` файла нет ни на диске, ни в lock, и `python -m unittest` без
@@ -993,7 +1000,7 @@ def check_package_root_without_init(test_root) -> None:
         )
 
 
-def check_runtime_rules(test_root) -> None:
+def check_runtime_rules(test_root: Path) -> None:
     """Runtime rules (ADR 0039): свежая установка, старый путь правил, правки проекта, указатель
     Codex в существующем AGENTS.md и закреплённый batch."""
     project = test_root / "rules_project"
@@ -1013,9 +1020,10 @@ def check_runtime_rules(test_root) -> None:
         sys.exit("fresh AGENTS.md has no Codex read pointer to .claude/rules/")
     if any(
         ".claude/rules" in item["diff"]
-        for item in capture_json(HARNESS + ["diff", str(project), "--json"])[
-            "seed_link_proposals"
-        ]
+        for item in cast(
+            list[dict[str, str]],
+            capture_json(HARNESS + ["diff", str(project), "--json"])["seed_link_proposals"],
+        )
     ):
         sys.exit("diff proposed a rules pointer for a fresh AGENTS.md")
 
@@ -1098,7 +1106,7 @@ ISSUE_WORKTREE = ".harness/skills/implement/references/issue-worktree.md"
 PROCEDURE_GUIDES = (".harness/instructions/worktrees.md", ".harness/instructions/test-author.md")
 
 
-def check_workflow_procedures(test_root) -> None:
+def check_workflow_procedures(test_root: Path) -> None:
     """Маршруты процедур (ADR 0037, #1162): цели указателей после свежей установки для Claude Code
     и Codex, замена старых руководств при update и предупреждение о переезде у правленой копии."""
     project = test_root / "procedures_project"
