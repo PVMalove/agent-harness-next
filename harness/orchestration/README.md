@@ -79,6 +79,11 @@ brief и report, независимый review и clean-room QA. Capability вы
 совместимость capability с role manifest'ами, fallback и обязательный `code-review`. Для внешних
 worker она также сверяет адаптеры `.harness/adapters/` с версией harness (`orchestration.adapters`)
 и ищет `claude` и `codex` в PATH окружения `harness-runtime serve` (`orchestration.worker_binaries`).
+Проверка `orchestration.rebaser_route` сообщает, работает ли маршрут `rebase`: роль доступна без
+настройки (zero-config) или назначена проектом (`assignment_plans.rebaser`). Если роль не
+установлена или проект назначает роли явно без `rebaser`, проверка предупреждает: сдвинутую базу
+ведёт developer-retry `rebase-fix-forward`. Она также перечисляет batch-и на закреплённом runtime
+без rebaser; их snapshot не переписывается (ADR 0034).
 
 При загрузке coordinator нормализует в памяти только перечисленные enum-поля (`normalization.v1`:
 регистр, пробелы по краям и документированные алиасы вроде `in_process` → `in-process`), пишет

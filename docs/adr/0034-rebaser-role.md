@@ -89,3 +89,27 @@ rewind, лишний QA на старой базе и retry, после кото
   решения.
 - Проект, который назначает роли явно, получает маршрут только после добавления
   `assignment_plans.rebaser`.
+
+### Доставка, диагностика и совместимость
+
+- Роль `roles/rebaser.md` и её runtime `workflow/rebaser.py` поставляет ресурс `orchestration`
+  capability `backend-orchestration` при `init` и `update`. Обычный `harness update` возвращает и
+  файлы версии, которая их ещё не ставила, и удалённый локально управляемый файл. Проектный
+  `.harness/orchestration.json` установщик не дополняет: `assignment_plans.rebaser` есть только в
+  примере `.harness/orchestration.example.json`.
+- Доступность роли имеет четыре состояния (`rebaser.availability`): `not-installed` — манифеста нет в
+  каталоге ролей runtime; `zero-config` — проект не назначает ни одной роли; `assigned` — проект
+  назначает `rebaser`; `not-assigned` — проект назначает роли явно, но не `rebaser`. Маршрут
+  `rebase` есть только в `zero-config` и `assigned`; иначе сдвинутую базу ведёт developer-retry
+  `rebase-fix-forward` (ADR 0012).
+- Read-only проверка `harness health` `orchestration.rebaser_route` различает эти состояния. Файл,
+  которого нет на диске при записи в `.harness/harness.lock`, она называет локальным расхождением
+  установки, а не дефектом установщика; файл, которого нет и в lock, — версией без роли. Оба случая
+  и `not-assigned` дают `warn`, не `fail`: `rebase-fix-forward` остаётся рабочим маршрутом.
+- Batch, закреплённый на runtime snapshot без `roles/rebaser.md` или `workflow/rebaser.py`,
+  завершается на `rebase-fix-forward`: snapshot не переписывается и не мигрирует, а его хэш
+  сверяется как прежде. `orchestration.rebaser_route` перечисляет такие незавершённые batch-и, не
+  пересчитывая хэш и ничего не записывая.
+- Store `harness-runtime` должен быть собран из той же версии: Python не может read-only
+  проверить, принимает ли запущенный store `route: rebase`, пока протокол не даёт такого сигнала.
+  Этот сигнал — отдельная задача.

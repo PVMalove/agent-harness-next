@@ -507,7 +507,10 @@ worker, dispatch переходит в `blocked` с `worker-exited-without-repor
 лога. `harness health` сверяет установленные адаптеры с версией харнесса (`orchestration.adapters`)
 и ищет `claude` и `codex` в PATH окружения `harness-runtime serve`
 (`orchestration.worker_binaries`): runtime запускает worker в этом окружении, а не в окружении
-coordinator. Для проверки команды без модели есть `dispatch --dry-run`, для тестового исполняемого
+coordinator. Проверка `orchestration.rebaser_route` показывает, доступна ли роль rebaser: без
+настройки (zero-config), по назначению проекта (`assignment_plans.rebaser`), не установлена или не
+назначена. В двух последних случаях сдвинутую базу ведёт developer-retry `rebase-fix-forward`;
+batch-и на закреплённом runtime без rebaser проверка перечисляет, не меняя их snapshot. Для проверки команды без модели есть `dispatch --dry-run`, для тестового исполняемого
 файла `--claude-bin`/`--codex-bin`, для строк developer-retry `--extra-prompt-file`.
 
 Для `transport: "external"` проект передаёт `--adapter <path>` в `dispatch send`. Adapter отвечает
