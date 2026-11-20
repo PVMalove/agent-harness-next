@@ -6,11 +6,13 @@
 // Removing or altering this header is prohibited and voids all license rights.
 
 //! `worktree.create` and `worktree.remove`: the managed issue worktrees of the repository
-//! (issue #1180).
+//! (issue #1180); `worktree.commit`: a commit in one of them (issue #1246).
 //!
 //! The coordinator runs inside an agent sandbox that mounts the repository's `.git/worktrees`
-//! read-only, so `git worktree add` and `git worktree remove` fail there. The runtime runs outside
-//! the sandbox, so it creates and removes these worktrees when the coordinator asks.
+//! read-only, so `git worktree add` and `git worktree remove` fail there, and so do `git add` and
+//! `git commit` of an in-process writer in a worktree the session did not create. The runtime runs
+//! outside the sandbox, so it creates and removes these worktrees and commits in them when the
+//! coordinator or its writer asks.
 //!
 //! The requester is sandboxed and the runtime is not, so an operation must not let the requester
 //! run code or touch a path outside the managed roots. A path is a strict descendant of a managed
@@ -179,10 +181,15 @@ fn managed_path(repo: &Repository, raw: &str, roots: &[&str]) -> Result<PathBuf,
 /// A Git command in the repository. The hooks and the fsmonitor are off, so Git runs no file the
 /// sandboxed requester wrote, and the environment of the runtime names no other repository.
 fn git(repo: &Repository) -> Command {
+    git_at(&repo.root)
+}
+
+/// A Git command in the checkout `dir`, with the guards of `git`.
+fn git_at(dir: &Path) -> Command {
     let mut command = Command::new("git");
     command
         .arg("-C")
-        .arg(&repo.root)
+        .arg(dir)
         .args([
             "-c",
             "core.hooksPath=/dev/null",
@@ -473,6 +480,233 @@ pub(crate) fn remove(
     Ok(json!({"path": path.to_string_lossy(), "removed": true}))
 }
 
+/// The longest commit message `worktree.commit` accepts, in bytes.
+const MAX_MESSAGE_BYTES: usize = 64 * 1024;
+
+/// A `worktree.commit` payload.
+struct CommitRequest<'a> {
+    path: &'a str,
+    message: &'a str,
+    /// The paths to stage, each read literally; `None` stages every change of the worktree.
+    pathspecs: Option<Vec<&'a str>>,
+}
+
+/// The fields of a `worktree.commit` payload: the string fields `path` and `message` and the
+/// optional non-empty array of strings `pathspecs`.
+fn commit_request(payload: Option<&Value>) -> Result<CommitRequest<'_>, ErrorBody> {
+    let refuse = |detail: String| {
+        ErrorBody::malformed(
+            detail,
+            "send worktree.commit a payload object with the string fields path and message and, \
+             optionally, pathspecs: a non-empty array of strings",
+        )
+    };
+    let Some(Value::Object(members)) = payload else {
+        return Err(refuse("worktree.commit needs a payload object".to_owned()));
+    };
+    if let Some(unknown) = members
+        .keys()
+        .find(|member| !["path", "message", "pathspecs"].contains(&member.as_str()))
+    {
+        return Err(refuse(format!("unknown payload field {unknown:?}")));
+    }
+    let text = |field: &str| {
+        members
+            .get(field)
+            .and_then(Value::as_str)
+            .ok_or_else(|| refuse(format!("the payload field {field:?} must be a string")))
+    };
+    let path = text("path")?;
+    if path.chars().any(char::is_control) {
+        return Err(refuse(
+            "the payload field \"path\" holds a control character".to_owned(),
+        ));
+    }
+    let message = text("message")?;
+    if message.trim().is_empty() {
+        return Err(refuse("the commit message is empty".to_owned()));
+    }
+    if message.len() > MAX_MESSAGE_BYTES {
+        return Err(refuse(format!(
+            "the commit message is longer than {MAX_MESSAGE_BYTES} bytes"
+        )));
+    }
+    // A line break and a tab belong to a commit message; no other control character does.
+    if message
+        .chars()
+        .any(|found| found.is_control() && found != '\n' && found != '\t')
+    {
+        return Err(refuse(
+            "the commit message holds a control character other than a line break or a tab"
+                .to_owned(),
+        ));
+    }
+    let pathspecs = match members.get("pathspecs") {
+        None => None,
+        Some(Value::Array(items)) if !items.is_empty() => Some(
+            items
+                .iter()
+                .map(|item| match item.as_str() {
+                    Some(spec) if !spec.is_empty() && !spec.chars().any(char::is_control) => {
+                        Ok(spec)
+                    }
+                    _ => Err(refuse(
+                        "every pathspec must be a non-empty string without a control character"
+                            .to_owned(),
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()?,
+        ),
+        Some(_) => {
+            return Err(refuse(
+                "the payload field \"pathspecs\" must be a non-empty array of strings".to_owned(),
+            ));
+        }
+    };
+    for spec in pathspecs.iter().flatten() {
+        let relative = Path::new(spec);
+        if relative.is_absolute()
+            || relative
+                .components()
+                .any(|component| component == Component::ParentDir)
+        {
+            return Err(ErrorBody::new(
+                ErrorCode::PolicyDenied,
+                FailureDomain::Policy,
+                false,
+                format!("the pathspec {spec:?} is not inside the worktree"),
+                "name paths relative to the worktree root, without `..`",
+            ));
+        }
+    }
+    Ok(CommitRequest {
+        path,
+        message,
+        pathspecs,
+    })
+}
+
+/// The output of `command` fed `input` on its standard input; an error when Git cannot start.
+fn run_with_input(mut command: Command, input: &[u8]) -> Result<Output, ErrorBody> {
+    use std::io::Write;
+
+    let cannot_start = |err: std::io::Error| {
+        ErrorBody::new(
+            ErrorCode::Internal,
+            FailureDomain::Tooling,
+            false,
+            format!("git cannot start: {err}"),
+            "install git on the PATH of the runtime, then repeat the request",
+        )
+    };
+    let mut child = command
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(cannot_start)?;
+    if let Some(mut stdin) = child.stdin.take() {
+        // Git reads the whole message before it writes anything, so the write cannot block on a
+        // full output pipe. A write error means Git stopped early; its exit status says why.
+        let _ = stdin.write_all(input);
+    }
+    child.wait_with_output().map_err(cannot_start)
+}
+
+/// `worktree.commit`: stage the changes of the worktree at `path` below a managed root, all of
+/// them or the paths `pathspecs` names, and commit the index on the branch the worktree has
+/// checked out. Git takes the author from its own configuration; the hooks and the fsmonitor are
+/// off, and the message reaches Git on its standard input, never as an argument.
+pub(crate) fn commit(
+    state_dir: Option<&Path>,
+    payload: Option<&Value>,
+) -> Result<Value, ErrorBody> {
+    let request = commit_request(payload)?;
+    let repo = repository(state_dir)?;
+    let path = managed_path(&repo, request.path, &[SANDBOX_ROOT, APPLICATION_ROOT])?;
+    let Some(worktree) = listed(&repo)?
+        .into_iter()
+        .find(|worktree| worktree.path == path && !worktree.prunable)
+    else {
+        return Err(ErrorBody::new(
+            ErrorCode::NotFound,
+            FailureDomain::EnvironmentPreparation,
+            false,
+            format!("the repository has no worktree at {}", path.display()),
+            "name the path of a worktree that `git worktree list` shows",
+        ));
+    };
+    let Some(branch_ref) = worktree.branch else {
+        return Err(refused(
+            format!("the worktree {} has a detached HEAD", path.display()),
+            "check out the issue branch in the worktree, then repeat the request",
+        ));
+    };
+    let branch = branch_ref
+        .strip_prefix("refs/heads/")
+        .unwrap_or(&branch_ref)
+        .to_owned();
+
+    let mut add = git_at(&path);
+    add.args(["add", "--all", "--"]);
+    for spec in request.pathspecs.iter().flatten() {
+        add.arg(format!(":(literal){spec}"));
+    }
+    checked(add, || {
+        format!(
+            "git could not stage the changes of the worktree {}",
+            path.display()
+        )
+    })?;
+    let mut staged = git_at(&path);
+    staged.args(["diff", "--cached", "--quiet"]);
+    let output = run(staged)?;
+    match output.status.code() {
+        Some(1) => {}
+        Some(0) => {
+            return Err(refused(
+                format!("the worktree {} has no change to commit", path.display()),
+                "change a file of the worktree, or name the changed paths, then repeat the request",
+            ));
+        }
+        _ => {
+            return Err(git_failure(
+                format!(
+                    "git could not compare the index of the worktree {}",
+                    path.display()
+                ),
+                &output,
+            ));
+        }
+    }
+    let mut command = git_at(&path);
+    command.args(["commit", "--quiet", "--no-verify", "--file=-"]);
+    let output = run_with_input(command, request.message.as_bytes())?;
+    if !output.status.success() {
+        return Err(git_failure(
+            format!(
+                "git could not commit in the worktree {} on the branch {branch:?}",
+                path.display()
+            ),
+            &output,
+        ));
+    }
+    let mut head = git_at(&path);
+    head.args(["rev-parse", "HEAD"]);
+    let head = checked(head, || {
+        format!(
+            "git could not read the new commit of the worktree {}",
+            path.display()
+        )
+    })?;
+    Ok(json!({
+        "path": path.to_string_lossy(),
+        "branch": branch,
+        "head": head,
+        "committed": true,
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -555,6 +789,25 @@ mod tests {
 
         fn remove(&self, path: &Path) -> Result<Value, ErrorBody> {
             remove(Some(&self.state_dir), Some(&json!({"path": path})))
+        }
+
+        /// A managed worktree on a new branch, and a repository identity that its commits use.
+        fn worktree(&self, name: &str) -> PathBuf {
+            for setting in [
+                ["user.name", "Test"],
+                ["user.email", "test@example.invalid"],
+                ["commit.gpgsign", "false"],
+            ] {
+                git_in(&self.root, &["config", setting[0], setting[1]]);
+            }
+            let path = self.managed(name);
+            self.create(&path, &format!("feature/{name}"), "main")
+                .unwrap();
+            path
+        }
+
+        fn commit_in(&self, payload: &Value) -> Result<Value, ErrorBody> {
+            commit(Some(&self.state_dir), Some(payload))
         }
 
         fn branch_exists(&self, branch: &str) -> bool {
@@ -943,6 +1196,179 @@ mod tests {
             )),
             ErrorCode::MalformedRequest
         );
+    }
+
+    #[test]
+    fn commit_records_every_change_of_the_worktree_on_its_branch() {
+        let repo = Scratch::new("commit");
+        let path = repo.worktree("issue-1");
+        let base = git_in(&path, &["rev-parse", "HEAD"]);
+        fs::write(path.join("README"), "changed").unwrap();
+        fs::write(path.join("added"), "new").unwrap();
+        let message = "feat: two changes\n\n--amend stays text\n";
+
+        let result = repo
+            .commit_in(&json!({"path": path, "message": message}))
+            .unwrap();
+
+        let head = git_in(&repo.root, &["rev-parse", "refs/heads/feature/issue-1"]);
+        assert_eq!(result["head"], head.as_str());
+        assert_eq!(result["branch"], "feature/issue-1");
+        assert_eq!(result["committed"], true);
+        assert_eq!(Path::new(result["path"].as_str().unwrap()), path);
+        assert_eq!(git_in(&path, &["rev-parse", "HEAD^"]), base);
+        assert_eq!(
+            git_in(&path, &["log", "-1", "--format=%B"]),
+            message.trim_end()
+        );
+        assert_eq!(
+            git_in(&path, &["show", "--name-only", "--format=", "HEAD"]),
+            "README\nadded"
+        );
+        assert_eq!(git_in(&path, &["status", "--porcelain"]), "");
+    }
+
+    #[test]
+    fn commit_stages_only_the_named_paths_and_reads_them_literally() {
+        let repo = Scratch::new("commit-paths");
+        let path = repo.worktree("issue-1");
+        fs::write(path.join("kept.txt"), "one").unwrap();
+        fs::write(path.join("left.txt"), "two").unwrap();
+
+        let glob = repo.commit_in(&json!({"path": path, "message": "x", "pathspecs": ["*.txt"]}));
+        let named = repo
+            .commit_in(&json!({"path": path, "message": "feat: kept", "pathspecs": ["kept.txt"]}))
+            .unwrap();
+
+        assert_eq!(code(glob), ErrorCode::InvariantViolation);
+        assert_eq!(
+            git_in(&path, &["show", "--name-only", "--format=", "HEAD"]),
+            "kept.txt"
+        );
+        assert_eq!(named["committed"], true);
+        assert_eq!(git_in(&path, &["status", "--porcelain"]), "?? left.txt");
+    }
+
+    #[test]
+    fn commit_refuses_a_worktree_without_a_change() {
+        let repo = Scratch::new("commit-clean");
+        let path = repo.worktree("issue-1");
+        let head = git_in(&path, &["rev-parse", "HEAD"]);
+
+        let error = repo
+            .commit_in(&json!({"path": path, "message": "feat: nothing"}))
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::InvariantViolation);
+        assert!(error.message.contains("no change"), "{}", error.message);
+        assert_eq!(git_in(&path, &["rev-parse", "HEAD"]), head);
+    }
+
+    #[test]
+    fn commit_refuses_a_worktree_with_a_detached_head() {
+        let repo = Scratch::new("commit-detached");
+        let path = repo.root.join(APPLICATION_ROOT).join("session-1");
+        git_in(
+            &repo.root,
+            &[
+                "worktree",
+                "add",
+                "--quiet",
+                "--detach",
+                path.to_str().unwrap(),
+            ],
+        );
+        fs::write(path.join("added"), "new").unwrap();
+
+        let error = repo
+            .commit_in(&json!({"path": path, "message": "feat: detached"}))
+            .unwrap_err();
+
+        assert_eq!(error.code, ErrorCode::InvariantViolation);
+        assert!(error.message.contains("detached"), "{}", error.message);
+        assert_eq!(git_in(&path, &["status", "--porcelain"]), "?? added");
+    }
+
+    #[test]
+    fn commit_refuses_a_path_that_is_no_managed_worktree() {
+        let repo = Scratch::new("commit-outside");
+        let unregistered = repo.managed("issue-1");
+        fs::create_dir_all(&unregistered).unwrap();
+        fs::write(unregistered.join("kept"), "mine").unwrap();
+
+        let main = repo.commit_in(&json!({"path": repo.root, "message": "feat: main"}));
+        let missing = repo.commit_in(&json!({"path": unregistered, "message": "feat: lost"}));
+
+        assert_eq!(code(main), ErrorCode::PolicyDenied);
+        assert_eq!(code(missing), ErrorCode::NotFound);
+    }
+
+    #[test]
+    fn commit_refuses_a_payload_it_does_not_define() {
+        let repo = Scratch::new("commit-payload");
+        let path = repo.worktree("issue-1");
+        fs::write(path.join("added"), "new").unwrap();
+        let malformed = [
+            json!({"path": path, "message": "feat: x", "amend": true}),
+            json!({"path": path}),
+            json!({"path": path, "message": " \n "}),
+            json!({"path": path, "message": "feat: x\u{0}"}),
+            json!({"path": path, "message": "feat: \u{1b}[31m"}),
+            json!({"path": path, "message": "x".repeat(MAX_MESSAGE_BYTES + 1)}),
+            json!({"path": path, "message": "feat: x", "pathspecs": []}),
+            json!({"path": path, "message": "feat: x", "pathspecs": "added"}),
+            json!({"path": path, "message": "feat: x", "pathspecs": [""]}),
+            json!({"path": path, "message": "feat: x", "pathspecs": [1]}),
+            json!([path, "feat: x"]),
+        ];
+        let outside = [
+            json!({"path": path, "message": "feat: x", "pathspecs": ["../escaped"]}),
+            json!({"path": path, "message": "feat: x", "pathspecs": ["/etc/passwd"]}),
+        ];
+
+        for payload in malformed {
+            let refused = repo.commit_in(&payload);
+            assert_eq!(code(refused), ErrorCode::MalformedRequest, "{payload}");
+        }
+        for payload in outside {
+            let refused = repo.commit_in(&payload);
+            assert_eq!(code(refused), ErrorCode::PolicyDenied, "{payload}");
+        }
+        assert_eq!(
+            code(commit(Some(&repo.state_dir), None)),
+            ErrorCode::MalformedRequest
+        );
+        assert_eq!(git_in(&path, &["status", "--porcelain"]), "?? added");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn commit_runs_no_hook_of_the_repository() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let repo = Scratch::new("commit-hook");
+        let path = repo.worktree("issue-1");
+        let marker = repo.base.join("hook-ran");
+        let hooks = repo.root.join(".git/hooks");
+        fs::create_dir_all(&hooks).unwrap();
+        let hook = hooks.join("pre-commit");
+        fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).unwrap();
+        fs::set_permissions(&hook, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::write(path.join("added"), "new").unwrap();
+
+        repo.commit_in(&json!({"path": path, "message": "feat: no hook"}))
+            .unwrap();
+
+        assert!(!marker.exists(), "worktree.commit ran the hook");
+        // The same hook does run when nothing disables it: the check above is not vacuous.
+        fs::write(path.join("more"), "new").unwrap();
+        git_in(&path, &["add", "more"]);
+        let enabled = format!("core.hooksPath={}", hooks.display());
+        git_in(
+            &path,
+            &["-c", &enabled, "commit", "--quiet", "-m", "feat: hook"],
+        );
+        assert!(marker.exists(), "the hook of the test never runs");
     }
 
     #[test]
