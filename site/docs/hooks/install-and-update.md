@@ -49,6 +49,16 @@ Seed-файлы: скрипты `.claude/hooks/`, rules, subagents, `docs/agents
 - **`harness diff`.** `diff --json` сохраняет ключ `seed_differing` (объединение трёх групп, на нём работает экран обновления консоли) и добавляет `seed_outdated`, `seed_modified` и `seed_unbaselined`. Текстовый `diff` печатает группу рядом с путём (`seed_differing: <путь> (устарел по версии)`) и подсказку для группы.
 - **Проверка `files.seed_baseline`.** `harness health` даёт `fail`, если `seed_files` не объект, ключ не относительный POSIX-путь (абсолютный, с `..` или `\`) или значение не sha256 hex и не `null`. Если lock есть, а `seed_files` нет, проверка даёт `warn` с командой `harness update <repo> --record-seed-baseline`; иначе `ok`. Без lock или с повреждённым lock проверка пропускается, об этом сообщает `files.lock`. Проект без `engineering-suite` и `backend-orchestration` получает `skipped`. Формат проверяет одна функция `seed_baseline_problems` для CLI и `health`. Неверный `seed_files` останавливает `update`, `adopt` и `diff` до записи файлов.
 
+### Runtime rules и указатель для Codex
+Обязательные правила проекта ставятся seed-копиями из `harness/project/rules/` в `.claude/rules/`: `karpathy-guidelines.md`, `token-efficiency.md`, `git-delivery.md` (бывший раздел 1 `docs/agents/git-workflow.md`) и `worktree-conventions.md` (обязательные пункты Conventions из `docs/agents/worktrees.md`). Загрузка зависит от runtime (ADR 0039):
+
+- **Claude Code** загружает `.claude/rules/*.md` автоматически; файл без frontmatter `paths:` действует всегда.
+- **Codex** этот каталог не загружает, а правил по путям у него нет. Раздел Runtime в `AGENTS.md` требует в начале каждой сессии прочитать каждый файл `.claude/rules/`. Это явное чтение по указателю: harness не обещает для Codex автоматическую загрузку или enforcement этих правил.
+
+Старые пути продолжают работать: в `docs/agents/git-workflow.md` раздел 1 стал указателем со списком имён правил, в `docs/agents/worktrees.md` три пункта Conventions заменил один пункт-указатель. Новые файлы правил `update` ставит и записывает им baseline. Если проект изменил `docs/agents/git-workflow.md` или `docs/agents/worktrees.md`, файл остаётся (группы «изменён локально» или «без baseline»), а `update` и текстовый `harness diff` добавляют под путём строку: `Источник правил переехал: … → .claude/rules/… — локальный текст старого раздела больше не грузится как правило; сверьте правку с новым файлом`. Формат `diff --json` не меняется.
+
+`AGENTS.md` и `CLAUDE.md` существующего проекта CLI не переписывает. Если активный текст `AGENTS.md` (без fenced code) не упоминает `.claude/rules`, `harness diff` и `harness update` печатают предложение вставить указатель (`seed_link_proposals` в `diff --json`). Если `AGENTS.md` не хватает и обязательного чтения Technical English, обе вставки идут одним предложением с одним diff. Предложение применяется ручной правкой или `git apply` после просмотра.
+
 ### Идемпотентный update
 Повторный `harness update` без изменений в проекте не меняет ни байта в файле настроек и в `.harness/integrations.json`, не дублирует управляемые записи и печатает отчёт по каждому файлу runtime:
 
