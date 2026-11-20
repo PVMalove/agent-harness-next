@@ -36,6 +36,7 @@ store — источник истины.
 |---|---|---|
 | `worktree.create` | `path`, `branch`, `base` | `path`, `branch`, `head`, `created` |
 | `worktree.remove` | `path` | `path`, `removed` |
+| `worktree.commit` (minor 9, #1246) | `path`, `message`, необязательный `pathspecs` | `path`, `branch`, `head`, `committed` |
 
 `worktree.create` выполняет `git worktree add --no-track -b <branch> <path> <base>`. Повтор запроса
 для уже созданного worktree отвечает `created: false`. Если ветка уже есть, указывает на `base` и
@@ -75,13 +76,40 @@ store — источник истины.
   `.harness/worktrees` и `.claude/worktrees`. Условия удаления прежние, к ним добавлено одно:
   заблокированное worktree (`git worktree lock`) остаётся с причиной `worktree is locked`.
 
+### 4. Коммит через runtime (#1246)
+
+Сессия может писать в файлы worktree, но не в его каталог `.git/worktrees/<name>`. Тогда
+in-process исполнитель не выполнит `git add` и `git commit`. Подход взят из qf-studio/pilot
+(`agent-isolation-design.md` §4.2): git-операции над рабочей копией агента выполняет доверенный
+процесс вне песочницы.
+
+- `worktree.commit` выполняет `git add --all -- [:(literal)<pathspec>...]` и
+  `git commit --no-verify --file=-` в worktree. Сообщение передаётся через stdin, а не аргументом.
+  Пустое сообщение, сообщение длиннее 64 КиБ и управляющие символы, кроме перевода строки и
+  табуляции, — `malformed_request`. Pathspec — непустая строка, относительная и без `..`.
+- Путь проверяется как у `worktree.remove`, worktree должно быть в `git worktree list`. Detached
+  HEAD и worktree без изменений — `invariant_violation`. Hooks и fsmonitor выключены, как у
+  остальных операций.
+- Агент не может подложить runtime filter или hook через конфигурацию: песочница не даёт писать
+  `.git/config` (проверка 2026-11-20: `could not lock config file .git/config`), глобальный конфиг
+  и служебный каталог worktree.
+- `coordinator.py worktree commit --path <worktree> (--message <text> | --message-file <file>)
+  [--pathspec <path>...]` до запроса к runtime отклоняет detached HEAD, базовую ветку и ветки
+  `integration/*`. Hooks агентского приложения, которые охраняют `git commit`, эту команду не видят.
+- `batch create`, `dispatch preflight` и `dispatch send` для роли на запись больше не отказывают
+  при read-only каталоге git, если сессия может писать в worktree, а runtime отвечает по
+  протоколу 1.9 и перечисляет `worktree.commit` в `features`. Если token-файла runtime нет,
+  проверка отвечает сразу, без повторов подключения.
+- `git rebase`, `git merge` и разрешение конфликтов по-прежнему требуют записи в каталог git.
+
 ## Операционные последствия
 
 - Runtime старше minor 8 операций не знает. Клиент передаёт `requires_minor=8` и получает
   `protocol_unsupported` до отправки запроса. Выход — обновить и перезапустить `harness-runtime`
   либо выполнить ручную команду из `docs/agents/worktrees.md` в терминале вне песочницы.
-- Проверки записи в `batch create`, `dispatch preflight` и `dispatch send` (#1126) не изменились:
-  они отказывают до запуска пишущей роли и называют каталог. Их remedy называет пару вызовов.
+- Проверки записи в `batch create`, `dispatch preflight` и `dispatch send` (#1126) отказывают до
+  запуска пишущей роли и называют каталог, если ни git, ни runtime (раздел 4) не может коммитить.
+  Их remedy называет пару вызовов и runtime 1.9.
 - Запись, открытая парой вызовов, принадлежит сессии. Новая сессия координатора повторяет оба
   вызова для того же worktree.
 - Тесты: `native/harness-runtime/crates/ipc/src/worktree.rs`, `tests/orchestration/test_worktree_lifecycle.py`,

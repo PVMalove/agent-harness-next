@@ -89,6 +89,22 @@ a symlinked, non-directory, or unwritable one gets no write grant, a `warning: .
 line names it, and the work continues. On refusal, use the reported path to repair the session and
 repeat the check.
 
+**Commit through the runtime.** When the session can write the worktree but not its Git admin
+directory, `batch create`, `dispatch preflight`, and `dispatch send` accept a write role if
+`harness-runtime` answers with protocol 1.9 or later. The writer then commits with the coordinator
+instead of `git add` and `git commit`:
+
+```bash
+python .harness/orchestration/coordinator.py --repo . worktree commit \
+  --path <issue-worktree> --message "feat: <summary>" [--pathspec <path> ...]
+```
+
+The runtime stages every change of the worktree, or only the `--pathspec` paths read literally, and
+commits on the worktree's branch with hooks off. Use `--message-file` for a long message; keep the
+file outside the worktree, or it is committed too. The command refuses a detached HEAD, the base
+branch, and an `integration/*` branch before it asks the runtime. `git rebase`, `git merge`, and
+conflict resolution still need a writable Git admin directory: open it with the session pair above.
+
 **Empty directory after `worktree remove`.** A session that opened write access to a worktree with the `EnterWorktree` `path` and `ExitWorktree` `keep` pair keeps its path in the sandbox configuration until the session ends. Before every command, the sandbox recreates an empty directory at that path as a mount point, so the directory comes back after `worktree remove`, even when git no longer lists the worktree. The sandbox also creates mask entries relative to the session's working directory: after a `cd` into `.harness/.sandboxes/worktrees/` or `.claude/worktrees/`, a `.claude/` directory with `.cc-writes` and empty `settings.json`-like files appears there. Neither is a worktree, and `git worktree prune` does not remove it. `harness health` names such directories apart and does not warn. `harness cleanup --mode hard` removes a directory that holds only directories and empty files; a directory that a live session still mounts stays, with the reason in `skipped`. Run the cleanup after that session ends. A repeated `worktree create` with the same path works over the empty directory.
 
 **Auto-gc and a lost issue worktree.** `git commit` and `git fetch` start an auto-gc that expires the reflogs of every worktree; under the sandbox `.git/worktrees` is read-only, and the gc fails with `cannot lock ref 'worktrees/<name>/HEAD'` after a command that succeeded. The coordinator's git commands and the agent session (the `env` block of `.claude/settings.local.json`, which `harness update` adds when the file sets none of these variables) pass `gc.auto=0` through `GIT_CONFIG_COUNT`, so the gc does not start. Run `git gc` from a terminal outside the sandbox when the repository needs it. If git no longer lists the batch's issue worktree, `dispatch preflight` and the worker self-report refuse before the role works: the message says that the worktree is lost and whether its directory is missing or empty, and the remedy is `git worktree prune && git worktree add <path> <branch>` outside the sandbox, followed by the session write-access pair.
