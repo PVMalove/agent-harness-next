@@ -150,7 +150,7 @@ Windows, правила тестов и QA). Это допустимое отл�
 
 | Раздел | Класс | Область | Потребители | Срез |
 | --- | --- | --- | --- | --- |
-| Artifacts & Scratchpads: каталоги, имена, `docs/tasks/` | shared procedure | по запросу | skills grilling, to-spec, to-tickets, to-guide; `harness/console/kernel/export.py:7` | #1162 |
+| Artifacts & Scratchpads: каталоги, имена, `docs/tasks/` | shared procedure | по запросу | skills grilling, to-spec, to-tickets, to-guide; `harness/console/kernel/export.py:7` | #1162 (реализовано: раздел `## Task artifacts and scratchpads` под H1 отделён от Local runtime storage; путь не изменён) |
 | Artifacts & Scratchpads: запись вне `docs/tasks/` и имена файлов в `pr_body/` | automatic enforcement | Write/Edit | `block-scratch-outside-docs-tasks.sh` | без переноса |
 | Local runtime storage | shared procedure | по запросу | coordinator, cleanup, QA | без переноса |
 
@@ -162,7 +162,7 @@ Windows, правила тестов и QA). Это допустимое отл�
 | --- | --- | --- | --- | --- |
 | 1. Fundamental Constraints: issue first, ветка, без auto-merge, project-only metadata | mandatory rule | всегда при delivery | все skills delivery, `pr-composer` | #1160: перенесено в `harness/project/rules/git-delivery.md`; здесь указатель с именами правил |
 | 1. Fundamental Constraints: части, которые проверяют hooks | automatic enforcement | Bash | `check-branch-name.sh`, `tracker-issue.py`, `block-direct-master.sh`, `block-pr-merge.sh`, `block-public-attribution.sh` | без переноса |
-| 2. Workflow Sequence | shared procedure | по запросу | skills implement, fast-implement, to-guide, to-pull-requests, to-spec, to-tickets, triage, wayfinder; `require-qa-gate.sh` | #1162 |
+| 2. Workflow Sequence | shared procedure | по запросу | skills implement, fast-implement, to-guide, to-pull-requests, to-spec, to-tickets, triage, wayfinder; `require-qa-gate.sh` | #1162 (реализовано: путь не изменён; skills ссылаются на step 6 → Ticket footer, step 7 → Close the ticket after merge и steps 1–2 вместо копий) |
 | 3. PR Body Template (русский и английский шаблоны) | shared procedure | по запросу | `harness/project/agents/pr-composer.md`, `to-pull-requests` | без переноса |
 
 **`harness/project/instructions/issue-tracker.md`** — seed → `docs/agents/issue-tracker.md`.
@@ -192,8 +192,9 @@ Windows, правила тестов и QA). Это допустимое отл�
 | --- | --- | --- | --- | --- |
 | 1. Purpose, 2. Configuration, 4. Call contract, 5. Red → Green → Refactor, 8. Diagnostics | shared procedure | по запросу | skill tdd, агент test-author, `harness/health/project_files.py:96`, `harness/health/checks/hooks.py` | без переноса |
 | 3. Protection | automatic enforcement | агент test-author | `test-author-guard.py`, `run-test.sh`, `test-author-preflight.sh` | без переноса |
-| 6. The short `/fast-implement` route | skill-specific procedure (fast-implement) | по skill | fast-implement, tdd | #1162 |
-| 7. The full `/implement` route | orchestration contract; дублирует `roles/developer.md` → Red-Green-Refactor with the optional test author | по роли | implement, developer | #1162 (один источник — роль) |
+| 6. The short `/fast-implement` route: маршрут (согласованный seam, один preflight, Fallback to the usual route) | skill-specific procedure (fast-implement) | по skill | fast-implement, tdd | #1162 (реализовано: `fast-implement/SKILL.md` → Test author; здесь указатель с прежним заголовком) |
+| 6. Opt-in, Protected environment, Supported versions and environments | shared procedure (конфигурация обоих маршрутов) | по запросу | fast-implement, implement, §5 | #1162 (реализовано: подразделы `###` в конце §2 Configuration) |
+| 7. The full `/implement` route | orchestration contract; единственный источник — `roles/references/developer-test-author.md` (ресурс роли developer) | по роли | implement, developer, tdd | #1162 (реализовано: §7 — указатель на роль; копии в `implement/references/test-author.md` и `tdd/references/test-author.md` заменены ссылкой) |
 
 **`harness/project/instructions/triage-labels.md`** — seed → `docs/agents/triage-labels.md`.
 Таблицу меток разбирает код, поэтому путь и формат таблиц — машинный контракт.
@@ -210,7 +211,8 @@ Windows, правила тестов и QA). Это допустимое отл�
 | Вступление, When to use it; Conventions: Base ref, Cleanup, Managed harness worktrees | shared procedure | по запросу | skills implement, fast-implement | без переноса |
 | Conventions: provisioning-сессия не входит в worktree; не менять конфигурацию инструментов ради worktree; git-workflow действует в worktree | mandatory rule | при работе в worktree | Claude Code, Codex | #1160: перенесено в `harness/project/rules/worktree-conventions.md`; здесь пункт-указатель |
 | Conventions: Branch naming still applies | automatic enforcement | EnterWorktree | `check-worktree-branch-name.sh` (только Claude Code) | без переноса |
-| Coordinator issue worktree | skill-specific procedure (implement) | по skill | implement | #1162 |
+| Coordinator issue worktree | skill-specific procedure (implement) | по skill | implement, `harness/project/rules/worktree-conventions.md` | #1162 (реализовано: `implement/references/issue-worktree.md`; здесь указатель с прежним якорем) |
+| Worker checkout environment | shared procedure | по запросу | workers, `harness/orchestration/roles/common.md:110` | #1162 (выделено в отдельный раздел `##`, без переноса) |
 
 **`harness/project/instructions/container-executor.md`** — managed →
 `.harness/instructions/container-executor.md` (backend-orchestration).
@@ -232,7 +234,7 @@ Configuration validation and pinned evidence), поэтому перенос ф�
 | --- | --- | --- | --- | --- |
 | `harness/orchestration/roles/common.md` (без разделов `##`) | orchestration contract | каждая роль | `harness/orchestration/adapters/claude_code.py:137`, `harness/orchestration/workflow/context_package.py:172` | #1161 (только ссылка на developer skill, если нужна общая) |
 | `harness/orchestration/roles/developer.md`: манифест и основной контракт | orchestration contract | роль developer | coordinator, implement | #1161 (реализовано: раздел Developer skill) |
-| `harness/orchestration/roles/developer.md`: Red-Green-Refactor with the optional test author | orchestration contract; единственный источник маршрута test-author в `/implement` (см. `test-author.md` §7) | роль developer | developer, test-author | #1162 |
+| `harness/orchestration/roles/developer.md`: Red-Green-Refactor with the optional test author | orchestration contract; единственный источник маршрута test-author в `/implement` — условный ресурс роли `roles/references/developer-test-author.md` (см. `test-author.md` §7) | роль developer | developer, test-author | #1162 (реализовано) |
 | `harness/orchestration/roles/developer.md`: Rerunning only the failed tests | orchestration contract | роль developer | developer | без переноса |
 | `harness/orchestration/roles/rebaser.md` | orchestration contract | маршрут `rebase` | `harness/orchestration/workflow/rebaser.py:54`, `harness/orchestration/core/constants.py:299` | #1158 |
 | `harness/orchestration/roles/conflict-resolver.md` | orchestration contract | маршрут `resolve-conflict` | `harness/orchestration/core/constants.py:297`, `harness/orchestration/workflow/resolver_state.py:37` | #1158 (сохранить маршрут) |
@@ -306,16 +308,16 @@ skills с тем же именем (`overrides`) или добавляются (
 | `skills/first-party/engineering/code-review/SKILL.md` | без переноса | — |
 | `skills/first-party/engineering/delivery-stats/SKILL.md` | без переноса | — |
 | `skills/first-party/engineering/diagnosing-bugs/SKILL.md` | без переноса | — |
-| `skills/first-party/engineering/fast-implement/SKILL.md` | #1162, #1156 | Смена `status::*` и назначение повторяют `issue-tracker.md` и `triage-labels.md`; developer skill может взять реализацию, а delivery остаётся у fast-implement |
+| `skills/first-party/engineering/fast-implement/SKILL.md` | #1162 (реализовано), #1156 | Смена `status::*`, назначение и создание ветки — ссылки на `issue-tracker.md` и `git-workflow.md` §2; владеет коротким маршрутом test-author (раздел Test author); developer skill может взять реализацию, а delivery остаётся у fast-implement |
 | `skills/first-party/engineering/grilling/SKILL.md` | без переноса | — |
 | `skills/first-party/engineering/grill-me/SKILL.md` | без переноса | — |
 | `skills/first-party/engineering/grill-with-docs/SKILL.md` | без переноса | — |
-| `skills/first-party/engineering/implement/SKILL.md` | #1161, #1162 | Coordinator worktree повторяет `worktrees.md` → Coordinator issue worktree; инструкции developer dispatch |
+| `skills/first-party/engineering/implement/SKILL.md` | #1161, #1162 (реализовано) | Владеет процедурой Coordinator issue worktree (`references/issue-worktree.md`); `references/test-author.md` готовит только установку и права, маршрут — по ссылке на роль developer |
 | `skills/first-party/engineering/qa-gate/SKILL.md` | без переноса | — |
 | `skills/first-party/engineering/setup-labels/SKILL.md` | без переноса | — |
-| `skills/first-party/engineering/tdd/SKILL.md` | без переноса | — |
-| `skills/first-party/engineering/to-guide/SKILL.md` | #1162 | Раздел 5 шаблона повторяет `git-workflow.md` §2: футер `Closes`/`Related to`, проверка закрытия issue, отчёт по задаче |
-| `skills/first-party/engineering/to-pull-requests/SKILL.md` | #1162 | Правило `Closes`/`Related to` и проверка закрытия повторяют `git-workflow.md` §2 |
+| `skills/first-party/engineering/tdd/SKILL.md` | #1162 (только `references/test-author.md`) | Пункты Full route повторяли маршрут роли developer; заменены ссылкой на `roles/references/developer-test-author.md`, Short route и протокол цикла не менялись |
+| `skills/first-party/engineering/to-guide/SKILL.md` | #1162 (реализовано) | Раздел 5 шаблона ссылается на `git-workflow.md` §2 step 6/7, готовый guide получает команды трекера проекта; claim и смена статуса — ссылки на `issue-tracker.md` |
+| `skills/first-party/engineering/to-pull-requests/SKILL.md` | #1162 (реализовано) | Правило `Closes`/`Related to` и проверка закрытия — ссылки на `git-workflow.md` §2 step 6/7 (также в `references/release.md`); Check the tree остаётся в skill |
 | `skills/first-party/engineering/to-spec/SKILL.md` | без переноса | — |
 | `skills/first-party/engineering/to-tickets/SKILL.md` | без переноса | — |
 | `skills/first-party/engineering/triage/SKILL.md` | #1157 | Строка 16 требует пометку `> *This was generated by AI during triage.*`; это противоречит project-only metadata (`AGENTS.md`, `git-workflow.md` §1). Исправляется в first-party override; vendor snapshot не меняется |
@@ -427,7 +429,9 @@ Codex — в ADR 0039.
    - **seed заменяется указателем.** Если проект не менял файл, `SeedInstall` заменяет его
      указателем с бэкапом. Если менял, файл остаётся со старым текстом, а `update` печатает
      предупреждение о локальной правке. Тикет добавляет в это предупреждение, что источник
-     переехал, чтобы старый и новый тексты не расходились незаметно.
+     переехал, чтобы старый и новый тексты не расходились незаметно. Для правила строка
+     начинается с «Источник правил переехал», для процедуры (#1162) — с «Источник процедуры
+     переехал»; у файла может быть несколько таких строк (`SEED_MOVED_SECTIONS`).
    - **seed становится managed.** Managed-файл `update` перезаписывает без проверки правок
      (`write_snapshot`). Перевод разрешён только вместе с переносом пути: старый seed-путь
      остаётся под политикой `SeedInstall`, новый managed-путь получает новый файл. Перевести
@@ -446,7 +450,7 @@ Codex — в ADR 0039.
 | Срез | Тикет | Что забирает из карты | Зависит от | Параллельно |
 | --- | --- | --- | --- | --- |
 | Runtime rules | #1160 | `harness/project/rules/*`, Runtime в `AGENTS.md.tmpl`, `git-workflow.md` §1 (mandatory rule), правила из `worktrees.md` → Conventions, пробел Codex | — | да |
-| Workflow rules и процедуры | #1162 | `git-workflow.md` §2, `artifacts.md` (процедура), `test-author.md` §6–§7 и `roles/developer.md` → Red-Green-Refactor, `worktrees.md` → Coordinator issue worktree, повторы в to-guide, to-pull-requests, fast-implement, implement | #1160 (граница правила и процедуры в `git-workflow.md`) | после #1160 |
+| Workflow rules и процедуры | #1162 (реализовано) | `git-workflow.md` §2, `artifacts.md` (процедура), `test-author.md` §6–§7 и `roles/developer.md` → Red-Green-Refactor, `worktrees.md` → Coordinator issue worktree, повторы в to-guide, to-pull-requests, fast-implement, implement | #1160 (граница правила и процедуры в `git-workflow.md`) | после #1160 |
 | Developer skill | #1156 | новый first-party skill; fast-implement как потребитель | — | да |
 | Developer dispatch | #1161 (реализовано) | `roles/developer.md`, `roles/common.md`, разделы playbook о брифе, implement | #1156 | после #1156 |
 | Triage и attribution | #1157 | `skills/first-party/engineering/triage/SKILL.md:16` | — | да |

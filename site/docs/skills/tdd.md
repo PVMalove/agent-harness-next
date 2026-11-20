@@ -39,10 +39,9 @@ Vendor-версия держала примеры и правила подмен
 защищённый адаптер работает через Claude Code и `.claude/hooks/test-author-preflight.sh`. Другие
 runtime остаются на обычном TDD, пока для них нет защищённого адаптера.
 
-Полный маршрут с внешним исполнителем Claude вызывает нативный `Agent(test-author)` без overrides
-model и effort (`model: inherit`), поэтому сохраняются утверждённые настройки developer. In-process
-worker передаёт каждый handoff в `.harness/health/test_author.py run --repo <worktree worker>
---brief <путь brief> --prompt-file <путь>`. Короткий маршрут передаёт каждый prompt-файл в
+Выбор исполнителя и передачу в полном маршруте задаёт только роль developer:
+`.harness/orchestration/roles/references/developer-test-author.md`; `tdd/references/test-author.md`
+ссылается на неё и не пересказывает маршрут. Короткий маршрут передаёт каждый prompt-файл в
 `.harness/health/test_author.py run --repo . --prompt-file <путь>`: так применяются модель и effort
 проекта, даже если текущая сессия работает с другими настройками. Подробнее:
 [руководство тест-автора](../agents/test-author.md).

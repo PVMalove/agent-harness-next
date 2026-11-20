@@ -1,29 +1,9 @@
-# Artifacts & Scratchpads Management { #artifacts-scratchpads-management }
-
-## Local runtime storage { #local-runtime-storage }
-
-Generated runtime data belongs under the main checkout's `.harness/.sandboxes/`, shared by its linked
-worktrees. The layout is `runs/` for disposable environments (e.g. `runs/tests/` for verification runs,
-`runs/qa/` for QA checkouts, `runs/drift/` for upstream checks), `cache/` for rebuildable caches
-(e.g. `cache/repo_map/`), `logs/` for test and execution logs, `reports/` for generated reports,
-`worktrees/` for managed issue checkouts, `scratch/` for role inboxes (`scratch/inbox/`), and
-`pr_body/` for one-shot publication files. `.harness/orchestration/state/` is the durable ledger and is never
-part of cleanup.
-
-Use `harness cleanup <repo> --mode soft` to preview removal of expired temporary runs (`runs/` >24h),
-scratch files (`scratch/`, `pr_body/`), expired logs (`logs/` >24h), and legacy top-level directories outside
-`.sandboxes/` (`.cache`, `test-logs`, `tmp`, `reports`, `scratch`). Add `--apply` to execute it. `--mode hard`
-also previews clearing rebuildable caches (`cache/`), reports (`reports/`), and old clean managed
-worktrees (`worktrees/`). Execute hard cleanup with `--apply --confirm HARD`. Both modes default to a
-24-hour minimum age for temporary data and worktrees; adjust with `--min-age-hours`. Active runs,
-worktrees of non-terminal batches, dirty trees, and branches with commits absent from `origin` are
-preserved. Hard cleanup removes the worktree of a `completed`, `failed`, `abandoned`, or
-`not-required` batch, and its local branch, when the tree is clean, pushed to `origin`, and older
-than the threshold. The plan and the `--apply` result name the `batch_id` and `state` of each
-worktree. Remote branches are never deleted.
+# Artifacts & Scratchpads { #artifacts-scratchpads-management }
 
 This guide defines only task artifacts and scratchpads. Orchestration contracts are in
 `.harness/orchestration/playbook.md`; run `harness --help` for the CLI.
+
+## Task artifacts and scratchpads { #task-artifacts-and-scratchpads }
 
 * **Storage Location:** Save specifications, scratchpads, and intermediate files inside the project repository, not in system temporary directories (`AppData/Local/Temp`, `/tmp`): `block-scratch-outside-docs-tasks.sh` rejects writes there.
 * **Project Directory:** Save intermediate task documents in `docs/tasks/` (create it if it doesn't exist).
@@ -47,3 +27,25 @@ This guide defines only task artifacts and scratchpads. Orchestration contracts 
         discovery-context.md
     ```
 * **Workflow:** During `/to-spec` or when creating a scratchpad, explicitly write the file to its own folder under `docs/tasks/` (inside the epic folder if one applies). Never commit these files — `docs/tasks/` is gitignored by design. This is not a scratch draft under deletion, though: unlike the one-shot PR/comment body under `.harness/.sandboxes/pr_body/` (deleted right after publication succeeds), the contents of `docs/tasks/` are a permanent local archive — no skill or tool deletes them after a spec or ticket is published. If something needs a permanent, *committed* trail in the repository itself, that belongs in `docs/adr/` via `domain-modeling`, not here.
+
+## Local runtime storage { #local-runtime-storage }
+
+Generated runtime data belongs under the main checkout's `.harness/.sandboxes/`, shared by its linked
+worktrees. The layout is `runs/` for disposable environments (e.g. `runs/tests/` for verification runs,
+`runs/qa/` for QA checkouts, `runs/drift/` for upstream checks), `cache/` for rebuildable caches
+(e.g. `cache/repo_map/`), `logs/` for test and execution logs, `reports/` for generated reports,
+`worktrees/` for managed issue checkouts, `scratch/` for role inboxes (`scratch/inbox/`), and
+`pr_body/` for one-shot publication files. `.harness/orchestration/state/` is the durable ledger and is never
+part of cleanup.
+
+Use `harness cleanup <repo> --mode soft` to preview removal of expired temporary runs (`runs/` >24h),
+scratch files (`scratch/`, `pr_body/`), expired logs (`logs/` >24h), and legacy top-level directories outside
+`.sandboxes/` (`.cache`, `test-logs`, `tmp`, `reports`, `scratch`). Add `--apply` to execute it. `--mode hard`
+also previews clearing rebuildable caches (`cache/`), reports (`reports/`), and old clean managed
+worktrees (`worktrees/`). Execute hard cleanup with `--apply --confirm HARD`. Both modes default to a
+24-hour minimum age for temporary data and worktrees; adjust with `--min-age-hours`. Active runs,
+worktrees of non-terminal batches, dirty trees, and branches with commits absent from `origin` are
+preserved. Hard cleanup removes the worktree of a `completed`, `failed`, `abandoned`, or
+`not-required` batch, and its local branch, when the tree is clean, pushed to `origin`, and older
+than the threshold. The plan and the `--apply` result name the `batch_id` and `state` of each
+worktree. Remote branches are never deleted.

@@ -67,6 +67,41 @@ Launcher повторно проверяет защищённый адаптер
 в плане несколько, выберите `claude` в `assignment_plans.developer.default_runtime`. Без плана
 developer runtime задаёт `test_author.runtime` файла `.harness/project.json`.
 
+### Включение (opt-in)
+
+Тест-автор выключен, пока в `.harness/project.json` нет `test_paths` и
+`test_runner`. Новый проект получает их флагами `harness init --test-path` и
+`--test-runner-command`. Старый проект без этих полей не меняется, и `/fast-implement` идёт обычным
+`/tdd`. Чтобы включить автора в старом проекте, добавьте оба поля вручную и запустите
+`harness health`.
+
+### Защищённое окружение
+
+Тесты автора идут только через `.claude/hooks/run-test.sh`. Необязательные
+поля `test_runner.build` (`command` и `artifact_paths`) и `test_runner.database` (`engine`,
+`test_ids`, `command`, `ready_command`) готовят свежие артефакты и отдельную тестовую БД внутри
+песочницы. Их задают флаги `--test-build-command`, `--test-artifact-path`, `--test-database-engine`,
+`--test-database-test-id`, `--test-database-command` и `--test-database-ready-command` вместе с
+`--test-runner-command`. Сборка пишет только в заранее созданные пустые каталоги артефактов, тест
+читает их без права записи, а БД запускается только для совпавших `test_ids`. Чистой доменной
+логике БД не нужна.
+
+### Поддерживаемые версии и окружения
+
+- Защищённый адаптер сейчас есть только для Claude Code. Выбор Codex или другого runtime
+  сохраняется в диагностике и даёт `runtime_unsupported`. Харнесс не закрепляет минимальную версию
+  Claude Code: preflight статически проверяет agent, scoped hook и guard, а срабатывание hook в
+  живой сессии подтверждает проверка самого харнесса (`make test-author-probe`, нужны `claude` и
+  вход).
+- Только Linux с bubblewrap 0.9.0+ и непривилегированными user-namespaces. На Windows и macOS
+  runner отвечает `isolation_unavailable`, а preflight выключает автора.
+- Checkout не должен лежать в `/tmp`, `/run`, `/dev` или `/proc`. Для сборки нужен компилятор или
+  инструмент, заданный в `test_runner.build.command`. Для SQL-тестов нужны инструменты выбранной СУБД
+  (в проверках харнесса это `postgres`, `initdb`, `psql`, `pg_isready` в `PATH`). Без них отказывает
+  только соответствующий запуск, а не весь проект.
+- Для hook нужен `python3` (или `python`) в `PATH`, а проект должен быть принят в диалоге доверия
+  Claude Code.
+
 ## 3. Защита
 
 Frontmatter установленного `.claude/agents/test-author.md` подключает
@@ -160,7 +195,7 @@ worktree доверенного репозитория отдельный диа
    Независимая QA, её роль и ledger не меняются.
 
 Сборку и отдельную тестовую БД задают необязательные `test_runner.build` и
-`test_runner.database` (см. раздел 6). Тест-автор не меняет артефакты: его
+`test_runner.database` (см. раздел 2). Тест-автор не меняет артефакты: его
 `Write`/`Edit` по-прежнему ограничены `test_paths`, а недоступная защита отключает автора.
 
 Runner запускает БД только для совпавших `test_runner.database.test_ids`; чистой доменной логике
@@ -174,86 +209,18 @@ Runner запускает БД только для совпавших `test_runn
 
 ## 6. Короткий маршрут `/fast-implement`
 
-`/fast-implement` использует того же тест-автора и тот же цикл из раздела 5, но без шагов
-coordinator, architect и независимой QA: developer-сессия сама ведёт цикл от тикета до push.
-Отличается только происхождение seam: он не берётся из brief architect, а согласуется с
-разработчиком до первого теста. Скилл называет требование, seam, публичные сигнатуры и существующие
-fixtures, останавливается до ответа разработчика и не пишет тест на несогласованном seam.
-Передача автору, проверка ожидания, скелет, запрет ослаблять принятое ожидание и лимит из трёх
-подряд неудачных вызовов такие же, как в полном маршруте. Локальные повторы не создают dispatch и
-состояние ledger.
-
-**Включение (opt-in).** Тест-автор выключен, пока в `.harness/project.json` нет `test_paths` и
-`test_runner`. Новый проект получает их флагами `harness init --test-path` и
-`--test-runner-command`. Старый проект без этих полей не меняется, и `/fast-implement` идёт обычным
-`/tdd`. Чтобы включить автора в старом проекте, добавьте оба поля вручную и запустите
-`harness health`.
-
-**Защищённое окружение.** Тесты автора идут только через `.claude/hooks/run-test.sh`. Необязательные
-поля `test_runner.build` (`command` и `artifact_paths`) и `test_runner.database` (`engine`,
-`test_ids`, `command`, `ready_command`) готовят свежие артефакты и отдельную тестовую БД внутри
-песочницы. Их задают флаги `--test-build-command`, `--test-artifact-path`, `--test-database-engine`,
-`--test-database-test-id`, `--test-database-command` и `--test-database-ready-command` вместе с
-`--test-runner-command`. Сборка пишет только в заранее созданные пустые каталоги артефактов, тест
-читает их без права записи, а БД запускается только для совпавших `test_ids`. Чистой доменной
-логике БД не нужна.
-
-**Поддерживаемые версии и окружения.**
-
-- Защищённый адаптер сейчас есть только для Claude Code. Выбор Codex или другого runtime
-  сохраняется в диагностике и даёт `runtime_unsupported`. Харнесс не закрепляет минимальную версию
-  Claude Code: preflight статически проверяет agent, scoped hook и guard, а срабатывание hook в
-  живой сессии подтверждает проверка самого харнесса (`make test-author-probe`, нужны `claude` и
-  вход).
-- Только Linux с bubblewrap 0.9.0+ и непривилегированными user-namespaces. На Windows и macOS
-  runner отвечает `isolation_unavailable`, а preflight выключает автора.
-- Checkout не должен лежать в `/tmp`, `/run`, `/dev` или `/proc`. Для сборки нужен компилятор или
-  инструмент, заданный в `test_runner.build.command`. Для SQL-тестов нужны инструменты выбранной СУБД
-  (в проверках харнесса это `postgres`, `initdb`, `psql`, `pg_isready` в `PATH`). Без них отказывает
-  только соответствующий запуск, а не весь проект.
-- Для hook нужен `python3` (или `python`) в `PATH`, а проект должен быть принят в диалоге доверия
-  Claude Code.
-
-**Откат на обычный маршрут.** Если preflight ответил не `{"status":"ok"}`, hook отсутствует или
-упал либо изоляция недоступна, `/fast-implement` продолжает обычным `/tdd` в той же сессии.
-Одной строкой он называет разработчику санитизированную причину и незащищённого автора не
-запускает. Этот исход не добавляет шагов coordinator, architect или QA и не меняет ledger.
+Этим маршрутом владеет скилл `fast-implement`: согласованный seam, один preflight, отсутствие шагов
+coordinator, architect и QA, откат на обычный `/tdd`. Источник —
+`.harness/skills/fast-implement/SKILL.md` → Test author (ставится с `engineering-suite`), перевод —
+в [описании скила fast-implement](../skills/fast-implement.md). Конфигурация, которой он
+пользуется, — в разделе 2, цикл — в разделе 5.
 
 ## 7. Полный маршрут `/implement`
 
-Автор работает рядом с external developer в worker worktree, с runtime/model/effort из его brief.
-Поддержанный адаптер запускает developer прямо в checkout из brief, поэтому runtime, scoped hook
-и runner относятся к тому же коду. Установите харнесс в worker checkout и включите там
-`test_paths` и `test_runner`; состояние оркестрации из основного checkout не копируется.
-Для worktree доверенного репозитория отдельный диалог доверия не нужен. Если основной checkout
-не доверен, откройте его в Claude Code и примите диалог. Ни installer, ни developer, ни
-headless-запуск не принимают решение о доверии за пользователя.
-
-External developer запускает общий preflight с `--repo <worker_worktree> --brief <путь brief>`.
-Для защищённого Claude-адаптера это `.claude/hooks/test-author-preflight.sh --worktree <worker_worktree> --brief <путь brief>`.
-Следующий шаг разрешает только точный ответ `{"status":"ok"}`. В утверждённом brief также должно
-быть разрешение `Agent(test-author)` или `Agent`; без него причина `agent_tool_unavailable`.
-Новый шаблон orchestration задаёт именованное разрешение только роли developer. Существующие
-проекты с `tool_policy` включают его явно в `tool_policy.roles.developer` и сохраняют остальные
-инструменты роли. Явное ограничение проекта автоматически не расширяется, а список инструментов
-фиксируется digest до approval по ADR 0024.
-
-Автор пишет тест в `test_paths` worker checkout и запускает его runner. Developer передаёт один
-конкретный тестовый путь в пределах scope brief и корень логов runner из prompt адаптера:
-`<main>/.harness/.sandboxes/runs/`. В linked worktree эти логи общие; `run_id` указывает на
-`isolated-test-<run_id>/log.txt` внутри этого корня. Адаптер открывает доступ к каталогу evidence,
-а scoped guard сохраняет прежние ограничения записи и Bash. Код, тесты и Git-статус основного
-checkout не меняются; общие runtime-логи остаются в его игнорируемой песочнице.
-
-Preflight основного checkout с `--worktree` отдельного worker отвечает `checkout_mismatch`: его
-guard и runner обслуживают только основной checkout. Поэтому in-process developer вызывает автора
-через launcher своего worktree:
-`python3 -I -B <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <путь brief> --prompt-file <файл>`.
-Launcher проверяет preflight worker и запускает автора с guard и runner этого worktree; правило
-разрешения в brief то же. Если preflight отказал или инструмент вызова автора недоступен, worker
-продолжает обычный TDD с указанной причиной, без blocker и новых записей ledger. Runtime берётся
-из developer. Если для него нет защищённого адаптера, остаётся обычный TDD без подмены
-исполнителя.
+Этим маршрутом владеет роль developer: preflight в worker checkout, исполнитель, разрешение brief,
+корень логов и launcher для in-process. Источник —
+`.harness/orchestration/roles/references/developer-test-author.md` (ставится с
+`backend-orchestration`); руководство его не пересказывает.
 
 В этой поставке проверены Python-тесты через unittest и pytest. Rust-тесты
 `native/harness-runtime/crates/*/tests` это решение не поддерживает: для них нет зон записи и

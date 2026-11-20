@@ -107,7 +107,7 @@ Localized skills, hook descriptions, role manifests and agent guides. Command na
 <li data-ah-entry><a href="../../agents/worktrees/">Parallel work: git worktrees</a></li></ul>
 </details>
 <details data-ah-group><summary>Artifacts and releases</summary>
-<ul><li data-ah-entry><a href="../../agents/artifacts/">Artifacts &amp; Scratchpads Management</a></li>
+<ul><li data-ah-entry><a href="../../agents/artifacts/">Artifacts &amp; Scratchpads</a></li>
 <li data-ah-entry><a href="../../agents/releases/">Harness next releases</a></li></ul>
 </details>
 <details data-ah-group><summary>Acceptance</summary>

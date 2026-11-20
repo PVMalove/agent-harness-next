@@ -16,7 +16,7 @@
 
 
 - **Правило имени ветки действует и здесь.** Параметр `name` в `EnterWorktree` задаёт имя новой ветки, но копируется не дословно: runtime добавляет префикс и заменяет `/`, так что `feature/issue-366-checkout-quote` превращается в `worktree-feature+issue-366-checkout-quote`. Такое имя не удовлетворяет `branch_pattern` из `.harness/project.json` (см. [git-workflow.md](git-workflow.md#2-workflow-sequence)). Проверьте имя ветки, которую создал инструмент, и переименуйте её до первого коммита. Для задач не оставляйте случайное имя по умолчанию.
-- **Сессия, которая лишь готовит worktree для другого исполнителя, в него не входит.** `EnterWorktree` предназначен для сессии, которая сама работает в этой ветке. Сессия coordinator, управляющая `coordinator.py`, к таким не относится: её состояние лежит в `.harness/orchestration/state/` относительно корня репозитория, который она передаёт как `--repo`. Если войти в worktree, состояние раздвоится, а batch станет невидим из корня. Такая сессия создаёт дерево командой `worktree create` (см. «Worktree задачи для coordinator»), остаётся в основном checkout и передаёт batch только путь. Единственное исключение — пара вызовов, которая открывает запись (см. «Право записи сессии» ниже): `EnterWorktree` с `path`, затем `ExitWorktree` с `action: keep`. Пара возвращает сессию в основной checkout до следующей команды coordinator.
+- **Сессия, которая лишь готовит worktree для другого исполнителя, в него не входит.** `EnterWorktree` предназначен для сессии, которая сама работает в этой ветке. Сессия coordinator, управляющая `coordinator.py`, к таким не относится: её состояние лежит в `.harness/orchestration/state/` относительно корня репозитория, который она передаёт как `--repo`. Если войти в worktree, состояние раздвоится, а batch станет невидим из корня. Такая сессия создаёт дерево командой `worktree create` (см. [процедуру worktree задачи](../skills/implement.md#issue-worktree)), остаётся в основном checkout и передаёт batch только путь. Единственное исключение — пара вызовов, которая открывает запись (см. «Право записи сессии» в [процедуре worktree задачи](../skills/implement.md#issue-worktree)): `EnterWorktree` с `path`, затем `ExitWorktree` с `action: keep`. Пара возвращает сессию в основной checkout до следующей команды coordinator.
 - **Не меняйте конфигурацию инструментов ради worktree.** Правка `.claude/settings.local.json` (в том числе `worktree.baseRef`) ради одной задачи меняет проект для всех последующих сессий. Если базовая ссылка по умолчанию не подходит задаче, создайте дерево явно от нужной ссылки.
 - **Базовая ссылка.** Новое worktree для дочерней задачи создаётся от записанной в эпике `origin/<integration-branch>`; задача без эпика использует `origin/<base_branch>` из `.harness/project.json`. Текущий локальный `HEAD` берите, только если задача этого требует (настройка `worktree.baseRef`).
 - **Всё остальное из [git-workflow.md](git-workflow.md) действует и внутри worktree:** TDD, `qa-gate` перед открытием PR, подтверждение перед PR, запрет на merge. Worktree меняет только то, *где* идёт работа, но не процесс.
@@ -25,81 +25,15 @@
 
 ## Worktree задачи для coordinator { #coordinator-issue-worktree }
 
-Coordinator (`/implement`) обязан создать worktree задачи до `batch create`. `batch create` отказывает, если `git worktree list` не показывает worktree: `worktree '<path>' is not registered by git worktree`. Coordinator выполняет команды ниже в основном checkout и в новом worktree не работает:
+Процедурой worktree задачи владеет coordinator (`/implement`): `worktree create`,
+`harness worktree-venv`, право записи сессии, auto-gc, восстановление после частичного сбоя и выбор
+checkout для worker. Её источник для агентов — `.harness/skills/implement/references/issue-worktree.md`
+(ставится с `engineering-suite`), перевод — в [описании скила implement](../skills/implement.md#issue-worktree).
 
-```bash
-git fetch origin <integration-branch>
-python .harness/orchestration/coordinator.py worktree create --repo . \
-  --branch feature/issue-<ID>-<slug> --base origin/<integration-branch>
-harness worktree-venv . .harness/.sandboxes/worktrees/issue-<ID>-<slug>
-```
+## Окружение worker checkout { #worker-checkout-environment }
 
-- `worktree create` просит `harness-runtime` выполнить `git worktree add --no-track -b <branch> <path> <base>`. Runtime работает вне песочницы агента. Песочница монтирует `.git/worktrees` только для чтения, поэтому собственный `git worktree add` coordinator останавливается там на полпути. Путь по умолчанию — `.harness/.sandboxes/worktrees/<последний сегмент ветки>`; путь вне этого каталога runtime отклоняет. Повторная команда отвечает `"created": false`. `worktree remove --path <worktree>` так же удаляет чистое управляемое worktree и сохраняет его ветку.
-- Если runtime отвечает `protocol_unsupported` или `unknown_operation`, он старше этой команды. Обновите и перезапустите `harness-runtime` или попросите разработчика выполнить `git worktree add --no-track -b feature/issue-<ID>-<slug> .harness/.sandboxes/worktrees/issue-<ID>-<slug> origin/<integration-branch>` в терминале вне песочницы.
-
-- `<integration-branch>` берётся из раздела `## Integration Branch` задачи. Если раздела нет, берите значение `## Git base`, затем тот же раздел родительского эпика. Для задачи без эпика берите `base_branch` из `.harness/project.json`. Если у задачи с эпиком значения нет, остановитесь и сообщите о блокере. Не угадывайте его.
-- В ручной команде `git worktree add -b` флаг `--no-track` обязателен. Без него команда записывает upstream новой ветки в `.git/config`. В песочнице `.git/config` может быть защищён от записи, и тогда команда остановится на полпути: ветка есть, а worktree нет.
-- `git push -u origin feature/issue-<ID>-<slug>` (см. [git-workflow.md](git-workflow.md#2-workflow-sequence), шаг 2) позже задаёт upstream. Он тоже пишет в `.git/config`, поэтому в песочнице может упасть так же. В таком случае выполните `git push origin feature/issue-<ID>-<slug>` и сообщите разработчику, что upstream не задан.
-- `harness worktree-venv` делает `.harness/.venv` worktree символической ссылкой на venv основного checkout, поэтому проверки brief, например `make lint`, запускаются без `make bootstrap`. Ссылка создаётся, только если `uv.lock` и `pyproject.toml` worktree совпадают с основным checkout. Иначе команда отвечает `"status": "refused"`, называет расходящиеся файлы и remedy: отдельный venv в worktree (`UV_PROJECT_ENVIRONMENT=.harness/.venv uv sync --locked`). Не запускайте `make bootstrap` в worktree со ссылкой на venv: через ссылку он пересинхронизирует venv основного checkout. После восстановительного `git worktree add` ниже выполните команду снова.
-- В `batch create` передайте абсолютный путь worktree как `--worktree`, ветку как `--branch` и integration-ветку как `--integration-ref`. Для задачи без эпика `--integration-ref` не указывайте.
-
-**Окружение worker в issue worktree.** Worker готовит issue worktree, не меняя окружение основного checkout:
+Worker готовит issue worktree, не меняя окружение основного checkout:
 
 - **Python-проверки** (`make lint` и pytest-команды brief): coordinator один раз выполняет `harness worktree-venv <repo> <worktree>`. Checkout worktree, rebase или merge дают `pyproject.toml` и `uv.lock` новый mtime без изменения содержимого; из-за этого связанный venv не синхронизируют заново и mtime файлов не сдвигают. В репозитории harness `make` вызывает `scripts/sync_dev_venv.py` вместо `uv sync`: для связанного venv он сравнивает оба файла с основным checkout и не синхронизирует, а если файлы различаются — отказывает и называет remedy (собственный venv worktree).
 - **Браузерные e2e (Playwright):** в песочнице домашний кэш (`~/.cache/ms-playwright`) доступен только на чтение, и `playwright install` там падает. Задайте `PLAYWRIGHT_BROWSERS_PATH` в `.harness/.sandboxes/cache/ms-playwright` основного checkout; для `npm ci` `~/.npm` тоже только для чтения, поэтому передайте `npm_config_cache=<main>/.harness/.sandboxes/cache/npm`. Собирайте фронтенд перед каждым прогоном e2e: спека на старой сборке показывает старые падения. В репозитории harness `npm run test:e2e` в `harness/console/frontend` делает всё это сам: собирает `dist`, выбирает каталог браузеров, ставит Chromium (без действий, если он уже есть) и запускает Playwright с аргументами после `--`.
 - **Сеть для первой установки:** `registry.npmjs.org` для `npm ci`; `cdn.playwright.dev` и `storage.googleapis.com` (Chrome for Testing) для Chromium. Добавьте их в разрешённые домены песочницы для этой команды. Без них worker отмечает e2e-проверку как `not_run` и называет заблокированный хост.
-
-**Право записи сессии.** Координатор работает из основной копии репозитория. После
-создания зарегистрированного worktree задачи выполните команду запуска из терминала оператора.
-
-```bash
-python .harness/orchestration/coordinator.py --repo . worktree prepare \
-  --runtime codex --worktree <issue-worktree> --launch
-```
-
-Для Claude Code укажите `--runtime claude`. Вызов без `--launch` готовит каталоги и печатает
-аргументы запуска. До старта команда создаёт каталоги состояния координатора, отчётов и brief,
-прогонов QA и тестов, логов и кэшей npm и Playwright.
-
-- **Codex** получает именованный профиль родительской сессии. Профиль даёт запись в выбранный
-  worktree, Git-метаданные, необходимые для коммита, и подготовленные служебные каталоги.
-  На Linux сетевое ограничение Codex по умолчанию блокирует и Unix-сокет `harness-runtime`.
-  Если политика разрешает доступ, добавьте `--network-access enabled`. При выключенном сетевом
-  прокси Codex этот флаг даёт командам прямой доступ к сети.
-- **Claude Code** получает служебные каталоги явными путями записи при запуске: они остаются
-  доступными, пока `EnterWorktree` переносит сессию в worktree. Затем сессия вызывает
-  `EnterWorktree` с `path` существующего worktree и сразу `ExitWorktree` с `action: keep`.
-  Сессия возвращается в основную копию и сохраняет доступ на запись в worktree и его
-  Git-метаданные. Между двумя вызовами не запускайте команды координатора. Новая сессия
-  повторяет пару. Субагент, запущенный с `isolation: worktree`, войти в существующий worktree не
-  может. В уже открытой сессии Claude Code подготовьте каталоги и вызовите ту же пару.
-
-Перед отправкой роли выполните проверку записи через инструмент оболочки координатора внутри его песочницы.
-
-```bash
-python .harness/orchestration/coordinator.py --repo . worktree check \
-  --worktree <issue-worktree>
-```
-
-Дождитесь `"writable": true`. Команда проверяет запись в checkout, его Git-каталог и общие
-служебные каталоги. Перед отправкой in-process-воркера `dispatch send` повторяет проверку каталогов
-отправляемой роли, а для роли на запись также проверяет доступ к worktree. Каждой роли нужны
-состояние координатора, каталоги brief и отчётов и `runs/qa`; разработчику нужен ещё `runs/tests`.
-Если обязательный путь — symlink или не каталог, запуск отклоняется (`required path is a symlink`).
-Логи, кэши и прогоны, которые роли не нужны, необязательны: такой каталог-symlink, не каталог или
-каталог без права записи не получает разрешения, строка `warning: ... not granted` называет его, и
-работа продолжается. При отказе исправьте доступ к указанному в ошибке пути и повторите проверку.
-
-**Пустой каталог после `worktree remove`.** Сессия, которая открыла запись в worktree парой `EnterWorktree` с `path` и `ExitWorktree` с `action: keep`, держит его путь в конфигурации песочницы до своего конца. Перед каждой командой песочница заново создаёт по этому пути пустой каталог как точку монтирования, поэтому каталог появляется снова после `worktree remove`, хотя git этот worktree уже не показывает. Кроме того, песочница создаёт маски относительно рабочего каталога сессии: после `cd` в `.harness/.sandboxes/worktrees/` или `.claude/worktrees/` там появляется каталог `.claude/` с `.cc-writes` и пустыми файлами вроде `settings.json`. Ни то, ни другое не worktree, и `git worktree prune` их не убирает. `harness health` называет такие каталоги отдельно и не выдаёт предупреждение. `harness cleanup --mode hard` удаляет каталог, в котором есть только каталоги и пустые файлы; каталог, который ещё монтирует живая сессия, остаётся, и причина указана в `skipped`. Запускайте очистку после конца этой сессии. Повторный `worktree create` с тем же путём работает поверх пустого каталога.
-
-**Auto-gc и потерянный issue worktree.** `git commit` и `git fetch` запускают auto-gc, который чистит reflog всех worktree; в песочнице `.git/worktrees` доступен только на чтение, и gc падает с `cannot lock ref 'worktrees/<name>/HEAD'` после успешной команды. Git-команды coordinator и сессия агента (блок `env` в `.claude/settings.local.json`, который `harness update` добавляет, если файл не задаёт ни одну из этих переменных) передают `gc.auto=0` через `GIT_CONFIG_COUNT`, поэтому gc не запускается. Когда репозиторию нужна сборка мусора, выполните `git gc` в терминале вне песочницы. Если git больше не показывает issue worktree batch, `dispatch preflight` и self-report worker отказывают до работы роли: сообщение говорит, что worktree потерян и что его каталог отсутствует или пуст, а remedy — `git worktree prune && git worktree add <path> <branch>` вне песочницы и затем пара вызовов для права записи сессии.
-
-**Восстановление после частичного сбоя.** Повторный `worktree create` восстанавливается сам, пока ветка указывает на базу. Для ручной команды: если `git worktree add -b` упал, а `git branch --list feature/issue-<ID>-<slug>` показывает ветку, значит ветка есть, а worktree нет. Не создавайте ветку заново и не удаляйте её. Выполните:
-
-```bash
-git worktree add .harness/.sandboxes/worktrees/issue-<ID>-<slug> feature/issue-<ID>-<slug>
-```
-
-Перед этой командой убедитесь, что ветка указывает на коммит `origin/<integration-branch>`: `git rev-parse feature/issue-<ID>-<slug> origin/<integration-branch>`. Если в ветке есть другие коммиты, остановитесь и сообщите о блокере. Затем подтвердите worktree командой `git worktree list`.
-
-Перед запуском worker передайте выбранный абсолютный checkout как `--worktree` в `dispatch preflight` и `dispatch send`. Для пишущих ролей это должен быть зарегистрированный worktree задачи batch на ветке задачи, на неизменяемом стартовом SHA. Code-review сохраняет явный `--checkout`; QA и publish используют собственные границы coordinator. `send` проверяет выбор ещё раз и возвращает `worker_worktree` и `worker_snapshot_commit` для prompt запуска. Runtime должен поддерживать запуск в этом готовом checkout; одного `isolation: worktree` для такого подключения недостаточно. В Claude Code инструмент Agent не умеет запускать subagent в существующем checkout (он стартует в основном checkout, и `EnterWorktree` там отказывает). Для worker, у которого CWD равен worktree, используйте транспорт `external` с `.harness/adapters/claude_worker.py`: `dispatch send --adapter <main-repo>/.harness/adapters/claude_worker.py` запускает его в `worker_worktree`, а он запускает там headless `claude -p`: под runtime (brief с `execution`) на переднем плане на всё время работы worker, иначе отсоединённо. Subagent `in-process` работает через абсолютные пути и `git -C <worker_worktree>`; его self-report доказывает checkout, в котором он работает, но не его CWD. Worker сам проверяет и сообщает свой фактический канонический Git top-level, ветку и HEAD. Основной checkout на том же SHA всё равно остаётся неверным путём для пишущей роли. Адрес репозитория и состояния для coordinator и его CLI держите в основном checkout. Не сбрасывайте candidate ради устаревшего brief.
