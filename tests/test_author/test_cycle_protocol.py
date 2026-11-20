@@ -79,7 +79,12 @@ FAST_MARKERS = (
     "Agree the seams before the first test",
     "Neither route adds a coordinator, architect or QA step",
     "../tdd/references/test-author.md",
+    "## Test author",
+    "Fallback to the usual route.",
+    "docs/agents/test-author.md",
 )
+# The short route is owned by the fast-implement skill; the guide keeps a pointer.
+FAST_ROUTE = ".harness/skills/fast-implement/SKILL.md"
 # One protocol shared by /tdd, /fast-implement and /developer (issue #1210).
 AUTHOR_PROTOCOL_MARKERS = (
     "test-author-preflight.sh",
@@ -108,10 +113,9 @@ GUIDE_MARKERS = (
     "is not weakened",
     "ledger",
     "short `/fast-implement` route",
-    "Opt-in.",
-    "Protected environment.",
+    "### Opt-in",
+    "### Protected environment",
     "bubblewrap 0.9.0+",
-    "Fallback to the usual route.",
 )
 
 
@@ -161,6 +165,21 @@ def test_full_route_points_to_the_developer_role(text: Callable[[], str]) -> Non
     assert ROLE_ROUTE in body
     restated = [marker for marker in ROUTE_RESTATEMENT_MARKERS if marker in body]
     assert not restated, f"the /implement route is restated: {restated}"
+
+
+def test_short_route_section_points_to_the_skill() -> None:
+    text = _text(GUIDE)
+    short = " ".join(_section(text, "## 6. The short `/fast-implement` route").split())
+    assert FAST_ROUTE in short
+    assert "Fallback to the usual route" not in short
+    configuration = _section(text, "## 2. Configuration")
+    for heading in (
+        "### Opt-in",
+        "### Protected environment",
+        "### Supported versions and environments",
+    ):
+        assert heading in configuration
+    assert "see section 6" not in text
 
 
 def test_changelog_records_the_full_route_worktree_fix() -> None:

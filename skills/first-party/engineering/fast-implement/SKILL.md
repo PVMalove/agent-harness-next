@@ -70,6 +70,16 @@ never performs them.
    nor `integration/*`. Commit with a Semantic Commit Message, push to the issue branch, and report
    the result.
 
+## Test author
+
+The optional author runs the cycle of `../tdd/references/test-author.md` in this session; its
+configuration is in `docs/agents/test-author.md` section 2. The seam is the one the developer
+confirmed in Implement step 1, never an unconfirmed one. Run the short-route preflight once; no
+dispatch or ledger record is created. Without `test_paths` and `test_runner`, follow the usual `/tdd`.
+**Fallback to the usual route.** Any preflight answer but `{"status":"ok"}`, a missing or failed
+hook, or unavailable isolation: continue with the usual `/tdd` in this session, name the sanitized
+reason in one line, and never start an unprotected author.
+
 ## Finish
 
 After a successful push, offer `/to-pull-requests <ticket>` as the next command. Never invoke it.
