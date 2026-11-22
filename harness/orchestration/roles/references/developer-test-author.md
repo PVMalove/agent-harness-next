@@ -1,8 +1,8 @@
 # Developer: optional test author
 
 Read this before the first test. Run `python3 -I -B .harness/health/test_author.py preflight --repo
-<worker_worktree> --brief <approved brief path>` in the worker checkout; it calls that checkout's
-`.claude/hooks/test-author-preflight.sh` itself. Only exactly `{"status":"ok"}` enables the author;
+<worker_worktree> --brief <approved brief path>` in the worker checkout. The launcher checks the
+protected adapter selected by the brief. Only exactly `{"status":"ok"}` enables the author;
 any other answer keeps ordinary TDD with the reason stated. The cycle is prose for the developer, not
 a new dispatch, role, state or ledger record.
 
@@ -58,5 +58,7 @@ its guard and runner serve the main checkout. For each handoff it runs `python3 
 <worker_worktree>/.harness/health/test_author.py run --repo <worker_worktree> --brief <approved brief
 path> --prompt-file <path>`, which checks the worker's preflight and starts the author bound to the
 worker's guard and runner; the same brief permission rule applies, and a refusal keeps ordinary TDD
-with its reason. Other runtimes are unsupported. A refusal never creates a blocker, another dispatch
+with its reason. A Codex developer uses the same launcher and supplies relevant signatures and the
+original test-file text in the prompt. The launcher validates one proposed edit against the brief,
+then returns the isolated pytest runner's JSON. A refusal never creates a blocker, another dispatch
 or ledger state. The optional author does not change independent QA or the Rust runtime authority.

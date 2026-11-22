@@ -123,7 +123,7 @@ def test_health_json_contains_the_registered_activation_check(project: Path) -> 
 
 
 def test_health_reports_the_configured_runtime_without_running_another_adapter(
-    project: Path,
+    project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = project / ".harness/project.json"
     config = json.loads(path.read_text())
@@ -138,12 +138,13 @@ def test_health_reports_the_configured_runtime_without_running_another_adapter(
         f'#!/bin/sh\ntouch "{sentinel}"\n'
     )
 
+    monkeypatch.setattr(hooks, "preflight_author", lambda *args, **kwargs: None)
     result = hooks.check_test_author(HealthContext(repo=project, lock={}, online=False))
 
     assert "runtime=codex" in result.message
     assert "model=configured-codex-model" in result.message
-    assert "runtime_unsupported" in result.message
-    assert result.status == "warn"
+    assert "preflight: ok" in result.message
+    assert result.status == "ok"
     assert not sentinel.exists()
 
 
@@ -152,15 +153,42 @@ def test_health_names_the_supported_runtime_and_where_to_select_it(
 ) -> None:
     path = project / ".harness/project.json"
     config = json.loads(path.read_text())
-    config["test_author"] = {"runtime": "codex", "model": "m", "effort": "high"}
+    config["test_author"] = {"runtime": "unsupported", "model": "m", "effort": "high"}
     path.write_text(json.dumps(config))
 
     result = hooks.check_test_author(HealthContext(repo=project, lock={}, online=False))
 
     assert "runtime_unsupported" in result.message
-    assert "поддержан runtime: claude" in result.message
+    assert "поддержан runtime: claude, codex" in result.message
     assert "assignment_plans.developer.runtimes" in result.message
     assert "assignment_plans.developer.default_runtime" in result.message
+
+
+def test_health_uses_the_codex_preflight_without_claude_trust(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = project / ".harness/project.json"
+    config = json.loads(path.read_text())
+    config["test_author"] = {"runtime": "codex", "model": "m", "effort": "high"}
+    path.write_text(json.dumps(config))
+    calls: list[Path] = []
+
+    def checked(repo: Path, selection: dict[str, object], *, planned: bool) -> None:
+        assert selection["runtime"] == "codex" and planned
+        calls.append(repo)
+
+    def unexpected_trust_read(repo: Path) -> None:
+        pytest.fail("Codex diagnostics must not look up Claude trust")
+
+    monkeypatch.setattr(hooks, "preflight_author", checked)
+    monkeypatch.setattr(hooks, "_trusted_by", unexpected_trust_read)
+    context = HealthContext(repo=project, lock={}, online=False)
+
+    assert hooks.check_test_author(context).status == "ok"
+    assert hooks.check_test_author_trust(context).status == "skipped"
+    assert hooks.check_test_author_guard(context).status == "skipped"
+    assert hooks.check_test_author_probe(context).status == "skipped"
+    assert calls == [project.resolve()]
 
 
 def test_health_scopes_preflight_to_this_checkout_and_names_the_in_process_launcher(

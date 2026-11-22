@@ -322,6 +322,8 @@ def _probe_executor(project: Path) -> dict[str, object]:
     """Resolve before looking for a CLI or linking its credentials."""
     try:
         selected = read_author(project)
+        if selected["runtime"] != "claude":
+            raise AuthorUnavailable("runtime_unsupported")
         adapter_for(selected)
         return selected
     except AuthorUnavailable as exc:
