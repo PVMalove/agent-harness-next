@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from difflib import unified_diff
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -129,7 +130,9 @@ def run(
     *,
     brief: Mapping[str, object] | None,
 ) -> int:
-    with tempfile.TemporaryDirectory(prefix="harness-codex-author-", dir="/tmp") as directory:
+    # Keep the scratch outside a project-local TMPDIR; Windows has no /tmp.
+    scratch_root = None if os.name == "nt" else "/tmp"
+    with tempfile.TemporaryDirectory(prefix="harness-codex-author-", dir=scratch_root) as directory:
         scratch = Path(directory)
         schema = scratch / "schema.json"
         response = scratch / "answer.json"
