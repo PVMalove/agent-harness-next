@@ -178,7 +178,7 @@ def test_full_route_uses_the_approved_developer_instead_of_short_route_profile(
         json.dumps(
             {
                 "role": "developer",
-                "resolved_runtime": "codex",
+                "resolved_runtime": "unsupported",
                 "resolved_model": "developer-model",
                 "resolved_effort": "high",
             }
@@ -195,7 +195,7 @@ def test_full_route_uses_the_approved_developer_instead_of_short_route_profile(
     brief.write_text(json.dumps(data))
     project_config = project / ".harness/project.json"
     config = json.loads(project_config.read_text())
-    config["test_author"]["runtime"] = "codex"
+    config["test_author"]["runtime"] = "unsupported"
     project_config.write_text(json.dumps(config))
     assert _answer(_run(project, args=("--brief", str(brief)))) == {"status": "ok"}
     assert _answer(_run(project)) == {
@@ -676,7 +676,7 @@ def test_portable_short_launcher_applies_project_settings_in_a_fresh_process(
 
     config_path = project / ".harness/project.json"
     config = json.loads(config_path.read_text())
-    config["test_author"]["runtime"] = "codex"
+    config["test_author"]["runtime"] = "unsupported"
     config_path.write_text(json.dumps(config))
     (project / "selected.json").unlink()
     result = subprocess.run(

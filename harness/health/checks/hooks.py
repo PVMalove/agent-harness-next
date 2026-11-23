@@ -35,6 +35,7 @@ from ..test_author import (
     PREFLIGHT_REASONS,
     AuthorUnavailable,
     adapter_for,
+    preflight_author,
     preflight_reason,
     profile_problems,
     read_author,
@@ -350,6 +351,13 @@ def fix_test_author_config(context: HealthContext, result: CheckResult) -> str |
     return f"в {PROJECT_JSON_SOURCE} добавлен {_block(plan)} из плана developer"
 
 
+def _codex_author_selected(repo: Path) -> bool:
+    try:
+        return read_author(repo, planned=True)["runtime"] == "codex"
+    except AuthorUnavailable:
+        return False
+
+
 def check_test_author_root(context: HealthContext) -> CheckResult:
     """The project root comes from Git; a set CLAUDE_PROJECT_DIR must name the same root."""
     _, skipped = _opted_in(context, ROOT_ID)
@@ -382,7 +390,7 @@ def check_test_author_root(context: HealthContext) -> CheckResult:
             ),
         )
     variable = os.environ.get("CLAUDE_PROJECT_DIR")
-    if variable:
+    if variable and not _codex_author_selected(repo):
         named = Path(variable).resolve()
         if named != root:
             return _line(
@@ -404,6 +412,8 @@ def check_test_author_trust(context: HealthContext) -> CheckResult:
     if skipped is not None:
         return skipped
     repo = context.repo.resolve()
+    if _codex_author_selected(repo):
+        return _line(TRUST_ID, "skipped", "Для тест-автора Codex доверие Claude Code не применяется")
     trusted = _trusted_by(repo)
     if trusted == repo:
         return _line(TRUST_ID, "ok", f"Доверие Claude Code: {repo}")
@@ -431,6 +441,8 @@ def check_test_author_guard(context: HealthContext) -> CheckResult:
     if skipped is not None:
         return skipped
     repo = context.repo.resolve()
+    if _codex_author_selected(repo):
+        return _line(GUARD_ID, "skipped", "Границы правки проверяет адаптер Codex")
     agent, guard = repo / TEST_AUTHOR_AGENT, repo / GUARD_REL
     if agent.is_symlink() or not agent.is_file():
         return _line(
@@ -505,6 +517,8 @@ def check_test_author_probe(context: HealthContext) -> CheckResult:
     if skipped is not None:
         return skipped
     repo = context.repo.resolve()
+    if _codex_author_selected(repo):
+        return _line(PROBE_ID, "skipped", "Проба изоляции Codex выполняется в hooks.test_author")
     runner = repo / RUNNER_REL
     if not runner.is_file() or not os.access(runner, os.X_OK):
         return _line(
@@ -600,6 +614,12 @@ def _test_author_readiness(
         preflight = adapter_for(selection)
     except AuthorUnavailable as exc:
         return exc.reason, "warn", selection
+    if selection["runtime"] == "codex":
+        try:
+            preflight_author(repo, selection, planned=True)
+        except AuthorUnavailable as exc:
+            return exc.reason, "warn", selection
+        return "ok", "ok", selection
     # A readiness check targets this checkout, even when health is called from another runtime.
     # Setting its identity is not granting trust: the checkout or its main checkout must be trusted.
     if _trusted_by(repo) is None:

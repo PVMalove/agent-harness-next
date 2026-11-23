@@ -59,9 +59,8 @@ python3 -I -B .harness/health/test_author.py run --repo . --prompt-file '<prompt
 
 The launcher checks the protected adapter again, passes the exact model and effort, and sends the
 task through stdin. It does this also when the current session uses another model. A runtime
-without a protected adapter gets `runtime_unsupported`; another CLI never replaces it. Only Claude
-Code has such an adapter now; the `.claude` paths below refer to its guard and runner, not to the
-selection of the executor. To switch the author to Claude Code, add `claude` with `model` and
+without a protected adapter gets `runtime_unsupported`; another CLI never replaces it. The adapters
+support Claude Code and Codex. To switch the author to Claude Code, add `claude` with `model` and
 `effort` to `assignment_plans.developer.runtimes` of `.harness/orchestration.json`. When the plan
 has several runtimes, select `claude` in `assignment_plans.developer.default_runtime`. Without a
 developer plan, `test_author.runtime` of `.harness/project.json` sets the runtime.
@@ -88,8 +87,11 @@ the test reads them without write access, and the database starts only for the m
 
 ### Supported versions and environments
 
-- Only Claude Code has a protected adapter now; a selection of Codex or another runtime stays in
-  the diagnostics and gives `runtime_unsupported`. The harness does not pin a minimum Claude Code
+- Codex proposes one test-file edit and one pytest node ID from the developer's supplied context.
+  Include relevant signatures and the original test-file text in that context. The launcher
+  validates the proposal, applies it in the authorized test zone, and prints the isolated
+  runner's JSON response. Classify Red from the runner's evidence.
+- Claude Code uses its scoped guard. The harness does not pin a minimum Claude Code
   version: preflight statically checks the agent, the scoped hook, and the guard, and the own check
   of the harness (`make test-author-probe`, which needs `claude` and a login) confirms that the hook
   fires in a live session.

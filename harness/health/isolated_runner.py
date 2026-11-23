@@ -684,6 +684,7 @@ def _read_marker(path: Path) -> str | None:
 def probe(
     repo: Path,
     *,
+    readonly_tests: bool = False,
     launcher: Launcher = launch,
     platform: str = sys.platform,
     which: Callable[[str], str | None] = shutil.which,
@@ -720,7 +721,10 @@ def probe(
                     zones,
                 )
             )
-        phases.append(([*zones, *artifacts, cache, reports], []))
+        test_binds: list[Path | Mount] = [
+            *([] if readonly_tests else zones), *artifacts, cache, reports
+        ]
+        phases.append((test_binds, zones if readonly_tests else []))
         for binds, readonly in phases:
             _probe(
                 bwrap=bwrap,
@@ -748,6 +752,7 @@ def run_test(
     repo: Path,
     test_id: str,
     *,
+    readonly_tests: bool = False,
     launcher: Launcher = launch,
     platform: str = sys.platform,
     which: Callable[[str], str | None] = shutil.which,
@@ -803,7 +808,9 @@ def run_test(
                 raise Refused("build_timeout")
             if built.exit_code != 0:
                 raise Refused("build_failed")
-        binds: list[Path | Mount] = [*zones, *artifacts, cache, reports]
+        binds: list[Path | Mount] = [
+            *([] if readonly_tests else zones), *artifacts, cache, reports
+        ]
         env = sandbox_environment(cache, reports, environ)
         _probe(
             bwrap=bwrap,
@@ -813,6 +820,7 @@ def run_test(
             run_dir=run_dir,
             launcher=launcher,
             run_id=run_id,
+            readonly_targets=zones if readonly_tests else [],
         )
         argv = command_for(settings.command, test_id)
         database = settings.database

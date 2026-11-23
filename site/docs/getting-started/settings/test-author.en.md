@@ -46,7 +46,7 @@ user choice, **not defaults**. See [project.json](project.md) for the overall co
 | `test_runner.database.test_ids` | Required non-empty array of unique non-empty strings: `fnmatchcase` selectors. Only a matching test starts the database. |
 | `test_runner.database.command` | Required non-empty argv without `{test_id}` or NUL. Starts a separate foreground database server inside the sandbox. |
 | `test_runner.database.ready_command` | Required non-empty argv without `{test_id}` or NUL. Checks server readiness; argv does not perform shell substitution. |
-| `test_author.runtime` | Required in the short profile: ID matching `[A-Za-z0-9][A-Za-z0-9_-]*`. Currently only `claude` has a protected adapter; other IDs do not turn into another CLI selection. |
+| `test_author.runtime` | Required in the short profile: ID matching `[A-Za-z0-9][A-Za-z0-9_-]*`. Protected adapters support `claude` and `codex`. Other IDs return `runtime_unsupported`. |
 | `test_author.model` | Required explicit CLI ID/alias matching `[A-Za-z0-9][A-Za-z0-9._:-]*`, without spaces. No default model. |
 | `test_author.effort` | Required: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max` or `ultra`. Schema validity does not prove that the chosen CLI supports a value. No default. |
 
@@ -135,8 +135,10 @@ and independent test expectations.
   `CLAUDE_CODE_SAFE_MODE=1`. A human accepted trust for **this checkout or the main checkout of its
   repository**. Do not repair this by writing an auth/trust file; open the project and accept the
   dialog.
-- The chosen runtime has a protected adapter. Currently that is Claude Code; the harness pins
-  no minimum CLI version. Preflight checks agent/hook statically; live firing is confirmed separately.
+- For Claude Code, preflight checks the agent and its scoped hook. The live probe confirms hook execution.
+- For Codex, include the public signatures and the original test-file text in the prompt. The
+  adapter accepts one edit and one pytest node ID. It applies the edit within the allowed paths
+  and returns the isolated runner's JSON. The test receives the checkout read-only.
 
 The guard confines `Write`/`Edit` to the test zone and `Bash` to one `run-test.sh <test-id>` call
 (including through trusted system Bash). Shell metacharacters, `--probe` and extra author

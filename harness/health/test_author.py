@@ -36,7 +36,10 @@ from harness.configuration import (
 FIELDS = frozenset({"runtime", "model", "effort"})
 RUNTIME_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
 # These are protected runtime adapters, not executor defaults. Selection happens first.
-ADAPTERS = {"claude": ".claude/hooks/test-author-preflight.sh"}
+ADAPTERS = {
+    "claude": ".claude/hooks/test-author-preflight.sh",
+    "codex": ".harness/health/codex_test_author.py",
+}
 PREFLIGHT_REASONS = frozenset(
     {
         "checkout_mismatch",
@@ -194,6 +197,16 @@ def preflight_author(
 ) -> None:
     """Dispatch readiness to the selected protected adapter, preserving sanitized refusals."""
     preflight = adapter_for(selection)
+    if selection["runtime"] == "codex":
+        from harness.health import codex_test_author
+
+        try:
+            codex_test_author.preflight(repo, _object(brief) if brief else None)
+        except codex_test_author.CodexRefused as exc:
+            raise AuthorUnavailable(str(exc)) from None
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            raise AuthorUnavailable("preflight_failed") from None
+        return
     bash = shutil.which("bash")
     if bash is None:
         raise AuthorUnavailable("runner_unavailable")
@@ -236,6 +249,20 @@ def run_author(
     if binary is None:
         raise AuthorUnavailable("runtime_unavailable")
     preflight_author(repo, selection, brief=brief, launcher=True)
+    if selection["runtime"] == "codex":
+        from harness.health import codex_test_author, isolated_runner
+
+        try:
+            return codex_test_author.run(
+                repo, binary, selection, prompt,
+                brief=_object(brief) if brief else None,
+            )
+        except codex_test_author.CodexRefused as exc:
+            raise AuthorUnavailable(str(exc)) from None
+        except isolated_runner.Refused as exc:
+            raise AuthorUnavailable(exc.reason) from None
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            raise AuthorUnavailable("author_unavailable") from None
     from harness.storage import storage_path
 
     try:

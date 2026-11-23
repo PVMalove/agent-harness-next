@@ -174,8 +174,48 @@ def test_unsupported_selected_runtime_starts_no_other_cli(
 
     monkeypatch.setattr(author, "execute", never_run)
     profile = select_author(
-        {"test_author": {"runtime": "codex", "model": "selected", "effort": "high"}}
+        {"test_author": {"runtime": "unsupported", "model": "selected", "effort": "high"}}
     )
 
     with pytest.raises(AuthorUnavailable, match="runtime_unsupported"):
         author.run_author(tmp_path, profile, "requirement")
+
+
+@pytest.mark.parametrize("with_brief", [False, True], ids=["fast-implement", "implement"])
+def test_check_accepts_codex_test_author_in_both_routes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], with_brief: bool
+) -> None:
+    config = tmp_path / ".harness"
+    config.mkdir()
+    (config / "project.json").write_text(
+        json.dumps(
+            {
+                "test_paths": ["tests/**"],
+                "test_runner": {"command": ["python3", "-m", "pytest", "{test_id}"]},
+                "test_author": {
+                    "runtime": "claude" if with_brief else "codex",
+                    "model": "project-model",
+                    "effort": "medium",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    args = ["check", "--repo", str(tmp_path)]
+    if with_brief:
+        brief = tmp_path / "brief.json"
+        brief.write_text(
+            json.dumps(
+                {
+                    "role": "developer",
+                    "resolved_runtime": "codex",
+                    "resolved_model": "developer-model",
+                    "resolved_effort": "high",
+                }
+            ),
+            encoding="utf-8",
+        )
+        args.extend(["--brief", str(brief)])
+
+    assert author.main(args) == 0
+    assert json.loads(capsys.readouterr().out) == {"status": "ok"}
