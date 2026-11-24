@@ -440,6 +440,7 @@
         "deny_paths": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Список glob-шаблонов исключаемых путей."},
         "redact_paths": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Пути, из которых вырезается внутреннее содержимое символов."},
         "redact_symbols": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Имена функций/классов, скрываемые из карты репозитория."},
+        "python_source_roots": {"type": "array", "items": {"type": "string", "minLength": 1}, "description": "Корни импорта Python: glob-шаблоны каталогов относительно корня репозитория, например [\"api_gateway\", \"libs/*/src\"]. Шаблон сравнивается с каталогом по сегментам пути, `*` не пересекает `/`. Файл под корнем получает имя модуля относительно самого длинного совпавшего корня. Без ключа имена модулей считаются от корня репозитория."},
         "max_files": {"type": "integer", "minimum": 1, "default": 10000, "description": "Максимальное число файлов в карте (целое число, по умолчанию 10000)."},
         "max_file_bytes": {"type": "integer", "minimum": 1, "default": 2000000, "description": "Максимальный размер обрабатываемого файла в байтах (по умолчанию 2000000)."},
         "max_path_length": {"type": "integer", "minimum": 1, "default": 4096, "description": "Максимальная длина пути к файлу в символах (по умолчанию 4096)."},

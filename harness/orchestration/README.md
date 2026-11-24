@@ -266,7 +266,8 @@ Digest списка по-прежнему фиксируется до approval; 
 ### `repo_map_policy`
 
 Фильтрация и лимиты Repo Map для Context Package: `allow_paths`, `deny_paths`,
-`redact_paths`, `redact_symbols`, `max_files` (10000), `max_file_bytes` (2000000),
+`redact_paths`, `redact_symbols`, `python_source_roots` (корни импорта Python), `max_files`
+(10000), `max_file_bytes` (2000000),
 `max_path_length` (4096), `max_symbol_length` (256), `max_signature_length` (2048),
 `timeout_seconds` (10), `max_tokens` (4000), `tier` (`full`/`minimal`), `min_tier` и
 `min_tier_by_role` (гейт dispatch по tier), `parser_bundle_registry_paths`,

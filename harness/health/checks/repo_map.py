@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import shutil
 import sys
+from fnmatch import fnmatchcase
 from pathlib import Path
 
 from harness.repo_map import parser_bundle
@@ -23,6 +24,53 @@ REPO_MAP_REGISTRY_REL = Path(
 _REMEDY_PREFIX = "КАК ИСПРАВИТЬ: "
 
 
+def _policy_section(repo: Path) -> dict[str, object] | None:
+    """The project's `repo_map_policy` object, or `None` without a readable one."""
+    policy_path = repo / ORCHESTRATION_CONFIG_REL
+    if policy_path.is_file():
+        try:
+            decoded = json.loads(policy_path.read_text(encoding="utf-8"))
+            section = (
+                decoded.get("repo_map_policy") if isinstance(decoded, dict) else None
+            )
+            if isinstance(section, dict):
+                return section
+        except (OSError, json.JSONDecodeError):
+            # The normal health validation reports malformed orchestration config.
+            pass
+    return None
+
+
+def _names_a_directory(repo: Path, pattern: str) -> bool:
+    """Whether a `python_source_roots` pattern, matched segment by segment, names a directory."""
+    found = [repo]
+    for segment in pattern.rstrip("/").split("/"):
+        matched: list[Path] = []
+        for parent in found:
+            try:
+                matched += [
+                    child
+                    for child in parent.iterdir()
+                    if child.is_dir() and fnmatchcase(child.name, segment)
+                ]
+            except OSError:
+                continue
+        found = matched
+    return bool(found)
+
+
+def unmatched_source_roots(repo: Path) -> list[str]:
+    """The `repo_map_policy.python_source_roots` patterns that name no directory of the project."""
+    patterns = (_policy_section(repo) or {}).get("python_source_roots", [])
+    if not isinstance(patterns, list):
+        return []
+    return [
+        pattern
+        for pattern in patterns
+        if isinstance(pattern, str) and not _names_a_directory(repo, pattern)
+    ]
+
+
 def repo_map_health(repo: Path) -> list[str]:
     """Describe the Repo Map dispatch capability without invoking its parser.
 
@@ -33,20 +81,9 @@ def repo_map_health(repo: Path) -> list[str]:
     if not (repo / REPO_MAP_REL).is_file():
         return []
 
-    policy: dict[str, object] = {}
-    has_policy = False
-    policy_path = repo / ORCHESTRATION_CONFIG_REL
-    if policy_path.is_file():
-        try:
-            decoded = json.loads(policy_path.read_text(encoding="utf-8"))
-            if isinstance(decoded, dict) and isinstance(
-                decoded.get("repo_map_policy"), dict
-            ):
-                policy = decoded["repo_map_policy"]
-                has_policy = True
-        except (OSError, json.JSONDecodeError):
-            # The normal health validation reports malformed orchestration config.
-            pass
+    section = _policy_section(repo)
+    policy = section or {}
+    has_policy = section is not None
 
     requested_tier = policy.get("tier", "full")
     policy_mode = "enforced" if has_policy else "portable"
@@ -135,6 +172,17 @@ def check_tier(context: HealthContext) -> CheckResult:
             if line.startswith(_REMEDY_PREFIX):
                 fix = Fix(text=line.removeprefix(_REMEDY_PREFIX))
                 break
+    unmatched = unmatched_source_roots(context.repo)
+    if unmatched:
+        # Such a pattern builds no import root, so its imports stay outside the graph.
+        status = "warn"
+        message += "; python_source_roots: нет каталогов для шаблонов " + ", ".join(
+            unmatched
+        )
+        fix = fix or Fix(
+            text="исправьте или удалите эти шаблоны в repo_map_policy.python_source_roots "
+            "файла .harness/orchestration.json и повторите harness health"
+        )
     return CheckResult(
         id="repo_map.tier", group="repo_map", status=status, message=message, fix=fix
     )

@@ -429,3 +429,149 @@ def test_an_empty_diff_has_an_empty_known_impact(repo: Path) -> None:
     impact = _impact(repo, base)
 
     assert impact == ImpactSet((), (), (), ())
+
+
+SERVICE_FILES = {
+    "svc_a/services/x.py": "def f(): return 1\n",
+    "svc_a/tests/unit/test_x.py": "from services.x import f\n",
+    "svc_b/services/x.py": "def f(): return 2\n",
+    "svc_b/tests/unit/test_x.py": "from services.x import f\n",
+}
+
+
+def _changed_service_module(repo: Path, files: dict[str, str]) -> str:
+    """Commit ``files`` as the base, then change ``svc_a/services/x.py``; returns the base."""
+    _write(repo, files)
+    base = _commit(repo, "services")
+    _write(repo, {"svc_a/services/x.py": "def f(): return 3\n"})
+    _commit(repo, "change the service module")
+    return base
+
+
+def _reasons(impact: ImpactSet, code: str) -> list[str]:
+    return [reason.path for reason in impact.unknown if reason.code == code]
+
+
+def test_a_source_root_resolves_an_import_from_the_service_directory(
+    repo: Path,
+) -> None:
+    base = _changed_service_module(repo, SERVICE_FILES)
+
+    impact = _impact(
+        repo, base, policy=RepoMapPolicy(python_source_roots=("svc_a", "svc_b"))
+    )
+
+    # Each service imports its own `services.x`: the other service's test is not related.
+    assert impact.related_tests == ("svc_a/tests/unit/test_x.py",)
+    assert impact.impacted_modules == ("svc_a/services/x.py",)
+    assert impact.unknown == ()
+
+
+def test_an_unresolved_import_that_may_name_a_changed_module_sets_unknown(
+    repo: Path,
+) -> None:
+    base = _changed_service_module(repo, SERVICE_FILES)
+
+    impact = _impact(repo, base)
+
+    # Without source roots the graph has no edge, so the plan must widen instead of staying
+    # focused on an empty selection.
+    assert impact.related_tests == ()
+    assert _reasons(impact, "unresolved-import") == [
+        "svc_a/tests/unit/test_x.py",
+        "svc_b/tests/unit/test_x.py",
+    ]
+
+
+def test_a_src_layout_library_is_imported_by_its_package_name(repo: Path) -> None:
+    _write(
+        repo,
+        {
+            "libs/tare/src/mes_tare/__init__.py": "RULE = 1\n",
+            "libs/tare/tests/test_tare_rules.py": "from mes_tare import RULE\n",
+            "svc_a/services/weigh.py": "import mes_tare\n",
+            "svc_a/tests/test_weigh.py": "from services.weigh import run\n",
+        },
+    )
+    base = _commit(repo, "library")
+    _write(repo, {"libs/tare/src/mes_tare/__init__.py": "RULE = 2\n"})
+    _commit(repo, "change the library")
+
+    impact = _impact(
+        repo, base, policy=RepoMapPolicy(python_source_roots=("libs/*/src", "svc_a"))
+    )
+
+    assert impact.related_tests == (
+        "libs/tare/tests/test_tare_rules.py",
+        "svc_a/tests/test_weigh.py",
+    )
+    assert impact.impacted_modules == (
+        "libs/tare/src/mes_tare/__init__.py",
+        "svc_a/services/weigh.py",
+    )
+    assert impact.unknown == ()
+
+
+def test_a_name_in_two_service_roots_is_ambiguous_for_an_outside_importer(
+    repo: Path,
+) -> None:
+    base = _changed_service_module(
+        repo, SERVICE_FILES | {"tests/test_contract.py": "from services.x import f\n"}
+    )
+
+    impact = _impact(
+        repo, base, policy=RepoMapPolicy(python_source_roots=("svc_a", "svc_b"))
+    )
+
+    # No edge is guessed for the outside importer: its test is not related, the impact is unknown.
+    assert impact.related_tests == ("svc_a/tests/unit/test_x.py",)
+    assert [
+        (reason.path, reason.detail)
+        for reason in impact.unknown
+        if reason.code == "ambiguous-import"
+    ] == [
+        (
+            "tests/test_contract.py",
+            "import 'services.x' matches svc_a/services/x.py, svc_b/services/x.py",
+        )
+    ]
+    assert _codes(impact) == {"ambiguous-import"}
+
+
+def test_a_file_under_a_source_root_is_still_imported_by_its_repository_path(
+    repo: Path,
+) -> None:
+    base = _changed_service_module(
+        repo, SERVICE_FILES | {"tests/test_full.py": "import svc_a.services.x\n"}
+    )
+
+    impact = _impact(
+        repo, base, policy=RepoMapPolicy(python_source_roots=("svc_a", "svc_b"))
+    )
+
+    assert impact.related_tests == (
+        "svc_a/tests/unit/test_x.py",
+        "tests/test_full.py",
+    )
+    assert impact.unknown == ()
+
+
+def test_an_unresolved_import_of_another_package_keeps_the_impact_known(
+    repo: Path,
+) -> None:
+    _write(
+        repo,
+        {
+            "pkg/models.py": "A = 1\n",
+            "pkg/json.py": "B = 1\n",
+            # A third-party module with the same last segment, and a standard library module.
+            "pkg/views.py": "from django.db import models\nimport json\n",
+        },
+    )
+    base = _commit(repo, "names shared with other packages")
+    _write(repo, {"pkg/models.py": "A = 2\n", "pkg/json.py": "B = 2\n"})
+    _commit(repo, "change them")
+
+    impact = _impact(repo, base)
+
+    assert impact.unknown == ()

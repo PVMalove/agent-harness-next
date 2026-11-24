@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, fields
 from fnmatch import fnmatchcase
 from pathlib import Path
@@ -94,6 +95,7 @@ class RepoMapPolicy:
     deny_paths: tuple[str, ...] = ()
     redact_paths: tuple[str, ...] = ()
     redact_symbols: tuple[str, ...] = ()
+    python_source_roots: tuple[str, ...] = ()
     max_files: int = DEFAULT_MAX_FILES
     max_file_bytes: int = DEFAULT_MAX_FILE_BYTES
     max_path_length: int = DEFAULT_MAX_PATH_LENGTH
@@ -114,7 +116,13 @@ class RepoMapPolicy:
 
 
 _DEFAULTS = RepoMapPolicy()
-_PATTERN_FIELDS = ("allow_paths", "deny_paths", "redact_paths", "redact_symbols")
+_PATTERN_FIELDS = (
+    "allow_paths",
+    "deny_paths",
+    "redact_paths",
+    "redact_symbols",
+    "python_source_roots",
+)
 # Validation order is part of the contract: the first invalid field is the one reported.
 _POSITIVE_INT_FIELDS = (
     "max_files",
@@ -166,6 +174,31 @@ def path_allowed(path: str, policy: RepoMapPolicy) -> bool:
     if matches(path, policy.deny_paths) or matches(path, policy.redact_paths):
         return False
     return not any(name.endswith(suffix) for suffix in EXCLUDED_SUFFIXES)
+
+
+def directory_matches(parts: Sequence[str], pattern: str) -> bool:
+    """Проверить, что каталог из сегментов `parts` совпадает с шаблоном `python_source_roots`.
+
+    Сравнение идёт по сегментам пути, поэтому `*` не пересекает `/`; `/` в конце шаблона не значим.
+    """
+    segments = pattern.rstrip("/").split("/")
+    return len(segments) == len(parts) and all(
+        fnmatchcase(part, segment) for part, segment in zip(parts, segments)
+    )
+
+
+def source_root(path: str, policy: RepoMapPolicy) -> str:
+    """Вернуть корень импорта Python-файла: самый длинный каталог-предок, совпавший с шаблоном
+    `python_source_roots`. Пустая строка означает корень репозитория.
+    """
+    parts = path.split("/")[:-1]
+    for length in range(len(parts), 0, -1):
+        if any(
+            directory_matches(parts[:length], pattern)
+            for pattern in policy.python_source_roots
+        ):
+            return "/".join(parts[:length])
+    return ""
 
 
 def symbol_visible(name: str, policy: RepoMapPolicy) -> bool:
@@ -305,6 +338,7 @@ def _policy_from_section(section: dict[str, object], raw: bytes) -> RepoMapPolic
         deny_paths=patterns["deny_paths"],
         redact_paths=patterns["redact_paths"],
         redact_symbols=patterns["redact_symbols"],
+        python_source_roots=patterns["python_source_roots"],
         max_files=numeric["max_files"],
         max_file_bytes=numeric["max_file_bytes"],
         max_path_length=numeric["max_path_length"],

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Literal, TypedDict
 
 from harness.repo_map.bundle_worker import FileFacts, ImportFact, SignatureFact
-from harness.repo_map.policy import RepoMapPolicy, symbol_visible
+from harness.repo_map.policy import RepoMapPolicy, source_root, symbol_visible
 
 # Names defined in this many files are too common to provide useful references.
 DEFINITION_FILE_FANOUT_THRESHOLD = 5
@@ -60,6 +60,18 @@ class Diagnostic(TypedDict):
     path: str
 
 
+class ImportGap(TypedDict):
+    """Абсолютный импорт Python, для которого ребро не построено.
+
+    `targets` пуст, если модуля нет среди файлов карты, и содержит несколько файлов, если имя есть
+    в нескольких корнях импорта.
+    """
+
+    source: str
+    module: str
+    targets: list[str]
+
+
 Edge = tuple[str, str, str, str]
 
 
@@ -88,6 +100,55 @@ def module_paths(paths: set[str]) -> dict[str, str]:
         if module:
             modules[module] = path
     return modules
+
+
+class PythonModules:
+    """Python-модули карты по корням импорта (`repo_map_policy.python_source_roots`).
+
+    Файл под корнем получает имя относительно своего корня и сохраняет имя от корня репозитория.
+    Без корней в политике остаётся одно пространство имён от корня репозитория.
+    """
+
+    def __init__(self, paths: set[str], policy: RepoMapPolicy) -> None:
+        self._repository = module_paths(paths)
+        self._roots: dict[str, str] = {}
+        # Module name -> import root -> file.
+        self._rooted: dict[str, dict[str, str]] = {}
+        if not policy.python_source_roots:
+            return
+        members: dict[str, dict[str, str]] = {}
+        for path in paths:
+            root = source_root(path, policy)
+            if root:
+                self._roots[path] = root
+                members.setdefault(root, {})[path[len(root) + 1 :]] = path
+        for root, relative in members.items():
+            for module, name in module_paths(set(relative)).items():
+                self._rooted.setdefault(module, {})[root] = relative[name]
+
+    def name(self, path: str) -> str:
+        """Dotted-имя файла в его корне импорта: от него разрешаются относительные импорты."""
+        root = self._roots.get(path, "")
+        return python_module(path[len(root) + 1 :] if root else path)
+
+    def resolve(self, source: str, module: str, *, relative: bool) -> list[str]:
+        """Вернуть файлы, которые импорт `module` из файла `source` может называть.
+
+        Имя сначала ищется в корне импорта самого файла. Абсолютный импорт, которого там нет,
+        ищется по имени от корня репозитория и в остальных корнях: один найденный файл даёт ребро,
+        несколько означают неоднозначный импорт.
+        """
+        root = self._roots.get(source, "")
+        rooted = self._rooted.get(module, {})
+        own = rooted.get(root) if root else self._repository.get(module)
+        if own is not None:
+            return [own]
+        if relative:
+            return []
+        found = set(rooted.values())
+        if root and module in self._repository:
+            found.add(self._repository[module])
+        return sorted(found)
 
 
 def import_modules(fact: ImportFact, module: str) -> list[str]:
@@ -177,22 +238,32 @@ def _js_import_edges(
 
 
 def _python_import_edges(
-    path: str, facts: FileFacts, modules: dict[str, str], policy: RepoMapPolicy
+    path: str,
+    facts: FileFacts,
+    modules: PythonModules,
+    policy: RepoMapPolicy,
+    import_gaps: list[ImportGap] | None,
 ) -> set[Edge]:
-    """Рёбра `import/high` из разрешённых импортов одного Python-файла."""
+    """Рёбра `import/high` из разрешённых импортов одного Python-файла.
+
+    Абсолютный импорт без ребра — не найденный или неоднозначный — попадает в `import_gaps`.
+    """
     edges: set[Edge] = set()
-    current_module = python_module(path)
+    current_module = modules.name(path)
     for import_fact in facts["imports"]:
+        relative = import_fact["level"] > 0
         for imported_module in import_modules(import_fact, current_module):
             if not module_visible(imported_module, policy):
                 continue
-            target = modules.get(imported_module)
-            if (
-                target
-                and target != path
-                and module_visible(python_module(target), policy)
-            ):
-                edges.add((path, target, "import", "high"))
+            targets = modules.resolve(path, imported_module, relative=relative)
+            if len(targets) == 1:
+                target = targets[0]
+                if target != path and module_visible(python_module(target), policy):
+                    edges.add((path, target, "import", "high"))
+            elif import_gaps is not None and not relative:
+                import_gaps.append(
+                    {"source": path, "module": imported_module, "targets": targets}
+                )
     return edges
 
 
@@ -229,14 +300,16 @@ def build_graph(
     diagnostics: list[Diagnostic],
     policy: RepoMapPolicy,
     extension_grammars: dict[str, str],
+    import_gaps: list[ImportGap] | None = None,
 ) -> list[EdgeRecord]:
     """Применить политику символов к фактам worker, дополнить записи файлов и построить список рёбер.
 
     Импорты дают `import/high` (Python и относительные TS/JS), ссылки по имени —
     `unique-name-ref/medium` или `ambiguous-name-ref/low` в пределах одного семейства. Имена,
-    определённые в `DEFINITION_FILE_FANOUT_THRESHOLD` и более файлах, отбрасываются.
+    определённые в `DEFINITION_FILE_FANOUT_THRESHOLD` и более файлах, отбрасываются. Абсолютные
+    импорты Python, для которых ребро не построено, дописываются в `import_gaps`, если он передан.
     """
-    modules = module_paths({path for path in records if path.endswith(".py")})
+    modules = PythonModules({path for path in records if path.endswith(".py")}, policy)
     js_paths = {path for path in records if Path(path).suffix in JS_EXTENSIONS}
     edges: set[Edge] = set()
     definitions: dict[tuple[str, str], set[str]] = {}
@@ -254,7 +327,7 @@ def build_graph(
         if path in js_paths:
             edges |= _js_import_edges(path, record, js_paths, policy)
         elif path.endswith(".py"):
-            edges |= _python_import_edges(path, record, modules, policy)
+            edges |= _python_import_edges(path, record, modules, policy, import_gaps)
     edges |= _name_ref_edges(facts, definitions, extension_grammars, policy)
     diagnostics.sort(key=lambda item: (item["path"], item["code"]))
     return [
