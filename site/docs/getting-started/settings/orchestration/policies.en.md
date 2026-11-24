@@ -68,7 +68,7 @@ confirmation is required; auto-merge is forbidden. See the
 | Field | Contract |
 | --- | --- |
 | `retry_policy.max_developer_retries` | Integer ≥ `0`. Default: `1`. Developer retry limit after review or QA findings; `0` disables these retries. These are not worker-session continuations. |
-| `auto_retry_min_severity` | String: `info`, `warning`, `error`, `blocker`. Default: `info`. Minimum finding severity for automatic review-retry; pinned in the batch plan. This routes retries; it does not authorize ignoring findings. |
+| `auto_retry_min_severity` | String: `info`, `warning`, `error`, `blocker`. Default: `info`. Minimum finding severity for automatic review-retry; pinned in the batch plan. This routes retries; it does not authorize ignoring findings. At `info`, every info finding becomes a carried item of a fix-forward, even one code cannot close; the developer marks such an item `not_closed`, and the automatic path stops with `carried-items-not-closed`. |
 | `attention_policy.retry_queue_seconds` | Integer ≥ `1`. Default: `3600`. How long an accepted retry may wait for its dispatch before attention is required. |
 | `attention_policy.max_infrastructure_retries` | Integer ≥ `0`. Default: `2`. Operational retry budget per candidate: infrastructure, transport and context pressure. `0` allows none. |
 | `attention_policy.stale_dispatch_seconds` | Integer ≥ `1`. Default: `3600`. A live dispatch becomes stale after this period of silence and requires attention. This is not a process-stop command. |

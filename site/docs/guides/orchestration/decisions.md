@@ -605,7 +605,7 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 | --- | --- |
 | `integrity-failure` | `runtime-unavailable`, `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed`, `operational-hold` |
 | `budget-exhausted` | `retry_policy.max_developer_retries`, `continuation_policy.max_continuations`, `continuation_policy.max_rate_limit_resumes`, `attention_policy.max_infrastructure_retries`, `tooling-retry-repeated` |
-| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure` |
+| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure`, `carried-items-not-closed` |
 
 `batch auto-decide` и `batch auto-report` ищут остановку в таком порядке: целостность, бюджет,
 маршрут. Coordinator пишет остановку один раз в `batch.auto_stop` вместе с итоговым отчётом.
@@ -620,6 +620,12 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 Остановку `no-automatic-route`/`unknown-reason` политика записывает и при отказе
 `UnprovenFailureError` от read-only стадии или publish (см. «Домены отказа»). Решение тогда не
 записывается, а evidence остановки сохраняет `failure`.
+
+Остановку `no-automatic-route`/`carried-items-not-closed` политика записывает вместо `retry`, когда
+единственное препятствие отчёта разработчика — переносимые пункты, которые он отметил `not_closed` с
+причиной. Повтор такой пункт не закроет и только потратит бюджет, поэтому evidence перечисляет пункты
+и причины, а человек решает `override-warning` с заметкой или `retry`. Developer-retry, который
+только отмечает пункты `not_closed` и не делает коммитов, отправляет пустой `commit_map`.
 
 Coordinator пишет итоговый отчёт один раз в `batch.auto_report`: при accept отчёта publish или при
 остановке. Отчёт перечисляет решения `policy:auto`, принятые риски, findings, retry и потраченный

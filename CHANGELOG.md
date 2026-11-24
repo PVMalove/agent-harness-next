@@ -2,6 +2,12 @@
 
 Изменения выпусков записываются в формате [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/) и версионируются по SemVer.
 
+## [Unreleased]
+
+### Fixed
+
+- **[Тупик fix-forward на not_closed]:** `batch auto-decide` больше не отправляет на повтор отчёт разработчика, в котором единственное препятствие — переносимые пункты, отмеченные `not_closed` с причиной: автоматический путь останавливается с `no-automatic-route`/`carried-items-not-closed`, и человек решает `override-warning` с заметкой или `retry`. Developer-retry, который не делает коммитов и отмечает хотя бы один пункт `not_closed`, теперь отправляет completed-отчёт с пустым `commit_map`; такой отчёт остаётся нечистым. (#1265)
+
 ## [2.0.1] - 2026-11-24
 
 ### Fixed
