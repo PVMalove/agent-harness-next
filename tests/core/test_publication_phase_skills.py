@@ -125,6 +125,14 @@ def test_completion_report_has_one_source_in_the_memory_format() -> None:
     assert "gh issue comment" not in guide
 
 
+def test_guide_hands_the_pr_and_the_closure_to_to_pull_requests() -> None:
+    """The hitl guide routes the PR/MR and the ticket closure through `/to-pull-requests`."""
+    guide = _text(ENGINEERING / "to-guide/references/guide-template.md")
+    assert "Run `/to-pull-requests <ID>` from the issue branch" in guide
+    for copy in ("gh pr create", "glab mr create", "pr_body/"):
+        assert copy not in guide, copy
+
+
 def test_unblocking_and_cleanup_follow_the_tracker_and_worktree_contracts() -> None:
     core = _text(PR_SKILL)
     assert "`docs/tasks/*.md`" not in core
