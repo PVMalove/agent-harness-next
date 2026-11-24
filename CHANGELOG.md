@@ -2,6 +2,12 @@
 
 Изменения выпусков записываются в формате [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/) и версионируются по SemVer.
 
+## [Unreleased]
+
+### Fixed
+
+- **[Память на runtime store]:** `harness memory build` и `harness memory rebuild` больше не падают с `memory ledger selector is invalid or unsupported` в проекте с runtime store: селектор `ledger.json` версии 4 не мешает индексировать файловые источники. Типы `ledger` и `qa_finding` в таком проекте не индексируются, потому что их записи хранит `runtime.db`: команды перечисляют их в поле `skipped_source_types` и в stderr, а `harness health` называет их в `memory.index` и сообщает причину, если индекс нельзя построить. (#1260)
+
 ## [2.0.0] - 2026-11-20
 
 ### Breaking Changes
