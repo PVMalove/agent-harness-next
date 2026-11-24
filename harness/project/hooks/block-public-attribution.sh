@@ -166,7 +166,7 @@ def cut_heredocs(text):
 
 shell, bodies = cut_heredocs(sys.stdin.read())
 is_commit = re.search(r"git\s+commit", shell, re.IGNORECASE)
-is_pr = re.search(r"(gh\s+pr|glab\s+mr)\s+(create|new|edit|update)", shell, re.IGNORECASE)
+is_pr = re.search(r"(gh\s+pr|glab\s+mr)\s+(create|new|edit|update)|glab\s+api\b[^\n]*/merge_requests(?![/\w-])", shell, re.IGNORECASE)
 is_push = re.search(r"git\s+push", shell, re.IGNORECASE)
 is_tracker = re.search(r"(gh|glab)\s+(issue|pr|mr)\s+(create|new|edit|update|comment|note)|glab\s+api", shell, re.IGNORECASE)
 if not (is_commit or is_pr or is_push or is_tracker):

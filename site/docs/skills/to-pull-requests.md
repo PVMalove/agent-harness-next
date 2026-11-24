@@ -17,6 +17,11 @@
 1. Целевая ветка берётся из `## Integration Branch` тикета или строки `**Integration branch:**`
    локального тикета, иначе это `base_branch`.
 2. Ветка должна быть чистой, соответствовать `branch_pattern` и совпадать со своей upstream-веткой.
+   Если песочница закрыла `.git/config` на запись, `git push -u` не записывает upstream; тогда навык
+   сверяет `HEAD` с SHA из `git ls-remote origin refs/heads/<ветка>`. По той же причине PR на GitHub
+   открывается с явным `--head <ветка>`, а MR на GitLab — запросом
+   `glab api projects/<project-id>/merge_requests -X POST`, потому что `glab mr create` пишет
+   `.git/config` до запроса к API.
 3. Сначала QA, потом подтверждение. Без opt-in backend-оркестрации и для `pipeline::fast` навык
    запускает `/qa-gate`. В opt-in-проекте он проверяет принятые доказательства QA точного SHA и
    вызывает `integration next` по `references/integration-route.md`, часть A, а не перезапускает QA.

@@ -8,7 +8,7 @@
 Blocking PR/MR creation without a successful QA pass
 ```
 ## 2. Full description
-This `PreToolUse(Bash)` hook intercepts commands in the agent's bash terminal. Its main task is to block the `gh pr create` command (creating a pull request) or the `glab mr create` command (creating a merge request) if the agent has not first run a successful check, with the `qa-gate` skill, of the checkout whose branch is being published.
+This `PreToolUse(Bash)` hook intercepts commands in the agent's bash terminal. Its main task is to block the `gh pr create` command (creating a pull request) or the `glab mr create` command and the `glab api` POST to `projects/<project-id>/merge_requests` (creating a merge request) if the agent has not first run a successful check, with the `qa-gate` skill, of the checkout whose branch is being published.
 
 The hook analyzes its input (the bash command text from stdin). If the command text contains `gh pr create` or `glab mr create`, or their alias `gh pr new`/`glab mr new`, the hook determines the checkout of the published branch and builds a hash of its state (the HEAD hash + the hash of the current changes). Then it checks that the marker file `.claude/.qa-gate/passed` exists in that checkout and that its content matches. The `qa-gate` skill creates this marker when it succeeds. If the marker is missing or its content does not match the computed state, the hook stops the execution with an error and a message that `qa-gate` must run. If the command does not create a PR/MR, or the check passed, the hook exits with code 0 and allows the command to run.
 
@@ -17,6 +17,7 @@ Instead of the marker, the hook accepts accepted QA evidence from the orchestrat
 The branch comes from the argv of the create command itself (parsed by `pr_commands.py`). Flags of other commands on the same line, for example `git commit -s`, do not count as a branch:
 - `gh pr create`: `--head <branch>`, `--head=<branch>`, or the short `-H <branch>`, `-H<branch>`, `-H=<branch>` (including inside a flag group, `-dH <branch>`). The `owner:` prefix is dropped.
 - `glab mr create`: `-s <branch>`, `-s<branch>`, `-s=<branch>`, `--source-branch <branch>`, `--source-branch=<branch>`, including inside a group of short flags (`-fs <branch>`). The glab flag `-H`/`--head` sets the repository (`OWNER/REPO`), not the branch, and is ignored.
+- `glab api` with a POST to `projects/<project-id>/merge_requests` (an explicit `-X POST`/`--method POST`, or a `-f`/`-F` field without another method): the value of the field `source_branch=<branch>`; without that field the branch is unknown, and the call is blocked. Comments on `merge_requests/<n>/notes` and GET, PUT or other methods create no MR.
 - Without a branch flag, the hook checks the deepest project checkout that contains the payload `cwd`, that is, the current branch.
 
 The branch selection is no narrower than in the previous version: if the text contains `gh pr create`, the first `--head <branch>`/`--head=<branch>` in the whole command text (global `shlex.split` parsing, as in the previous hook) also counts as the PR branch and is checked, even if the token-based parse of the create command does not see it. A `--head` without a value, or text with `--head` that `shlex` did not parse, blocks the call.

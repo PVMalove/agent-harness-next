@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import tomllib
 from pathlib import Path
 
 import pytest
 
 from harness.health import registry
+from harness.health.checks import environment
+from harness.health.context import HealthContext
 from harness.health.model import CheckResult
 from harness.health.render import render_text
 
@@ -459,3 +462,39 @@ def test_the_claude_snippet_is_valid_json_for_a_path_with_backslashes(
     assert result.fix is not None
     parsed = json.loads(_snippet(result.fix.text))
     assert parsed["sandbox"]["filesystem"]["allowWrite"] == [str(cache)]
+
+
+def _git_config_check(repo: Path) -> CheckResult:
+    return environment.check_git_config(HealthContext(repo=repo, lock=None, online=False))
+
+
+def test_a_writable_git_config_is_ok(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+
+    result = _git_config_check(repo)
+
+    assert (result.id, result.status, result.fix) == ("environment.git_config", "ok", None)
+
+
+def test_a_masked_config_lock_names_the_delivery_path(tmp_path: Path) -> None:
+    """Issue #1266: the sandbox masks .git/config.lock, so git cannot write the upstream."""
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    (repo / ".git" / "config.lock").write_text("", encoding="utf-8")
+
+    result = _git_config_check(repo)
+
+    assert result.status == "warn"
+    assert "config.lock" in result.message
+    assert result.fix is not None
+    for route in (
+        "git ls-remote origin refs/heads/",
+        "gh pr create --head",
+        "glab api projects/<project-id>/merge_requests -X POST",
+    ):
+        assert route in result.fix.text
+
+
+def test_outside_a_repository_the_git_config_check_is_skipped(tmp_path: Path) -> None:
+    assert _git_config_check(tmp_path).status == "skipped"

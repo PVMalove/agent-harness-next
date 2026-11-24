@@ -82,7 +82,7 @@ release candidate SHA. If either changed, repeat verification and request fresh 
 Then, from the checkout of part 3, with the epic title as `<title>`:
 
 - **GitHub:** `gh pr create --base <base-branch> --head <integration-branch> --title '<title>' --body-file <path>`.
-- **GitLab:** `glab mr create -R <project-url> --source-branch <integration-branch> --target-branch <base-branch> --title '<title>' --description-file <path> --yes`.
+- **GitLab:** `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests -X POST -f source_branch=<integration-branch> -f target_branch=<base-branch> -f title='<title>' -F description=@<path>`. `glab mr create` writes `.git/config` before the API request, so it fails when a sandbox keeps that file read-only. The MR is `!<iid>`, with `iid` and `web_url` from the JSON the command prints.
 
 Delete the body file only after the command succeeds. Return the link and wait for the CI of the PR:
 GitHub `gh pr checks <n>`, GitLab the pipeline of the MR. Never merge it.

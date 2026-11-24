@@ -173,6 +173,9 @@ CHECK_ROUTES: dict[str, CheckRoute] = {
     "environment.output_encoding": CheckRoute(
         "Кодировка вывода не UTF-8", "Diagnostics"
     ),
+    "environment.git_config": CheckRoute(
+        ".git/config закрыт на запись", "Diagnostics"
+    ),
     "environment.codex_sandbox": CheckRoute(
         "Песочница Codex настроена неверно", "Diagnostics"
     ),

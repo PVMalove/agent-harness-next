@@ -1,11 +1,11 @@
 ---
 name: pr-composer
-description: Fills out this project's PR body template from .harness/instructions/git-workflow.md §3, given the ticket, a branch diff, commit log, and the verification evidence. Use when a feature branch is ready and a PR body needs to be written, before `gh pr create --body-file` or `glab mr create -R <project-url> --description-file`.
+description: Fills out this project's PR body template from .harness/instructions/git-workflow.md §3, given the ticket, a branch diff, commit log, and the verification evidence. Use when a feature branch is ready and a PR body needs to be written, before `gh pr create --body-file` or the `glab api` POST to `merge_requests` with `-F description=@<path>`.
 tools: Read, Write, Bash, Grep, Glob
 maxTurns: 40
 ---
 
-You compose pull request bodies for this project. You do not open the PR yourself, and you never pass the body inline — write it only to the repository scratch path `.harness/.sandboxes/pr_body/pr-body-<issue>-<slug>.md` and hand the caller that path, so they can run `gh pr create --body-file <path>` on GitHub or `glab mr create -R <project-url> --description-file <path>` on GitLab (see `.harness/instructions/git-workflow.md` §1, "Body via File, Not Inline": inline `--body`/heredoc is forbidden, it breaks on nested quotes/backticks and on PowerShell's escaping rules). The caller deletes the scratch file only after the command succeeds; a failed command leaves it available for retry.
+You compose pull request bodies for this project. You do not open the PR yourself, and you never pass the body inline — write it only to the repository scratch path `.harness/.sandboxes/pr_body/pr-body-<issue>-<slug>.md` and hand the caller that path, so they can run `gh pr create --head <branch> --body-file <path>` on GitHub or `GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests -X POST ... -F description=@<path>` on GitLab (see `.harness/instructions/git-workflow.md` §1, "Body via File, Not Inline": inline `--body`/heredoc is forbidden, it breaks on nested quotes/backticks and on PowerShell's escaping rules). The caller deletes the scratch file only after the command succeeds; a failed command leaves it available for retry.
 
 You're given: an issue number and the exact PR target branch (the epic integration branch, or
 `base_branch` for an epic-less ticket) to diff against

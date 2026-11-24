@@ -11,6 +11,23 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <div class="ah-releases" markdown="1">
 
+## v2.0.1 — 24 November 2026 {.ah-release-title}
+
+<p class="ah-release-meta">Fixed: 6 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.1">Open on GitHub</a></p>
+
+<p class="ah-release-summary">Highlights: multiline QA commands · memory on the runtime store · Python import roots · auto path stops on not_closed · delivery with a read-only .git/config.</p>
+
+??? note "Full notes"
+
+    **Fixed**
+
+    - **[Fix-forward dead end on not_closed]:** `batch auto-decide` no longer retries a developer report whose only obstacle is carried items marked `not_closed` with a reason: the automatic path stops with `no-automatic-route`/`carried-items-not-closed`, and a human decides `override-warning` with a note, or `retry`. A developer-retry that creates no commit and marks at least one item `not_closed` now sends a completed report with an empty `commit_map`; such a report stays unclean. (#1265)
+    - **[Multiline QA stage command]:** `qa run` no longer refuses with `the QA stage record does not match the immutable evidence` when a stage command contains a newline, for example `bash -c` with a multiline script: the command log writes such a command as one line `$json "<command>"` and reads it back without loss. Single-line commands are written as before, so earlier QA artifacts verify unchanged. The mismatch error now names the number of blocks and stages and no longer suggests a useless rerun. (#1261)
+    - **[Memory on the runtime store]:** `harness memory build` and `harness memory rebuild` no longer fail with `memory ledger selector is invalid or unsupported` in a project with a runtime store: the version 4 `ledger.json` selector does not block indexing of file sources. The `ledger` and `qa_finding` types are not indexed in such a project, because `runtime.db` holds their records: the commands list them in `skipped_source_types` and on stderr, and `harness health` names them in `memory.index` and reports why the index cannot be built. (#1260)
+    - **[Python import roots]:** ChangeImpact and Repo Map link an import to a file in projects whose import root is not the repository root: the new optional key `repo_map_policy.python_source_roots` sets service and src-layout directories, for example `["api_gateway", "libs/*/src"]`. A name found in several roots gives no edge, and ChangeImpact records the reason `ambiguous-import`; `harness health` warns about a pattern that matches no directory. Without the key, existing edges do not change. (#1259)
+    - **[Missed tests without an import edge]:** The verification plan no longer stays `focused` with an empty selection when the graph did not link an import to the changed module: if the name of an unresolved import matches the end of the path of an affected module, ChangeImpact records the reason `unresolved-import`, and pytest widens to `full`. This changes the plans of existing projects without `python_source_roots` that have such imports; standard library names give no reason. (#1259)
+    - **[Delivery with a read-only git config]:** `/to-pull-requests` opens PRs and MRs in a sandbox that keeps `.git/config` read-only: it compares a branch without an upstream with the server through `git ls-remote`, opens a GitHub PR with an explicit `--head`, and creates a GitLab MR with `glab api projects/<project-id>/merge_requests -X POST`, because `glab mr create` fails writing that file. The QA gate and attribution hooks recognize this MR creation like `glab mr create`, and `harness health` reports a read-only `.git/config` in the new check `environment.git_config` and names this delivery path. (#1266)
+
 ## v2.0.0 — 20 November 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Breaking: 7 · Added: 82 · Changed: 33 · Fixed: 65</p>

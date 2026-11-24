@@ -20,7 +20,7 @@ Every publication surface uses the same rule: reject known assistant signatures 
 The execution logic includes:
 1. Safe JSON parsing (through Python) to extract the command being run from `tool_input.command`.
 2. Cutting out heredoc bodies: this is stdin, not command words. A marker stays in place of the operator, and the body is checked only if the operator stands inside a checked argument, for example `-m "$(cat <<'EOF' ... EOF)"` or `--body "$(cat <<'EOF' ... EOF)"`.
-3. Detection of the operation type from the command text without heredoc bodies: `git commit`, `git push`, `gh pr` and `glab mr` `create`/`new`/`edit`/`update`, `gh`/`glab issue` `create`/`new`/`edit`/`update`, comments `gh issue|pr comment`, notes `glab issue|mr note`, `glab api`.
+3. Detection of the operation type from the command text without heredoc bodies: `git commit`, `git push`, `gh pr` and `glab mr` `create`/`new`/`edit`/`update`, `gh`/`glab issue` `create`/`new`/`edit`/`update`, comments `gh issue|pr comment`, notes `glab issue|mr note`, `glab api`. An MR created through `glab api` on `…/merge_requests` counts as a PR publication, like `glab mr create`.
 4. When it detects these operations, the script uses the `shlex` module (Python) to parse the command arguments. For `git commit` it checks `-m`/`--message`, `--trailer`, and the file `-F`/`--file`. For each publishing command, a flag table defines which short and long flags carry text in exactly this CLI:
    - `gh pr create|new|edit`, `gh issue create|new|edit|comment`, `gh pr comment` — `-t`/`--title`, `-b`/`--body`, and the file `-F`/`--body-file`;
    - `glab mr create|new|edit|update`, `glab issue create|new|update` — `-t`/`--title`, `-d`/`--description`, and the file `--description-file`;

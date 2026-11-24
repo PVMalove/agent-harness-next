@@ -177,6 +177,7 @@ EN: dict[str, str] = {
     "Песочница Claude настроена неверно": "The Claude sandbox is misconfigured",
     "Кэш uv недоступен в песочнице Codex": "The uv cache is unavailable in the Codex sandbox",
     "Кэш uv недоступен в песочнице Claude": "The uv cache is unavailable in the Claude sandbox",
+    ".git/config закрыт на запись": ".git/config is read-only",
     "Длинные пути Windows выключены": "Windows long paths are off",
     "Путь к проекту слишком длинный": "The project path is too long",
     "Временный каталог pytest недоступен": "The pytest temporary directory is unavailable",
