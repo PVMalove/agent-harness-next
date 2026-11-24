@@ -7,7 +7,7 @@ disable-model-invocation: true
 Invoke only on an explicit request (`/to-guide`, or `$to-guide` in Codex). This is the `hitl`
 counterpart of `/implement` and `/fast-implement`: instead of an agent writing the code, the human
 gets a navigator's checklist. Coding, code review, `qa-gate`, and the PR stay with the human; the
-guide names the exact commands for them. Never edit production code, tests, or the ticket's scope.
+guide names the commands for them, with `/to-pull-requests` for the PR and the ticket closure. Never edit production code, tests, or the ticket's scope.
 On GitLab, every `glab` command takes `-R <project-url>` and every `glab api` call is written
 `GITLAB_HOST=<host> glab api projects/<project-id>/...`; the placeholders are defined in
 `.harness/instructions/issue-tracker.md` → GitLab → Conventions.
@@ -34,11 +34,10 @@ On GitLab, every `glab` command takes `-R <project-url>` and every `glab api` ca
 
 ## Write the guide
 
-5. Read `references/guide-template.md` and fill it. In its section 5 write only this project's
-   tracker commands, taken from `.harness/instructions/git-workflow.md` §2 steps 6–7, and fill in `<project-url>`, `<host>`, `<project-id>`, `<target-branch>`,
-   `<ID>`, `<title>` and `<slug>` with real values (`<title>` in single quotes, each apostrophe as
-   `'\''`, or `''` in PowerShell); only the PR/MR number stays a placeholder. Write the whole guide,
-   prompts included, in the `language` from `.harness/project.json` (default `ru`).
+5. Read `references/guide-template.md` and fill it. In its section 5 fill in `<ID>` and
+   `<target-branch>` with real values; the PR/MR and the ticket closure go through
+   `/to-pull-requests`, so the guide copies no tracker commands. Write the whole guide, prompts
+   included, in the `language` from `.harness/project.json` (default `ru`).
 6. Save it under `docs/tasks/` by `.harness/instructions/artifacts.md` (issue ID and slug), inside the epic's
    folder when the ticket has a parent epic. If the write fails, report it and return the guide in chat.
 
