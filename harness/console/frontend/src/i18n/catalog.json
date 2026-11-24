@@ -1,5 +1,6 @@
 {
   "en": {
+    ".git/config закрыт на запись": ".git/config is read-only",
     ".harness/project.json найден": ".harness/project.json found",
     "01 · Наблюдай": "01 · Observe",
     "01 · План и approve": "01 · Plan and approve",
@@ -2112,6 +2113,10 @@
       "en": "Branches, worktrees and integrity checks rely on git; without a suitable version the workflow does not work.",
       "ru": "Ветки, worktree и проверки целостности опираются на git; без нужной версии рабочий процесс не работает."
     },
+    "environment.git_config": {
+      "en": "If the sandbox keeps .git/config read-only, git push -u records no upstream and glab mr create opens no MR.",
+      "ru": "Если песочница закрыла .git/config, git push -u не записывает upstream, а glab mr create не создаёт MR."
+    },
     "environment.git_identity": {
       "en": "Without user.name and user.email commits fail or get the wrong author.",
       "ru": "Без user.name и user.email коммиты не создаются или получают чужое авторство."
@@ -2694,6 +2699,10 @@
     "environment.git": {
       "en": "Git binary",
       "ru": "Программа Git"
+    },
+    "environment.git_config": {
+      "en": "Writing .git/config",
+      "ru": "Запись в .git/config"
     },
     "environment.git_identity": {
       "en": "Git commit identity",

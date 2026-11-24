@@ -149,6 +149,7 @@ def test_registry_runs_without_crashing_even_with_a_lock_file_present(
         "environment.os",
         "environment.git",
         "environment.git_identity",
+        "environment.git_config",
         "environment.gitattributes",
         "environment.line_endings",
         "environment.python",

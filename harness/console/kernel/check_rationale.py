@@ -162,6 +162,10 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "Без UTF-8 вывода русский текст и символы статусов искажаются или вызывают ошибки кодировки.",
         "Without UTF-8 output Russian text and status symbols are garbled or raise encoding errors.",
     ),
+    "environment.git_config": (
+        "Если песочница закрыла .git/config, git push -u не записывает upstream, а glab mr create не создаёт MR.",
+        "If the sandbox keeps .git/config read-only, git push -u records no upstream and glab mr create opens no MR.",
+    ),
     "environment.codex_sandbox": (
         "Без записи в рабочую область и нужной сети sandbox Codex не даст агенту выполнить задачу.",
         "Without workspace write access and the needed network the Codex sandbox stops the agent from doing the task.",
@@ -343,6 +347,7 @@ TITLES: dict[str, tuple[str, str]] = {
     "environment.c_linker": ("C-компоновщик для Rust", "C linker for Rust"),
     "environment.runtime_socket_path": ("Путь сокета runtime", "Runtime socket path"),
     "environment.output_encoding": ("Кодировка вывода", "Output encoding"),
+    "environment.git_config": ("Запись в .git/config", "Writing .git/config"),
     "environment.codex_sandbox": ("Песочница Codex", "Codex sandbox"),
     "environment.claude_sandbox": ("Песочница Claude Code", "Claude Code sandbox"),
     "environment.codex_uv_cache": ("Кэш uv для Codex", "uv cache for Codex"),

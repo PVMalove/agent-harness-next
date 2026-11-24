@@ -182,6 +182,59 @@ def check_git_identity(context: HealthContext) -> CheckResult:
 # --- line endings ------------------------------------------------------------------------------
 
 
+_GIT_CONFIG_DELIVERY = (
+    "доставка это учитывает: ветку без upstream сверяйте с сервером через "
+    "`git ls-remote origin refs/heads/<ветка>`, PR на GitHub открывайте "
+    "`gh pr create --head <ветка>`, MR на GitLab — "
+    "`glab api projects/<project-id>/merge_requests -X POST` (/to-pull-requests, шаги 2 и 6). "
+    "Upstream можно записать вне песочницы: `git branch --set-upstream-to=origin/<ветка>`"
+)
+
+
+def check_git_config(context: HealthContext) -> CheckResult:
+    """Сообщить, может ли git записать `.git/config` основного репозитория (#1266).
+
+    Песочница может закрыть файл на запись или занять `config.lock` маской: тогда
+    `git push -u` не записывает upstream, а `glab mr create` падает до запроса к API.
+    Проверка только читает файловую систему и ничего не создаёт.
+    """
+    check_id = "environment.git_config"
+    result = _git(
+        context, "rev-parse", "--path-format=absolute", "--git-common-dir"
+    )
+    if result is None or result.returncode != 0 or not result.stdout.strip():
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="skipped",
+            message="git недоступен или каталог не является репозиторием: .git/config не проверен",
+        )
+    common = Path(result.stdout.strip())
+    config = common / "config"
+    lock = common / "config.lock"
+    if os.path.lexists(lock):
+        reason = f"занят {lock}"
+    elif not os.access(common, os.W_OK):
+        reason = f"каталог {common} только для чтения"
+    elif config.exists() and not os.access(config, os.W_OK):
+        reason = "файл только для чтения"
+    else:
+        return CheckResult(
+            id=check_id,
+            group=GROUP,
+            status="ok",
+            message=f"{config} доступен для записи: git push -u записывает upstream",
+        )
+    return CheckResult(
+        id=check_id,
+        group=GROUP,
+        status="warn",
+        message=f"{config} закрыт на запись ({reason}): git push -u не записывает "
+        "upstream, а glab mr create падает до создания MR",
+        fix=Fix(text=_GIT_CONFIG_DELIVERY),
+    )
+
+
 def check_gitattributes(context: HealthContext) -> CheckResult:
     """Проверить наличие файла .gitattributes для нормализации переводов строк."""
     if (context.repo / ".gitattributes").is_file():

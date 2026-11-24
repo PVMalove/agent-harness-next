@@ -62,6 +62,7 @@ REGISTRY: list[tuple[str, CheckFn]] = [
     ("environment.os", environment_checks.check_os),
     ("environment.git", environment_checks.check_git),
     ("environment.git_identity", environment_checks.check_git_identity),
+    ("environment.git_config", environment_checks.check_git_config),
     ("environment.gitattributes", environment_checks.check_gitattributes),
     ("environment.line_endings", environment_checks.check_line_endings),
     ("environment.python", environment_checks.check_python),
