@@ -102,6 +102,14 @@ policy is rejected: the plan cannot cover related tests at review/QA (`impact_no
 An ordinary plan selects related tests for retry/review; unknown impact widens selection to
 `full`, and QA receives `full`. An empty `focused` selection means `not_run`, not a passing run.
 
+Impact is also unknown when the import graph did not link an import to a file and the import may
+name a changed module. The `unresolved-import` reason means that the import name equals the end of
+the changed module's path, for example `from services.routes import …` when
+`routing_service/services/routes.py` changed. The `ambiguous-import` reason means that the name
+exists in several import roots and no file can be chosen. To let the graph build such edges and
+keep the plan `focused`, set the import roots in
+[`repo_map_policy.python_source_roots`](#context).
+
 **Ticket-diff selection.** With `ticket_diff_selection` enabled for `integration/*`, retry,
 review **and QA** plans select tests from `base..candidate` (`ticket-diff`), without widening
 to `full`. Added/modified Python tests and corresponding Rust test targets are included.
@@ -161,6 +169,7 @@ generated files and binary files. An empty allow-list does not remove those excl
 | `repo_map_policy.deny_paths` | Array of glob strings, default `[]`: additional path exclusions. |
 | `repo_map_policy.redact_paths` | Array of glob strings, default `[]`. The current filter excludes the entire matching path from the map, rather than just the file body. |
 | `repo_map_policy.redact_symbols` | Array of symbol-name glob strings, default `[]`: hides matching functions/classes from the map. |
+| `repo_map_policy.python_source_roots` | Array of directory glob patterns relative to the repository root, default `[]`: Python import roots, for example `["api_gateway", "libs/*/src"]`. A pattern is matched against a directory segment by segment, so `*` does not cross `/`. A file under a root gets its module name relative to the longest matching root and keeps its name from the repository root. An import is looked up in the importing file's root first, then in the other roots; a name found in several roots gives no edge. Without the key, module names are counted from the repository root only. `harness health` warns about a pattern that matches no directory. |
 | `repo_map_policy.max_files` | Integer ≥ 1, default `10000`: file-count limit. |
 | `repo_map_policy.max_file_bytes` | Integer ≥ 1, default `2000000`: file-processing size limit in bytes. |
 | `repo_map_policy.max_path_length` | Integer ≥ 1, default `4096`: maximum path length in characters. |

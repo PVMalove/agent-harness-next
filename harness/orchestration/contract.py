@@ -1059,6 +1059,7 @@ def _repo_map_policy_problems(config: Mapping[str, object]) -> list[str]:
         "deny_paths",
         "redact_paths",
         "redact_symbols",
+        "python_source_roots",
         "parser_bundle_registry_paths",
     }
     enum_values = {

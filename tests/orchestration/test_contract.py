@@ -581,6 +581,7 @@ class RepoMapPolicyProblemTests(unittest.TestCase):
                         "deny_paths": ["src/legacy/**"],
                         "redact_paths": ["src/private/**"],
                         "redact_symbols": ["customer_*"],
+                        "python_source_roots": ["api_gateway", "libs/*/src"],
                         "max_path_length": 4096,
                         "max_symbol_length": 256,
                         "max_signature_length": 2048,

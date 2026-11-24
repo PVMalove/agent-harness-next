@@ -529,6 +529,47 @@ def test_repo_map_resolves_relative_package_imports(
     } in result["edges"]
 
 
+def test_repo_map_ranks_the_importer_through_a_source_root_next_to_its_seed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = tmp_path / "project"
+    sources = {
+        "a_unrelated.py": "VALUE = 1\n",
+        "svc_a/services/x.py": "def f(): pass\n",
+        "svc_a/tests/unit/test_x.py": "from services.x import f\n",
+        "svc_b/services/x.py": "def f(): pass\n",
+    }
+    commit = _commit_files(repo, sources)
+    _fake_python_bundle(
+        monkeypatch,
+        {"svc_a/tests/unit/test_x.py": _facts(imports=[("services.x", 0, ["f"])])},
+    )
+    policy_path = tmp_path / "orchestration.json"
+    policy_path.write_text(
+        json.dumps({"repo_map_policy": {"python_source_roots": ["svc_a/", "svc_b"]}})
+    )
+    policy = repo_map.load_policy(policy_path, explicit=True)
+
+    result = json.loads(
+        repo_map.build_map(repo, commit, 4000, ["svc_a/services/x.py"], policy)
+    )
+
+    assert result["edges"] == [
+        {
+            "source": "svc_a/tests/unit/test_x.py",
+            "target": "svc_a/services/x.py",
+            "kind": "import",
+            "confidence": "high",
+        }
+    ]
+    assert [item["path"] for item in result["files"]] == [
+        "svc_a/services/x.py",
+        "svc_a/tests/unit/test_x.py",
+        "a_unrelated.py",
+        "svc_b/services/x.py",
+    ]
+
+
 def test_repo_map_ranks_normalized_seeds_and_definition_references(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

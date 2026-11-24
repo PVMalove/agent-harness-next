@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import fnmatch
 import re
+import sys
 import tomllib
 from collections import defaultdict, deque
 from collections.abc import Mapping, Sequence
@@ -19,7 +20,7 @@ from pathlib import Path, PurePosixPath
 from harness.repo_map.backend import BundleParserBackend, ParseOutcome, ParserBackend
 from harness.repo_map.bundle_worker import FileFacts
 from harness.repo_map.git_source import blob_contents, run_git, tracked_paths
-from harness.repo_map.graph import build_graph
+from harness.repo_map.graph import ImportGap, build_graph
 from harness.repo_map.policy import RepoMapPolicy, path_allowed
 
 # Причины `unknown`; вызывающий код ветвится по ним, поэтому это закрытый список.
@@ -33,6 +34,8 @@ UNKNOWN_DYNAMIC_IMPORT = "dynamic-import"
 UNKNOWN_OVER_THRESHOLD = "related-tests-over-threshold"
 UNKNOWN_GRAPH_DEGRADED = "graph-degraded"
 UNKNOWN_UNSEEN_IMPORTER = "unseen-importer"
+UNKNOWN_AMBIGUOUS_IMPORT = "ambiguous-import"
+UNKNOWN_UNRESOLVED_IMPORT = "unresolved-import"
 
 # Манифесты и конфиги сборки и проверок: их изменение влияет на каждый тест.
 _BUILD_CONFIG_NAMES = frozenset(
@@ -101,7 +104,8 @@ class _Graph:
     """Граф импортов одного коммита: обратные рёбра, факты и статусы разбора Python-файлов.
 
     `blind` — tracked-файлы Python, чьих импортов граф не видит: их скрывает политика Repo Map либо
-    парсер не вернул факты (`too_large`, ошибка разбора).
+    парсер не вернул факты (`too_large`, ошибка разбора). `gaps` — абсолютные импорты разобранных
+    файлов, для которых граф не построил ребро.
     """
 
     importers: dict[str, set[str]]
@@ -110,6 +114,7 @@ class _Graph:
     degraded: str | None = None
     blind: tuple[str, ...] = ()
     parsed: ParseOutcome | None = None
+    gaps: tuple[ImportGap, ...] = ()
 
 
 def is_test_path(path: str) -> bool:
@@ -159,7 +164,8 @@ def _graph(
     parsed = backend.parse(commit, paths)
     if not parsed.applied:
         return _Graph({}, {}, frozenset(), parsed.reason)
-    importers = _importers(parsed, policy)
+    gaps: list[ImportGap] = []
+    importers = _importers(parsed, policy, gaps)
     blind = sorted(
         {
             path
@@ -178,10 +184,15 @@ def _graph(
         frozenset(parsed.records),
         blind=tuple(blind),
         parsed=parsed,
+        gaps=tuple(gaps),
     )
 
 
-def _importers(parsed: ParseOutcome, policy: RepoMapPolicy) -> dict[str, set[str]]:
+def _importers(
+    parsed: ParseOutcome,
+    policy: RepoMapPolicy,
+    import_gaps: list[ImportGap] | None = None,
+) -> dict[str, set[str]]:
     """Обратные рёбра импорта: цель — файлы, которые её импортируют."""
     edges = build_graph(
         parsed.records,
@@ -189,6 +200,7 @@ def _importers(parsed: ParseOutcome, policy: RepoMapPolicy) -> dict[str, set[str
         parsed.diagnostics,
         policy,
         parsed.extension_grammars,
+        import_gaps,
     )
     importers: dict[str, set[str]] = defaultdict(set)
     for edge in edges:
@@ -279,6 +291,45 @@ def _unseen_importers(
                     UNKNOWN_UNSEEN_IMPORTER,
                     path,
                     f"not in the import graph and names {match.group(0)!r}",
+                )
+            )
+    return reasons
+
+
+def _import_gap_reasons(graph: _Graph, closure: set[str]) -> list[UnknownReason]:
+    """Импорты без ребра, которые могут называть модуль замыкания.
+
+    Неоднозначный импорт даёт `ambiguous-import`, если среди его кандидатов есть модуль замыкания.
+    Не найденный импорт даёт `unresolved-import`, если его dotted-имя — окончание пути модуля
+    замыкания: под каким-то корнем импорта это имя называет именно этот файл. Имя стандартной
+    библиотеки файл проекта не называет. В обоих случаях импортёр не попал в `related_tests`, и
+    вызывающий расширяет выбор до полного.
+    """
+    names: dict[str, str] = {}
+    for path in sorted(closure):
+        parts = path.removesuffix(".py").removesuffix("/__init__").split("/")
+        for start in range(len(parts)):
+            names.setdefault(".".join(parts[start:]), path)
+    reasons: list[UnknownReason] = []
+    for gap in graph.gaps:
+        source, module, targets = gap["source"], gap["module"], gap["targets"]
+        if source in closure:
+            continue
+        if targets:
+            if closure.intersection(targets):
+                reasons.append(
+                    UnknownReason(
+                        UNKNOWN_AMBIGUOUS_IMPORT,
+                        source,
+                        f"import {module!r} matches {', '.join(targets)}",
+                    )
+                )
+        elif module in names and module.split(".")[0] not in sys.stdlib_module_names:
+            reasons.append(
+                UnknownReason(
+                    UNKNOWN_UNRESOLVED_IMPORT,
+                    source,
+                    f"import {module!r} is not in the import graph and may name {names[module]}",
                 )
             )
     return reasons
@@ -423,6 +474,7 @@ def compute_change_impact(
             repo, candidate, graph, closure, effective_policy.timeout_seconds
         )
     )
+    unknown.extend(_import_gap_reasons(graph, closure))
     for path in sorted(closure):
         facts = graph.facts.get(path)
         if facts is not None and _uses_dynamic_import(facts):
