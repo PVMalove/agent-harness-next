@@ -2,6 +2,12 @@
 
 Изменения выпусков записываются в формате [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/) и версионируются по SemVer.
 
+## [Unreleased]
+
+### Fixed
+
+- **[Publish при pre-QA проверках]:** `dispatch create --purpose publish` больше не отказывает с `dispatch brief verification_commands must exactly match its project role configuration` на батче проекта с `assignment_plans` и непустым `pre_qa_commands`: проверка брифа допускает для полного QA gate тот же список, который замораживает `batch create` (`pre_qa_commands`, затем `verification_commands`), и оба места считают его одной функцией. Так же проходит QA-бриф без плана проверки. Бриф с другим списком команд по-прежнему получает отказ, а `dispatch preflight` теперь делает ту же сверку команд и отказывает в тех же случаях, что и `dispatch create`. Уже созданные батчи продолжают работу без правки ledger. (#1270)
+
 ## [2.0.1] - 2026-11-24
 
 ### Fixed
