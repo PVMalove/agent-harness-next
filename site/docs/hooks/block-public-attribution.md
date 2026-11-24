@@ -27,7 +27,7 @@
 Как хук проверяет команду:
 1. Python разбирает JSON и берёт команду из `tool_input.command`.
 2. Хук вырезает тела heredoc: это stdin, а не слова команды. На месте оператора остаётся маркер. Тело хук проверяет, только если оператор стоит внутри проверяемого аргумента, например `-m "$(cat <<'EOF' ... EOF)"` или `--body "$(cat <<'EOF' ... EOF)"`.
-3. По тексту команды без тел heredoc хук определяет операцию: `git commit`, `git push`, `gh pr` и `glab mr` `create`/`new`/`edit`/`update`, `gh`/`glab issue` `create`/`new`/`edit`/`update`, комментарии `gh issue|pr comment`, notes `glab issue|mr note`, `glab api`.
+3. По тексту команды без тел heredoc хук определяет операцию: `git commit`, `git push`, `gh pr` и `glab mr` `create`/`new`/`edit`/`update`, `gh`/`glab issue` `create`/`new`/`edit`/`update`, комментарии `gh issue|pr comment`, notes `glab issue|mr note`, `glab api`. Создание MR через `glab api` на `…/merge_requests` хук считает публикацией PR, как `glab mr create`.
 4. Аргументы найденной операции хук разбирает модулем `shlex` (Python). У `git commit` он проверяет `-m`/`--message`, `--trailer` и файл `-F`/`--file`. Для каждой команды публикации таблица флагов задаёт, какие короткие и длинные флаги несут текст именно в этом CLI:
    - `gh pr create|new|edit`, `gh issue create|new|edit|comment`, `gh pr comment`: `-t`/`--title`, `-b`/`--body` и файл `-F`/`--body-file`;
    - `glab mr create|new|edit|update`, `glab issue create|new|update`: `-t`/`--title`, `-d`/`--description` и файл `--description-file`;

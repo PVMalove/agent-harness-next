@@ -16,7 +16,12 @@ merged one to the merge checks, the ticket closure and the cleanup.
 
 1. The target branch comes from the ticket's `## Integration Branch` or the local ticket's
    `**Integration branch:**` line, otherwise it is `base_branch`.
-2. The branch must be clean, match `branch_pattern` and equal its upstream branch.
+2. The branch must be clean, match `branch_pattern` and equal its upstream branch. When a sandbox
+   keeps `.git/config` read-only, `git push -u` records no upstream; the skill then compares `HEAD`
+   with the SHA from `git ls-remote origin refs/heads/<branch>`. For the same reason a GitHub PR is
+   opened with an explicit `--head <branch>`, and a GitLab MR with
+   `glab api projects/<project-id>/merge_requests -X POST`, because `glab mr create` writes
+   `.git/config` before its API request.
 3. QA first, then confirmation. Without the backend-orchestration opt-in, and for `pipeline::fast`,
    the skill runs `/qa-gate`. In an opt-in project it validates the accepted QA evidence of the exact
    SHA and calls `integration next` per `references/integration-route.md`, part A, instead of

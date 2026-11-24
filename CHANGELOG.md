@@ -2,6 +2,12 @@
 
 Изменения выпусков записываются в формате [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/) и версионируются по SemVer.
 
+## [Unreleased]
+
+### Fixed
+
+- **[Доставка с закрытым конфигом git]:** `/to-pull-requests` открывает PR и MR в песочнице, где `.git/config` закрыт на запись: ветку без upstream навык сверяет с сервером через `git ls-remote`, PR на GitHub открывает с явным `--head`, а MR на GitLab создаёт запросом `glab api projects/<project-id>/merge_requests -X POST`, потому что `glab mr create` падает на записи конфига. Хуки QA gate и проверки атрибуции распознают такое создание MR так же, как `glab mr create`, а `harness health` в новой проверке `environment.git_config` сообщает о закрытом `.git/config` и называет этот путь доставки. (#1266)
+
 ## [2.0.1] - 2026-11-24
 
 ### Fixed
