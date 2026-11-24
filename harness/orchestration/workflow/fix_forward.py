@@ -444,13 +444,22 @@ class FixForwardHistory:
                     else snapshot
                 )
                 if planned:
-                    plan_rules.check_report(
-                        report,
-                        dispatch,
-                        _commits_between(repo, rebase_target or plan_base, resolved),
-                        partial(_candidate_commit, repo),
-                        previous=rebase.previous_commits(repo, dispatch),
+                    created = _commits_between(
+                        repo, rebase_target or plan_base, resolved
                     )
+                    # A retry that only records carried items not_closed maps no commit (#1265).
+                    if not (
+                        rebase_target is None
+                        and plan_rules.is_developer_retry(dispatch)
+                        and carried_items.closes_without_commits(report, created)
+                    ):
+                        plan_rules.check_report(
+                            report,
+                            dispatch,
+                            created,
+                            partial(_candidate_commit, repo),
+                            previous=rebase.previous_commits(repo, dispatch),
+                        )
                 if closure:
                     # An earlier attempt of the retry chain may have closed an item (issue #503).
                     pre_chain = (

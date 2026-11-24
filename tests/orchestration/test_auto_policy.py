@@ -714,6 +714,57 @@ class AutoDecisionTableTests(unittest.TestCase):
                     (choice.decision, choice.reason_category), ("retry", "requirements")
                 )
 
+    def test_carried_items_left_not_closed_stop_instead_of_a_retry(self) -> None:
+        """Issue #1265: a retry cannot close what the developer reasoned code does not close."""
+        retry: JsonObject = {
+            "role": "developer",
+            "purpose": "work",
+            "carried_items": {
+                "review": [
+                    {"item_id": item_id, "source": {}, "summary": item_id}
+                    for item_id in ("review-finding-1", "review-finding-2")
+                ]
+            },
+        }
+        closure = [
+            {"item_id": "review-finding-1", "commits": ["a" * 40]},
+            {"item_id": "review-finding-2", "not_closed": "history below the snapshot"},
+        ]
+        report = _clean("developer", carried_item_closure=closure)
+
+        stop = auto_policy.not_closed_stop(
+            "developer", report, retry, scope_warnings=[], block_bypass=False
+        )
+
+        assert stop is not None
+        self.assertEqual(
+            (stop.category, stop.reason),
+            ("no-automatic-route", "carried-items-not-closed"),
+        )
+        self.assertEqual(
+            stop.evidence["not_closed"],
+            {"review-finding-2": "history below the snapshot"},
+        )
+        for name, other, scope in (
+            ("failed check", {"checks_run": [{"result": "fail"}]}, []),
+            ("out of scope", {}, ["services/b.py"]),
+            (
+                "not covered",
+                {"dod_coverage": [{"dod_item": 1, "not_covered": "out of time"}]},
+                [],
+            ),
+        ):
+            with self.subTest(case=name):
+                self.assertIsNone(
+                    auto_policy.not_closed_stop(
+                        "developer",
+                        {**report, **other},
+                        retry,
+                        scope_warnings=scope,
+                        block_bypass=False,
+                    )
+                )
+
     def test_recorded_context_pressure_names_its_category(self) -> None:
         blocked = _clean(
             "developer",

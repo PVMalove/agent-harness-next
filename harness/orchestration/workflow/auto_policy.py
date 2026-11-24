@@ -194,6 +194,9 @@ def inputs_from(args: argparse.Namespace) -> Inputs:
     )
 
 
+NOT_CLOSED_OBSTACLE = "carried items are not closed"
+
+
 def _own_incomplete(stage: str, report: JsonObject) -> list[JsonObject]:
     return [
         item
@@ -230,7 +233,7 @@ def accept_obstacles(
     if plan_rules.not_covered(report):
         obstacles.append("definition-of-done items are not covered")
     if carried_items.carried_gap(report, dispatch):
-        obstacles.append("carried items are not closed")
+        obstacles.append(NOT_CLOSED_OBSTACLE)
     if scope_warnings:
         obstacles.append("files changed outside the approved scope")
     review = report.get("review")
@@ -347,6 +350,49 @@ def category(
         )
     return Choice(
         "retry", None, False, False, f"{found}; the structured report data routes it"
+    )
+
+
+def not_closed_stop(
+    stage: str,
+    report: JsonObject,
+    dispatch: JsonObject,
+    *,
+    scope_warnings: list[str],
+    block_bypass: bool,
+    auto_retry_min_severity: str = "info",
+) -> Stop | None:
+    """The stop for a developer-retry report whose only obstacle is the carried items it records
+    as not_closed with a reason (no I/O, issue #1265).
+
+    A retry cannot close an item the developer reasoned code does not close, so it would only
+    spend the budget; a human decides override-warning with a note, or retry.
+    """
+    if stage != "developer":
+        return None
+    gap = carried_items.carried_gap(report, dispatch)
+    reasons = carried_items.not_closed_reasons(report)
+    if not gap or not set(gap) <= set(reasons):
+        return None
+    obstacles = accept_obstacles(
+        stage,
+        report,
+        dispatch,
+        scope_warnings=scope_warnings,
+        block_bypass=block_bypass,
+        auto_retry_min_severity=auto_retry_min_severity,
+    )
+    if obstacles != [NOT_CLOSED_OBSTACLE]:
+        return None
+    return Stop(
+        "no-automatic-route",
+        "carried-items-not-closed",
+        {
+            "carried_items_gap": gap,
+            "not_closed": {item_id: reasons[item_id] for item_id in gap},
+            "remedy": "a human reads the reasons, then runs batch decide with "
+            "--decision override-warning and a --note, or --decision retry",
+        },
     )
 
 
@@ -794,6 +840,17 @@ def resolve(
         if report.get("role") != "architect"
         else []
     )
+    auto_retry_min_severity = _auto_retry_min_severity(config, batch)
+    held = not_closed_stop(
+        stage,
+        report,
+        dispatch,
+        scope_warnings=scope,
+        block_bypass=inputs.block_bypass,
+        auto_retry_min_severity=auto_retry_min_severity,
+    )
+    if held is not None:
+        return Resolution(stop=held)
     try:
         current: str | None = _latest_developer_candidate(repo, root, batch)
     except CoordinatorError:
@@ -811,7 +868,7 @@ def resolve(
             and item.get("level") == "critical"
             for item in batch.get("context_pressure", [])
         ),
-        auto_retry_min_severity=_auto_retry_min_severity(config, batch),
+        auto_retry_min_severity=auto_retry_min_severity,
     )
     fields: JsonObject = {
         "decision": choice.decision,

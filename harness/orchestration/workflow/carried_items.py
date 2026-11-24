@@ -708,6 +708,23 @@ def carried_gap(report: JsonObject, dispatch: JsonObject) -> list[str]:
     return [row["item_id"] for row in rows if row["status"] in {"open", "omitted"}]
 
 
+def not_closed_reasons(report: JsonObject) -> dict[str, str]:
+    """The carried items a developer-retry report records as not_closed, with their reasons."""
+    return {
+        item_id: str(record["not_closed"])
+        for item_id, record in _closure(report).items()
+        if "not_closed" in record
+    }
+
+
+def closes_without_commits(report: JsonObject, created: list[str]) -> bool:
+    """Whether a developer-retry report created no commit only to record carried items not_closed
+    (issue #1265): its empty commit_map is valid, and the not_closed gap keeps it unclean."""
+    return (
+        not created and not report.get("commit_map") and bool(not_closed_reasons(report))
+    )
+
+
 def owes_closure(dispatch: JsonObject) -> bool:
     """Whether a brief is a developer-retry that carried items, so its report maps their closure."""
     return (

@@ -12829,6 +12829,75 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         self.assertEqual(decision["carried_items_gap"], ["review-finding-1"])
         self.assertEqual(decided["next_action"], "risk-assessment")
 
+    def _second_retry_brief(self) -> tuple[str, JsonObject]:
+        """The second developer-retry brief of a fix-forward chain (issue #1265): the first retry
+        closed the coordinator finding with one commit, left the review finding not_closed, and a
+        human retried it. Returns that commit and the brief."""
+        self._patch_config(retry_policy={"max_developer_retries": 2})
+        _, brief = self._fix_forward_brief()
+        self._start(brief["dispatch_id"])
+        fix, report = self._fix_report(brief)
+        report["carried_item_closure"] = [
+            {"item_id": "coordinator-finding-1", "commits": [fix]},
+            {"item_id": "review-finding-1", "not_closed": "history below the snapshot"},
+        ]
+        self._submit(brief["dispatch_id"], report)
+        self._decide(self.batch_id, "retry", reason_category="requirements")
+        again = self._dispatch(self.batch_id, "developer")["brief"]
+        self.assertEqual(again["snapshot_commit"], fix)
+        self._start(again["dispatch_id"])
+        return fix, again
+
+    def _no_commit_report(self, brief: JsonObject, closure: list[JsonObject]) -> JsonObject:
+        """A developer-retry report on the brief's snapshot: the retry created no commit."""
+        head = brief["snapshot_commit"]
+        base = self._batch_record(self.batch_id)["base_commit"]
+        return self._developer_report(
+            brief,
+            head,
+            git_utils._changed_files_between(self.repo, base, head),
+            commit_map=[],
+            carried_item_closure=closure,
+        )
+
+    def test_a_retry_without_commits_may_record_carried_items_not_closed(
+        self,
+    ) -> None:
+        """Issue #1265: with nothing to commit, the report maps no commit and stays unclean."""
+        fix, brief = self._second_retry_brief()
+        reason = "the finding needs a product decision"
+        closure: list[JsonObject] = [
+            {"item_id": "coordinator-finding-1", "commits": [fix]},
+            {"item_id": "review-finding-1", "not_closed": reason},
+        ]
+
+        submitted = self._submit(
+            brief["dispatch_id"], self._no_commit_report(brief, closure)
+        )
+
+        self.assertEqual(submitted["state"], "reported")
+        self.assertEqual(self._packet()["carried_items_gap"], ["review-finding-1"])
+        self.assertIsNone(self._pending_auto_policy())
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "are not closed"):
+            self._decide(self.batch_id, "accept")
+
+    def test_a_retry_without_commits_or_not_closed_items_still_needs_a_commit_map(
+        self,
+    ) -> None:
+        fix, brief = self._second_retry_brief()
+        closure: list[JsonObject] = [
+            {"item_id": item_id, "commits": [fix]} for item_id in self.RETRY_ITEMS
+        ]
+
+        with self.assertRaises(coordinator.CoordinatorError) as refused:
+            self._submit(brief["dispatch_id"], self._no_commit_report(brief, closure))
+
+        self.assertIn("requires commit_map", refused.exception.message)
+        self.assertEqual(
+            refused.exception.remedy,
+            "map every commit created after snapshot_commit to one distinct commit_plan entry",
+        )
+
     def test_a_retry_that_rewrites_the_snapshot_history_is_refused(self) -> None:
         for rewrite in ("amend", "reset"):
             with self.subTest(rewrite=rewrite):
@@ -16974,6 +17043,73 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
 
         self._assert_stopped(
             result, "budget-exhausted", "retry_policy.max_developer_retries"
+        )
+
+    def test_carried_items_left_not_closed_stop_the_automatic_path(self) -> None:
+        """Issue #1265: a developer-retry that reasons a carried item is not closable by code is
+        not retried; the path stops, and a human overrides it with a note."""
+        developer = self._auto_developer_brief()
+        candidate, changed = self._developer_commit("x")
+        self._submit(
+            developer["dispatch_id"],
+            self._developer_report(
+                developer, candidate, changed, risk_triggers=["transactions"]
+            ),
+        )
+        self.assertEqual(self._auto_decide()["next_action"], "risk-assessment")
+        self._assess(self.batch_id, candidate, changed)
+        review = self._auto_dispatch("code-review", candidate=candidate)
+        self._start(review["dispatch_id"], checkout=self.worktree)
+        self._submit(
+            review["dispatch_id"],
+            self._base_report(
+                review,
+                "code-review",
+                review={
+                    "candidate_commit": candidate,
+                    "scope": review["review_scope"],
+                    **self._axes(("clean", []), ("warning", [dict(self.SPEC_WARNING)])),
+                },
+            ),
+        )
+        self.assertEqual(self._auto_decide()["route"], "fix-forward")
+        retry = self._auto_dispatch("developer")
+        self._start(retry["dispatch_id"])
+        reason = "the commit boundary lies below snapshot_commit"
+        fix = self._commit_file("services/x.py", "fix: test the marker")
+        base = self._batch_record(self.batch_id)["base_commit"]
+        self._submit(
+            retry["dispatch_id"],
+            self._developer_report(
+                retry,
+                fix,
+                git_utils._changed_files_between(self.repo, base, fix),
+                commit_map=self._commit_map([(fix, retry["commit_plan"][0])]),
+                carried_item_closure=[
+                    {"item_id": "review-finding-1", "not_closed": reason}
+                ],
+            ),
+        )
+        spent = decisions._developer_retry_count(self._batch_record(self.batch_id))
+
+        result = self._auto_decide()
+
+        self._assert_stopped(result, "no-automatic-route", "carried-items-not-closed")
+        stored = self._batch_record(self.batch_id)
+        self.assertEqual(
+            stored["auto_stop"]["evidence"]["not_closed"], {"review-finding-1": reason}
+        )
+        self.assertNotIn("decision", stored["dispatches"][-1])
+        self.assertEqual(decisions._developer_retry_count(stored), spent)
+        coordinator.resume_stopped_batch(
+            self._args(batch=self.batch_id, note="read the reasons", **self._approval())
+        )
+        decided = self._decide(
+            self.batch_id, "override-warning", note="the boundary is accepted as is"
+        )
+        self.assertEqual(
+            decided["coordinator_decisions"][-1]["carried_items_gap"],
+            ["review-finding-1"],
         )
 
     @file_ledger_source
