@@ -28,7 +28,7 @@ from harness.orchestration import (
 from harness.orchestration.core.utils import JsonObject
 from harness.repo_map import change_impact
 from tests.orchestration import test_coordinator as coordinator_tests
-from tests.orchestration.legacy_state import runs_on_file_ledger
+from tests.orchestration.legacy_state import file_ledger_source, runs_on_file_ledger
 from tests.repo_map.test_change_impact import RegexBackend
 
 POLICY: JsonObject = {
@@ -573,6 +573,7 @@ class PublishUnderPreQaChecksTests(TicketDiffFixture):
                 outcomes.append(exc.message)
         return outcomes[0], outcomes[1]
 
+    @file_ledger_source
     def test_publish_after_a_planned_qa_takes_the_gate_frozen_with_the_pre_qa_checks(
         self,
     ) -> None:
@@ -584,6 +585,7 @@ class PublishUnderPreQaChecksTests(TicketDiffFixture):
 
         self.assertEqual(brief["verification_commands"], ["true pre-qa", "true"])
 
+    @file_ledger_source
     def test_publish_preflight_refuses_exactly_where_publish_create_does(
         self,
     ) -> None:
@@ -605,6 +607,7 @@ class PublishUnderPreQaChecksTests(TicketDiffFixture):
         assert isinstance(preview, dict) and isinstance(brief, dict)
         self.assertEqual(preview["mandatory_checks"], brief["verification_commands"])
 
+    @file_ledger_source
     def test_publish_refuses_a_brief_with_other_commands(self) -> None:
         batch_id, candidate = self._qa_accepted_under_pre_qa_checks()
         brief = self.fx._dispatch(

@@ -5230,6 +5230,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             )
         self.assertEqual(qa["access"], "read-only")
 
+    @file_ledger_source
     def test_qa_and_publish_without_a_plan_take_the_gate_frozen_with_the_pre_qa_checks(
         self,
     ) -> None:
