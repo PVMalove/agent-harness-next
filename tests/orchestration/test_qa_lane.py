@@ -1879,5 +1879,51 @@ class QaLaneRunTests(QaLaneTestCase):
             )
 
 
+class StageVerificationCommandLogTests(unittest.TestCase):
+    """The stage record is proved against the command blocks of the artifact text."""
+
+    MULTILINE = "bash -c 'set -u\nexit 0' ticket-diff-tests"
+
+    @staticmethod
+    def _verify(stages: list[tuple[str, int]], artifact: str) -> None:
+        record = {
+            "stages": [
+                {"stage": "gate", "command": command, "exit_code": code}
+                for command, code in stages
+            ]
+        }
+        checksum = hashlib.sha256(artifact.encode("utf-8")).hexdigest()
+        qa_lane._verify_stages_against_artifact(
+            record, Path("unused.log"), checksum, artifact
+        )
+
+    def test_a_multiline_stage_command_matches_its_block(self) -> None:
+        stages = [("make check_all", 0), (self.MULTILINE, 1)]
+
+        self._verify(
+            stages,
+            "".join(format_command_log(command, code, "out") for command, code in stages),
+        )
+
+    def test_an_artifact_of_the_earlier_single_line_format_still_matches(self) -> None:
+        self._verify(
+            [("make check_all", 0), ("make lint", 2)],
+            "$ make check_all\nexit_code=0\nok\n$ make lint\nexit_code=2\nE1\n",
+        )
+
+    def test_a_mismatch_names_the_difference_and_does_not_suggest_a_rerun(self) -> None:
+        with self.assertRaises(CoordinatorError) as caught:
+            self._verify(
+                [("make check_all", 0), (self.MULTILINE, 0)],
+                format_command_log("make check_all", 0, "ok"),
+            )
+
+        self.assertIn("does not match the immutable evidence", caught.exception.message)
+        self.assertIn("1 command block", caught.exception.message)
+        self.assertIn("2 stages", caught.exception.message)
+        self.assertIn("gives the same result", caught.exception.remedy)
+        self.assertNotIn("run the QA runner again", caught.exception.remedy)
+
+
 if __name__ == "__main__":
     unittest.main()

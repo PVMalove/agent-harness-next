@@ -316,6 +316,14 @@ and `redact_rules`, `min_similarity: 0`, `top_k: 5`, and `max_tokens: 1000`. Thi
 not schema `default` values. If the object is present, all six fields are required. Memory is active
 only with `memory.enabled: true` and non-empty `source_types` and `allow_paths` lists.
 
+In a project with the runtime store (the `.harness/orchestration/state/ledger.json` selector has
+version 4), `runtime.db` holds the orchestration records. The `ledger` and `qa_finding` types are
+therefore not indexed, and `completion_report` comes only from the tracker snapshot. Every other
+source is indexed as usual. `harness memory build` and `harness memory rebuild` list the skipped
+types in the `skipped_source_types` field and on stderr, and `harness health` names them in the
+`memory.index` check. If the selector is damaged or has an unsupported version, `memory.index`
+states why the index cannot be built.
+
 ## Complete example
 
 This complete example uses Russian report language, a local tracker, and a unittest runner.

@@ -896,9 +896,24 @@ def _verify_stages_against_artifact(
         for stage in stages["stages"]
     ]
     if logged != recorded:
+        differing = next(
+            (
+                position
+                for position, (block, stage) in enumerate(zip(logged, recorded), 1)
+                if block != stage
+            ),
+            min(len(logged), len(recorded)) + 1,
+        )
         raise CoordinatorError(
-            "the QA stage record does not match the immutable evidence",
-            remedy="the stage commands and exit codes must equal the artifact's command blocks; run the QA runner again",
+            "the QA stage record does not match the immutable evidence: the artifact has "
+            f"{len(logged)} command block{'' if len(logged) == 1 else 's'}, the record has "
+            f"{len(recorded)} stage{'' if len(recorded) == 1 else 's'}, and they first differ "
+            f"at position {differing}",
+            # The checksum above already matched, so the evidence did not change after the write.
+            remedy="a repeated QA run gives the same result, because the artifact and the record "
+            "come from one run. Check whether the output of a stage command imitates a command "
+            "block (a `$ <command>` line followed by `exit_code=<code>`); otherwise report the "
+            "stage command at that position as a harness defect",
         )
 
 

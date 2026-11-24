@@ -15,6 +15,11 @@ from .policy import Policy
 
 STATE = ".harness/orchestration/state"
 SELECTOR = STATE + "/ledger.json"
+# Selector versions: 3 names a file-ledger generation, 4 marks the runtime-store cutover
+# (ADR 0036).
+FILE_LEDGER_SELECTOR_VERSION = 3
+RUNTIME_STORE_SELECTOR_VERSION = 4
+SELECTOR_VERSIONS = (FILE_LEDGER_SELECTOR_VERSION, RUNTIME_STORE_SELECTOR_VERSION)
 RECORD_KINDS = {"batches", "dispatches", "dispatch-status"}
 MAX_RETAINED_BYTES = 16 * 1024
 
@@ -64,12 +69,20 @@ def classify(relative: str) -> str:
 
 
 def selected_generation(repo: Path) -> str:
-    """Validate only the selector, with no migrations, writes or graph traversal."""
+    """The selected file generation, or "" when no file generation holds the records."""
+    return selected_ledger(repo)[0]
+
+
+def selected_ledger(repo: Path) -> tuple[str, bool]:
+    """Validate only the selector, with no migrations, writes or graph traversal.
+
+    Returns the selected file generation and whether the runtime store is the authority.
+    """
     from .sources import raw_bytes, safe_source
 
     path = safe_source(repo, SELECTOR)
     if not path.exists():
-        return ""
+        return "", False
     try:
         value = json.loads(raw_bytes(repo, SELECTOR))
     except (ValueError, UnicodeDecodeError):
@@ -78,16 +91,19 @@ def selected_generation(repo: Path) -> str:
         not isinstance(value, dict)
         or set(value) != {"version", "generation", "selected_at"}
         or type(value["version"]) is not int
-        or value["version"] != 3
+        or value["version"] not in SELECTOR_VERSIONS
         or not isinstance(value["selected_at"], str)
         or not isinstance(value["generation"], str)
         or re.fullmatch(r"generation-[A-Za-z0-9_-]+", value["generation"]) is None
     ):
         raise ValueError("memory ledger selector is invalid or unsupported")
+    if value["version"] == RUNTIME_STORE_SELECTOR_VERSION:
+        # The runtime store keeps operational records in runtime.db: no file generation to read.
+        return "", True
     relative = STATE + "/generations/" + value["generation"]
     if not safe_source(repo, relative).is_dir():
         raise ValueError("memory selected ledger generation is missing")
-    return relative
+    return relative, False
 
 
 def scalar(value: object, default: str = "") -> str:

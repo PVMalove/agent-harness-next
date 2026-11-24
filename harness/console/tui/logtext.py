@@ -56,7 +56,7 @@ def _line(out: Text, line: str) -> None:
             position = counter.end()
         out.append(line[position:], style="bold")
         return
-    if line.startswith("$ "):
+    if line.startswith(("$ ", "$json ")):
         out.append(line, style=f"bold {palette['secondary']}")
     elif line.startswith("  -> "):
         out.append(line, style=palette["secondary"])

@@ -9,7 +9,14 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from .adapters import STATE, classify, project_json, sanitized, selected_generation
+from .adapters import (
+    STATE,
+    classify,
+    project_json,
+    sanitized,
+    selected_generation,
+    selected_ledger,
+)
 from .policy import Policy
 
 MAX_SOURCE_BYTES = 1024 * 1024
@@ -31,6 +38,8 @@ EXCLUDED = {
     "cache",
 }
 STATE_SOURCE_TYPES = {"ledger", "qa_finding", "completion_report"}
+# Records of these types have no file form once the runtime store is the authority.
+RUNTIME_STORE_SOURCE_TYPES = {"ledger", "qa_finding"}
 
 
 @dataclass(frozen=True)
@@ -250,6 +259,18 @@ def matches(relative: str, patterns: tuple[str, ...]) -> bool:
         )
 
     return any(match(parts, pattern.split("/")) for pattern in patterns)
+
+
+def skipped_source_types(repo: Path, policy: Policy) -> list[str]:
+    """Selected source types that the runtime store keeps in runtime.db, out of the corpus.
+
+    Validates the selector exactly when a build of this policy would read it.
+    """
+    if not (policy.active and STATE_SOURCE_TYPES & set(policy.source_types)):
+        return []
+    if not selected_ledger(repo)[1]:
+        return []
+    return sorted(RUNTIME_STORE_SOURCE_TYPES & set(policy.source_types))
 
 
 def allowed_paths(repo: Path, policy: Policy) -> list[str]:
