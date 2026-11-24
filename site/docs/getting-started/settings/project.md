@@ -314,6 +314,14 @@ hooks берут самый строгий профиль из базового 
 а не `default` схемы. Если объект указан, нужны все шесть полей. Память работает, только если
 `memory.enabled: true`, а списки `source_types` и `allow_paths` не пусты.
 
+В проекте с runtime store (селектор `.harness/orchestration/state/ledger.json` версии 4) записи
+оркестрации хранит `runtime.db`, поэтому типы `ledger` и `qa_finding` не индексируются, а
+`completion_report` берётся только из снимка трекера. Остальные источники индексируются как
+обычно. `harness memory build` и `harness memory rebuild` перечисляют пропущенные типы в поле
+`skipped_source_types` и в stderr, а `harness health` называет их в проверке `memory.index`. Если
+селектор повреждён или его версия не поддерживается, `memory.index` сообщает причину, по которой
+индекс нельзя построить.
+
 ## Полный пример
 
 В примере русский язык отчётов, локальный трекер и runner unittest. Необязательных build и
