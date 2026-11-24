@@ -388,6 +388,40 @@ def test_command_log_round_trips_between_writer_and_reader() -> None:
     assert parse_command_log(log.splitlines()) == [("make test", 0), ("make lint", 2)]
 
 
+def test_command_log_keeps_a_multiline_command_as_one_block() -> None:
+    """A command with a line break is one block and comes back as the string it was."""
+    import shlex
+
+    from harness.gate_runner.gate_runner import format_command_log, parse_command_log
+
+    commands = [
+        "make check_all",
+        shlex.join(["bash", "-c", "set -u\nexit 0", "ticket-diff-tests"]),
+        "printf 'a\r\nb'\n",
+        "echo one two",
+    ]
+    log = "".join(format_command_log(command, 0, "ok") for command in commands)
+
+    assert parse_command_log(log.splitlines()) == [(command, 0) for command in commands]
+
+
+def test_command_log_keeps_the_format_of_a_single_line_command() -> None:
+    """A one-line command is written verbatim, and a log of the earlier format reads the same."""
+    from harness.gate_runner.gate_runner import format_command_log, parse_command_log
+
+    # A backslash followed by `n` is two characters of one line, not a line break.
+    literal = r"printf 'a\nb' \"quoted\""
+    earlier = f"$ make check_all\nexit_code=0\nok\n$ {literal}\nexit_code=3\nE1\n"
+
+    assert format_command_log("make check_all", 0, "ok") + format_command_log(
+        literal, 3, "E1"
+    ) == (earlier)
+    assert parse_command_log(earlier.splitlines()) == [
+        ("make check_all", 0),
+        (literal, 3),
+    ]
+
+
 def _committed_repo(root: Path) -> tuple[Path, str]:
     repo = root / "repo"
     repo.mkdir()
