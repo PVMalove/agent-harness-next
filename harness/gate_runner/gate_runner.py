@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shlex
@@ -395,22 +396,47 @@ class EvidenceBundle:
 
 
 _LOG_COMMAND = re.compile(r"^\$ (.*)$")
+# A command with a line break takes one line too: a JSON string after this marker. A one-line
+# command stays verbatim after `$ `, so a log of the earlier format reads the same.
+_LOG_ENCODED_COMMAND = re.compile(r"^\$json (.*)$")
 _LOG_EXIT = re.compile(r"^exit_code=(-?\d+)$")
+
+
+def _command_line(command: str) -> str:
+    """Строка команды в блоке: дословно либо JSON-строкой, если в команде есть перевод строки."""
+    if command.splitlines() in ([], [command]):
+        return f"$ {command}"
+    return f"$json {json.dumps(command)}"
+
+
+def _logged_command(line: str) -> str | None:
+    """Команда из строки блока в исходном виде или ``None``, если строка не начинает блок."""
+    verbatim = _LOG_COMMAND.match(line)
+    if verbatim is not None:
+        return verbatim.group(1)
+    encoded = _LOG_ENCODED_COMMAND.match(line)
+    if encoded is None:
+        return None
+    try:
+        command = json.loads(encoded.group(1))
+    except ValueError:
+        return None
+    return command if isinstance(command, str) else None
 
 
 def format_command_log(command: str, returncode: int, output: str) -> str:
     """Сформировать блок команды в артефакте QA: $ <команда>, exit_code=<код> и вывод."""
-    return f"$ {command}\nexit_code={returncode}\n{output}\n"
+    return f"{_command_line(command)}\nexit_code={returncode}\n{output}\n"
 
 
 def parse_command_log(lines: list[str]) -> list[tuple[str, int]]:
     """Извлечь пары (команда, код возврата) для каждого блока из лога в порядке записи."""
     commands: list[tuple[str, int]] = []
     for index, line in enumerate(lines[:-1]):
-        command = _LOG_COMMAND.match(line)
-        exit_code = _LOG_EXIT.match(lines[index + 1]) if command else None
+        command = _logged_command(line)
+        exit_code = _LOG_EXIT.match(lines[index + 1]) if command is not None else None
         if command is not None and exit_code is not None:
-            commands.append((command.group(1), int(exit_code.group(1))))
+            commands.append((command, int(exit_code.group(1))))
     return commands
 
 
