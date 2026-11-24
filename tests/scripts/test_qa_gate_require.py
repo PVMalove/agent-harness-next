@@ -90,10 +90,12 @@ class Project:
             },
         )
 
-    def require(self, branch: str = BRANCH) -> subprocess.CompletedProcess[str]:
+    def require(
+        self, branch: str = BRANCH, command: str | None = None
+    ) -> subprocess.CompletedProcess[str]:
         """Run the hook as a PR-creating Bash call; the linked worktree has no project dir."""
         env = {k: v for k, v in os.environ.items() if k != "CLAUDE_PROJECT_DIR"}
-        payload = {"tool_input": {"command": f"gh pr create --head {branch}"}}
+        payload = {"tool_input": {"command": command or f"gh pr create --head {branch}"}}
         return subprocess.run(
             [sys.executable, str(HOOK), "require"],
             cwd=self.linked,
@@ -196,6 +198,25 @@ def test_evidence_that_is_not_accepted_green_for_head_keeps_blocking(
     result = project.require()
     assert result.returncode == 2
     assert "qa-gate" in result.stderr
+
+
+def test_a_merge_request_opened_through_the_api_meets_the_same_gate(
+    project: Project,
+) -> None:
+    """Issue #1266: the `glab api` POST that opens an MR resolves its checkout by source_branch."""
+    create = (
+        "GITLAB_HOST=gitlab.example.invalid glab api projects/7/merge_requests -X POST "
+        f"-f source_branch={BRANCH} -f target_branch=main -F description=@body.md"
+    )
+    assert project.require(command=create).returncode == 0
+    assert project.argv()[project.argv().index("--branch") + 1] == BRANCH
+
+    project.answer(code=1)
+    refused = project.require(command=create)
+    assert refused.returncode == 2
+    assert "qa-gate" in refused.stderr
+    note = "glab api projects/7/merge_requests/42/notes -F body=@pr-comment-7-demo.md"
+    assert project.require(command=note).returncode == 0
 
 
 def test_a_dirty_tree_keeps_blocking_even_with_accepted_evidence(

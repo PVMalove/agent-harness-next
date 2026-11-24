@@ -130,11 +130,24 @@ STREAM_NAMES = frozenset({"stdin", "stdout", "stderr"})
 PATTERN_SPLIT = re.compile(r"(?:\$?['\"]|[\s();&|<>=,\\`])+")
 # An extglob operator: before the split it becomes `*(`, a pattern that names any name.
 EXTGLOB = re.compile(r"[?*+@!]\(")
-CREATE_TEXT = re.compile(r"\bgh\s+pr\s+(?:create|new)\b|\bglab\s+mr\s+(?:create|new)\b")
+# `glab api` creates a merge request by a POST to `projects/<id>/merge_requests` (#1266): an
+# explicit POST method, or a field without another method (glab then defaults to POST).
+API_CREATE_TEXT = (
+    r"\bglab\s+api\b(?=[^\n]*?/merge_requests(?![/\w-]))"
+    r"(?![^\n]*?(?:\s-X\s*|--method[=\s]+)(?i:get|put|patch|delete|head)\b)"
+    r"(?=[^\n]*?(?:\s-X\s*(?i:post)\b|--method[=\s]+(?i:post)\b"
+    r"|\s(?:-[fF]|--field|--raw-field)[\s=]))"
+)
+API_CREATE = re.compile(API_CREATE_TEXT)
+CREATE_TEXT = re.compile(
+    r"\bgh\s+pr\s+(?:create|new)\b|\bglab\s+mr\s+(?:create|new)\b|" + API_CREATE_TEXT
+)
 # The only create text the QA gate matched before #443.
 LEGACY_CREATE = re.compile(r"\bgh\s+pr\s+create\b")
 # A create fragment that tokens cannot decide may name its branch with one of these flags.
-HEAD_OPTION_TEXT = re.compile(r"--head|--source-branch|(?<![^\s'\"])-[A-Za-z]*[sH]")
+HEAD_OPTION_TEXT = re.compile(
+    r"--head|--source-branch|source_branch|(?<![^\s'\"])-[A-Za-z]*[sH]"
+)
 # `gh pr create` and `glab mr create` shorthands that take a value; in a pflag cluster such
 # a flag ends it.
 GH_VALUE_SHORTS = frozenset("aBbFHlmprRtT")
@@ -1149,6 +1162,12 @@ def create_heads(command: str) -> set[str | None]:
             elif name == "glab" and action in (["mr", "create"], ["mr", "new"]):
                 args = argv[start + 3 :]
                 heads.add(_option(args, "--source-branch", "s", GLAB_VALUE_SHORTS))
+            elif (
+                name == "glab"
+                and action[:1] == ["api"]
+                and API_CREATE.search(" " + shlex.join(argv[start:]))
+            ):
+                heads.add(_api_source_branch(argv[start + 2 :]))
     heads.update(
         "" if HEAD_OPTION_TEXT.search(fragment) else None
         for fragment in parsed.opaque
@@ -1158,6 +1177,22 @@ def create_heads(command: str) -> set[str | None]:
     if legacy is not None:
         heads.add(legacy)
     return heads
+
+
+def _api_source_branch(args: list[str]) -> str:
+    """Ветка MR из полей `glab api`: значение `source_branch=`, "" — поля нет или их несколько."""
+    branches = []
+    for index, arg in enumerate(args):
+        value = None
+        if arg in ("-f", "-F", "--field", "--raw-field") and index + 1 < len(args):
+            value = args[index + 1]
+        elif arg.startswith(("--field=", "--raw-field=")):
+            value = arg.split("=", 1)[1]
+        elif arg[:2] in ("-f", "-F") and len(arg) > 2:
+            value = arg[2:].removeprefix("=")
+        if value is not None and value.startswith("source_branch="):
+            branches.append(value.split("=", 1)[1])
+    return branches[0] if len(set(branches)) == 1 else ""
 
 
 def _legacy_head(command: str) -> str | None:
