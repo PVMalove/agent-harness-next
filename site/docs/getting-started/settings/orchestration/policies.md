@@ -67,7 +67,7 @@ Coordinator закрепляет политику, когда создаёт bat
 | Поле | Контракт |
 | --- | --- |
 | `retry_policy.max_developer_retries` | Целое ≥ `0`. По умолчанию: `1`. Сколько раз developer может повторить работу после замечаний review или QA; `0` запрещает такие повторы. Продолжения worker session сюда не входят. |
-| `auto_retry_min_severity` | Строка: `info`, `warning`, `error`, `blocker`. По умолчанию: `info`. Минимальная серьёзность finding, при которой coordinator сам отправляет отчёт на review-retry; значение закрепляется в плане batch. Это порог маршрутизации, а не разрешение игнорировать находки. |
+| `auto_retry_min_severity` | Строка: `info`, `warning`, `error`, `blocker`. По умолчанию: `info`. Минимальная серьёзность finding, при которой coordinator сам отправляет отчёт на review-retry; значение закрепляется в плане batch. Это порог маршрутизации, а не разрешение игнорировать находки. При `info` любое info-замечание становится переносимым пунктом fix-forward, даже если кодом его не закрыть; разработчик отмечает такой пункт `not_closed`, и автоматический путь останавливается с `carried-items-not-closed`. |
 | `attention_policy.retry_queue_seconds` | Целое ≥ `1`. По умолчанию: `3600`. Сколько принятый retry может ждать своего dispatch, прежде чем coordinator позовёт человека. |
 | `attention_policy.max_infrastructure_retries` | Целое ≥ `0`. По умолчанию: `2`. Бюджет operational retry на один candidate: инфраструктура, transport, нехватка контекста. `0` запрещает такие повторы. |
 | `attention_policy.stale_dispatch_seconds` | Целое ≥ `1`. По умолчанию: `3600`. Если живой dispatch молчит дольше, он считается stale и требует внимания. Процесс это поле не останавливает. |

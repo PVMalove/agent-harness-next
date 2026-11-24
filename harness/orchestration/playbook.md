@@ -533,7 +533,11 @@ for one batch with `batch create --auto-retry-min-severity warning` (or `error` 
 the `warning` threshold, lower-severity findings remain in the original report and ledger, while an
 `accept` recommendation with passed checks and no warning/blocker axis permits auto-accept. A finding at or
 above the threshold, a reviewer `retry` recommendation, a failed required check, or any warning/blocker axis
-still routes to retry. The default `info` threshold retries on info findings as before.
+still routes to retry. The default `info` threshold retries on info findings as before, so every
+info finding becomes a carried item of a fix-forward, even one code cannot close (a commit boundary
+below `snapshot_commit`, a Definition of Done wording, a deliberate design choice). The developer
+marks such an item `not_closed` with the reason, and the path stops with
+`carried-items-not-closed`; set `warning` to leave info findings out of automatic retries.
 Warning/blocker axes always prevent plain accept, including at the `error` and `blocker`
 thresholds. `error` is a threshold between warning and blocker; the report contract uses
 `info`, `warning` and `blocker` findings.
@@ -554,7 +558,10 @@ The decision table:
 3. The policy retries any other report. The reason category is `block-bypass` for a read-only
    stage and `code` for an architect or developer with `--block-bypass`. A report whose only
    evidence is incomplete items for its own role gets a narrowed retry. A completed developer
-   report with a `not_covered` item, a scope warning or a carried gap gets `requirements`. A
+   report with a `not_covered` item, a scope warning or a carried gap gets `requirements`, except
+   a developer report whose only obstacle is carried items it records `not_closed`: it stops with
+   `carried-items-not-closed`, because a retry cannot close what the developer reasoned code does
+   not close. A
    blocked report with a critical `context_pressure` record gets `context-pressure`. Otherwise the
    structured report data decides. The route is the `route_preview` of `batch decision-packet`.
 
@@ -579,6 +586,7 @@ detect them in this order: integrity, budget, route.
 | `no-automatic-route` | `unknown-reason` | The route has reason category `unknown`, or is a developer-retry whose failure domain is `unknown`, or the coordinator refuses a developer retry because no code defect is proven (the stop keeps the `failure`), or attention `unknown-reason` |
 | `no-automatic-route` | `abandon-dead-end` | The coordinator refuses the retry route, or the batch is `blocked` or `failed` |
 | `no-automatic-route` | `supersede-dead-end` | The batch is `abandoned`; only a human continues with `batch create --supersedes` |
+| `no-automatic-route` | `carried-items-not-closed` | A developer report whose only obstacle is the carried items it records `not_closed` with a reason; the evidence lists the items and the reasons, and a human decides `override-warning` with a note, or `retry` |
 | `no-automatic-route` | `qa-environment-failure` | The QA gate failed on its environment (a read-only file system, or permission denied outside the repository) with no code-defect sign, or on an exact environment signature that wins over cargo's `could not compile`: no linker for cargo (`missing-linker`) or a runtime socket path over the Unix limit (`socket-path-too-long`); the evidence names the remedy: a writable temporary directory, a C toolchain (`cc`) or a short `XDG_RUNTIME_DIR`/`TMPDIR`, then `batch rewind --to qa` |
 
 The coordinator records the stop once as the hashed `batch.auto_stop` (`category`, `reason`,
@@ -1542,7 +1550,9 @@ The report must include:
   field is still decided: every item is `omitted` and a carried gap.
   A `not_closed` item is a carried gap: no policy accepts the report, plain `accept` is refused,
   and only `override-warning` with a note other than `none` (recorded as `carried_items_gap`) or
-  `retry` decides it. Without a rebase target (the brief's non-null `rebase_target_commit`, or the
+  `retry` decides it. A developer-retry that creates no commit and records at least one item
+  `not_closed` reports an empty `commit_map`; every other item names commits of its retry chain.
+  Without a `not_closed` item, a retry with no new commit is refused as before. Without a rebase target (the brief's non-null `rebase_target_commit`, or the
   batch's target on a legacy stale-base record with `base_rebase_required`), the report's
   `commit_sha` must descend from `snapshot_commit`. A retry that rewrote that history (amend, squash or reset) is
   refused; its remedy is to recover the commits from `git reflog` and re-apply the fix as new

@@ -828,6 +828,7 @@ AUTO_STOP_REASONS = {
         "abandon-dead-end",
         "supersede-dead-end",
         "qa-environment-failure",
+        "carried-items-not-closed",
     ),
 }
 AUTO_STOP_FIELDS = frozenset(

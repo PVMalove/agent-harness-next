@@ -331,7 +331,8 @@
         "unknown-reason": "The retry reason is unknown, or the coordinator refuses a developer retry because no code defect is proven. A human names the cause with --reason-category.",
         "abandon-dead-end": "The coordinator refuses the retry route, or the batch is blocked or failed. A human decides.",
         "supersede-dead-end": "The only remaining route is a supersede, which needs a human.",
-        "qa-environment-failure": "The QA gate failed on its environment with no code-defect sign."
+        "qa-environment-failure": "The QA gate failed on its environment with no code-defect sign.",
+        "carried-items-not-closed": "A developer-retry report marks carried items not_closed with reasons; a retry cannot close them, so a human decides override-warning or retry."
       },
       "groups": {
         "budget-exhausted": [
@@ -355,7 +356,8 @@
           "unknown-reason",
           "abandon-dead-end",
           "supersede-dead-end",
-          "qa-environment-failure"
+          "qa-environment-failure",
+          "carried-items-not-closed"
         ]
       }
     },

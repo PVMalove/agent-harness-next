@@ -555,7 +555,7 @@ The closed list of stops:
 | --- | --- |
 | `integrity-failure` | `runtime-unavailable`, `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed`, `operational-hold` |
 | `budget-exhausted` | `retry_policy.max_developer_retries`, `continuation_policy.max_continuations`, `continuation_policy.max_rate_limit_resumes`, `attention_policy.max_infrastructure_retries`, `tooling-retry-repeated` |
-| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure` |
+| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure`, `carried-items-not-closed` |
 
 `batch auto-decide` and `batch auto-report` find a stop in this order: integrity, budget, route.
 `runtime-unavailable` means that the runtime failed after the worker started or refused before its start.
@@ -568,6 +568,12 @@ and the batch cannot return to `auto`.
 
 The policy also writes the `no-automatic-route`/`unknown-reason` stop when a read-only stage or publish fails with
 `UnprovenFailureError` (see "Failure domains"): the decision is not written, and the stop evidence keeps `failure`.
+
+The policy writes the `no-automatic-route`/`carried-items-not-closed` stop instead of `retry` when the only obstacle
+of a developer report is the carried items it records `not_closed` with a reason. A retry would not close such an item
+and would only spend the budget, so the evidence lists the items and the reasons, and a human decides
+`override-warning` with a note, or `retry`. A developer-retry that only records items `not_closed` and creates no
+commit reports an empty `commit_map`.
 
 The coordinator writes the final report once in `batch.auto_report`: when the publish report is accepted or at a
 stop.

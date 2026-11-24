@@ -198,11 +198,12 @@ pub const AUTO_STOP_INTEGRITY_FAILURE: [&str; 8] = [
 ];
 
 /// `AUTO_STOP_REASONS` of the category `no-automatic-route`.
-pub const AUTO_STOP_NO_AUTOMATIC_ROUTE: [&str; 4] = [
+pub const AUTO_STOP_NO_AUTOMATIC_ROUTE: [&str; 5] = [
     "unknown-reason",
     "abandon-dead-end",
     "supersede-dead-end",
     "qa-environment-failure",
+    "carried-items-not-closed",
 ];
 
 /// `AUTO_STOP_FIELDS`, sorted.
