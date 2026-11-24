@@ -2,6 +2,12 @@
 
 Изменения выпусков записываются в формате [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/) и версионируются по SemVer.
 
+## [Unreleased]
+
+### Fixed
+
+- **[Publish при pre-QA проверках]:** в проекте с `assignment_plans` и непустым `pre_qa_commands` `dispatch create --purpose publish` и QA-бриф без плана проверки больше не отказывают с `dispatch brief verification_commands must exactly match its project role configuration`. `dispatch preflight` для publish теперь отказывает в тех же случаях, что и `dispatch create`. Уже созданные батчи продолжают работу без правки ledger. (#1270)
+
 ## [2.0.1] - 2026-11-24
 
 ### Fixed

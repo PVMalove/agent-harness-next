@@ -33,6 +33,7 @@ from harness.orchestration.contract import (
     ROLE_CONTRACT_STEMS,
     ContractError,
     load_role_manifest,
+    qa_gate_commands,
     reject_sensitive,
     resolve_assignment,
     resolve_runtime_name,
@@ -445,9 +446,12 @@ def _qa_gate_commands(config: JsonObject) -> list[str]:
 
     Only the QA gate takes the pre-QA checks; developer and review fall back to the bare list.
     """
-    return _qa_preparation_commands(config, "pre_qa_commands") + _verification_commands(
-        config
-    )
+    source = {
+        "pre_qa_commands": _qa_preparation_commands(config, "pre_qa_commands"),
+        "verification_commands": _verification_commands(config),
+    }
+    # One function computes the gate here and in the brief check (contract.qa_gate_commands).
+    return cast(list[str], qa_gate_commands(source))
 
 
 def _developer_verification_commands(config: JsonObject) -> list[str]:

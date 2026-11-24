@@ -5230,6 +5230,31 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             )
         self.assertEqual(qa["access"], "read-only")
 
+    @file_ledger_source
+    def test_qa_and_publish_without_a_plan_take_the_gate_frozen_with_the_pre_qa_checks(
+        self,
+    ) -> None:
+        """Without a verification plan the QA brief, like publish, carries the frozen gate (#1270)."""
+        self._configure_specialist_writers()
+        path = self.repo / ".harness/orchestration.json"
+        config = json.loads(path.read_text(encoding="utf-8"))
+        config["pre_qa_commands"] = ["true pre-qa"]
+        path.write_text(json.dumps(config), encoding="utf-8")
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id)
+        self._reported_review(batch_id, candidate)
+        self._decide(batch_id, "accept")
+        qa = self._reported_qa(batch_id, candidate)
+        self._decide(batch_id, "accept")
+
+        publish = self._dispatch(
+            batch_id, "developer", purpose="publish", candidate=candidate
+        )["brief"]
+
+        for brief in (qa, publish):
+            self.assertEqual(brief["verification_commands"], ["true pre-qa", "true"])
+
     def _publish_brief_under(
         self, access_policy: JsonObject | None
     ) -> tuple[str, JsonObject, str]:

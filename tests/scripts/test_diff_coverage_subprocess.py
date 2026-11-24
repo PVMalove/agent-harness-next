@@ -43,6 +43,10 @@ def test_pytest_coverage_records_python_cli_subprocess(tmp_path: Path) -> None:
             "-q",
             "-c",
             str(ROOT / "pyproject.toml"),
+            # Collection walks every directory from the confcutdir down to the test file. The
+            # default, the repository root, includes the shared temporary directory, where other
+            # xdist workers remove their own directories during the scan.
+            f"--confcutdir={tmp_path}",
             f"--cov={source}",
             f"--cov-config={ROOT / 'pyproject.toml'}",
             f"--cov-report=json:{report_path}",

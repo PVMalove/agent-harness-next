@@ -19,6 +19,7 @@ import unittest
 from unittest import mock
 
 from harness.orchestration import (
+    contract,
     coordinator,
     operational_guards,
     runtime_access,
@@ -27,7 +28,7 @@ from harness.orchestration import (
 from harness.orchestration.core.utils import JsonObject
 from harness.repo_map import change_impact
 from tests.orchestration import test_coordinator as coordinator_tests
-from tests.orchestration.legacy_state import runs_on_file_ledger
+from tests.orchestration.legacy_state import file_ledger_source, runs_on_file_ledger
 from tests.repo_map.test_change_impact import RegexBackend
 
 POLICY: JsonObject = {
@@ -528,6 +529,104 @@ class TicketDiffDispatchTests(TicketDiffFixture):
         self.assertEqual(
             _stage(review["verification_plan"], "tests")["selection"], "ticket-diff"
         )
+
+
+class PublishUnderPreQaChecksTests(TicketDiffFixture):
+    """Publish of a configured batch whose QA gate starts with pre-QA checks (#1270)."""
+
+    def _qa_accepted_under_pre_qa_checks(self) -> tuple[str, str]:
+        """A batch of a configured project with pre-QA checks, its candidate accepted by a planned QA."""
+        fx = self.fx
+        fx._configure_specialist_writers()
+        path = fx.repo / ".harness" / "orchestration.json"
+        config = json.loads(path.read_text(encoding="utf-8"))
+        config["pre_qa_commands"] = ["true pre-qa"]
+        config["verification_plan_policy"] = self._on()
+        path.write_text(json.dumps(config), encoding="utf-8")
+        batch_id, candidate = self._assessed_candidate_with_test()
+        fx._accepted_review_and_qa(batch_id, candidate)
+        return batch_id, candidate
+
+    def _preflight_and_create(
+        self, batch_id: str, candidate: str
+    ) -> tuple[JsonObject | str, JsonObject | str]:
+        """What publish preflight and publish create give for the same arguments: a result or a refusal."""
+        fx = self.fx
+        outcomes: list[JsonObject | str] = []
+        for step in (
+            lambda: coordinator.preflight_dispatch(
+                fx._args(
+                    batch=batch_id,
+                    role="developer",
+                    purpose="publish",
+                    runtime="claude",
+                    candidate_commit=candidate,
+                )
+            ),
+            lambda: fx._dispatch(
+                batch_id, "developer", purpose="publish", candidate=candidate
+            )["brief"],
+        ):
+            try:
+                outcomes.append(step())
+            except coordinator.CoordinatorError as exc:
+                outcomes.append(exc.message)
+        return outcomes[0], outcomes[1]
+
+    @file_ledger_source
+    def test_publish_after_a_planned_qa_takes_the_gate_frozen_with_the_pre_qa_checks(
+        self,
+    ) -> None:
+        batch_id, candidate = self._qa_accepted_under_pre_qa_checks()
+
+        brief = self.fx._dispatch(
+            batch_id, "developer", purpose="publish", candidate=candidate
+        )["brief"]
+
+        self.assertEqual(brief["verification_commands"], ["true pre-qa", "true"])
+
+    @file_ledger_source
+    def test_publish_preflight_refuses_exactly_where_publish_create_does(
+        self,
+    ) -> None:
+        batch_id, candidate = self._qa_accepted_under_pre_qa_checks()
+        path = self.fx.repo / ".harness" / "orchestration.json"
+        frozen = path.read_text(encoding="utf-8")
+        edited = json.loads(frozen)
+        edited["verification_commands"] = ["true edited after batch create"]
+        path.write_text(json.dumps(edited), encoding="utf-8")
+
+        refused = self._preflight_and_create(batch_id, candidate)
+
+        message = "dispatch brief verification_commands must exactly match its project role configuration"
+        self.assertEqual(refused, (message, message))
+
+        path.write_text(frozen, encoding="utf-8")
+        preview, brief = self._preflight_and_create(batch_id, candidate)
+
+        assert isinstance(preview, dict) and isinstance(brief, dict)
+        self.assertEqual(preview["mandatory_checks"], brief["verification_commands"])
+
+    @file_ledger_source
+    def test_publish_refuses_a_brief_with_other_commands(self) -> None:
+        batch_id, candidate = self._qa_accepted_under_pre_qa_checks()
+        brief = self.fx._dispatch(
+            batch_id, "developer", purpose="publish", candidate=candidate
+        )["brief"]
+        config = json.loads(
+            (self.fx.repo / ".harness" / "orchestration.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
+        for commands in (["rm -rf /"], ["true pre-qa", "true", "rm -rf /"], []):
+            with self.subTest(commands=commands):
+                with self.assertRaisesRegex(
+                    contract.ContractError, "must exactly match its project role"
+                ):
+                    contract.require_accepted_verification_commands(
+                        commands, config, "developer", "publish", brief=brief
+                    )
 
 
 class ImpactGateTests(PlanFixture):

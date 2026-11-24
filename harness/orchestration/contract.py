@@ -842,18 +842,14 @@ def validate_brief_policy(
                 f"dispatch brief {field} must be a list of strings",
                 remedy=INTERNAL_INVARIANT_REMEDY,
             )
-    accepted_commands = accepted_verification_commands(
+    require_accepted_verification_commands(
+        brief["verification_commands"],
         config,
         str(brief.get("role")),
         str(brief.get("purpose")),
         brief=brief,
         allowed_paths=allowed_paths,
     )
-    if brief["verification_commands"] not in accepted_commands:
-        raise ContractError(
-            "dispatch brief verification_commands must exactly match its project role configuration",
-            remedy="regenerate this brief so verification_commands matches the project's role verification_commands",
-        )
     branch = brief["branch"]
     pattern = project.get("branch_pattern", r"^feature/issue-[0-9]+-.+")
     base = project.get("base_branch", "master")
@@ -954,6 +950,9 @@ REPO_MAP_POLICY_ROLES = ("architect", "developer", "code-review")
 # Work roles that own no verification gate: the architect runs only decision-specific checks
 # (roles/architect.md), so it must never receive the batch's full QA suite in its brief.
 NO_GATE_WORK_ROLES = frozenset({"architect"})
+# Work roles with a focused verification list of their own (``role_verification_commands``): they
+# never receive the full QA gate.
+FOCUSED_GATE_WORK_ROLES = frozenset({"developer", "rebaser", "code-review"})
 
 
 def role_verification_commands(
@@ -976,6 +975,20 @@ def role_verification_commands(
     if role == "code-review":
         return source.get("review_verification_commands", fallback)
     return fallback
+
+
+def qa_gate_commands(source: Mapping[str, object]) -> object:
+    """Вернуть полный QA gate источника: ``pre_qa_commands``, затем ``verification_commands``.
+
+    Этот список замораживает ``batch create``, и проверка brief допускает его же. Если одно из
+    значений не список строк, функция возвращает ``verification_commands`` без изменений: значения
+    проверяет вызывающий.
+    """
+    commands = source.get("verification_commands")
+    pre_qa = source.get("pre_qa_commands")
+    if not pre_qa or not string_list(pre_qa) or not string_list(commands):
+        return commands
+    return [*pre_qa, *commands]
 
 
 # The field of a verification profile that holds the commands of each work role.
@@ -1002,8 +1015,15 @@ def accepted_verification_commands(
     ``related_tests`` своего Context Package (сводка brief привязана к пакету его
     ``context_package_sha256``); замороженный batch несёт этот ключ, только если он был задан
     при ``batch create``.
+
+    Роль с полным gate допускает его и в форме, которую замораживает ``batch create``: проверки
+    ``pre_qa_commands`` перед списком (``qa_gate_commands``).
     """
     accepted = [role_verification_commands(source, role, purpose)]
+    if purpose != "work" or role not in FOCUSED_GATE_WORK_ROLES | NO_GATE_WORK_ROLES:
+        gate = qa_gate_commands(source)
+        if gate not in accepted:
+            accepted.append(gate)
     if purpose != "work":
         return accepted
     if role in NO_GATE_WORK_ROLES:
@@ -1029,6 +1049,30 @@ def accepted_verification_commands(
         if retry is not None:
             accepted.append(retry)
     return accepted
+
+
+def require_accepted_verification_commands(
+    commands: object,
+    source: Mapping[str, object],
+    role: str,
+    purpose: str,
+    *,
+    brief: Mapping[str, object] | None = None,
+    allowed_paths: list[str] | None = None,
+) -> None:
+    """Отказать, если ``commands`` нет среди списков, которые ``source`` допускает для роли.
+
+    Одна проверка для ``dispatch create`` (через ``validate_brief_policy``) и ``dispatch preflight``,
+    чтобы они не расходились ни в решении, ни в тексте отказа.
+    """
+    accepted = accepted_verification_commands(
+        source, role, purpose, brief=brief, allowed_paths=allowed_paths
+    )
+    if commands not in accepted:
+        raise ContractError(
+            "dispatch brief verification_commands must exactly match its project role configuration",
+            remedy="regenerate this brief so verification_commands matches the project's role verification_commands",
+        )
 
 
 def _allowed_names(names: Iterable[str]) -> str:
