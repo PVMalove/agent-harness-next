@@ -26,8 +26,10 @@ from harness.orchestration import (
 )
 from harness.orchestration.contract import (
     REPO_MAP_TIER_ORDER,
+    ContractError,
     low_risk_eligible,
     paths_inside,
+    require_accepted_verification_commands,
     resolve_allowed_tools,
     resolve_min_repo_map_tier,
     retry_verification_commands,
@@ -551,6 +553,25 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
             next_action=batch.get("next_action"),
             context_package=package,
         )
+        # The same command check as `dispatch create`. A work brief under a verification plan or a
+        # developer-retry gets commands that only create derives, so create alone checks those.
+        if config.get("assignment_plans") and not (
+            args.purpose == "work"
+            and (
+                isinstance(batch.get("verification_plan_policy"), dict)
+                or batch.get("next_action") == "developer-retry"
+            )
+        ):
+            try:
+                require_accepted_verification_commands(
+                    checks,
+                    config,
+                    args.role,
+                    args.purpose,
+                    allowed_paths=cast(list[str] | None, batch.get("allowed_paths")),
+                )
+            except ContractError as exc:
+                raise CoordinatorError(exc.message, remedy=exc.remedy) from exc
         state = {
             "repo": str(repo),
             "config": config,

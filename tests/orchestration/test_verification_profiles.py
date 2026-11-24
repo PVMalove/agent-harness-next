@@ -107,6 +107,34 @@ class VerificationProfileContractTests(unittest.TestCase):
         self.assertEqual(no_scope, [["make full"]])
         self.assertIn(CONSOLE["review"], review)
 
+    def test_brief_validation_accepts_the_qa_gate_that_batch_create_freezes(
+        self,
+    ) -> None:
+        config = {
+            "verification_commands": ["make verify"],
+            "pre_qa_commands": ["check-heads"],
+        }
+        gate = ["check-heads", "make verify"]
+
+        for role, purpose in (
+            ("developer", "publish"),
+            ("qa", "publish"),
+            ("qa", "work"),
+        ):
+            with self.subTest(role=role, purpose=purpose):
+                accepted = contract.accepted_verification_commands(config, role, purpose)
+                self.assertIn(gate, accepted)
+                self.assertNotIn(["rm -rf /"], accepted)
+        self.assertNotIn(
+            gate, contract.accepted_verification_commands(config, "developer", "work")
+        )
+        self.assertEqual(
+            contract.accepted_verification_commands(
+                {"verification_commands": ["make verify"]}, "developer", "publish"
+            ),
+            [["make verify"]],
+        )
+
     def test_an_empty_scope_never_selects_a_profile(self) -> None:
         config = {"verification_profiles": [CONSOLE]}
 

@@ -5230,6 +5230,76 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             )
         self.assertEqual(qa["access"], "read-only")
 
+    def _qa_accepted_under_pre_qa_checks(self) -> tuple[str, str]:
+        """A batch of a configured project with pre-QA checks, its candidate accepted by QA."""
+        self._configure_specialist_writers()
+        path = self.repo / ".harness/orchestration.json"
+        config = json.loads(path.read_text(encoding="utf-8"))
+        config["pre_qa_commands"] = ["true pre-qa"]
+        path.write_text(json.dumps(config), encoding="utf-8")
+        batch_id = self._create_batch()["batch_id"]
+        self._accepted_architect(batch_id)
+        candidate = self._accepted_candidate(batch_id)
+        self._accepted_review_and_qa(batch_id, candidate)
+        return batch_id, candidate
+
+    def test_publish_brief_takes_the_qa_gate_frozen_with_the_pre_qa_checks(
+        self,
+    ) -> None:
+        batch_id, candidate = self._qa_accepted_under_pre_qa_checks()
+
+        brief = self._dispatch(
+            batch_id, "developer", purpose="publish", candidate=candidate
+        )["brief"]
+
+        self.assertEqual(brief["verification_commands"], ["true pre-qa", "true"])
+
+    def _publish_preflight_and_create(
+        self, batch_id: str, candidate: str
+    ) -> tuple[JsonObject | str, JsonObject | str]:
+        """What publish preflight and publish create give for the same arguments: a result or a refusal."""
+        outcomes: list[JsonObject | str] = []
+        for step in (
+            lambda: coordinator.preflight_dispatch(
+                self._args(
+                    batch=batch_id,
+                    role="developer",
+                    purpose="publish",
+                    runtime="claude",
+                    candidate_commit=candidate,
+                )
+            ),
+            lambda: self._dispatch(
+                batch_id, "developer", purpose="publish", candidate=candidate
+            )["brief"],
+        ):
+            try:
+                outcomes.append(step())
+            except coordinator.CoordinatorError as exc:
+                outcomes.append(exc.message)
+        return outcomes[0], outcomes[1]
+
+    def test_publish_preflight_refuses_exactly_where_publish_create_does(
+        self,
+    ) -> None:
+        batch_id, candidate = self._qa_accepted_under_pre_qa_checks()
+        path = self.repo / ".harness/orchestration.json"
+        frozen = path.read_text(encoding="utf-8")
+        edited = json.loads(frozen)
+        edited["verification_commands"] = ["true edited after batch create"]
+        path.write_text(json.dumps(edited), encoding="utf-8")
+
+        refused = self._publish_preflight_and_create(batch_id, candidate)
+
+        message = "dispatch brief verification_commands must exactly match its project role configuration"
+        self.assertEqual(refused, (message, message))
+
+        path.write_text(frozen, encoding="utf-8")
+        preview, brief = self._publish_preflight_and_create(batch_id, candidate)
+
+        assert isinstance(preview, dict) and isinstance(brief, dict)
+        self.assertEqual(preview["mandatory_checks"], brief["verification_commands"])
+
     def _publish_brief_under(
         self, access_policy: JsonObject | None
     ) -> tuple[str, JsonObject, str]:
