@@ -950,6 +950,9 @@ REPO_MAP_POLICY_ROLES = ("architect", "developer", "code-review")
 # Work roles that own no verification gate: the architect runs only decision-specific checks
 # (roles/architect.md), so it must never receive the batch's full QA suite in its brief.
 NO_GATE_WORK_ROLES = frozenset({"architect"})
+# Work roles with a focused verification list of their own (``role_verification_commands``): they
+# never receive the full QA gate.
+FOCUSED_GATE_WORK_ROLES = frozenset({"developer", "rebaser", "code-review"})
 
 
 def role_verification_commands(
@@ -974,15 +977,12 @@ def role_verification_commands(
     return fallback
 
 
-# Work roles with a focused verification list of their own: they never receive the full QA gate.
-FOCUSED_GATE_WORK_ROLES = frozenset({"developer", "rebaser", "code-review"})
-
-
 def qa_gate_commands(source: Mapping[str, object]) -> object:
     """Вернуть полный QA gate источника: ``pre_qa_commands``, затем ``verification_commands``.
 
-    Этот список замораживает ``batch create``; проверка brief допускает его же. Не список строк
-    возвращается как есть: валидацию делают вызывающие.
+    Этот список замораживает ``batch create``, и проверка brief допускает его же. Если одно из
+    значений не список строк, функция возвращает ``verification_commands`` без изменений: значения
+    проверяет вызывающий.
     """
     commands = source.get("verification_commands")
     pre_qa = source.get("pre_qa_commands")

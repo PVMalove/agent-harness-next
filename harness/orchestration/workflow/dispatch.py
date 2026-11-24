@@ -553,7 +553,8 @@ def preflight_dispatch(args: argparse.Namespace) -> JsonObject:
             next_action=batch.get("next_action"),
             context_package=package,
         )
-        # The same command check as `dispatch create`. A work brief under a verification plan or a
+        # The same command check as `dispatch create`, which runs it only for a project with
+        # assignment plans (validate_brief_policy). A work brief under a verification plan or a
         # developer-retry gets commands that only create derives, so create alone checks those.
         if config.get("assignment_plans") and not (
             args.purpose == "work"
