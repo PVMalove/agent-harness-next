@@ -6,7 +6,7 @@ This repo does **not** use the upstream `mattpocock/skills` canonical five-role 
 
 ## The taxonomy { #the-taxonomy }
 
-Every triaged issue or PR carries exactly one label from each of the first three axes below, except while it carries `status::specs` — execution mode isn't decided yet at that stage (see [State machine](#state-machine)).
+Every triaged issue carries exactly one label from each of the first three axes below, except while it carries `status::specs` — execution mode isn't decided yet at that stage (see [State machine](#state-machine)). A PR follows [PR kind](#pr-kind-pr-pull-requests-only) instead.
 
 ### 1. Type (`type::*`) { #1-type-type }
 
@@ -39,6 +39,7 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 | `status::ready` | green `#0e8a16` | Fully specified, ready to be picked up |
 | `status::in-progress` | blue `#1d76db` | Currently being worked on in an active session |
 | `status::blocked` | red `#b60205` | Blocked by a dependency, or waiting on more info from you |
+| `status::done` | green `#2ea44f` | Terminal value: the merge is confirmed. It replaces `status::in-progress` before the ticket closes, so the ticket still carries exactly one `status::*` label; on GitLab the previous label with the same `key::` prefix is removed explicitly, by the same replacement rule as [State machine](#state-machine) step 5. |
 
 ### Context labels — applied when relevant { #context-labels-applied-when-relevant }
 
@@ -46,6 +47,7 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 | --- | --- | --- | --- |
 | `task-report::required` | gray `#6a737d` | `/publish-epic`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Applied by default to every ticket unless you say to skip it. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
 | `resolution::wontfix` | gray `#c2c2c2` | `/triage` | The request was explicitly rejected. Applied at close time; see `.out-of-scope/` handling in `triage/OUT-OF-SCOPE.md`. |
+| `rca::done` | lavender `#d4c5f9` | The RCA phase of `/diagnosing-bugs` | A root-cause analysis was completed for this bug. It goes next to `type::bug`, never instead of it: the type axis stays as it is. |
 
 ### 4. Priority (`priority::*`) — optional, purely informational { #4-priority-priority-optional-purely-informational }
 
@@ -100,6 +102,15 @@ A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets`
 | `pipeline::fast` | pale blue `#c5def5` | Score `≤ fast_threshold` and `Execution: afk` — the short `/fast-implement` path, no gates. |
 | `pipeline::full` | orange-red `#d93f0b` | Score `≥ full_threshold` — the gated `/implement` pipeline. |
 
+### PR kind (`pr::*`) — pull requests only { #pr-kind-pr-pull-requests-only }
+
+A separate axis for pull and merge requests, independent of the issue axes above. Every PR carries exactly one `pr::*` label.
+
+| Label | Color | Meaning |
+| --- | --- | --- |
+| `pr::ticket` | blue `#0075ca` | A PR of one ticket, including a ticket without an epic that goes straight to `base_branch`. It inherits the ticket's `type::*` label. |
+| `pr::integration` | dark teal `#006b75` | Any PR whose head is an `integration/*` branch, whatever its target. It carries no `type::*` label. |
+
 ## State machine { #state-machine }
 
 An unlabeled issue is implicitly "needs triage" — there's no dedicated label for that state.
@@ -130,7 +141,7 @@ A local-markdown-tracked ticket (`.scratch/<feature>/issues/NN-*.md`) has no Git
 
 This field block is the vocabulary that [issue-tracker.md](issue-tracker.md)'s `Workflow:` line refers to. Wayfinder's own `Status: claimed/resolved` line (same source doc) is an orthogonal claim/lock marker for the file and coexists with these fields rather than replacing them.
 
-`status::*`'s values are the same strings as the GitHub/GitLab labels, plus a terminal `done`, which `/to-pull-requests` sets after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `.harness/instructions/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
+`status::*`'s values are the same strings as the GitHub/GitLab labels, except that the terminal value is written `done` rather than `status::done`, and `/to-pull-requests` sets it after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `.harness/instructions/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
 
 ## Adapting this taxonomy per project { #adapting-this-taxonomy-per-project }
 
