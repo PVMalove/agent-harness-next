@@ -171,6 +171,17 @@ def _publish_fresh(path: Path, documents: list[Source], policy: Policy) -> None:
             temporary.unlink(missing_ok=True)
 
 
+def _result(
+    status: str, indexed: int, canonical: Path, policy: Policy
+) -> dict[str, object]:
+    """Report the publication and the selected source types the runtime store kept out of it."""
+    result: dict[str, object] = {"status": status, "indexed": indexed}
+    skipped = sources.skipped_source_types(canonical, policy)
+    if skipped:
+        result["skipped_source_types"] = skipped
+    return result
+
+
 def refresh(repo: Path) -> dict[str, object]:
     """Hash authorized bytes first; project only changes under the bounded writer lock."""
     canonical, path, policy = context(repo, writer=True)
@@ -192,7 +203,7 @@ def refresh(repo: Path) -> dict[str, object]:
                 if manifest.get("schema_version") != SCHEMA_VERSION:
                     documents = collect_sources(canonical, policy)
                     _publish_fresh(path, documents, policy)
-                    return {"status": "built", "indexed": len(documents)}
+                    return _result("built", len(documents), canonical, policy)
             connection = sqlite3.connect(path, timeout=LOCK_TIMEOUT)
             try:
                 initialize(connection)
@@ -265,7 +276,7 @@ def refresh(repo: Path) -> dict[str, object]:
         raise ValueError(
             "memory refresh failed; previous cache retained; check permissions, writer and FTS5 or run harness memory rebuild"
         ) from None
-    return {"status": "built", "indexed": indexed}
+    return _result("built", indexed, canonical, policy)
 
 
 def build(repo: Path) -> dict[str, object]:
@@ -294,4 +305,4 @@ def rebuild(repo: Path) -> dict[str, object]:
     finally:
         if temporary is not None:
             temporary.unlink(missing_ok=True)
-    return {"status": "rebuilt", "indexed": len(documents)}
+    return _result("rebuilt", len(documents), canonical, policy)

@@ -6,6 +6,7 @@ import re
 import sqlite3
 
 from harness.memory.index import LOCK_TIMEOUT, SCHEMA_VERSION, context as memory_context
+from harness.memory.sources import skipped_source_types
 
 from ..context import HealthContext
 from ..model import CheckResult, Fix
@@ -25,6 +26,15 @@ def check_index(context: HealthContext) -> CheckResult:
         "Пересоберите индекс из главного checkout.",
         context.harness_command("memory", "rebuild", str(canonical)),
     )
+    try:
+        skipped = skipped_source_types(canonical, policy)
+    except ValueError as exc:
+        return CheckResult(
+            id="memory.index",
+            group="memory",
+            status="warn",
+            message=f"индекс нельзя построить: {exc}",
+        )
     if not path.is_file():
         return CheckResult(
             id="memory.index",
@@ -93,7 +103,12 @@ def check_index(context: HealthContext) -> CheckResult:
         id="memory.index",
         group="memory",
         status="ok",
-        message=f"индекс валиден (FTS5); размер: {size} байт; источников: {count}",
+        message=f"индекс валиден (FTS5); размер: {size} байт; источников: {count}"
+        + (
+            f"; типы {', '.join(skipped)} не индексируются: их записи хранит runtime store"
+            if skipped
+            else ""
+        ),
     )
 
 

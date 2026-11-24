@@ -2174,6 +2174,13 @@ def cmd_memory(args: argparse.Namespace) -> int:
             result = memory_build(repo)
     except (ValueError, OSError) as exc:
         fail(str(exc))
+    skipped = result.get("skipped_source_types")
+    if isinstance(skipped, list):
+        print(
+            f"harness: memory does not index source types {', '.join(skipped)}: "
+            "the runtime store keeps these records in runtime.db",
+            file=sys.stderr,
+        )
     print(json.dumps(result, ensure_ascii=False))
     return 0
 

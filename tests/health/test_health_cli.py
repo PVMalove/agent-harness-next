@@ -311,3 +311,58 @@ def test_health_worktree_inspects_main_memory_and_recommends_main_rebuild(
     assert str(main) in index["fix"]["command"]
     assert str(linked) not in index["fix"]["command"]
     assert not (linked / ".harness/.sandboxes").exists()
+
+
+def _memory_reading_the_ledger(repo: Path, selector_version: int) -> None:
+    """A project whose memory policy selects orchestration records, with a ledger selector."""
+    _init_repo(repo)
+    _enable_memory(repo)
+    config = repo / ".harness/project.json"
+    value = json.loads(config.read_text(encoding="utf-8"))
+    value["memory_policy"]["source_types"] = ["glossary", "qa_finding", "ledger"]
+    config.write_text(json.dumps(value), encoding="utf-8")
+    state = repo / ".harness/orchestration/state"
+    state.mkdir(parents=True)
+    selector = {
+        "generation": "generation-0a1b2c3d",
+        "selected_at": "2026-11-20T10:00:00Z",
+        "version": selector_version,
+    }
+    (state / "ledger.json").write_text(json.dumps(selector), encoding="utf-8")
+    (repo / "CONTEXT.md").write_text("# Glossary\nA known source.\n", encoding="utf-8")
+
+
+def test_health_names_the_reason_when_the_memory_index_cannot_be_built(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """An unsupported ledger selector is the stated reason, not a bare missing index."""
+    _memory_reading_the_ledger(tmp_path, selector_version=5)
+    CLI["cmd_health"](SimpleNamespace(repo=str(tmp_path), json=True))
+    checks = {c["id"]: c for c in json.loads(capsys.readouterr().out)["checks"]}
+    index = checks["memory.index"]
+    assert index["status"] == "warn"
+    assert "индекс нельзя построить" in index["message"]
+    assert "memory ledger selector is invalid or unsupported" in index["message"]
+
+
+def test_health_names_the_sources_the_runtime_store_keeps_out_of_the_index(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """With a version 4 selector the index is valid and the skipped sources are listed."""
+    _memory_reading_the_ledger(tmp_path, selector_version=4)
+    assert (
+        CLI["cmd_memory"](
+            SimpleNamespace(repo=str(tmp_path), memory_operation="rebuild")
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["skipped_source_types"] == ["ledger", "qa_finding"]
+    assert "ledger, qa_finding" in captured.err
+    assert "runtime store" in captured.err
+    CLI["cmd_health"](SimpleNamespace(repo=str(tmp_path), json=True))
+    checks = {c["id"]: c for c in json.loads(capsys.readouterr().out)["checks"]}
+    index = checks["memory.index"]
+    assert index["status"] == "ok"
+    assert "ledger, qa_finding" in index["message"]
+    assert "runtime store" in index["message"]

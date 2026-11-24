@@ -4,7 +4,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from harness.memory import build, search
+from harness.memory import build, rebuild, search
 from harness.storage import storage_path
 from tests.orchestration.legacy_state import seed_file_ledger
 from .test_build import configure, source
@@ -258,3 +258,58 @@ def test_baseline_redaction_and_generation_selection_do_not_depend_on_project_ru
     value["generation"] = "generation-../../outside"
     pointer.write_text(json.dumps(value))
     assert search(tmp_path, "qualityword")["status"] == "index_unavailable"
+
+
+def runtime_store_selector(repo: Path) -> None:
+    """The selector `harness-runtime init` and `migrate` write at the cutover (ADR 0036)."""
+    source(
+        repo,
+        ".harness/orchestration/state/ledger.json",
+        json.dumps(
+            {
+                "generation": "generation-0a1b2c3d",
+                "selected_at": "2026-11-20T10:00:00Z",
+                "version": 4,
+            }
+        ),
+    )
+
+
+def test_runtime_store_selector_keeps_file_sources_searchable(tmp_path: Path) -> None:
+    """A version 4 selector does not block the file sources of a state-aware policy."""
+    configure(
+        tmp_path,
+        source_types=["adr", "completion_report"],
+        allow_paths=["docs/adr/**"],
+    )
+    runtime_store_selector(tmp_path)
+    source(tmp_path, "docs/adr/0001.md", "# ADR\nStatus: accepted\nstoreepochword\n")
+    assert build(tmp_path) == {"status": "built", "indexed": 1}
+    assert search(tmp_path, "storeepochword")["pointers"]
+
+
+def test_runtime_store_selector_skips_only_the_store_owned_sources(
+    tmp_path: Path,
+) -> None:
+    """`ledger` and `qa_finding` live in runtime.db: the build names them and indexes the rest."""
+    configure(
+        tmp_path,
+        source_types=["adr", "qa_finding", "ledger"],
+        allow_paths=[
+            "docs/adr/**",
+            ".harness/orchestration/state/generations/**/*.json",
+        ],
+    )
+    runtime_store_selector(tmp_path)
+    source(tmp_path, "docs/adr/0001.md", "# ADR\nStatus: accepted\nstoreepochword\n")
+    # A generation that a migration left behind is no longer the authority.
+    source(
+        tmp_path,
+        ".harness/orchestration/state/generations/generation-0a1b2c3d/reports/qa.json",
+        json.dumps({"role": "qa", "outcome": "pass", "output": "stalefileword"}),
+    )
+    expected = {"indexed": 1, "skipped_source_types": ["ledger", "qa_finding"]}
+    assert build(tmp_path) == {"status": "built", **expected}
+    assert rebuild(tmp_path) == {"status": "rebuilt", **expected}
+    assert search(tmp_path, "storeepochword")["pointers"]
+    assert search(tmp_path, "stalefileword")["pointers"] == []
