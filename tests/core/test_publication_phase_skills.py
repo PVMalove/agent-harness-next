@@ -133,6 +133,58 @@ def test_guide_hands_the_pr_and_the_closure_to_to_pull_requests() -> None:
         assert copy not in guide, copy
 
 
+TICKET_PR_GITHUB = (
+    "`gh pr create --base <target-branch> --title '<title>' "
+    "--label pr::ticket --label <type-label> --body-file <path>`"
+)
+TICKET_PR_GITLAB = (
+    "`glab mr create -R <project-url> --target-branch <target-branch> --title '<title>' "
+    "--label 'pr::ticket,<type-label>' --description-file <path> --yes`"
+)
+
+
+def _step(path: Path, number: int) -> str:
+    """Нормализованный текст нумерованного шага верхнего уровня до следующего шага."""
+    text = path.read_text(encoding="utf-8")
+    start = text.index(f"\n{number}. ")
+    end = text.find(f"\n{number + 1}. ", start)
+    return " ".join(text[start : end if end != -1 else None].split())
+
+
+def test_ticket_pr_carries_pr_ticket_and_the_ticket_type() -> None:
+    """Both PR creation forms label a ticket PR with `pr::ticket` and the ticket's `type::*`."""
+    for path in (PR_SKILL, INSTRUCTIONS / "git-workflow.md"):
+        step = _step(path, 6)
+        assert TICKET_PR_GITHUB in step, path.name
+        assert TICKET_PR_GITLAB in step, path.name
+
+
+def test_ticket_pr_type_label_is_read_from_the_ticket_or_asked() -> None:
+    """The type label comes from the ticket; a missing or ambiguous one stops the skill."""
+    resolve = _step(PR_SKILL, 1)
+    assert "`<type-label>` is the ticket's one `type::*` label" in resolve
+    assert "If the ticket has no `type::*` label or more than one" in resolve
+    assert "stop and ask the developer which type to use; never infer it" in resolve
+    guide = _step(INSTRUCTIONS / "git-workflow.md", 6)
+    assert "If the ticket has no `type::*` label or more than one" in guide
+    assert "The agent must not infer the type from the title or the diff" in guide
+
+
+def test_epic_less_ticket_pr_also_gets_pr_ticket() -> None:
+    """A ticket PR into `base_branch` is labeled like one into `integration/*`."""
+    for path in (PR_SKILL, INSTRUCTIONS / "git-workflow.md"):
+        assert (
+            "`pr::ticket` labels every ticket PR, whether it targets `integration/*` "
+            "or, for an epic-less ticket, `base_branch`"
+        ) in _step(path, 6), path.name
+
+
+def test_guide_names_the_pr_labels() -> None:
+    """The hitl guide says which labels `/to-pull-requests` puts on the ticket PR."""
+    guide = _text(ENGINEERING / "to-guide/references/guide-template.md")
+    assert "labels it `pr::ticket` and the ticket's `type::*`" in guide
+
+
 def test_unblocking_and_cleanup_follow_the_tracker_and_worktree_contracts() -> None:
     core = _text(PR_SKILL)
     assert "`docs/tasks/*.md`" not in core
