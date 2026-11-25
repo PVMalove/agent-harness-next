@@ -7,6 +7,7 @@
 ### Fixed
 
 - **[Publish при pre-QA проверках]:** в проекте с `assignment_plans` и непустым `pre_qa_commands` `dispatch create --purpose publish` и QA-бриф без плана проверки больше не отказывают с `dispatch brief verification_commands must exactly match its project role configuration`. `dispatch preflight` для publish теперь отказывает в тех же случаях, что и `dispatch create`. Уже созданные батчи продолжают работу без правки ledger. (#1270)
+- **[Повтор на провале плана проверки]:** `batch auto-decide` больше не отправляет разработчика на fix-forward, если стадия `verification_plan` провалилась на собственной конфигурации: стадия `pytest` с кодом выхода 4 или повтор того же провала с тем же выводом останавливают автоматический путь с `no-automatic-route`/`verification-plan-failure` и remedy, а `retry_policy.max_developer_retries` не тратится. Повторный провал той же стадии больше не перекрывает остановку `carried-items-not-closed`. (#1272)
 
 ## [2.0.1] - 2026-11-24
 
