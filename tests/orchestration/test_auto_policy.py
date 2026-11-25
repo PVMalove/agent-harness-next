@@ -14,6 +14,7 @@ import shutil
 import tempfile
 import unittest
 from collections.abc import Callable
+from unittest import mock
 from pathlib import Path
 
 import pytest
@@ -1019,6 +1020,256 @@ class AutoDecisionTableTests(unittest.TestCase):
     def test_a_stop_outside_the_closed_list_cannot_exist(self) -> None:
         with self.assertRaises(CoordinatorError):
             auto_policy.Stop("no-automatic-route", "operator-preference", {})
+
+
+TICKET_DIFF_TESTS = ["scripts/ticket-diff.sh", "tools/tests/test_ci_triggers.py"]
+OUTSIDE_ROOTS = (
+    "ticket-diff: путь теста вне сервисов и libs: tools/tests/test_ci_triggers.py\nexit 4"
+)
+ASSERTION_FAILED = "FAILED tools/tests/test_ci_triggers.py::test_x - assert 1 == 2\nexit 1"
+
+
+def _plan_dispatch(role: str, dispatch_id: str, **extra: object) -> JsonObject:
+    """A brief whose verification plan runs a lint stage and a ticket-diff pytest stage."""
+    return {
+        "dispatch_id": dispatch_id,
+        "role": role,
+        "purpose": "work",
+        "verification_plan": {
+            "stages": [
+                {"stage_id": "lint", "kind": "custom", "argv": ["make", "lint"]},
+                {"stage_id": "tests", "kind": "pytest", "argv": TICKET_DIFF_TESTS},
+            ]
+        },
+        **extra,
+    }
+
+
+def _plan_report(role: str, evidence: str, **overrides: object) -> JsonObject:
+    """A report whose lint stage passed and whose pytest stage failed with ``evidence``."""
+    return _clean(
+        role,
+        checks_run=[
+            {"command": "make lint", "result": "pass", "evidence": "ok"},
+            {"command": " ".join(TICKET_DIFF_TESTS), "result": "fail", "evidence": evidence},
+        ],
+        **overrides,
+    )
+
+
+class AutoVerificationPlanStopTests(unittest.TestCase):
+    """Issue #1272: a failed verification plan stage a developer retry cannot fix stops the path."""
+
+    REVIEW = _plan_dispatch("code-review", "dispatch-review")
+    RETRY = _plan_dispatch(
+        "developer",
+        "dispatch-retry",
+        carried_items={
+            "review": [
+                {"item_id": item_id, "source": {}, "summary": item_id}
+                for item_id in ("review-finding-1", "review-finding-2")
+            ]
+        },
+    )
+    CLOSURE = [
+        {"item_id": "review-finding-1", "commits": ["a" * 40]},
+        {"item_id": "review-finding-2", "not_closed": "history below the snapshot"},
+    ]
+
+    def _stop(
+        self,
+        stage: str,
+        report: JsonObject,
+        dispatch: JsonObject,
+        earlier: list[auto_policy.EarlierReport] | None = None,
+    ) -> auto_policy.Stop | None:
+        return auto_policy.report_stop(
+            stage,
+            report,
+            dispatch,
+            earlier or [],
+            scope_warnings=[],
+            block_bypass=False,
+        )
+
+    def _choice(
+        self, stage: str, report: JsonObject, dispatch: JsonObject
+    ) -> auto_policy.Choice:
+        return auto_policy.category(
+            stage,
+            report,
+            dispatch,
+            scope_warnings=[],
+            block_bypass=False,
+            candidate_moved=False,
+            pressure_recorded=False,
+        )
+
+    def _reviewed(self, evidence: str) -> list[auto_policy.EarlierReport]:
+        return [
+            auto_policy.EarlierReport(
+                self.REVIEW, _plan_report("code-review", evidence, review={})
+            )
+        ]
+
+    def test_a_stage_that_fails_before_its_tests_stops_with_a_remedy(self) -> None:
+        report = _plan_report(
+            "code-review", OUTSIDE_ROOTS, review={"recommendation": "accept"}
+        )
+        self.assertEqual(
+            self._choice("code-review", report, self.REVIEW).decision, "retry"
+        )
+
+        stop = self._stop("code-review", report, self.REVIEW)
+
+        assert stop is not None
+        self.assertEqual(
+            (stop.category, stop.reason),
+            ("no-automatic-route", "verification-plan-failure"),
+        )
+        self.assertEqual(stop.evidence["sign"], "configuration")
+        self.assertEqual(
+            [(item["stage_id"], item["evidence"]) for item in stop.evidence["stages"]],
+            [("tests", OUTSIDE_ROOTS)],
+        )
+        self.assertIn("verification_plan_policy", stop.evidence["remedy"])
+        self.assertIn("--supersedes", stop.evidence["remedy"])
+
+    def test_only_a_pytest_plan_stage_ending_with_exit_4_is_a_configuration_failure(
+        self,
+    ) -> None:
+        for name, report, brief in (
+            ("failed test", _plan_report("code-review", ASSERTION_FAILED), self.REVIEW),
+            ("exit 40", _plan_report("code-review", "exit 40"), self.REVIEW),
+            (
+                "custom stage",
+                _clean(
+                    "code-review",
+                    checks_run=[
+                        {"command": "make lint", "result": "fail", "evidence": "exit 4"}
+                    ],
+                ),
+                self.REVIEW,
+            ),
+            (
+                "no plan",
+                _plan_report("code-review", OUTSIDE_ROOTS),
+                {"role": "code-review", "purpose": "work"},
+            ),
+        ):
+            with self.subTest(case=name):
+                self.assertIsNone(self._stop("code-review", report, brief))
+        for evidence in ("exit code: 4", "Exited with code 4", "exit_code=4"):
+            with self.subTest(evidence=evidence):
+                stop = self._stop(
+                    "code-review", _plan_report("code-review", evidence), self.REVIEW
+                )
+                self.assertIsNotNone(stop)
+
+    def test_the_same_stage_failing_alike_on_two_candidates_stops(self) -> None:
+        report = _plan_report("developer", ASSERTION_FAILED)
+        retry = _plan_dispatch("developer", "dispatch-retry")
+
+        stop = self._stop(
+            "developer", report, retry, self._reviewed(f"  {ASSERTION_FAILED}\n")
+        )
+
+        assert stop is not None
+        self.assertEqual(
+            (stop.category, stop.reason),
+            ("no-automatic-route", "verification-plan-failure"),
+        )
+        self.assertEqual(stop.evidence["sign"], "repeated")
+        self.assertEqual(stop.evidence["previous_dispatch_id"], "dispatch-review")
+        self.assertEqual(
+            [item["stage_id"] for item in stop.evidence["stages"]], ["tests"]
+        )
+        for name, earlier in (
+            ("first failure", []),
+            ("other output", self._reviewed("FAILED other - assert 2 == 3")),
+            (
+                "the stage passed in between",
+                [
+                    auto_policy.EarlierReport(
+                        _plan_dispatch("developer", "dispatch-2"),
+                        _clean(
+                            "developer",
+                            checks_run=[
+                                {
+                                    "command": " ".join(TICKET_DIFF_TESTS),
+                                    "result": "pass",
+                                    "evidence": "1 passed",
+                                }
+                            ],
+                        ),
+                    ),
+                    *self._reviewed(ASSERTION_FAILED),
+                ],
+            ),
+        ):
+            with self.subTest(case=name):
+                self.assertIsNone(self._stop("developer", report, retry, earlier))
+
+    def test_carried_items_not_closed_stop_despite_a_repeated_stage_failure(
+        self,
+    ) -> None:
+        report = _plan_report(
+            "developer", ASSERTION_FAILED, carried_item_closure=self.CLOSURE
+        )
+        self.assertEqual(
+            self._choice("developer", report, self.RETRY).reason_category,
+            "requirements",
+        )
+
+        stop = self._stop(
+            "developer",
+            report,
+            self.RETRY,
+            self._reviewed("FAILED tools/tests/test_ci_triggers.py::test_x"),
+        )
+
+        assert stop is not None
+        self.assertEqual(
+            (stop.category, stop.reason),
+            ("no-automatic-route", "carried-items-not-closed"),
+        )
+        self.assertEqual(
+            stop.evidence["not_closed"], {"review-finding-2": "history below the snapshot"}
+        )
+        self.assertEqual(stop.evidence["repeated_stage_failures"], ["tests"])
+        self.assertIsNone(self._stop("developer", report, self.RETRY))
+
+    def test_earlier_reports_are_the_decided_ones_before_the_dispatch_newest_first(
+        self,
+    ) -> None:
+        decided = {"decision": "retry"}
+        batch: JsonObject = {
+            "dispatches": [
+                {"dispatch_id": "d-1", "state": "reported", "decision": decided},
+                {"dispatch_id": "d-2", "state": "abandoned"},
+                {"dispatch_id": "d-3", "state": "reported", "decision": decided},
+                {"dispatch_id": "d-4", "state": "reported"},
+                {"dispatch_id": "d-5", "state": "reported", "decision": decided},
+            ]
+        }
+        with (
+            mock.patch.object(
+                auto_policy, "_load_dispatch", lambda _root, item: {"dispatch_id": item}
+            ),
+            mock.patch.object(
+                auto_policy,
+                "_pending_report",
+                lambda _root, _batch, entry: {"of": entry["dispatch_id"]},
+            ),
+        ):
+            earlier = auto_policy.earlier_reports(
+                Path("/state"), batch, {"dispatch_id": "d-4"}
+            )
+
+        self.assertEqual(
+            [(item.dispatch["dispatch_id"], item.report["of"]) for item in earlier],
+            [("d-3", "d-3"), ("d-1", "d-1")],
+        )
 
 
 class AutoStopListTests(unittest.TestCase):

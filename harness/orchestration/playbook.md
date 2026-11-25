@@ -561,7 +561,10 @@ The decision table:
    report with a `not_covered` item, a scope warning or a carried gap gets `requirements`, except
    a developer report whose only obstacle is carried items it records `not_closed`: it stops with
    `carried-items-not-closed`, because a retry cannot close what the developer reasoned code does
-   not close. A
+   not close. A failed check does not hide that stop when every unsuccessful check is a
+   `verification_plan` stage that also failed on its previous run. Before this table, a report
+   whose `verification_plan` stage failed on its frozen configuration, or failed with the same
+   evidence as its previous run, stops with `verification-plan-failure`. A
    blocked report with a critical `context_pressure` record gets `context-pressure`. Otherwise the
    structured report data decides. The route is the `route_preview` of `batch decision-packet`.
 
@@ -586,7 +589,8 @@ detect them in this order: integrity, budget, route.
 | `no-automatic-route` | `unknown-reason` | The route has reason category `unknown`, or is a developer-retry whose failure domain is `unknown`, or the coordinator refuses a developer retry because no code defect is proven (the stop keeps the `failure`), or attention `unknown-reason` |
 | `no-automatic-route` | `abandon-dead-end` | The coordinator refuses the retry route, or the batch is `blocked` or `failed` |
 | `no-automatic-route` | `supersede-dead-end` | The batch is `abandoned`; only a human continues with `batch create --supersedes` |
-| `no-automatic-route` | `carried-items-not-closed` | A developer report whose only obstacle is the carried items it records `not_closed` with a reason; the evidence lists the items and the reasons, and a human decides `override-warning` with a note, or `retry` |
+| `no-automatic-route` | `carried-items-not-closed` | A developer report whose only obstacle is the carried items it records `not_closed` with a reason; the evidence lists the items and the reasons, and a human decides `override-warning` with a note, or `retry`; the evidence adds `repeated_stage_failures` when the report's failed checks are `verification_plan` stages that also failed on their previous run |
+| `no-automatic-route` | `verification-plan-failure` | A failed check of the pending report ran a `verification_plan` stage (the check `command` is the stage `argv` joined) that a developer retry cannot fix. With `sign: configuration`, a `pytest` stage ended with exit code 4 (a usage error before any test ran, for example a test path the stage script does not accept); the remedy is to fix `verification_plan_policy` or the stage script, then `batch abandon` and `batch create --supersedes`, because the batch froze the stage. With `sign: repeated`, the stage failed with the same evidence (up to whitespace) as its previous run in an earlier decided report; the evidence names that `previous_dispatch_id`. Neither sign spends `retry_policy.max_developer_retries` |
 | `no-automatic-route` | `qa-environment-failure` | The QA gate failed on its environment (a read-only file system, or permission denied outside the repository) with no code-defect sign, or on an exact environment signature that wins over cargo's `could not compile`: no linker for cargo (`missing-linker`) or a runtime socket path over the Unix limit (`socket-path-too-long`); the evidence names the remedy: a writable temporary directory, a C toolchain (`cc`) or a short `XDG_RUNTIME_DIR`/`TMPDIR`, then `batch rewind --to qa` |
 
 The coordinator records the stop once as the hashed `batch.auto_stop` (`category`, `reason`,

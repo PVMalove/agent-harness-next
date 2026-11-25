@@ -605,7 +605,7 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 | --- | --- |
 | `integrity-failure` | `runtime-unavailable`, `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed`, `operational-hold` |
 | `budget-exhausted` | `retry_policy.max_developer_retries`, `continuation_policy.max_continuations`, `continuation_policy.max_rate_limit_resumes`, `attention_policy.max_infrastructure_retries`, `tooling-retry-repeated` |
-| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure`, `carried-items-not-closed` |
+| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure`, `carried-items-not-closed`, `verification-plan-failure` |
 
 `batch auto-decide` и `batch auto-report` ищут остановку в таком порядке: целостность, бюджет,
 маршрут. Coordinator пишет остановку один раз в `batch.auto_stop` вместе с итоговым отчётом.
@@ -625,7 +625,18 @@ python .harness/orchestration/coordinator.py --repo . batch auto-decide --batch 
 единственное препятствие отчёта разработчика — переносимые пункты, которые он отметил `not_closed` с
 причиной. Повтор такой пункт не закроет и только потратит бюджет, поэтому evidence перечисляет пункты
 и причины, а человек решает `override-warning` с заметкой или `retry`. Developer-retry, который
-только отмечает пункты `not_closed` и не делает коммитов, отправляет пустой `commit_map`.
+только отмечает пункты `not_closed` и не делает коммитов, отправляет пустой `commit_map`. Провал
+проверки эту остановку не перекрывает, если каждая непройденная проверка — стадия `verification_plan`,
+которая провалилась и при предыдущем запуске.
+
+Остановку `no-automatic-route`/`verification-plan-failure` политика записывает вместо `retry`, когда
+провал стадии `verification_plan` повтор разработчика не исправит. Признак `sign: configuration`
+означает, что стадия `pytest` завершилась с кодом 4: это ошибка использования до запуска тестов,
+например тестовый путь, который скрипт стадии не принимает. `batch create` заморозил стадию в батче,
+поэтому человек исправляет `verification_plan_policy` или скрипт стадии и перепланирует батч через
+`batch abandon` и `batch create --supersedes`. Признак `sign: repeated` означает, что стадия
+провалилась с тем же evidence, что и при предыдущем запуске; evidence остановки называет
+`previous_dispatch_id`. Ни один признак не тратит `retry_policy.max_developer_retries`.
 
 Coordinator пишет итоговый отчёт один раз в `batch.auto_report`: при accept отчёта publish или при
 остановке. Отчёт перечисляет решения `policy:auto`, принятые риски, findings, retry и потраченный

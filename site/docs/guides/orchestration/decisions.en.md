@@ -555,7 +555,7 @@ The closed list of stops:
 | --- | --- |
 | `integrity-failure` | `runtime-unavailable`, `stale`, `model-mismatch`, `worktree-mismatch`, `harness-snapshot-changed`, `deterministic-gate-failed`, `ledger-validation-failed`, `operational-hold` |
 | `budget-exhausted` | `retry_policy.max_developer_retries`, `continuation_policy.max_continuations`, `continuation_policy.max_rate_limit_resumes`, `attention_policy.max_infrastructure_retries`, `tooling-retry-repeated` |
-| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure`, `carried-items-not-closed` |
+| `no-automatic-route` | `unknown-reason`, `abandon-dead-end`, `supersede-dead-end`, `qa-environment-failure`, `carried-items-not-closed`, `verification-plan-failure` |
 
 `batch auto-decide` and `batch auto-report` find a stop in this order: integrity, budget, route.
 `runtime-unavailable` means that the runtime failed after the worker started or refused before its start.
@@ -573,7 +573,16 @@ The policy writes the `no-automatic-route`/`carried-items-not-closed` stop inste
 of a developer report is the carried items it records `not_closed` with a reason. A retry would not close such an item
 and would only spend the budget, so the evidence lists the items and the reasons, and a human decides
 `override-warning` with a note, or `retry`. A developer-retry that only records items `not_closed` and creates no
-commit reports an empty `commit_map`.
+commit reports an empty `commit_map`. A failed check does not hide this stop when every unsuccessful check is a
+`verification_plan` stage that also failed on its previous run.
+
+The policy writes the `no-automatic-route`/`verification-plan-failure` stop instead of `retry` when a developer retry
+cannot fix the failed `verification_plan` stage. `sign: configuration` means that a `pytest` stage ended with exit
+code 4: a usage error before any test ran, for example a test path that the stage script does not accept.
+`batch create` froze the stage in the batch, so a human fixes `verification_plan_policy` or the stage script and plans
+the batch again with `batch abandon` and `batch create --supersedes`. `sign: repeated` means that the stage failed with
+the same evidence as its previous run; the stop evidence names `previous_dispatch_id`. Neither sign spends
+`retry_policy.max_developer_retries`.
 
 The coordinator writes the final report once in `batch.auto_report`: when the publish report is accepted or at a
 stop.

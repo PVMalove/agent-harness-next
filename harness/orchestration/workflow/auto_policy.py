@@ -12,17 +12,23 @@ every decision it takes goes through ``decide_batch`` with its validation unchan
 from __future__ import annotations
 
 import argparse
+import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import cast
 
+from harness.orchestration import verification_plan
 from harness.orchestration.core import utils
 from harness.orchestration.core.config import (
     _auto_retry_min_severity,
     _continuation_policy,
     _reject_sensitive,
 )
-from harness.orchestration.core.check_results import check_counts_as_success
+from harness.orchestration.core.check_results import (
+    check_counts_as_success,
+    parse_check_result,
+)
 from harness.orchestration.core.report_evidence import evidence_is_none
 from harness.orchestration.core.constants import (
     AUTO_RETRY_SEVERITY_RANKS,
@@ -32,6 +38,7 @@ from harness.orchestration.core.constants import (
     INCOMPLETE_ITEM_TARGET_ROLES,
     TERMINAL_BATCH_STATES,
     FailureDomain,
+    ReportCheckResult,
     ReviewRecommendation,
 )
 from harness.orchestration.core.utils import (
@@ -50,6 +57,7 @@ from harness.orchestration.ledger.ledger_ops import (
     _state_root,
 )
 from harness.orchestration.ledger.lifecycle import BatchRecord, LifecycleLedger
+from harness.orchestration.ledger.recovery_chain import active_dispatches
 from harness.orchestration.workflow import approval as approvals
 from harness.orchestration.workflow import carried_items
 from harness.orchestration.workflow import commit_plan as plan_rules
@@ -117,6 +125,22 @@ QA_ENVIRONMENT_REMEDIES = {
         "human re-runs QA on the same candidate with batch rewind --to qa"
     ),
 }
+# pytest exits with code 4 on a usage error, before any test runs (issue #1272).
+USAGE_ERROR_EXIT = re.compile(
+    r"\bexit(?:ed)?[\s_]*(?:with\s+)?(?:code|status)?\s*[:=]?\s*4\b", re.IGNORECASE
+)
+PLAN_CONFIGURATION_REMEDY = (
+    "a verification plan stage failed before its tests ran (pytest exit code 4, a usage "
+    "error), so a developer retry cannot fix it: batch create froze the stage; fix "
+    "verification_plan_policy or the script its stage runs, then a human plans the batch "
+    "again with batch abandon and batch create --supersedes"
+)
+PLAN_REPEATED_REMEDY = (
+    "a verification plan stage failed with the same evidence as its previous run, so another "
+    "developer retry would fail the same way: a human reads the evidence; if the stage itself "
+    "is wrong, fix verification_plan_policy and plan the batch again with batch abandon and "
+    "batch create --supersedes, otherwise decide with batch decide and a --note"
+)
 CLEAN_BASIS = (
     "the report is clean: completed, no blockers, every check passed, and nothing is left "
     "uncovered, unclosed, open or outside the approved scope"
@@ -162,6 +186,14 @@ class Stop:
 
 
 @dataclass(frozen=True)
+class EarlierReport:
+    """A report the coordinator already decided, with its brief: what an earlier run showed."""
+
+    dispatch: JsonObject
+    report: JsonObject
+
+
+@dataclass(frozen=True)
 class Resolution:
     """What ``batch auto-decide`` does with the pending report: decide or stop."""
 
@@ -195,6 +227,7 @@ def inputs_from(args: argparse.Namespace) -> Inputs:
 
 
 NOT_CLOSED_OBSTACLE = "carried items are not closed"
+CHECK_OBSTACLE = "a check did not pass"
 
 
 def _own_incomplete(stage: str, report: JsonObject) -> list[JsonObject]:
@@ -228,7 +261,7 @@ def accept_obstacles(
     for check in report.get("checks_run", []):
         result = check.get("result") if isinstance(check, dict) else None
         if not check_counts_as_success(result):
-            obstacles.append(f"a check did not pass ({result})")
+            obstacles.append(f"{CHECK_OBSTACLE} ({result})")
             break
     if plan_rules.not_covered(report):
         obstacles.append("definition-of-done items are not covered")
@@ -361,12 +394,15 @@ def not_closed_stop(
     scope_warnings: list[str],
     block_bypass: bool,
     auto_retry_min_severity: str = "info",
+    repeated: list[str] | None = None,
 ) -> Stop | None:
     """The stop for a developer-retry report whose only obstacle is the carried items it records
     as not_closed with a reason (no I/O, issue #1265).
 
     A retry cannot close an item the developer reasoned code does not close, so it would only
-    spend the budget; a human decides override-warning with a note, or retry.
+    spend the budget; a human decides override-warning with a note, or retry. A failed check
+    does not hide the stop when every unsuccessful check is a plan stage in ``repeated``: a stage
+    that also failed on its previous run, which the retry did not change either (issue #1272).
     """
     if stage != "developer":
         return None
@@ -382,18 +418,191 @@ def not_closed_stop(
         block_bypass=block_bypass,
         auto_retry_min_severity=auto_retry_min_severity,
     )
+    failing = [row["stage_id"] for row in _unsuccessful_checks(report, dispatch)]
+    if failing and set(failing) <= set(repeated or []):
+        obstacles = [item for item in obstacles if not item.startswith(CHECK_OBSTACLE)]
     if obstacles != [NOT_CLOSED_OBSTACLE]:
+        return None
+    evidence: JsonObject = {
+        "carried_items_gap": gap,
+        "not_closed": {item_id: reasons[item_id] for item_id in gap},
+        "remedy": "a human reads the reasons, then runs batch decide with "
+        "--decision override-warning and a --note, or --decision retry",
+    }
+    if failing:
+        evidence["repeated_stage_failures"] = failing
+    return Stop("no-automatic-route", "carried-items-not-closed", evidence)
+
+
+def _plan_checks(report: JsonObject, dispatch: JsonObject) -> list[JsonObject]:
+    """The report's checks, each with the verification plan stage it ran: ``stage_id`` is
+    ``None`` for a command that is no stage of the brief's plan (no I/O)."""
+    plan = dispatch.get("verification_plan")
+    stages = plan.get("stages") if isinstance(plan, dict) else None
+    by_command = {
+        shlex.join(stage["argv"]): stage
+        for stage in (stages if isinstance(stages, list) else [])
+        if isinstance(stage, dict) and isinstance(stage.get("argv"), list)
+    }
+    rows = []
+    for check in report.get("checks_run") or []:
+        if not isinstance(check, dict):
+            continue
+        stage = by_command.get(str(check.get("command")), {})
+        rows.append(
+            {
+                "stage_id": stage.get("stage_id"),
+                "kind": stage.get("kind"),
+                "command": check.get("command"),
+                "result": parse_check_result(check.get("result")),
+                "evidence": str(check.get("evidence", "")),
+            }
+        )
+    return rows
+
+
+def _unsuccessful_checks(report: JsonObject, dispatch: JsonObject) -> list[JsonObject]:
+    return [
+        row
+        for row in _plan_checks(report, dispatch)
+        if row["result"] != ReportCheckResult.PASS
+    ]
+
+
+def _repeated_failures(
+    report: JsonObject,
+    dispatch: JsonObject,
+    earlier: list[EarlierReport],
+    *,
+    identical: bool,
+) -> list[JsonObject]:
+    """The failed plan stages of the report whose previous run (the newest earlier report that
+    ran the stage) failed too; with ``identical``, with the same evidence up to whitespace."""
+    found = []
+    for row in _unsuccessful_checks(report, dispatch):
+        if row["stage_id"] is None or row["result"] != ReportCheckResult.FAIL:
+            continue
+        previous = next(
+            (
+                {**other, "dispatch_id": item.dispatch.get("dispatch_id")}
+                for item in earlier
+                for other in _plan_checks(item.report, item.dispatch)
+                if other["stage_id"] == row["stage_id"]
+            ),
+            None,
+        )
+        if previous is None or previous["result"] != ReportCheckResult.FAIL:
+            continue
+        if identical and row["evidence"].split() != previous["evidence"].split():
+            continue
+        found.append({**row, "previous_dispatch_id": previous["dispatch_id"]})
+    return found
+
+
+def _stage_evidence(rows: list[JsonObject]) -> list[JsonObject]:
+    return [
+        {key: row[key] for key in ("stage_id", "kind", "command", "evidence")}
+        for row in rows
+    ]
+
+
+def configuration_stop(report: JsonObject, dispatch: JsonObject) -> Stop | None:
+    """The stop for a pytest plan stage that ended with exit code 4, a usage error before any
+    test ran (no I/O, issue #1272): the stage's frozen configuration failed, not the code."""
+    failed = [
+        row
+        for row in _plan_checks(report, dispatch)
+        if row["kind"] == verification_plan.PYTEST_KIND
+        and row["result"] == ReportCheckResult.FAIL
+        and USAGE_ERROR_EXIT.search(row["evidence"])
+    ]
+    if not failed:
         return None
     return Stop(
         "no-automatic-route",
-        "carried-items-not-closed",
+        "verification-plan-failure",
         {
-            "carried_items_gap": gap,
-            "not_closed": {item_id: reasons[item_id] for item_id in gap},
-            "remedy": "a human reads the reasons, then runs batch decide with "
-            "--decision override-warning and a --note, or --decision retry",
+            "sign": "configuration",
+            "stages": _stage_evidence(failed),
+            "remedy": PLAN_CONFIGURATION_REMEDY,
         },
     )
+
+
+def repeated_stop(
+    report: JsonObject, dispatch: JsonObject, earlier: list[EarlierReport]
+) -> Stop | None:
+    """The stop for a plan stage that failed with the same evidence as its previous run (no
+    I/O, issue #1272), as ``tooling-retry-repeated`` stops a repeated tooling block."""
+    repeated = _repeated_failures(report, dispatch, earlier, identical=True)
+    if not repeated:
+        return None
+    return Stop(
+        "no-automatic-route",
+        "verification-plan-failure",
+        {
+            "sign": "repeated",
+            "stages": _stage_evidence(repeated),
+            "previous_dispatch_id": repeated[0]["previous_dispatch_id"],
+            "remedy": PLAN_REPEATED_REMEDY,
+        },
+    )
+
+
+def report_stop(
+    stage: str,
+    report: JsonObject,
+    dispatch: JsonObject,
+    earlier: list[EarlierReport],
+    *,
+    scope_warnings: list[str],
+    block_bypass: bool,
+    auto_retry_min_severity: str = "info",
+) -> Stop | None:
+    """The stop the pending report shows before the table would retry it (no I/O): a plan stage
+    configuration failure, then carried items left not_closed, then a plan stage that failed
+    alike on its previous run. ``earlier`` lists the batch's decided reports, newest first."""
+    return (
+        configuration_stop(report, dispatch)
+        or not_closed_stop(
+            stage,
+            report,
+            dispatch,
+            scope_warnings=scope_warnings,
+            block_bypass=block_bypass,
+            auto_retry_min_severity=auto_retry_min_severity,
+            repeated=[
+                str(row["stage_id"])
+                for row in _repeated_failures(report, dispatch, earlier, identical=False)
+            ],
+        )
+        or repeated_stop(report, dispatch, earlier)
+    )
+
+
+def earlier_reports(
+    root: Path, batch: JsonObject, dispatch: JsonObject
+) -> list[EarlierReport]:
+    """The decided reports of the batch's active chain before ``dispatch``, newest first; a
+    report that cannot be read is left out."""
+    entries = active_dispatches(batch)
+    ids = [entry.get("dispatch_id") for entry in entries]
+    if dispatch.get("dispatch_id") in ids:
+        entries = entries[: ids.index(dispatch.get("dispatch_id"))]
+    found = []
+    for entry in reversed(entries):
+        if entry.get("state") != "reported" or not isinstance(entry.get("decision"), dict):
+            continue
+        try:
+            found.append(
+                EarlierReport(
+                    _load_dispatch(root, entry["dispatch_id"]),
+                    _pending_report(root, batch, entry),
+                )
+            )
+        except CoordinatorError:
+            continue
+    return found
 
 
 def environment_stop(stage: str, report: JsonObject, repo: Path) -> Stop | None:
@@ -841,10 +1050,11 @@ def resolve(
         else []
     )
     auto_retry_min_severity = _auto_retry_min_severity(config, batch)
-    held = not_closed_stop(
+    held = report_stop(
         stage,
         report,
         dispatch,
+        earlier_reports(root, batch, dispatch),
         scope_warnings=scope,
         block_bypass=inputs.block_bypass,
         auto_retry_min_severity=auto_retry_min_severity,
