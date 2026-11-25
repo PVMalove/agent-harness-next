@@ -332,7 +332,8 @@
         "abandon-dead-end": "The coordinator refuses the retry route, or the batch is blocked or failed. A human decides.",
         "supersede-dead-end": "The only remaining route is a supersede, which needs a human.",
         "qa-environment-failure": "The QA gate failed on its environment with no code-defect sign.",
-        "carried-items-not-closed": "A developer-retry report marks carried items not_closed with reasons; a retry cannot close them, so a human decides override-warning or retry."
+        "carried-items-not-closed": "A developer-retry report marks carried items not_closed with reasons; a retry cannot close them, so a human decides override-warning or retry.",
+        "verification-plan-failure": "A verification plan stage failed on its frozen configuration before its tests ran, or failed with the same evidence as its previous run; a developer retry cannot fix it."
       },
       "groups": {
         "budget-exhausted": [
@@ -357,7 +358,8 @@
           "abandon-dead-end",
           "supersede-dead-end",
           "qa-environment-failure",
-          "carried-items-not-closed"
+          "carried-items-not-closed",
+          "verification-plan-failure"
         ]
       }
     },
