@@ -13,7 +13,7 @@
 import { useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
-import { PageHeader, Panel, PipeTabs, StatusIcon, Summary } from "../ds";
+import { PageHeader, Panel, PipeTabs, ScreenState, StatusIcon, Summary } from "../ds";
 import type { PipeTab, Tone } from "../ds";
 import { NoData } from "../harness/HarnessOverview";
 import { useI18n } from "../i18n";
@@ -334,7 +334,8 @@ export function OpenProject() {
   const steps: PipeTab[] = STAGES.map((name, index) => ({
     id: String(index),
     label: t(name),
-    count: index < stage ? "✓" : index + 1,
+    // A finished stage gets a check beside its step number; the marker itself is the number.
+    badge: index < stage ? "✓" : undefined,
   }));
   const composition = (
     <dl className="ds-kv" id="open-project-composition-counts">
@@ -361,11 +362,7 @@ export function OpenProject() {
         }
       />
 
-      {screen.error && !facts && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Данные не получены")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Состояние проекта не получено" />
 
       <Summary
         id="open-project-facts"
@@ -396,7 +393,7 @@ export function OpenProject() {
 
       <div className="ds-wizard" id="open-project-steps">
         <PipeTabs id="open-project-step" label={t("Шаги установки")} tabs={steps} value={step} onChange={(id) => setStep(id)} />
-        <span className="ds-note">{t("Шаг {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
+        <span className="ds-note">{t("Этап проекта: {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
       </div>
 
       {facts && (

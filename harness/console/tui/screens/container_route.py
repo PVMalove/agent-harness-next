@@ -177,6 +177,7 @@ class ContainerRouteScreen(ConsoleShell):
     SECTION = "Orchestration"
     IS_SECTION_ROOT = False
     CRUMBS = "Главная › Оркестрация › Контейнерный маршрут"
+    AUTO_FOCUS = "#route-batch"
     NARROW_FOOTER_KEYS = ("escape", "enter", "f2")
     IDS = ShellIds(
         navigation="route-navigation",
@@ -265,7 +266,7 @@ class ContainerRouteScreen(ConsoleShell):
                 # A fixed pool: a stage shows at most MAX_ACTIONS buttons, the rest stay hidden.
                 for slot in range(MAX_ACTIONS):
                     yield Button("", id=f"act-{slot}", classes="no-i18n")
-            yield Input(placeholder="approved-by", id="route-approver")
+            yield Input(placeholder="Кто подтверждает (approved-by)", id="route-approver")
             yield Static("", id="route-status", classes="no-i18n", markup=False)
 
     def on_mount(self) -> None:

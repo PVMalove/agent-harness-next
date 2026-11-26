@@ -68,7 +68,9 @@ init/adopt/update. Установка требует подтверждения 
 | `Esc` | Назад или отмена |
 | `e` | Экспорт в Markdown |
 | `j` | Экспорт Repo Map в JSON |
-| `b` | Хронология batch в Reports, построение карты в Repo Map, «Доска задач» в Оркестрации |
+| `b` | «Доска задач» с любого экрана |
+| `t` | Хронология batch в карточке отчёта |
+| `u` | Построение карты в Repo Map |
 | `w` | «Ход работы» в Оркестрации |
 | `F3` | QA-логи в Reports |
 | `F1` | Эта справка с любого экрана |
@@ -195,7 +197,9 @@ every screen. Conflicts in discovery paths and managed files must be resolved be
 | `Esc` | Back or cancel |
 | `e` | Export to Markdown |
 | `j` | Export the Repo Map to JSON |
-| `b` | Batch timeline in Reports, build the map in Repo Map, task board in Orchestration |
+| `b` | Task board from any screen |
+| `t` | Batch timeline in a report card |
+| `u` | Build the map in Repo Map |
 | `w` | Agent activity in Orchestration |
 | `F3` | QA logs in Reports |
 | `F1` | This guide from any screen |

@@ -981,8 +981,14 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
 
     def _paint_detail(self) -> None:
         key = self._selected_key
+        # Without a selected command the risk and CLI frames and the actions have nothing to show.
+        for widget_id in ("command-risk", "command-cli", "copy-hint", "command-actions"):
+            self.query_one(f"#{widget_id}").display = key is not None
         if key is None:
-            for widget_id in ("command-detail", "command-risk", "command-cli"):
+            self.query_one("#command-detail", Static).update(
+                self._t("Выберите команду в группе слева — Enter раскрывает группу.")
+            )
+            for widget_id in ("command-risk", "command-cli"):
                 self.query_one(f"#{widget_id}", Static).update("")
             self.query_one("#command-run", Button).disabled = True
             return

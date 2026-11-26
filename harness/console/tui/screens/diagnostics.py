@@ -185,7 +185,7 @@ class DiagnosticsScreen(ConsoleShell):
     CRUMBS = "Главная › Диагностика"
     SECTION = "Diagnostics"
     NARROW_FOOTER_KEYS = ("escape", "e", "f2")
-    AUTO_FOCUS = "#diagnostics-scroll"
+    AUTO_FOCUS = "#check-list"
     CSS = SHELL_CSS + brand.shell_css("""
     DiagnosticsScreen #diagnostics-scroll { height: 1fr; padding: 0 2; }
     DiagnosticsScreen #diagnostics-heading { height: 1; text-style: bold; }

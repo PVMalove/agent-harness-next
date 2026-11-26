@@ -28,6 +28,14 @@ def _report_of(stages: list[StageEntry], role: str) -> StageEntry | None:
     )
 
 
+def _check(stage: StageEntry | None) -> str:
+    """A preflight check from a role's report: `ok` only for a completed report, `fail` for any
+    other recorded outcome, and `warn` while the report is missing."""
+    if stage is None or stage.report is None:
+        return "warn"
+    return "ok" if stage.report.outcome == "completed" else "fail"
+
+
 def _candidate(stages: list[StageEntry]) -> str:
     review = _report_of(stages, "code-review") or _report_of(stages, "review")
     if review is None or review.report is None:
@@ -108,10 +116,8 @@ class PublishScreen(ConsoleShell):
                     with SectionCard(title="Решение человека", id="publish-decision"):
                         yield Static("", id="publish-gate", markup=False)
                         with Horizontal(id="publish-actions"):
-                            yield Button(
-                                "Копировать PR", id="publish-copy", compact=True
-                            )
-                            yield Button("Обновить", id="publish-refresh", compact=True)
+                            yield Button("Копировать PR", id="publish-copy")
+                            yield Button("Обновить", id="publish-refresh")
 
     def on_mount(self) -> None:
         super().on_mount()
@@ -201,10 +207,10 @@ class PublishScreen(ConsoleShell):
         qa = _report_of(stages, "qa")
         publish = _report_of(stages, "publish")
         checks = (
-            ("Review", review is not None),
-            ("QA", qa is not None),
-            ("PR", bool(batch.pr_url)),
-            ("Publish", publish is not None),
+            ("Review", _check(review)),
+            ("QA", _check(qa)),
+            ("PR", "ok" if batch.pr_url else "warn"),
+            ("Publish", _check(publish)),
         )
         self._set_title(f"{batch.ticket or '—'} · {batch.batch_id}")
         meta = [
@@ -216,16 +222,19 @@ class PublishScreen(ConsoleShell):
         ]
         self.query_one("#publish-detail-meta", Static).update("\n".join(meta))
 
-        passed = sum(ok for _, ok in checks)
+        passed = sum(state == "ok" for _, state in checks)
         self.query_one("#publish-detail", SectionCard).set_note(
             f"{passed} / {len(checks)}"
         )
         gate = Text()
-        missing = [label for label, ok in checks if not ok]
-        if missing:
+        failed = [label for label, state in checks if state == "fail"]
+        missing = [label for label, state in checks if state == "warn"]
+        if failed or missing:
+            reasons = [f"не пройден {label}" for label in failed]
+            reasons += [f"нет {label}" for label in missing]
             gate.append(
-                f"{brand.STATUS_ICONS['fail']} Release Gate: заблокирован — нет "
-                + ", ".join(missing)
+                f"{brand.STATUS_ICONS['fail']} Release Gate: заблокирован — "
+                + ", ".join(reasons)
                 + "\n",
                 style=brand.STATUS_COLORS["fail"],
             )
@@ -240,20 +249,15 @@ class PublishScreen(ConsoleShell):
         )
         self.query_one("#publish-gate", Static).update(gate)
         body = Text()
-        for label, ok in checks:
-            icon = brand.STATUS_ICONS["ok"] if ok else brand.STATUS_ICONS["warn"]
-            color = brand.STATUS_COLORS["ok"] if ok else brand.STATUS_COLORS["warn"]
-            body.append(f"{icon} {label}\n", style=color)
-        if review is not None and review.report is not None:
-            body.append("\nReview\n", style=f"bold {brand.PALETTE['primary']}")
+        outcomes = {"Review": review, "QA": qa, "Publish": publish}
+        for label, state in checks:
             body.append(
-                str(review.report.outcome) + "\n", style=brand.PALETTE["foreground"]
+                f"{brand.STATUS_ICONS[state]} {label}", style=brand.STATUS_COLORS[state]
             )
-        if qa is not None and qa.report is not None:
-            body.append("\nQA\n", style=f"bold {brand.PALETTE['primary']}")
-            body.append(
-                str(qa.report.outcome) + "\n", style=brand.PALETTE["foreground"]
-            )
+            stage = outcomes.get(label)
+            if stage is not None and stage.report is not None:
+                body.append(f" · {stage.report.outcome}", style=brand.PALETTE["muted"])
+            body.append("\n")
         self.query_one("#publish-detail-body", Static).update(body)
         button = self.query_one("#publish-copy", Button)
         button.disabled = not bool(batch.pr_url)

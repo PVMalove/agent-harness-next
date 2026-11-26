@@ -214,7 +214,7 @@ export function CommandPanel({
       )}
       {refusal && (
         <p className="command-refusal err" role="alert" data-code={refusal.code}>
-          {t(JOB_ERROR_LABELS[refusal.code] ?? "Сервер ответил ошибкой.")}
+          {t(JOB_ERROR_LABELS[refusal.code] ?? "Не удалось загрузить список команд.")}
         </p>
       )}
       {unavailable && (
@@ -227,7 +227,7 @@ export function CommandPanel({
           <h2>{t("Команды")}</h2>
         </div>
         {commands === null ? (
-          <p className="harness-note">{t("Загрузка каталога команд…")}</p>
+          refusal ? null : <p className="harness-note">{t("Загрузка каталога команд…")}</p>
         ) : commands.length === 0 ? (
           <p className="harness-note">{t("В этом разделе нет команд")}</p>
         ) : (

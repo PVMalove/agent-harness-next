@@ -43,7 +43,7 @@ describe("the Help route", () => {
   test("asks for the guide in the UI language; the seven tabs carry counts computed from the data", () => {
     const { request } = renderPage();
     expect(request).toEqual({ id: request.id, type: "help.snapshot", language: "ru" });
-    expect(tabs()).toEqual(["1Начало", "13Разделы", "4Клавиши", "6Статусы", "12Безопасность", "4Вопросы", "3Документация"]);
+    expect(tabs()).toEqual(["1Начало", "2Разделы13", "3Клавиши4", "4Статусы6", "5Безопасность12", "6Вопросы4", "7Документация3"]);
     expect([...document.querySelectorAll("#help-kpis .ds-stat-label")].map((item) => item.textContent)).toEqual([
       "Разделов", "Сочетаний клавиш", "Правил безопасности", "Вопросов",
     ]);
@@ -52,7 +52,7 @@ describe("the Help route", () => {
     // Every guide section is shown in one of the tabs.
     const seen = new Set<string>();
     for (const name of tabs()) {
-      act(() => fireEvent.click(screen.getByRole("tab", { name: new RegExp(name!.replace(/^\d+/, "")) })));
+      act(() => fireEvent.click(screen.getByRole("tab", { name: new RegExp(name!.replace(/^\d+/, "").replace(/\d+$/, "")) })));
       for (const heading of document.querySelectorAll("#help-tab-start .ds-panel-title, [id^='help-section-'] .ds-panel-title, #help-faq .ds-panel-title, .ds-md h2")) seen.add(heading.textContent ?? "");
     }
     for (const title of FACTS.ru) expect([...seen], title).toContain(title);
@@ -120,7 +120,7 @@ describe("the Help route", () => {
     act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
     const request = answer(socket, EN);
     expect(request).toMatchObject({ type: "help.snapshot", language: "en" });
-    expect(tabs().map((label) => label!.replace(/^\d+/, ""))).toEqual(["Start", "Sections", "Keys", "Statuses", "Safety", "Questions", "Documentation"]);
+    expect(tabs().map((label) => label!.replace(/^\d+/, "").replace(/\d+$/, ""))).toEqual(["Start", "Sections", "Keys", "Statuses", "Safety", "Questions", "Documentation"]);
   });
 
   test("the renderer makes elements, never markup or an external link", () => {

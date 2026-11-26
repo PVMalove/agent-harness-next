@@ -190,7 +190,7 @@ class ConfigurationScreen(ConsoleShell):
     on every phase change, the frame itself (menu, breadcrumbs, footer) stays."""
 
     SECTION = "Configuration"
-    CRUMBS = "Главная › Настройка конфигурации"
+    CRUMBS = "Главная › Настройка"
     NARROW_FOOTER_KEYS = ("escape", "enter", "f2")
     AUTO_FOCUS = "#configure-project"
     # Textual's Screen binds Tab with no footer hint; the footer names it here.

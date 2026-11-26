@@ -393,7 +393,7 @@ def test_the_tui_tabs_word_the_execution_and_the_timeline() -> None:
     from harness.console.kernel import reports
     from harness.console.tui.screens.worker_observation import (
         execution_lines,
-        timeline_lines,
+        timeline_rows,
     )
 
     summary = execution_summary(
@@ -422,6 +422,7 @@ def test_the_tui_tabs_word_the_execution_and_the_timeline() -> None:
         "Runtime не надзирает за этим dispatch или не ответил."
     ]
     timeline = cast(reports.LedgerView, _timeline_view()).timeline("batch-1")
-    shown = timeline_lines(timeline, limit=2)
+    shown = timeline_rows(timeline, limit=2)
     assert len(shown) == 2
-    assert shown[-1].startswith("10:05:01  decision") and "восстановление: pause" in shown[-1]
+    at, kind, _role, text = shown[-1]
+    assert (at, kind) == ("10:05:01", "decision") and "восстановление: pause" in text

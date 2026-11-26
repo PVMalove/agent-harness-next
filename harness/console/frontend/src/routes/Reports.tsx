@@ -8,7 +8,7 @@
    stay on Orchestration. */
 import { downloadJson } from "../diagnostics/exportReport";
 import { useMemo, useState } from "react";
-import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
+import { LedgerAbsent, PageHeader, Panel, PipeTabs, ScreenState, Summary } from "../ds";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -128,16 +128,8 @@ export function Reports() {
         }
       />
 
-      {screen.error && !ledger && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
-      {ledger?.unavailable && (
-        <p className="ds-alert ds-alert-err" role="alert">
-          {ledger.unavailable}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Снимок отчётов не получен" />
+      <LedgerAbsent reason={ledger?.unavailable} />
 
       <Summary
         id="reports-summary"
@@ -220,7 +212,7 @@ export function Reports() {
                   <StageFilterBar filters={filters} onChange={setFilters} />
                 </details>
               </div>
-              <StageList stages={shown} reports={reports} selected={current?.dispatch_id ?? null} onSelect={setSelected} />
+              <StageList stages={shown} any={ledger.stages.length > 0} reports={reports} selected={current?.dispatch_id ?? null} onSelect={setSelected} />
               <div className="report-list-foot">{t("Отчёты не заменяют решение; evidence доступен в деталях.")}</div>
             </Panel>
             <Panel title={t("Детали отчёта")} fill scroll="text" id="reports-detail" label={t("Детали отчёта")}>
@@ -233,7 +225,7 @@ export function Reports() {
                 </>
               ) : (
                 <p className="ds-empty" id="report-detail">
-                  {t("Ничего не найдено")}
+                  {ledger.stages.length ? t("Ничего не найдено") : t("Отчётов ещё нет")}
                 </p>
               )}
             </Panel>

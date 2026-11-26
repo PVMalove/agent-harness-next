@@ -123,7 +123,7 @@ def test_stage_status_is_a_symbol_and_a_label_for_every_known_outcome() -> None:
         ("reported", "completed"): "✔ отчёт получен · завершено",
         ("reported", "blocked"): "⚠ отчёт получен · заблокировано",
         ("reported", "failed"): "✖ отчёт получен · ошибка",
-        ("working", None): "⚠ в работе · отчёта ещё нет",
+        ("working", None): "▶ в работе · отчёта ещё нет",
     }
     for (state, outcome), shown in cases.items():
         assert stage_status(_stage(state, outcome)).render("ru") == shown

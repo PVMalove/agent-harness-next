@@ -215,7 +215,7 @@ class KpiGrid(Grid):
 
     DEFAULT_CLASSES = "kpi-grid"
     DEFAULT_CSS = """
-    KpiGrid { grid-size: 4; grid-gutter: 0 2; height: auto; }
+    KpiGrid { grid-size: 4; grid-gutter: 1 2; height: auto; }
     KpiGrid Static { height: auto; }
     """
 
@@ -245,5 +245,6 @@ class KpiGrid(Grid):
             text = Text()
             text.append(label + "\n", style=brand.PALETTE["muted"])
             text.append(figure + "\n", style=f"bold {brand.PALETTE.get(colour, brand.PALETTE['foreground'])}")
-            text.append(hint, style=brand.PALETTE["muted"])
+            # A tile without a hint keeps its line, so the tiles of a row stay one height.
+            text.append(hint or " ", style=brand.PALETTE["muted"])
             yield Static(text, classes="kpi-tile no-i18n", markup=False)

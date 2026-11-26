@@ -45,6 +45,9 @@ SECTIONS = (
     "Agent activity",
     "Publish",
 )
+# From this terminal width the context panel takes 48 columns instead of 38.
+ROOMY_WIDTH = 180
+
 # Keys stay the familiar 0-9 for the original sections; the three Web views use b, w and p. The
 # menu shows the key in front of each name, in place of an icon.
 SECTION_KEYS = {
@@ -671,6 +674,7 @@ Screen.shell { background: $background !important; }
 .shell .field-column { width: 1fr; height: auto; padding-right: 2; }
 .shell .field { height: auto; margin-bottom: 1; }
 .shell.-spacious .context-panel { width: 38; }
+.shell.-spacious.-roomy .context-panel { width: 48; }
 .shell.-wide ShellSidebar { width: 27; }
 .shell.-narrow .menu-toggle { display: block; }
 .shell.-narrow ShellSidebar { display: none; }
@@ -707,6 +711,9 @@ Screen.shell { background: $background !important; }
 .shell ListView.well, .shell .frame { background: transparent; }
 .shell Input.-textual-compact, .shell Input.-textual-compact:focus { border: none; height: 1; padding: 0 1; background: transparent; }
 .shell Select.-textual-compact > SelectCurrent, .shell Select.-textual-compact:focus > SelectCurrent { border: none; height: 1; padding: 0 1; background: transparent; }
+.shell Input.-textual-compact:focus, .shell Select.-textual-compact:focus > SelectCurrent { background: $selection-background; color: $selection-foreground; }
+.shell Checkbox > .toggle--button, .shell RadioButton > .toggle--button { color: $text-muted; }
+.shell Checkbox.-on > .toggle--button, .shell RadioButton.-on > .toggle--button { color: $success; }
 """)
 
 
@@ -928,6 +935,8 @@ class ConsoleShell(Translated, Screen[ShellResult]):
 
     def on_resize(self, event: events.Resize) -> None:
         self._fold_context(event.size.width)
+        # A separate class, not a breakpoint: the `-spacious` rules still hold from 140 columns.
+        self.set_class(event.size.width >= ROOMY_WIDTH, "-roomy")
         self.call_after_refresh(self._ensure_visible_focus)
         for link in self.query(JumpLink):
             link.relabel()

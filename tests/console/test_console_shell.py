@@ -192,6 +192,37 @@ def test_the_menu_is_a_flat_list_in_hotkey_order() -> None:
         assert actions[key] == f"section({SECTIONS.index(name)})"
 
 
+def test_no_shell_screen_rebinds_a_section_key() -> None:
+    """A section key opens its section from every screen: a shell screen binds `b`, `w`, `p` or a
+    digit only to open that same section."""
+    import importlib
+    import pkgutil
+
+    from harness.console.kernel.i18n import section_label
+    from harness.console.tui import screens
+    from harness.console.tui.shell import SECTION_KEYS
+
+    for module in pkgutil.iter_modules(screens.__path__):
+        importlib.import_module(f"{screens.__name__}.{module.name}")
+
+    def subclasses(cls: type) -> list[type]:
+        found = []
+        for sub in cls.__subclasses__():
+            found += [sub, *subclasses(sub)]
+        return found
+
+    sections = {key: section_label("ru", name) for name, key in SECTION_KEYS.items()}
+    for screen_class in subclasses(ConsoleShell):
+        for binding in screen_class.__dict__.get("BINDINGS", []):
+            if not isinstance(binding, Binding) or binding.key not in sections:
+                continue
+            assert binding.description == sections[binding.key], (
+                screen_class.__name__,
+                binding.key,
+                binding.description,
+            )
+
+
 def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> None:
     """The Home, Open project, Diagnostics, Harness, Reports, Repo Map and Configuration screens
     take colours, the top bar and the navigation from the shell: their sources hold none of their

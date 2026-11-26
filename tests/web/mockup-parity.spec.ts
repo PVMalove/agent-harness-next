@@ -104,7 +104,7 @@ const PAGES: PageSpec[] = [
     route: "help",
     title: "Справка",
     blocks: ["#help-kpis", ".ds-toolbar", "#help-tabs", "#help-intro", "#help-next"],
-    tabs: ["1Начало", "13Разделы", "4Клавиши", "6Статусы", "12Безопасность", "4Вопросы", "3Документация"],
+    tabs: ["1Начало", "2Разделы13", "3Клавиши4", "4Статусы6", "5Безопасность12", "6Вопросы4", "7Документация3"],
   },
   {
     route: "agent-activity",
@@ -116,7 +116,7 @@ const PAGES: PageSpec[] = [
     route: "orchestration",
     title: "Оркестрация",
     blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-tabs", "#orch-stage-strip", "#orch-dispatch", "#orch-tickets", "#orch-batch-cards"],
-    tabs: ["1Конвейер", "2Поток", "3Качество", "4Runtime", "5Контейнер", "0Решения"],
+    tabs: ["1Конвейер", "2Поток", "3Качество", "4Runtime", "5Контейнер", "6Решения0"],
   },
   {
     route: "reports",

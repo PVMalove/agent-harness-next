@@ -206,8 +206,8 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     OrchestrationScreen #orchestration-title { width: auto; height: 1; text-style: bold; padding-right: 2; }
     OrchestrationScreen #orchestration-subtitle { width: 1fr; height: 1; color: $text-muted; }
     OrchestrationScreen .overview { height: auto; margin: 0; padding: 0; border: none; }
-    OrchestrationScreen #pipeline-stats { layout: horizontal; }
-    OrchestrationScreen #pipeline-stats .field-column { width: 1fr; padding-right: 2; }
+    OrchestrationScreen FieldGrid#pipeline-stats { layout: horizontal; }
+    OrchestrationScreen FieldGrid#pipeline-stats .field-column { width: 1fr; padding-right: 2; }
     OrchestrationScreen #ledger-lock { height: auto; }
     OrchestrationScreen #pipeline-analytics-card, OrchestrationScreen #pipeline-analytics TabPane { height: auto; }
     OrchestrationScreen #pipeline-analytics { height: auto; }
@@ -345,7 +345,9 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         with SectionCard(title="Состояние и статистика", id="pipeline-stats-card"):
             yield panel
         lock = Static(
-            ledger_lock.current_lock_text(
+            "Загрузка…"
+            if self._first_lock.lock_error == LOADING
+            else ledger_lock.current_lock_text(
                 self.repo, lambda repo: first_lock(self._first_lock), self._language
             ),
             id="ledger-lock",
@@ -387,6 +389,11 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         self.query_one("#worker-sessions", Button).label = self._sessions_label()
         if not self._view.unavailable:
             self._show_batches(console_stats.ALL_STATES)
+            # The command menu took focus on arrival, below the fold; the batch history is the
+            # screen's first list, so the arrow keys move a list the operator can see.
+            if self.focused is self.query_one("#command-menu"):
+                # After the recomposed overview is laid out, so the focus scrolls it into view.
+                self.call_after_refresh(self.query_one("#batch-history", ListView).focus)
 
     def _refresh_lock(self) -> None:
         """Перечитать состояние lock ledger без его захвата и обновить панель.

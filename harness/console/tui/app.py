@@ -303,7 +303,13 @@ class HarnessConsoleApp(App[None]):
             yield command._replace(title=title, help=help_text)
 
     def _console_commands(self, screen: Screen[object]) -> Iterable[SystemCommand]:
-        yield from super().get_system_commands(screen)
+        # The console draws with its own brand palette, so Textual's theme switch would leave
+        # those colours on a foreign background; the palette does not offer it.
+        yield from (
+            command
+            for command in super().get_system_commands(screen)
+            if command.callback != self.action_change_theme
+        )
         yield SystemCommand(
             "Language / Язык",
             "Switch the menu language between Russian and English (F2)",

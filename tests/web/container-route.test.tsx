@@ -73,8 +73,8 @@ describe("the Container route", () => {
   test("a new selection is a new read of its own", () => {
     const { socket } = renderRoute("#/container-route");
     expect(socket.request("container_route.view")).toMatchObject({ batch: "", role: "developer", runtime: "" });
-    act(() => fireEvent.change(screen.getByLabelText("batch"), { target: { value: "b-886" } }));
-    act(() => fireEvent.change(screen.getByLabelText("role"), { target: { value: "qa" } }));
+    act(() => fireEvent.change(screen.getByLabelText("Batch"), { target: { value: "b-886" } }));
+    act(() => fireEvent.change(screen.getByLabelText("Роль"), { target: { value: "qa" } }));
     act(() => fireEvent.click(screen.getByRole("button", { name: "Применить выбор" })));
     expect(socket.request("container_route.view")).toMatchObject({ batch: "b-886", role: "qa", runtime: "" });
     expect(window.location.hash).toBe("#/container-route?batch=b-886&role=qa");

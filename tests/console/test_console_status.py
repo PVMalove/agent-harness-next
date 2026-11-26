@@ -131,6 +131,13 @@ def test_status_caption_is_symbol_plus_words_in_the_status_colour() -> None:
     assert running.color in str(caption.style)
 
 
+def test_a_reported_session_shows_a_failed_or_blocked_report() -> None:
+    assert status.session_status("reported", "failed").render("ru") == "✖ Отчёт: ошибка"
+    assert status.session_status("reported", "blocked").render("en") == "⚠ Report: blocked"
+    assert status.session_status("reported", "completed").render("ru") == "✔ Отчёт получен"
+    assert status.session_status("working", "failed").render("ru") == "▶ Выполняется"
+
+
 def test_session_card_carries_ticket_role_dispatch_and_caption() -> None:
     from harness.console.tui import session_card
 

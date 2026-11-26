@@ -69,11 +69,12 @@ const BATCH_STATES: Readonly<Record<string, [StatusKind, string, string]>> = {
 export const reportsById = (ledger: Ledger): Map<string, ReportHead> =>
   new Map(ledger.reports.map((report) => [report.dispatch_id, report]));
 
-/** A stage row's status: `✔ отчёт получен · завершено`, or `⚠ в работе · отчёта ещё нет`. */
+/** A stage row's status: `✔ отчёт получен · завершено`, or `▶ в работе · отчёта ещё нет` while a
+    worker runs without a report. */
 export function stageStatus(stage: StageHead, report: ReportHead | undefined, narrow = false): Status {
   if (report === undefined) {
-    const [ru, en] = stage.state === "working" ? ["в работе", "in progress"] : [stage.state, stage.state];
-    return { kind: "warning", ru: `${ru} · отчёта ещё нет`, en: `${en} · no report yet` };
+    if (stage.state === "working") return { kind: "running", ru: "в работе · отчёта ещё нет", en: "in progress · no report yet" };
+    return { kind: "warning", ru: `${stage.state} · отчёта ещё нет`, en: `${stage.state} · no report yet` };
   }
   const [kind, ru, en] = OUTCOMES[report.outcome] ?? ["warning", report.outcome, report.outcome];
   const [wordRu, wordEn] = narrow ? ["отчёт", "report"] : ["отчёт получен", "report received"];

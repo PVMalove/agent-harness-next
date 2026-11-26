@@ -71,7 +71,7 @@ export function RepoMap() {
       {failed && <pre className="ds-code">{shown.output.filter((f) => f.channel === "stderr").map((f) => f.text).join("") || shown.error}</pre>}
     </Panel>}
     {error && <p role="alert" className="ds-alert ds-alert-err" data-code={error}>{t(ERROR_LABELS[error] ?? "Не удалось прочитать Repo Map")}</p>}
-    {!facts ? <p className="ds-empty">{t("Читаю снимок Repo Map…")}</p> : <>
+    {!facts ? (error ? null : <p className="ds-empty">{t("Читаю снимок Repo Map…")}</p>) : <>
       <Summary id="repo-facts" label={t("Сводка Repo Map")}
         stats={[
           { label: t("Файлы"), value: map?.files.length ?? "—" },

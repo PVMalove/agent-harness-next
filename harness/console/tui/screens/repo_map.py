@@ -116,10 +116,11 @@ class RepoMapScreen(ConsoleShell):
 
     CRUMBS = "Главная › Repo Map"
     SECTION = "Repo Map"
-    NARROW_FOOTER_KEYS = ("escape", "b", "f2")
+    NARROW_FOOTER_KEYS = ("escape", "u", "f2")
     AUTO_FOCUS = "Tabs"
+    # `b` opens the task board from every screen, so the build takes `u`.
     BINDINGS = [
-        Binding("b", "build", "Собрать"),
+        Binding("u", "build", "Собрать"),
         Binding(EXPORT_BINDING_KEY, "export", "Markdown"),
         Binding(EXPORT_JSON_BINDING_KEY, "export_json", "JSON"),
     ]

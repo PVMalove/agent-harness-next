@@ -21,7 +21,7 @@ import type { SessionStatus } from "../steps/ActivityViews";
 import { ExecutionPanel } from "../steps/ExecutionPanel";
 import { InProcessPanel } from "../steps/InProcessPanel";
 import { SessionEvents } from "../steps/SessionEvents";
-import { StepFilters } from "../steps/StepFilters";
+import { StepFilters, newestFirst } from "../steps/StepFilters";
 import { StepList } from "../steps/StepList";
 import { StepSources } from "../steps/StepSources";
 import { useLiveSteps } from "../steps/useLiveSteps";
@@ -48,7 +48,7 @@ export function AgentActivity() {
   const scoped = ticket ? live.dispatches.filter((entry) => entry.ticket === ticket) : live.dispatches;
   const ids = new Set(scoped.map((entry) => entry.dispatch_id));
   const steps = ticket ? live.steps.filter(({ step }) => ids.has(step.dispatch_id ?? "")) : live.steps;
-  const session = scoped.find((entry) => entry.dispatch_id === filter.dispatch) ?? scoped[0] ?? null;
+  const session = scoped.find((entry) => entry.dispatch_id === filter.dispatch) ?? newestFirst(scoped)[0] ?? null;
   const chooseTicket = (next: string | null) => {
     setTicket(next);
     setFilter({ ...filter, dispatch: null });
@@ -81,6 +81,14 @@ export function AgentActivity() {
           </a>
         </div>
       </div>
+      {live.error ? (
+        <div className="ds-alert ds-alert-err" role="alert" data-code={live.error}>
+          <div>
+            <b>{t("Поток шагов не получен: {code}", { code: live.error })}</b>
+            <p>{t("Консоль переподключится сама; если ошибка повторяется, откройте Диагностику.")}</p>
+          </div>
+        </div>
+      ) : null}
       <div className="work-stats">
         <WorkSummary dispatches={live.dispatches} />
         <WorkKpis dispatches={live.dispatches} analytics={ledger.data?.analytics ?? null} now={now} />
@@ -103,10 +111,11 @@ export function AgentActivity() {
               ticket={ticket}
               onTicket={chooseTicket}
             />
-            <SessionRoute session={session} dispatches={live.dispatches} prState={prState} now={now} />
+            <SessionRoute session={session} dispatches={live.dispatches} prState={prState} now={now}>
+              <InProcessPanel session={session} />
+              <ExecutionPanel session={session} />
+            </SessionRoute>
           </div>
-          <InProcessPanel session={session} />
-          <ExecutionPanel session={session} />
           <SessionEvents session={session} />
           <StepList steps={filterSteps(steps, filter)} unavailable={live.orchestration === "unavailable"} />
           <DecisionPanel kinds={["native-permission"]} hideWhenEmpty />

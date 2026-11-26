@@ -16,6 +16,7 @@
 import { TabList, tabId } from "../views/Tabs";
 import { useState } from "react";
 import { useSearchParams } from "react-router";
+import { ScreenState } from "../ds";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { useScreen } from "../screens/useScreen";
@@ -67,7 +68,7 @@ export function ContainerRoute() {
       <div className="page-title">
         <div>
           <h1>{t("Контейнерный запуск")}</h1>
-          <p>{t("Rootless Podman · среда, этапы и свидетельства.")}</p>
+          <p>{t("Контейнерный запуск worker: среда, этапы и свидетельства.")}</p>
           {view && (
             <p id="route-context">
               {view.context.map(([label, value], index) => (
@@ -94,25 +95,29 @@ export function ContainerRoute() {
           apply();
         }}
       >
-        {(["batch", "role", "runtime"] as const).map((name) => (
-          <input
-            key={name}
-            aria-label={name}
-            placeholder={name}
-            value={draft[name]}
-            onChange={(event) => setDraft({ ...draft, [name]: event.target.value })}
-          />
+        {(
+          [
+            ["batch", "Batch"],
+            ["role", "Роль"],
+            ["runtime", "Runtime, необязательно"],
+          ] as const
+        ).map(([name, label]) => (
+          <label key={name} className="route-field">
+            <span>{t(label)}</span>
+            <input
+              name={name}
+              placeholder={name}
+              value={draft[name]}
+              onChange={(event) => setDraft({ ...draft, [name]: event.target.value })}
+            />
+          </label>
         ))}
         <button className="btn" type="submit">
           {t("Применить выбор")}
         </button>
       </form>
 
-      {screen.error && !view && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Состояние контейнерного запуска не получено" />
 
       <div className="grid" id="route-summary">
         <section className="panel">
@@ -147,13 +152,12 @@ export function ContainerRoute() {
                 [
                   ["Podman", envFact(view, /podman/i)],
                   ["SELinux", envFact(view, /selinux/i)],
-                  ["Cgroups", null],
                 ] as const
               ).map(([label, row]) => (
-                <span key={label} style={{ display: "contents" }}>
+                <div key={label} className="route-env-row">
                   <dt>{label}</dt>
                   <dd className={row ? "" : "muted no-data"}>{row ? t(row.value) : t("нет данных")}</dd>
-                </span>
+                </div>
               ))}
             </dl>
           </div>

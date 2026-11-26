@@ -19,8 +19,8 @@ export const clockTime = (at: string) => {
 const TEXT_FILTERS: [keyof StageFilters, string][] = [
   ["ticket", "тикет"],
   ["role", "роль"],
-  ["outcome", "outcome"],
-  ["date", "дата (2026-09-27)"],
+  ["outcome", "итог"],
+  ["date", "дата ГГГГ-ММ-ДД"],
   ["state", "статус стадии"],
 ];
 
@@ -79,17 +79,20 @@ export function StageFilterBar({ filters, onChange }: { filters: StageFilters; o
 
 export function StageList({
   stages,
+  any = true,
   reports,
   selected,
   onSelect,
 }: {
   stages: readonly StageHead[];
+  /** Whether the ledger holds any stage at all: an empty filtered list then means "no match". */
+  any?: boolean;
   reports: Map<string, ReportHead>;
   selected: string | null;
   onSelect: (dispatchId: string) => void;
 }) {
   const { t, language } = useI18n();
-  if (!stages.length) return <p className="report-empty">{t("Ничего не найдено")}</p>;
+  if (!stages.length) return <p className="report-empty">{t(any ? "Ничего не найдено" : "Отчётов ещё нет")}</p>;
   return (
     <div id="report-list" className="report-list">
       {stages.map((stage) => {

@@ -139,7 +139,7 @@ export function Harness() {
             </span>
             {store && <span>{store.authority}</span>}
             {store?.schema != null && <span>schema {store.schema}</span>}
-            {state && <span>{t("{count} скилов", { count: state.skills })}</span>}
+            {state && <span>{t("{count} скиллов", { count: state.skills })}</span>}
           </>
         }
         snapshot={data ? (

@@ -9,7 +9,7 @@
    the TUI's command menu is not reproduced: decisions cover the human gate. */
 import { useState } from "react";
 import { DecisionPanel } from "../decisions/DecisionPanel";
-import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
+import { LedgerAbsent, PageHeader, Panel, PipeTabs, ScreenState, Summary } from "../ds";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -62,16 +62,8 @@ export function Orchestration() {
         }
       />
 
-      {screen.error && !data && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
-      {data?.ledger.unavailable && (
-        <p className="ds-alert ds-alert-err" role="alert">
-          {data.ledger.unavailable}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Снимок оркестрации не получен" />
+      <LedgerAbsent reason={data?.ledger.unavailable} />
 
       <Summary
         id="orch-summary"

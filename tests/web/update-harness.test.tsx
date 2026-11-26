@@ -95,7 +95,7 @@ describe("the Update Harness route", () => {
     expect(document.querySelector("#update-cache")?.textContent?.trim()).toMatch(/^\d{2}:\d{2}:\d{2}$/);
     expect(document.querySelector("#update-cache")?.getAttribute("title")).toBe("Новый снимок · 0 s");
     const tabs = [...document.querySelectorAll("#update-how [role=tab]")].map((tab) => tab.textContent);
-    expect(tabs).toEqual(["1Режим", "–Seed", "3План", "4Миграция"]);
+    expect(tabs).toEqual(["1Режим1", "2Seed–", "3План", "4Миграция"]);
     expect([...document.querySelectorAll(".ds-choice")].map((card) => [card.querySelector(".ds-row-title")?.textContent, card.querySelector(".ds-tag")?.textContent])).toEqual([
       ["Обычное", "рекомендуется"],
       ["С перезаписью управляемых файлов", "опасно"],
@@ -209,7 +209,7 @@ describe("the Update Harness route", () => {
   test("the summary carries the version rows and the plan warning has no doubled glyph", () => {
     const { socket } = renderPage();
     const facts = [...document.querySelectorAll("#update-versions .ds-facts-main span")].map((item) => item.textContent);
-    expect(facts).toContain("Скилов: 32");
+    expect(facts).toContain("Скиллов: 32");
     expect(facts).toContain("Lock обновлён: 2026-11-05 10:00 UTC");
     expect(document.querySelector("#update-warning b")?.textContent).not.toMatch(/^⚠/);
     const before = socket.sent.filter((body) => body.type === "update_harness.snapshot").length;

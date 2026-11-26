@@ -303,7 +303,9 @@ export function DispatchQueue({ data, now = Date.now() }: { data: OrchestrationS
     >
       <div id="orch-dispatch-list">
         {shown.length === 0 ? (
-          <div className="report-empty">{t("Dispatch с такими фильтрами нет")}</div>
+          <div className="report-empty">
+            {data.ledger.stages.length ? t("Dispatch с такими фильтрами нет") : t("Dispatch ещё не создавались")}
+          </div>
         ) : (
           shown.map((stage) => (
             <div className="orch-dispatch-row" key={stage.dispatch_id} data-dispatch={stage.dispatch_id}>

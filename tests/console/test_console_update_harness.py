@@ -77,10 +77,10 @@ def test_counters_and_file_tags_carry_symbols() -> None:
 def test_the_versions_verdict_is_a_symbol_and_a_word() -> None:
     current = render_versions(_state(), "1.3.2").plain
     assert "✔ Версия актуальна" in current
-    assert "Состав" in current and "Скилов" in current and "Lock обновлён" in current
+    assert "Состав" in current and "Скиллов" in current and "Lock обновлён" in current
     assert "⚠ Доступно обновление" in render_versions(_state(), "1.4.0").plain
     narrow = render_versions(_state(), "1.3.2", narrow=True).plain
-    assert "Установлено" in narrow and "Состав" in narrow and "Скилов" not in narrow
+    assert "Установлено" in narrow and "Состав" in narrow and "Скиллов" not in narrow
     missing = render_versions(_state(installed=False), "1.4.0").plain.splitlines()
     assert missing == [
         "✖ Харнесс не установлен: нет читаемого .harness/harness.lock",

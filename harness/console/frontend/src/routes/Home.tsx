@@ -628,7 +628,7 @@ export function Home() {
             <h2>{t("Контекст")}</h2>
             <span className="small muted">{project?.name ?? t("нет данных")}</span>
           </div>
-          <div className="context-grid">
+          <div className="context-grid" tabIndex={0} role="region" aria-label={t("Контекст")}>
             <div className="context-section">
               <h3>
                 <Icon name={HOSTING_ICON[project?.tracker ?? ""] ?? "folder"} /> {t("Проект")}

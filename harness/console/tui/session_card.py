@@ -36,9 +36,11 @@ def session_card(
     language: str,
     id_limit: int,
     stacked: bool = False,
+    outcome: str = "",
 ) -> Text:
     """Ticket and role on the first line, then the shortened dispatch ID and the status caption:
-    on one line, or each on its own when `stacked` (a narrow list)."""
+    on one line, or each on its own when `stacked` (a narrow list). A failed or blocked report
+    `outcome` replaces the «Отчёт получен» caption."""
     card = Text(f"{ticket}  ·  ", style=brand.PALETTE["foreground"])
     card.append_text(role_label(role))
     card.append("\n")
@@ -46,7 +48,7 @@ def session_card(
         brand.shorten(dispatch_id, id_limit) + ("\n" if stacked else "  ·  "),
         style=brand.PALETTE["muted"],
     )
-    card.append_text(status_caption(session_status(state), language))
+    card.append_text(status_caption(session_status(state, outcome), language))
     return card
 
 

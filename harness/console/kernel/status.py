@@ -54,6 +54,11 @@ _SESSION = {
     "abandoned": Status("paused", "Завершён", "Finished"),
 }
 _UNCONFIRMED = Status("warning", "Нет подтверждения", "Unconfirmed")
+# A reported session whose report did not complete: the report outcome outranks the state.
+_REPORTED = {
+    "failed": Status("error", "Отчёт: ошибка", "Report: failed"),
+    "blocked": Status("warning", "Отчёт: заблокировано", "Report: blocked"),
+}
 
 PERMISSION_PENDING = Status("warning", "Ждёт разрешения", "Permission pending")
 
@@ -64,8 +69,11 @@ _PROCESS = {
 _OUTCOME_UNKNOWN = Status("warning", "Исход неизвестен", "Outcome unknown")
 
 
-def session_status(state: str) -> Status:
-    """The status of a session in ledger state `state`; an unknown state is unconfirmed."""
+def session_status(state: str, outcome: str = "") -> Status:
+    """The status of a session in ledger state `state`; an unknown state is unconfirmed. A
+    reported session with a failed or blocked report `outcome` shows that outcome."""
+    if state == "reported" and outcome in _REPORTED:
+        return _REPORTED[outcome]
     return _SESSION.get(state, _UNCONFIRMED)
 
 

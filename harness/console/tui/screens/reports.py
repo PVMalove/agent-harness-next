@@ -39,8 +39,8 @@ from .commands import call_from_worker
 _FILTERS = (
     ("filter-ticket", "тикет", "ticket"),
     ("filter-role", "роль", "role"),
-    ("filter-outcome", "outcome", "outcome"),
-    ("filter-date", "дата (2026-09-27)", "date"),
+    ("filter-outcome", "итог", "outcome"),
+    ("filter-date", "дата ГГГГ-ММ-ДД", "date"),
     ("filter-state", "статус стадии", "state"),
 )
 
@@ -63,7 +63,10 @@ _QA_LABELS = ("F3 QA-логи", "QA")
 
 
 def _short_id(identifier: str, prefix: str) -> str:
-    return identifier.removeprefix(prefix)[:8]
+    """The id without its prefix: whole up to 12 cells, else its first 8 cells and an ellipsis,
+    so a cut id never reads as another id."""
+    rest = identifier.removeprefix(prefix)
+    return rest if len(rest) <= 12 else rest[:8] + "…"
 
 
 def _report_label(
@@ -172,10 +175,10 @@ class ReportsScreen(ConsoleShell):
     CSS = SHELL_CSS + brand.shell_css("""
     ReportsScreen #reports-page { height: 1fr; padding: 0 2; }
     ReportsScreen #report-header { height: auto; margin-bottom: 1; }
-    ReportsScreen #report-heading { width: 1fr; height: auto; }
+    ReportsScreen #report-heading { width: 1fr; min-width: 30; height: auto; }
     ReportsScreen #reports-title { height: 1; text-style: bold; }
     ReportsScreen #reports-subtitle { height: 1; color: $text-muted; }
-    ReportsScreen #reports-status { width: auto; height: 1; margin-right: 2; }
+    ReportsScreen #reports-status { width: auto; max-width: 70; height: 1; margin-right: 2; text-wrap: nowrap; text-overflow: ellipsis; }
     ReportsScreen #report-toolbar { width: auto; height: 1; }
     ReportsScreen #report-toolbar Button { margin-left: 1; }
     ReportsScreen #report-filter-fold { margin-bottom: 1; }
@@ -709,8 +712,9 @@ class ReportScreen(ConsoleShell):
     IS_SECTION_ROOT = False
     AUTO_FOCUS = "#report-body"
     CSS = SHELL_CSS + _DETAIL_CSS
+    # `b` opens the task board from every screen, so the timeline takes `t`.
     BINDINGS = [
-        Binding("b", "open_timeline", "Хронология"),
+        Binding("t", "open_timeline", "Хронология"),
         Binding(EXPORT_BINDING_KEY, "export", "Экспорт"),
     ]
 
@@ -771,7 +775,7 @@ class ReportScreen(ConsoleShell):
                         markup=False,
                     )
                 with Horizontal(classes="page-actions"):
-                    yield Button("b Хронология batch", id="open-timeline", compact=True)
+                    yield Button("t Хронология batch", id="open-timeline", compact=True)
                     yield Button("e Экспорт в Markdown", id="export", compact=True)
             yield FieldGrid(self._fields(), id="report-fields")
             for title, lines in console_reports.report_section_lines(self.entry.report):

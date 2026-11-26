@@ -82,10 +82,10 @@ describe("PipeTabs", () => {
       tabs={[{ id: "a", label: "Первая" }, { id: "b", label: "Вторая", count: 7 }, { id: "c", label: "Третья" }]} />;
   }
 
-  test("numbers the steps, keeps the number of a counted tab and moves with the arrow keys", () => {
+  test("numbers the steps, shows a count as the badge beside the step number and moves with the arrow keys", () => {
     render(<Harness />);
     const tabs = screen.getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["1Первая", "7Вторая", "3Третья"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["1Первая", "2Вторая7", "3Третья"]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
     expect(screen.getAllByRole("tab")[1].getAttribute("aria-selected")).toBe("true");

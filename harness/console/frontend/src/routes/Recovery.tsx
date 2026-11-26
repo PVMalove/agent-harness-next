@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
+import { ScreenState } from "../ds";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { useScreen } from "../screens/useScreen";
@@ -132,11 +133,7 @@ export function Recovery() {
         </div>
       </div>
 
-      {screen.error && !data && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Состояние восстановления не получено" />
 
       <div className="note" id="recovery-note">
         {t("Неизвестный исход не считается успехом. Действия восстановления выполняются только после подтверждения.")}
@@ -158,7 +155,9 @@ export function Recovery() {
             ))
           ) : (
             <div className="body">
-              <p className="muted">{t("Откройте recovery выбранного batch, чтобы увидеть его состояние.")}</p>
+              <p className="muted">
+                {screen.loading || screen.error ? "—" : t("Откройте recovery выбранного batch, чтобы увидеть его состояние.")}
+              </p>
             </div>
           )}
         </section>
@@ -223,8 +222,13 @@ export function Recovery() {
           <RowList rows={view.rows} blockers={view.blockers} notes={view.notes} actions={actions} />
           <ActionBar actions={actions} busy={false} onAction={onAction} />
           <div className="recovery-inputs" id="recovery-inputs">
-            <input aria-label="approved-by" placeholder="approved-by" value={approver} onChange={(event) => setApprover(event.target.value)} />
-            <input aria-label="note" placeholder="note" value={note} onChange={(event) => setNote(event.target.value)} />
+            <input
+              aria-label={t("Кто подтверждает (approved-by)")}
+              placeholder={t("Кто подтверждает (approved-by)")}
+              value={approver}
+              onChange={(event) => setApprover(event.target.value)}
+            />
+            <input aria-label={t("Заметка (note)")} placeholder={t("Заметка (note)")} value={note} onChange={(event) => setNote(event.target.value)} />
             <input
               aria-label={t("ID диагностики")}
               placeholder={t("ID диагностики")}

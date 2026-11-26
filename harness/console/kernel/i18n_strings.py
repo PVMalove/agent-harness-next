@@ -196,7 +196,6 @@ EN: dict[str, str] = {
     "НАБЛЮДЕНИЕ · БЕЗ LLM\n\nОткрытие сессии подключает локальный монитор. Новый worker не запускается.": "OBSERVATION · NO LLM\n\nOpening a session attaches a local monitor. No new worker is started.",
     "Наблюдение за работой": "Worker observation",
     "Наблюдение": "Observation",
-    "Worker / Наблюдение": "Worker / Observation",
     "Контекст запуска": "Launch context",
     "Сессия": "Session",
     "Сессии": "Sessions",
@@ -551,7 +550,8 @@ EN: dict[str, str] = {
     "нет отчёта": "no report",
     "тикет": "ticket",
     "роль": "role",
-    "дата (2026-09-27)": "date (2026-09-27)",
+    "дата ГГГГ-ММ-ДД": "date YYYY-MM-DD",
+    "итог": "outcome",
     # group headings (also used by the command menus)
     "Установка и обновление": "Install & update",
     "Скиллы": "Skills",
@@ -971,7 +971,7 @@ EN_PHRASES: dict[str, str] = {
     "нет читаемого .harness/harness.lock": "no readable .harness/harness.lock",
     "Установлена версия": "Installed version",
     "версия пакета харнесса": "Harness package version",
-    "Скилов": "Skills",
+    "Скиллов": "Skills",
     "управляемых файлов": "managed files",
     "Lock обновлён": "Lock updated",
     "Оркестрация: подключена": "Orchestration: connected",
@@ -1147,7 +1147,7 @@ EN.update(
         "Стадии, completion reports и хронология batch из ledger.": "Stages, completion reports and the batch timeline from the ledger.",
         "Enter — открыть отчёт": "Enter — open the report",
         "Enter — хронология": "Enter — timeline",
-        "b Хронология batch": "b Batch timeline",
+        "t Хронология batch": "t Batch timeline",
         "e Экспорт в Markdown": "e Export to Markdown",
         "файлы": "files",
         "До PR": "To PR",
@@ -1912,7 +1912,7 @@ EN.update(
         "Источники шагов": "Step sources",
         "наблюдаемые данные": "observed data",
         "Шаги, роли и инструменты приходят структурированными.": "Steps, roles and tools arrive structured.",
-        "Только plain-хвост лога. Не выдаём его за шаги и не показываем thinking.": "Only the plain log tail. It is not passed off as steps and thinking is not shown.",
+        "Только хвост обычного лога: его строки не выдаются за шаги, рассуждения модели не показываются.": "Only the plain log tail. It is not passed off as steps and thinking is not shown.",
         "Все сессии": "All sessions",
         "{shown} из {total}": "{shown} of {total}",
         "Все роли": "All roles",
@@ -2042,7 +2042,7 @@ EN.update(
         "Установлено": "Installed",
         "установлен": "installed",
         "Пакет": "Package",
-        "Скилов": "Skills",
+        "Скиллов": "Skills",
         "Управляемых файлов": "Managed files",
         "Lock обновлён": "Lock updated",
         "✔ подключена": "✔ connected",
@@ -2050,7 +2050,7 @@ EN.update(
         "Харнесс не установлен: нет читаемого .harness/harness.lock.": "Harness is not installed: no readable .harness/harness.lock.",
         "Состояние харнесса загружается…": "Loading the Harness state…",
         "○ Состояние харнесса недоступно: ": "○ Harness state unavailable: ",
-        "{count} скилов": "{count} skills",
+        "{count} скиллов": "{count} skills",
         "{count} управляемых файлов": "{count} managed files",
         "{count} объектов": "{count} items",
         "Пайплайн": "Pipeline",
@@ -2127,6 +2127,9 @@ EN.update(
 EN.update(
     {
         "ID диагностики": "Diagnostic ID",
+        "Кто подтверждает (approved-by)": "Approved by (approved-by)",
+        "Выберите команду в группе слева — Enter раскрывает группу.": "Choose a command in a group on the left; Enter expands the group.",
+        "Заметка (note)": "Note (note)",
         "Resume, Fix и Reload — отдельные действия ядра; выход с сохранением не отменяет batch и не останавливает worker.": "Resume, Fix and Reload are separate core actions; exit with save does not abandon the batch or stop the worker.",
         "Восстановление batch": "Batch recovery",
         "Выйти с сохранением": "Exit with save",
@@ -2243,6 +2246,7 @@ EN.update(
 EN.update(
     {
         "Шаг {current} из {total}": "Step {current} of {total}",
+        "Этап проекта: {current} из {total}": "Project stage: {current} of {total}",
         "Команда для другой консоли": "Command for another console",
         "Этот проект уже открыт этим сервером": "This server already serves this project",
         "✖ заблокировано: {n}": "✖ blocked: {n}",
@@ -2828,7 +2832,7 @@ EN.update(
         "PR готов к созданию": "The PR is ready to create",
         "Почему": "Why",
         "нет данных · обоснование для проверки не записано": "no data · no rationale is recorded for the check",
-        "политику hook снимок harness.overview не читает": "the harness.overview snapshot does not read the hook policy",
+        "Снимок не содержит политику хуков": "The snapshot holds no hook policy",
         "быстрый доступ": "quick access",
         "команда": "command",
         "режим": "mode",
@@ -3056,7 +3060,7 @@ EN.update(
         "Сбои инфраструктуры не повторяются автоматически.": "Infrastructure failures are not retried automatically.",
         "Сервер консоли отвечает": "The console server answers",
         "Состояние worker принимается без подтверждения.": "A worker's state is accepted without attestation.",
-        "Состояние функций Harness и отчёт harness health. Команды «Как исправить» консоль не выполняет — запустите их вручную.": "The state of the Harness features and the harness health report. The console does not run the \"How to fix\" commands; run them by hand.",
+        "Состояние функций Harness и отчёт harness health. Консоль не выполняет команды из «Как исправить»: запустите их вручную.": "The state of the Harness features and the harness health report. The console does not run the \"How to fix\" commands; run them by hand.",
         "Список проверок": "Check list",
         "Список функций": "Feature list",
         "Тело PR пишется вручную.": "The PR body is written by hand.",
@@ -3167,6 +3171,33 @@ EN.update(
         "ID контейнера": "Container ID",
         "код": "code",
         "остановлено": "stopped by",
+    }
+)
+
+# Screen states of the web console (UX review of #1296): what was not received, a retry, and a
+# first run that is not a failure.
+EN.update(
+    {
+        "Повторите запрос; если ошибка повторяется, откройте Диагностику.": "Retry; if the error repeats, open Diagnostics.",
+        "Оркестрация в этом проекте ещё не запускалась": "Orchestration has not run in this project yet",
+        "Данные появятся после первого batch; как его запустить, описано в Справке.": "The data appears after the first batch; Help describes how to start one.",
+        "Поток шагов не получен: {code}": "The step feed was not received: {code}",
+        "Консоль переподключится сама; если ошибка повторяется, откройте Диагностику.": "The console reconnects by itself; if the error repeats, open Diagnostics.",
+        "Сессий пока нет: маршрут появится, когда batch отправит первый worker.": "No sessions yet: the route appears when a batch sends its first worker.",
+        "Снимок оркестрации не получен": "The orchestration snapshot was not received",
+        "Снимок отчётов не получен": "The reports snapshot was not received",
+        "Снимок публикации не получен": "The publication snapshot was not received",
+        "Состояние восстановления не получено": "The recovery state was not received",
+        "Состояние контейнерного запуска не получено": "The container route state was not received",
+        "Настройки не получены": "The settings were not received",
+        "Состояние проекта не получено": "The project state was not received",
+        "Состояние обновления не получено": "The update state was not received",
+        "Dispatch ещё не создавались": "No dispatch has been created yet",
+        "Отчётов ещё нет": "No reports yet",
+        "Не удалось загрузить список команд.": "The command list could not be loaded.",
+        "Batch": "Batch",
+        "Runtime, необязательно": "Runtime, optional",
+        "Контейнерный запуск worker: среда, этапы и свидетельства.": "Container launch of a worker: environment, stages and evidence.",
     }
 )
 

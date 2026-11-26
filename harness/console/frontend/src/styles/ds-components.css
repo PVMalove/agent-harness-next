@@ -56,7 +56,7 @@
   background: var(--ds-bg);
   color: var(--ds-faint);
 }
-.ds-search:focus-within { border-color: var(--ds-accent); }
+.ds-search:focus-within { border-color: var(--ds-accent); outline: 2px solid var(--ds-accent); outline-offset: 1px; }
 .ds-search .ds-input { flex: 1; min-width: 0; padding: 4px 0; border: 0; background: none; outline: none; }
 .ds-toolbar {
   display: flex;
@@ -111,6 +111,10 @@
 .ds-h1 { font-size: var(--ds-fs-4); line-height: 1.25; font-weight: 600; }
 .ds-sub { margin: 0; color: var(--ds-muted); }
 .ds-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (min-width: 1200px) {
+  .ds-page-head > :first-child { flex: 1 1 auto; min-width: 0; }
+  .ds-head-actions { flex: none; flex-wrap: nowrap; }
+}
 .ds-summary { border: 1px solid var(--ds-line); border-radius: 8px; background: var(--ds-surface); }
 .ds-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .ds-stat {
@@ -140,6 +144,7 @@
 .ds-facts-main { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; min-width: 0; }
 .ds-facts-main span,
 .ds-facts-end { display: inline-flex; align-items: center; gap: 4px; }
+.ds-facts-end > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 
 /* Pipeline tabs: one row; when it does not fit it scrolls inside itself, and the edges fade while
    there is more to scroll (modern-web-guidance ui-components/tabs, "Handling tabs that don't fit"). */

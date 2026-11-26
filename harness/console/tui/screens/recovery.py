@@ -77,6 +77,7 @@ class RecoveryScreen(ConsoleShell):
     SECTION = "Orchestration"
     IS_SECTION_ROOT = False
     CRUMBS = "Главная › Оркестрация › Восстановление"
+    AUTO_FOCUS = "#recovery-history"
     NARROW_FOOTER_KEYS = ("escape", "enter", "f2")
     IDS = ShellIds(
         navigation="recovery-navigation",
@@ -92,6 +93,8 @@ class RecoveryScreen(ConsoleShell):
     RecoveryScreen #recovery-title { height: 1; text-style: bold; margin-bottom: 1; }
     RecoveryScreen #recovery-history { height: 10; margin-bottom: 1; }
     RecoveryScreen #recovery-entry { height: auto; margin-bottom: 1; }
+    RecoveryScreen #recovery-nav { height: auto; margin-bottom: 1; }
+    RecoveryScreen #recovery-nav Button { margin-right: 1; }
     RecoveryScreen #recovery-body { height: auto; padding: 0 1; border: round $border-subtle; background: transparent; }
     RecoveryScreen #recovery-actions { height: auto; margin-top: 1; }
     RecoveryScreen #recovery-actions Button { margin-right: 1; }
@@ -145,8 +148,8 @@ class RecoveryScreen(ConsoleShell):
                 for slot in range(MAX_ACTIONS):
                     yield Button("", id=f"ract-{slot}", classes="no-i18n")
             with Horizontal(id="recovery-inputs"):
-                yield Input(placeholder="approved-by", id="recovery-approver")
-                yield Input(placeholder="note", id="recovery-note")
+                yield Input(placeholder="Кто подтверждает (approved-by)", id="recovery-approver")
+                yield Input(placeholder="Заметка (note)", id="recovery-note")
                 yield Input(placeholder="ID диагностики", id="recovery-diagnostic")
             yield Static("", id="recovery-status", classes="no-i18n", markup=False)
 

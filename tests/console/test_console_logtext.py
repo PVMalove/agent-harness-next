@@ -49,6 +49,6 @@ def test_diff_colours_additions_removals_and_hunks() -> None:
 
 
 def test_overview_keys_are_accented() -> None:
-    overview = colorize_overview("Скилов: 32\nбез двоеточия")
-    assert brand.PALETTE["primary"] in _styles(overview)["Скилов:"]
-    assert overview.plain == "Скилов: 32\nбез двоеточия"
+    overview = colorize_overview("Скиллов: 32\nбез двоеточия")
+    assert brand.PALETTE["primary"] in _styles(overview)["Скиллов:"]
+    assert overview.plain == "Скиллов: 32\nбез двоеточия"

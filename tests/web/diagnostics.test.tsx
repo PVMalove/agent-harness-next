@@ -243,7 +243,7 @@ describe("the Diagnostics Features tab", () => {
     const { socket } = renderFeatures();
     expect(socket.request("features.snapshot")).toMatchObject({ force: false });
     const tabs = screen.getAllByRole("tab").map((tab) => tab.textContent);
-    expect(tabs.slice(0, 2)).toEqual(["26Функции", "—Проверки"]);
+    expect(tabs.slice(0, 2)).toEqual(["1Функции26", "2Проверки—"]);
     expect(featureRows()).toHaveLength(26);
     const groups = [...document.querySelectorAll("#features-list [data-category]")].map((group) => group.getAttribute("data-category"));
     expect(groups).toEqual(["execution", "roles", "hooks", "context", "process", "publication", "capabilities", "platform"]);

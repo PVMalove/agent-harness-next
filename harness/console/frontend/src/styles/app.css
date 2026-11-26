@@ -495,6 +495,10 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   #home .context-section { padding: 8px 12px; }
   #home .context-section h3 { margin-bottom: 4px; }
   #home .context-section .kv > div { padding: 2px 0; }
+  /* A long value starts on its own line under its label instead of breaking mid-word. */
+  #home .context-section .kv > div { flex-wrap: wrap; column-gap: 12px; }
+  #home .context-section .kv dd { overflow-wrap: break-word; flex: 1 1 auto; min-width: 0; }
+  #home .contour-svg text { font-size: 15px; }
   #home-health > .body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px; overflow: hidden; }
   #home-health > .panel-head { flex-wrap: wrap; gap: 4px 12px; padding: 8px 16px; }
   #home .health-mode { flex-wrap: wrap; gap: 4px 12px; }
@@ -621,8 +625,11 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .work-fit .work-grid { display: grid; gap: 12px; align-items: stretch; margin: 0; }
   .work-fit .work-grid > .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .work-fit .work-sessions .work-list { flex: 1 1 auto; min-height: 120px; max-height: none; overflow-y: auto; }
-  .work-fit .work-grid > .work-sessions { overflow-y: auto; }
-  .work-fit .work-route-panel { overflow-y: auto; }
+  /* Only the session list scrolls in the sessions panel; the route panel scrolls as a whole, so
+     its actions and the session's observation stay reachable (UX review of #1296). */
+  .work-fit .work-grid > .work-route-panel { overflow-y: auto; }
+  .work-fit .work-sources .work-source small { display: none; }
+  .work-fit .work-sources .work-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .work-fit .work-events-panel { display: flex; flex-direction: column; overflow: hidden; }
   .work-fit .work-events-panel .work-events { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
   .work-fit > .work-panel > .decision-panel { grid-column: 1 / -1; max-height: 160px; overflow-y: auto; }
@@ -826,3 +833,20 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   border: 1px solid var(--rule); border-radius: 4px;
 }
 .work-event[data-kind="output"] .work-event-main b { font: var(--fs-1) var(--mono); font-weight: 400; white-space: pre-wrap; }
+/* The session's observation inside the route panel: no second panel frame (#1296). */
+.work-route-panel .work-observation, .work-route-panel .work-execution { border: none; border-top: 1px solid var(--rule); border-radius: 0; box-shadow: none; margin: 12px 0 0; background: transparent; }
+.work-source.plain { border-color: var(--rule); }
+.work-source.plain > span { color: var(--orch-cyan); }
+/* UX review of #1296 (wide): a row's focus ring stays inside its scrolling list; the preflight
+   reads name first, status on the right, in one aligned column; Publish gives the candidates
+   less width than the detail. */
+.ds-panel-body :is(.ds-row, .report-row, .orch-dispatch-row, .work-row):focus-visible { outline-offset: -2px; }
+.publish-preflight .publish-check { grid-template-columns: minmax(0, 1fr) max-content; }
+.publish-preflight .publish-check > :last-child { justify-self: end; }
+@media (min-width: 1200px) {
+  .publish-page .ds-split { grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr); }
+}
+/* Container route (UX review of #1296): each field has a visible label; a dl keeps its pairs
+   in div rows, as the definition-list rules of axe require. */
+.route-select .route-field { display: inline-flex; flex-direction: column; gap: 2px; font-size: var(--fs-1); color: var(--muted); }
+#route-env .route-env-row { display: contents; }

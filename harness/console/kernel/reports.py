@@ -454,12 +454,14 @@ _BATCH_STATES = {
 
 def stage_status(entry: StageEntry, *, narrow: bool = False) -> Status:
     """A stage row's status, a symbol and a label: `✔ отчёт получен · завершено`, or
-    `⚠ в работе · отчёта ещё нет` while no report is recorded. A value the console does not know is
-    shown as the ledger wrote it. A narrow terminal drops `получен`."""
+    `▶ в работе · отчёта ещё нет` while a worker runs without a report. A value the console does
+    not know is shown as the ledger wrote it. A narrow terminal drops `получен`."""
     if entry.report is None:
-        known = {"working": ("в работе", "in progress")}.get(entry.state)
-        ru, en = known or (entry.state, entry.state)
-        return Status("warning", f"{ru} · отчёта ещё нет", f"{en} · no report yet")
+        if entry.state == "working":
+            return Status("running", "в работе · отчёта ещё нет", "in progress · no report yet")
+        return Status(
+            "warning", f"{entry.state} · отчёта ещё нет", f"{entry.state} · no report yet"
+        )
     outcome = entry.report.outcome
     kind, ru, en = _OUTCOMES.get(outcome, ("warning", outcome, outcome))
     word_ru, word_en = (

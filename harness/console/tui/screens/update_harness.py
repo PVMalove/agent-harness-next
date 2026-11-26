@@ -206,7 +206,7 @@ def render_versions(
     rows = [("Состав", ", ".join(state.capabilities) or t("нет"))]
     if not narrow:
         rows += [
-            ("Скилов", str(state.skills)),
+            ("Скиллов", str(state.skills)),
             ("Управляемых файлов", str(state.managed_files)),
             ("Lock обновлён", state.updated_at),
         ]

@@ -1,6 +1,7 @@
 /* The mockup's Agent activity blocks over the live roster and the ledger snapshot: the summary,
    the KPI row, the session route, the timeline and the statistics. Counts come from the roster
    or the server's analytics; a figure without a source shows an explicit no-data state. */
+import type { ReactNode } from "react";
 import { Icon } from "../icons";
 import { compactDuration, useI18n } from "../i18n";
 import type { Language } from "../i18n";
@@ -191,17 +192,23 @@ export function SessionRoute({
   dispatches,
   prState,
   now,
+  children,
 }: {
   session: RosterDispatch | null;
   dispatches: readonly RosterDispatch[];
   prState: string | null;
   now: number;
+  /** The session's own observation (in-process ledger facts, the runtime's execution), shown
+      under the route inside its scrolling panel. */
+  children?: ReactNode;
 }) {
   const { t, language, section, state: stateText } = useI18n();
   if (!session) {
     return (
       <section className="panel work-route-panel" id="work-route">
-        <div className="work-empty">{t("Выберите сессию слева.")}</div>
+        <div className="work-empty">
+          {dispatches.length ? t("Выберите сессию слева.") : t("Сессий пока нет: маршрут появится, когда batch отправит первый worker.")}
+        </div>
       </section>
     );
   }
@@ -274,6 +281,7 @@ export function SessionRoute({
             {section("Orchestration")} <Icon name="chevron" />
           </a>
         </div>
+        {children}
       </div>
     </section>
   );

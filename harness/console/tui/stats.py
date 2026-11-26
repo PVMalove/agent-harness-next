@@ -132,7 +132,7 @@ def harness_state_text(state: HarnessState, harness_version: str) -> str:
         (
             f"Установлена версия: {version}",
             f"Capability: {', '.join(state.capabilities) or 'нет'}",
-            f"Скилов: {state.skills}, управляемых файлов: {state.managed_files}",
+            f"Скиллов: {state.skills}, управляемых файлов: {state.managed_files}",
             f"Lock обновлён: {state.updated_at}",
             f"Оркестрация: {'подключена' if state.orchestration else 'не подключена'}",
         )
@@ -166,8 +166,8 @@ def harness_summary_fields(
             state.installed_version + (f" ⚠ ({package_version})" if mismatch else " ✔"),
         ),
         ("Состав", ", ".join(state.capabilities) or "нет"),
-        ("Скилов", str(state.skills)),
-        ("файлов", str(state.managed_files)),
+        ("Скиллов", str(state.skills)),
+        ("Управляемых файлов", str(state.managed_files)),
         ("Lock", state.updated_at),
         ("Оркестрация", "✔ подключена" if state.orchestration else "○ не подключена"),
     ]

@@ -162,13 +162,13 @@ describe("the Open Project route", () => {
     expect([...document.querySelectorAll("#open-project-facts .ds-facts-main span")].map((item) => item.textContent)).toEqual(["claude-agent-harness", "feature/issue-7", "1.5.1"]);
     const steps = [...document.querySelectorAll("#open-project-steps [role=tab]")];
     expect(steps.map((step) => step.textContent)).toEqual([
-      "✓Выбор проекта",
+      "1Выбор проекта✓",
       "2Предварительные проверки",
       "3Установка / внедрение",
       "4Настройка",
       "5Итоговая диагностика",
     ]);
-    expect(document.querySelector("#open-project-steps .ds-note")?.textContent).toBe("Шаг 2 из 5");
+    expect(document.querySelector("#open-project-steps .ds-note")?.textContent).toBe("Этап проекта: 2 из 5");
     const current = document.querySelector("#open-project-current") as HTMLElement;
     expect([...current.querySelectorAll(".ds-project-meta svg")].map((icon) => icon.getAttribute("data-icon"))).toEqual(["branch", "github-mark"]);
     expect(current.querySelector(".ds-project-meta")?.textContent).toContain("feature/issue-7");

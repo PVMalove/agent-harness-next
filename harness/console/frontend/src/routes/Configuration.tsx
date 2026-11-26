@@ -14,7 +14,7 @@ import { pretty, useConfigurationDraft } from "../configuration/draft";
 import type { ConfigurationDraft } from "../configuration/draft";
 import { ADAPTER_STATUS, NO_SCHEMA, PENDING, adapterName, shortDigest, writeBlock } from "../configuration/format";
 import { Wizard, currentValue, shown } from "../configuration/Wizard";
-import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
+import { PageHeader, Panel, PipeTabs, ScreenState, Summary } from "../ds";
 import { useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { useScreen } from "../screens/useScreen";
@@ -405,11 +405,7 @@ export function Configuration() {
         }
       />
 
-      {screen.error && !facts && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Данные не получены")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Настройки не получены" />
 
       {facts && (
         <>

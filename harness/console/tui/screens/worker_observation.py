@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding
@@ -294,15 +295,29 @@ def execution_lines(summary: ExecutionSummary | None, t: Callable[[str], str]) -
     return lines
 
 
-def timeline_lines(timeline: reports.BatchTimeline | None, limit: int = TIMELINE_LIMIT) -> list[str]:
+def timeline_rows(
+    timeline: reports.BatchTimeline | None, limit: int = TIMELINE_LIMIT
+) -> list[tuple[str, str, str, str]]:
     """The newest orchestration events of the batch, oldest first: time, kind, role and text."""
     if timeline is None:
         return []
     return [
-        f"{event.at[11:19] or '--:--:--'}  {event.kind:<8} "
-        f"{(event.role or '-'):<10} {event.text}"
+        (event.at[11:19] or "--:--:--", event.kind, event.role or "-", event.text)
         for event in timeline.events[-limit:]
     ]
+
+
+def timeline_table(rows: list[tuple[str, str, str, str]]) -> Table:
+    """The timeline as a grid: an event's text wraps inside its own column, so the time, kind and
+    role columns stay aligned on a narrow main column."""
+    table = Table.grid(padding=(0, 1), expand=True)
+    table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
+    table.add_column(no_wrap=True)
+    table.add_column(no_wrap=True, style=brand.PALETTE["primary"])
+    table.add_column(ratio=1, overflow="fold")
+    for row in rows:
+        table.add_row(*row)
+    return table
 
 
 def observe(repo: Path, dispatch: str, offset: int) -> JsonObject:
@@ -392,14 +407,15 @@ class WorkerObservationScreen(ConsoleShell):
     # 140 columns the context folds into a collapsible block under the stream.
     CONTEXT_SIDE_MIN = 140
     CONTEXT_TITLE = "Контекст запуска"
+    AUTO_FOCUS = "#worker-picker"
     BINDINGS = [
         Binding("r", "refresh", "Обновить"),
         *(Binding(f"alt+{i+1}", f"select_session({i})", show=False) for i in range(3)),
     ]
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
-    WorkerObservationScreen #worker-sessions { width: 42; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
-    WorkerObservationScreen #worker-live { width: 2; height: 1; color: $success; }
+    WorkerObservationScreen #worker-sessions { width: 34; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-live { width: 2; height: 1; margin-left: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
     WorkerObservationScreen #worker-picker > .option-list--option { padding: 0 1; }
@@ -447,9 +463,10 @@ class WorkerObservationScreen(ConsoleShell):
     .shell #worker-actions Button { border: round $component-border; color: $foreground; }
     .shell #worker-actions Button:hover, .shell #worker-actions Button:focus { border: round $primary; color: $primary; }
     .shell #worker-actions #worker-stop { color: $error; }
-    .shell.-wide #worker-actions { height: 2; padding: 0 1; }
-    .shell.-wide #worker-actions Button, .shell.-wide #worker-actions Button:hover, .shell.-wide #worker-actions Button:focus { border: none; height: 1; min-width: 0; padding: 0; margin-right: 0; }
-    .shell.-wide #worker-actions Button:focus { background: $selection-background; color: $selection-foreground; }
+    .shell.-wide #worker-actions, .shell.-spacious #worker-actions { height: 2; padding: 0 1; }
+    .shell.-wide #worker-actions Button, .shell.-wide #worker-actions Button:hover, .shell.-wide #worker-actions Button:focus,
+    .shell.-spacious #worker-actions Button, .shell.-spacious #worker-actions Button:hover, .shell.-spacious #worker-actions Button:focus { border: none; height: 1; min-width: 0; padding: 0; margin-right: 0; }
+    .shell.-wide #worker-actions Button:focus, .shell.-spacious #worker-actions Button:focus { background: $selection-background; color: $selection-foreground; }
     """)
 
     def __init__(
@@ -500,6 +517,7 @@ class WorkerObservationScreen(ConsoleShell):
             language=language,
             id_limit=34,
             stacked=True,
+            outcome=stage.report.outcome if stage.report is not None else "",
         )
 
     def _paint_sessions(self) -> None:
@@ -613,7 +631,7 @@ class WorkerObservationScreen(ConsoleShell):
                             markup=False,
                             highlight=False,
                         )
-                    with TabPane("Оркестрация", id="orchestration"):
+                    with TabPane("Хронология batch", id="orchestration"):
                         yield RichLog(
                             id="worker-timeline",
                             max_lines=TIMELINE_LIMIT * 2,
@@ -778,8 +796,9 @@ class WorkerObservationScreen(ConsoleShell):
         self._timeline = timeline
         log = self.query_one("#worker-timeline", RichLog)
         log.clear()
-        for line in timeline_lines(timeline):
-            log.write(Text(line))
+        rows = timeline_rows(timeline)
+        if rows:
+            log.write(timeline_table(rows), expand=True)
 
     def _show_unavailable(self) -> None:
         self.query_one("#worker-status", Static).update(
@@ -935,7 +954,7 @@ class WorkerObservationScreen(ConsoleShell):
                 brand.shorten(batch, 23),
                 action="open_batch" if batch in self._batches else None,
             ),
-            Crumb("Worker / Наблюдение"),
+            Crumb("Ход работы"),
         ]
 
     def action_open_batch(self) -> None:
