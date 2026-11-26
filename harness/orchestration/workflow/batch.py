@@ -88,6 +88,7 @@ from harness.orchestration.ledger.lifecycle import (
 from harness.orchestration.ledger.recovery_chain import terminal
 from harness.orchestration.workflow import approval as approvals
 from harness.orchestration.workflow import supersede
+from harness.orchestration.workflow.preserved_progress import PRESERVED_REWIND_REMEDY
 from harness.orchestration.workflow.approval import (
     _approval,
 )
@@ -761,7 +762,8 @@ def resume_batch(args: argparse.Namespace) -> JsonObject:
         ):
             raise CoordinatorError(
                 "legacy resume cannot bypass a recorded stop",
-                remedy="use batch resume-stop with explicit human approval, or batch rewind",
+                remedy="use batch resume-stop with explicit human approval, or batch rewind; "
+                + PRESERVED_REWIND_REMEDY,
             )
         entries = batch.get("dispatches", [])
         latest = entries[-1] if entries else None

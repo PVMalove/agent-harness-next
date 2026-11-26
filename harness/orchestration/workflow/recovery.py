@@ -25,6 +25,7 @@ from harness.orchestration.ledger.recovery_chain import (
     writer_start,
 )
 from harness.orchestration.workflow import approval, risk
+from harness.orchestration.workflow.preserved_progress import PRESERVED_REWIND_REMEDY
 from harness.orchestration.workflow.recovery_events import append_event
 
 ENVIRONMENT_REASONS = frozenset(
@@ -480,7 +481,8 @@ def _record_resumed_batch(args: argparse.Namespace) -> JsonObject:
         else:
             raise CoordinatorError(
                 "no pending report or confirmed environment failure",
-                remedy="use batch rewind to select an earlier gate with a fresh human approval",
+                remedy="use batch rewind to select an earlier gate with a fresh human approval; "
+                + PRESERVED_REWIND_REMEDY,
             )
         batch["state"] = "awaiting-approval"
         batch["manual_recovery"] = True
@@ -539,7 +541,8 @@ def resume_stopped_batch(args: argparse.Namespace) -> JsonObject:
         if stop and stop.get("reason") not in ENVIRONMENT_REASONS:
             raise CoordinatorError(
                 "this recovery has no same-stage worker to restart",
-                remedy="resume without --restart and decide the preserved pending report",
+                remedy="resume without --restart to decide a pending report; "
+                + PRESERVED_REWIND_REMEDY,
             )
         events = batch.get("recovery_events", [])
         if events and events[-1]["kind"] == "resume-stop":
@@ -563,7 +566,8 @@ def resume_stopped_batch(args: argparse.Namespace) -> JsonObject:
     if not event.get("dispatch_id"):
         raise CoordinatorError(
             "this recovery has no same-stage worker to restart",
-            remedy="decide the pending report; use --restart only for a confirmed startup failure",
+            remedy="decide the pending report; use --restart only for a confirmed startup "
+            "failure; " + PRESERVED_REWIND_REMEDY,
         )
     source = _load_dispatch(root, event["dispatch_id"])
     successor = create_dispatch(
@@ -638,11 +642,8 @@ def _require_known_checkout(repo: Path, batch: JsonObject, snapshot: str) -> Non
 
     checkout = Path(batch["worktree"]).resolve()
     preservation = (
-        "for a writer cancelled with --runtime-stopped and no completion report, or the latest "
-        "writer with an unaccepted blocked report at its exact commit, repeat human-approved "
-        "batch rewind to its writer gate with --preserved-commit <full-HEAD-SHA> and "
-        "--preserved-file <path> for every pending file; otherwise register known progress; "
-        "never reset or stash to pass recovery"
+        f"{PRESERVED_REWIND_REMEDY}; otherwise register known progress; never reset or stash "
+        "to pass recovery"
     )
     try:
         verified_checkout(
