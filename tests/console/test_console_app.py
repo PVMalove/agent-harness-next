@@ -428,3 +428,26 @@ def test_the_diagnostics_screen_is_a_console_server_client() -> None:
     assert parameters["client"].default is inspect.Parameter.empty
     assert parameters["client"].kind is inspect.Parameter.KEYWORD_ONLY
     assert not {"collect_diagnostics", "apply_local_fixes"} & set(parameters)
+
+
+def test_home_context_groups_carry_a_glyph_and_wrap_a_branch_at_its_separators() -> (
+    None
+):
+    from rich.console import Console
+    from rich.text import Text
+
+    from harness.console.tui.screens.dashboard import context_facts, context_title
+
+    assert context_title("card-harness", "Harness", "ru").plain == "◆ Harness"
+    assert context_title("card-project", "Контекст проекта", "en").plain.startswith(
+        "⌂ "
+    )
+
+    branch = "feature/issue-1290-orkestraciya-proverki-i-instrukcii"
+    console = Console(width=34, record=True, color_system=None)
+    console.print(context_facts([("Ветка", Text(branch))], "ru", 34))
+    lines = [line.rstrip() for line in console.export_text().splitlines()]
+    assert lines[0].startswith("Ветка ")
+    # Every line ends at a separator or the end: no word is cut in two.
+    assert "".join(line[6:] for line in lines) == branch
+    assert all(line[6:].endswith(("-", "/")) for line in lines[:-1])
