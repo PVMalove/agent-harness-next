@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import hashlib
 import json
 import os
@@ -90,7 +92,9 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.prompt_dump = root / "prompt.txt"
         self.cwd_dump = root / "cwd.txt"
 
-    def fake_claude(self, exit_code: int, probe_seconds: float = 0.0) -> None:
+    def fake_claude(
+        self, exit_code: int, probe_seconds: float = 0.0, after_prompt: str = ""
+    ) -> None:
         script = self.bin / "claude"
         script.write_text(
             f"#!{sys.executable}\n"
@@ -99,6 +103,7 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
             )
             + f"Path({str(self.cwd_dump)!r}).write_text(os.getcwd())\n"
             + f"Path({str(self.prompt_dump)!r}).write_text(prompt, encoding='utf-8')\n"
+            + after_prompt
             + f"sys.exit({exit_code})\n"
         )
         script.chmod(script.stat().st_mode | stat.S_IEXEC)
@@ -526,6 +531,47 @@ class ClaudeWorkerAdapterTest(unittest.TestCase):
         self.assertFalse(
             (self.repo / ".harness/.sandboxes/scratch/worker-logs").exists()
         )
+
+    @POSIX_ONLY
+    def test_turn_ended_with_background_checks_running_is_named_on_stderr(self) -> None:
+        """#1283: Claude Code stops background checks after the last turn; the report is lost."""
+        brief = json.loads(self.brief.read_text())
+        brief["execution"] = {"kind": "process"}
+        self.brief.write_text(json.dumps(brief))
+        env_dump = self.bin.parent / "env.txt"
+        self.fake_claude(
+            0,
+            after_prompt=(
+                f"Path({str(env_dump)!r}).write_text("
+                "os.environ.get('CLAUDE_CODE_DISABLE_BACKGROUND_TASKS', ''))\n"
+                "emit({'type': 'result', 'subtype': 'success', 'is_error': False,"
+                " 'result': 'Waiting for the background job.'})\n"
+                "sys.stderr.write('Background tasks still running 10m after the last turn "
+                "(shell \"Run verify, lint and tests\"); stopping them. Set "
+                "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely.\\n')\n"
+                "sys.stderr.flush()\n"
+            ),
+        )
+        stderr = io.StringIO()
+
+        with contextlib.redirect_stderr(stderr):
+            code = self.run_adapter()
+
+        self.assertEqual(code, 0)
+        # The worker session cannot start background tasks, and the prompt keeps checks in the
+        # foreground.
+        self.assertEqual(env_dump.read_text(), "1")
+        self.assertIn("in the foreground", self.prompt_dump.read_text())
+        # A stop that still happens is named on stderr for the coordinator's exit reaction.
+        self.assertIn(claude_worker.BACKGROUND_TASKS_STOPPED, stderr.getvalue())
+
+    def test_background_stop_line_matches_the_coordinator_literal(self) -> None:
+        from harness.orchestration.workflow.execution_reaction import (
+            BACKGROUND_TASKS_STOPPED,
+        )
+
+        # The stdlib-only adapter repeats the line the exit reaction reads; it must never drift.
+        self.assertEqual(claude_worker.BACKGROUND_TASKS_STOPPED, BACKGROUND_TASKS_STOPPED)
 
     @POSIX_ONLY
     def test_worker_that_dies_at_startup_is_rejected(self) -> None:
