@@ -1,8 +1,9 @@
-# Release mode (`--release <epic>`)
+# Integration-PR mode (`--release <epic>`)
 
-Read this file when the developer runs `/to-pull-requests --release <epic>`. It opens the release
-PR/MR of the epic's integration branch into `base_branch`, and after the developer confirms the merge
-it closes the epic. Child tickets are not touched here: each one was closed after its own merge into the
+Read this file when the developer runs `/to-pull-requests --release <epic>`, optionally with
+`--target <branch>`. It opens the integration PR/MR of the epic's integration branch into
+`base_branch` or into another `integration/*` branch, and after the developer confirms a merge into
+`base_branch` it closes the epic. Child tickets are not touched here: each one was closed after its own merge into the
 integration branch. This mode never edits `CHANGELOG.md` or the project version.
 
 GitLab conventions, the `!<iid>` and `#<iid>` references and the one-command-per-shell-call rule are
@@ -14,6 +15,9 @@ the same as in the skill.
   `glab issue view <epic> -R <project-url> -F json`. Stop when it is already closed.
 - `<integration-branch>` is the value of its `## Integration Branch` section; stop and ask when it is
   missing. `<base-branch>` is `base_branch` from `.harness/project.json`.
+- `<target-branch>` is the value of `--target <branch>` when the developer gave it, otherwise
+  `base_branch`. Accept it only when it is `base_branch` or an `integration/*` branch other than
+  `<integration-branch>`, and `origin/<target-branch>` exists after a fetch; otherwise stop and ask.
 
 ## 2. Check that every child ticket is closed
 
@@ -33,7 +37,14 @@ A child closed as `resolution::wontfix` has no PR; list it separately.
 ## 3. Verify the integration branch
 
 Work in a clean checkout of `<integration-branch>` whose `HEAD` equals `origin/<integration-branch>` after
-a fetch, so the PR hook finds a checkout for the PR head. Never commit to it. Record the full `HEAD`
+a fetch, so the PR hook finds a checkout for the PR head. If a clean worktree, the main checkout
+included, already has `<integration-branch>` checked out, use it. If that worktree is dirty, stop and
+ask the developer: Git never checks out one branch twice. Otherwise create one with
+`git worktree add .harness/.sandboxes/worktrees/integration-pr-<epic> <integration-branch>`, without
+`-b`, so Git creates the tracking branch from `origin/<integration-branch>`; `coordinator.py worktree
+create` and `EnterWorktree` refuse an `integration/*` branch. If that command fails because
+`.git/worktrees` is read-only in the sandbox or a hook blocks it, give the developer the command and
+stop. Remember whether this mode created the worktree: part 6 removes only that one. Never commit to it. Record the full `HEAD`
 SHA as the release candidate before running checks.
 
 - Run `/qa-gate` there and stop on failure. A failure is fixed by new child tickets based on
@@ -62,27 +73,52 @@ SHA as the release candidate before running checks.
 - If the epic has no structured criteria, record epic acceptance as unverified and continue with
   the existing child and QA checks.
 
+### Release Gate (opt-in project)
+
+Run this part after `/qa-gate` only for a project with a valid `backend-orchestration` opt-in, as the
+skill defines it; skip it otherwise. Every command is
+`python .harness/orchestration/coordinator.py --repo . <command>`.
+
+- Observe the record, read-only: `integration status --ticket "#<epic>" --branch "<integration-branch>"`.
+  A refusal saying `no integration record exists` does not block the PR: record under Not verified &
+  risks that the Release Gate has no record of this pair and only the full `/qa-gate` on the release
+  candidate confirms it. `unavailable` or any other refusal is an operational stop: report it to the
+  developer.
+- With a record, run `integration next --record <id>`. Continue only on step `confirm-pr` whose
+  `candidate_sha` equals the release candidate and whose `target_sha` equals
+  `git rev-parse origin/<target-branch>`. Handle any other `step` as part A of
+  `references/integration-route.md` describes: stop and hand the data to the coordinator session, and
+  never commit to the integration branch.
+- After the PR opens, run part B of `references/integration-route.md` with `--record <id>` in place of
+  `<ticket-branch>`. After the merge, check the tree as **Check the tree** in skill step 7 describes,
+  with `--record <id>`.
+
 ## 4. Prepare the body
 
 Follow `.harness/instructions/git-workflow.md` §3 and store the body at
 `.harness/.sandboxes/pr_body/pr-body-<epic>-release.md`. The summary comes from the epic. Under What
-changed, write one line per child: `#<pr> <title> (#<ticket>)`. Under Verification, give the `/qa-gate`
+changed, write one line per child: `#<pr> <title> (#<ticket>)`; never put a closing keyword
+(`Closes`, `Fixes`, `Resolves`) before a child reference: each child was closed after its own merge. Under Verification, give the `/qa-gate`
 result, the results by epic criterion and the release candidate SHA. Under Not verified & risks,
 list unverified criteria, including the legacy case above, children without a merged PR, and any
-check that did not run. Choose the footer (`Closes #<epic>` or `Related to #<epic>`) by
-`.harness/instructions/git-workflow.md` §2 step 6 → Ticket footer, with `<epic>` for `<ID>` and `<base-branch>`
-as the target.
+check that did not run. Choose the footer by `.harness/instructions/git-workflow.md` §2 step 6 → Ticket footer,
+with `<epic>` for `<ID>` and `<target-branch>` as the target: `Closes #<epic>` only when `<target-branch>` is
+`base_branch` and that rule's default branch, `Related to #<epic>` in every other case.
 
 ## 5. Confirm and open
 
-Ask the developer for explicit, separate confirmation that the release PR may be opened; state the
-release candidate SHA, the QA and epic acceptance results, and the child list. Stop for their
+Ask the developer for explicit, separate confirmation that the integration PR may be opened; state
+`<target-branch>`, the release candidate SHA, the QA and epic acceptance results, and the child list;
+with a Release Gate record, also its `candidate_sha`, `target_sha` and `qa_source`. Stop for their
 answer. After approval, fetch and recheck that both the local and remote integration refs match the
 release candidate SHA. If either changed, repeat verification and request fresh confirmation.
 Then, from the checkout of part 3, with the epic title as `<title>`:
 
-- **GitHub:** `gh pr create --base <base-branch> --head <integration-branch> --title '<title>' --body-file <path>`.
-- **GitLab:** `glab mr create -R <project-url> --source-branch <integration-branch> --target-branch <base-branch> --title '<title>' --description-file <path> --yes`.
+- **GitHub:** `gh pr create --base <target-branch> --head <integration-branch> --title '<title>' --label pr::integration --body-file <path>`.
+- **GitLab:** `glab mr create -R <project-url> --source-branch <integration-branch> --target-branch <target-branch> --title '<title>' --label pr::integration --description-file <path> --yes`.
+
+`pr::integration` labels the PR; it never carries a `type::*` label, because it collects tickets of
+several types.
 
 Delete the body file only after the command succeeds. Return the link and wait for the CI of the PR:
 GitHub `gh pr checks <n>`, GitLab the pipeline of the MR. Never merge it.
@@ -103,6 +139,6 @@ Read the published spec from `.scratch/<feature>/spec.md`. Check that every tick
 to the work. Run part 3 using the local integration ref if there is no remote. In place of the PR
 body, show the criterion results before asking for confirmation. Recheck the integration ref against
 the release candidate SHA
-before asking the developer to merge `<integration-branch>` into `<base-branch>`. If it changed,
+before asking the developer to merge `<integration-branch>` into `<target-branch>`. If it changed,
 repeat verification and request fresh confirmation. After the developer confirms the merge, require
 `git merge-base --is-ancestor <release-candidate-sha> <base-ref>` to succeed and offer `/delivery-stats`.
