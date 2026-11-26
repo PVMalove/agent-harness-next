@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import threading
+import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
@@ -29,7 +32,7 @@ from ...kernel import brand, i18n
 from ...kernel import reports
 from ..chrome import TopBar
 from ...kernel.runner import CommandRunner
-from ..client import ConsoleClientError, WorkerSteps
+from ..client import WorkerSteps
 from ..session_card import session_card, status_caption
 from ...kernel.status import PERMISSION_PENDING, process_status, session_status
 from ..crumbs import Crumb
@@ -71,11 +74,20 @@ _OBSERVER_STREAM = frozenset(
 )
 
 
+# The console server may hold its one connection for minutes (online checks of another screen):
+# the poll waits this long for its page and then follows the observer's own reading of the log.
+STEPS_WAIT_SECONDS = 1.0
+# A poll that has not answered for this long is reported instead of leaving the initial view.
+POLL_STALL_SECONDS = 10.0
+_OBSERVED = frozenset({"connected", "waiting"})
+
+
 def with_server_steps(
     snapshot: JsonObject, steps: WorkerSteps | None, failure: str
 ) -> JsonObject:
     """The process facts of `snapshot` with the transcript of the console server; the observer's
-    own events are dropped. Without a page the transcript is unavailable for `failure`."""
+    own events are dropped. Without a page the observer's events are the transcript when it reads
+    the worker log; otherwise the transcript is unavailable for `failure`."""
     facts: JsonObject = {
         key: value for key, value in snapshot.items() if key not in _OBSERVER_STREAM
     }
@@ -84,6 +96,8 @@ def with_server_steps(
     # An in-process dispatch has no stream at all: its reason is a fact of the dispatch.
     if snapshot.get("stream_reason") == IN_PROCESS_STREAM_REASON:
         facts["stream_reason"] = IN_PROCESS_STREAM_REASON
+    if steps is None and snapshot.get("stream_state") in _OBSERVED:
+        return {**snapshot, "steps_source": "observer"}
     if steps is None:
         return {
             **facts,
@@ -104,6 +118,124 @@ def with_server_steps(
         "steps_structure": steps.structure,
         "last_event_age_seconds": steps.last_step_age_seconds,
     }
+
+
+@dataclass(frozen=True)
+class Poll:
+    """One observation of a dispatch: the snapshot to show, where the observer reads next, and why
+    the server transcript is not used (None while the server answers)."""
+
+    snapshot: JsonObject
+    observer_offset: int
+    steps_failure: str | None
+
+
+def bounded_steps(
+    reader: StepsReader | None, dispatch: str, offset: int
+) -> tuple[WorkerSteps | None, str]:
+    """The server page of `dispatch`, or None with why: no client, an error, no such dispatch, or
+    no reply within `STEPS_WAIT_SECONDS`. A late reply is dropped; its thread ends on its own."""
+    if reader is None:
+        return None, "no_server"
+    found: list[WorkerSteps | None] = []
+
+    def read() -> None:
+        try:
+            found.append(reader(dispatch, offset))
+        except Exception:
+            pass  # Any failure of the server read leaves the observer's own stream.
+
+    thread = threading.Thread(target=read, name="worker-steps", daemon=True)
+    thread.start()
+    thread.join(STEPS_WAIT_SECONDS)
+    if not found:
+        return None, "no_server"
+    return found[0], "no_dispatch"
+
+
+def poll_worker(
+    repo: Path,
+    dispatch: str,
+    observer: Observer,
+    reader: StepsReader | None,
+    *,
+    observer_offset: int,
+    server_offset: int,
+    steps_failure: str | None,
+) -> Poll:
+    """Observe `dispatch` once. After the server failed to give a page (`steps_failure`), it is
+    not asked again: the transcript follows the observer, so no step is shown twice."""
+    try:
+        snapshot = observer(repo, dispatch, observer_offset)
+        if steps_failure is None:
+            steps, failure = bounded_steps(reader, dispatch, server_offset)
+        else:
+            steps, failure = None, steps_failure
+        shown = with_server_steps(snapshot, steps, failure)
+    except Exception:
+        return Poll(
+            {"dispatch_id": dispatch, "observation_error": True},
+            observer_offset,
+            steps_failure,
+        )
+    following = snapshot.get("next_offset", observer_offset)
+    return Poll(
+        shown,
+        following if isinstance(following, int) else observer_offset,
+        failure if steps is None else None,
+    )
+
+
+class PollGate:
+    """One poll per view generation at a time; a poll running longer than `POLL_STALL_SECONDS`
+    is stalled. A poll of an earlier generation (another session, a reconnect) blocks nothing."""
+
+    def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
+        self._clock = clock
+        self._running: int | None = None
+        self._started = 0.0
+
+    def begin(self, generation: int) -> bool:
+        if self._running == generation:
+            return False
+        self._running, self._started = generation, self._clock()
+        return True
+
+    def finish(self, generation: int) -> None:
+        if self._running == generation:
+            self._running = None
+
+    def stalled(self, generation: int) -> bool:
+        return (
+            self._running == generation
+            and self._clock() - self._started >= POLL_STALL_SECONDS
+        )
+
+
+@dataclass(frozen=True)
+class Sessions:
+    """The session list: the stage of each dispatch, the batches with a timeline, and the
+    `(label, dispatch)` choices, running sessions first, newest first."""
+
+    stages: dict[str, reports.StageEntry]
+    batches: frozenset[str]
+    choices: list[tuple[str, str]]
+
+
+def session_choices(view: reports.LedgerView, dispatch: str | None) -> Sessions:
+    """The sessions of `view`; a requested `dispatch` the ledger does not list comes first."""
+    ordered = sorted(view.stages, key=lambda stage: stage.at, reverse=True)
+    ordered.sort(key=lambda stage: stage.finished)
+    choices = [
+        (f"{stage.ticket} · {stage.role}", stage.dispatch_id) for stage in ordered
+    ]
+    if dispatch and not any(value == dispatch for _, value in choices):
+        choices.insert(0, (dispatch, dispatch))
+    return Sessions(
+        {stage.dispatch_id: stage for stage in ordered},
+        frozenset(batch.batch_id for batch in view.batches),
+        choices,
+    )
 
 
 def observe(repo: Path, dispatch: str, offset: int) -> JsonObject:
@@ -261,25 +393,22 @@ class WorkerObservationScreen(ConsoleShell):
         self.dispatch = dispatch
         self.observer = observer
         self._stream_offset = 0
+        self._observer_offset = 0
+        self._steps_failure: str | None = None
         self.snapshot: JsonObject = {}
         self._events: list[JsonObject] = []
         self._last_operation = "—"
-        self._polling = False
-        # The screen is built on the UI thread, so the read of the runtime store is short.
-        view = reports.load_ledger_view(
-            repo, read_timeout=reports.INTERACTIVE_STORE_READ_TIMEOUT_SECONDS
+        self._polls = PollGate()
+        # Bumped when the view starts over, so a late poll of the previous view is dropped.
+        self._generation = 0
+        # The ledger is read off the UI thread after mount; until then only the requested
+        # dispatch is listed and already observed.
+        found = session_choices(reports.LedgerView(), dispatch)
+        self._stages, self._batches, self._choices = (
+            found.stages,
+            found.batches,
+            found.choices,
         )
-        ordered = sorted(view.stages, key=lambda stage: stage.at, reverse=True)
-        ordered.sort(key=lambda stage: stage.finished)
-        self._stages = {stage.dispatch_id: stage for stage in ordered}
-        self._batches = {batch.batch_id for batch in view.batches}
-        self._choices = [
-            (f"{stage.ticket} · {stage.role}", stage.dispatch_id) for stage in ordered
-        ]
-        if dispatch and not any(value == dispatch for _, value in self._choices):
-            self._choices.insert(0, (dispatch, dispatch))
-        if not dispatch and self._choices:
-            self.dispatch = self._choices[0][1]
         self._timer: Timer | None = None
 
     def _session_card(self, label: str, dispatch_id: str) -> Text:
@@ -300,6 +429,46 @@ class WorkerObservationScreen(ConsoleShell):
             stacked=True,
         )
 
+    def _session_items(self) -> list[ListItem]:
+        return [
+            ListItem(
+                Static(self._session_card(label, value), classes="no-i18n"),
+                name=value,
+            )
+            for label, value in self._choices
+        ]
+
+    def _load_sessions(self) -> None:
+        repo, dispatch = self.repo, self.dispatch
+
+        def load() -> None:
+            found = session_choices(reports.load_ledger_view(repo), dispatch)
+            call_from_worker(self, lambda: self._show_sessions(found))
+
+        self.run_worker(load, thread=True, group="sessions", exit_on_error=False)
+
+    async def _show_sessions(self, found: Sessions) -> None:
+        self._stages, self._batches, self._choices = (
+            found.stages,
+            found.batches,
+            found.choices,
+        )
+        self.query_one("#worker-session-count", Static).update(
+            f"РАБОЧИЕ СЕССИИ   {len(self._choices)}"
+        )
+        picker = self.query_one("#worker-picker", ListView)
+        await picker.clear()
+        await picker.extend(self._session_items())
+        self.translate_now()
+        if not self._choices:
+            return
+        if self.dispatch is None:
+            self._restart(self._choices[0][1])
+        picker.index = next(
+            (i for i, (_, value) in enumerate(self._choices) if value == self.dispatch),
+            0,
+        )
+
     def compose_strip(self) -> ComposeResult:
         yield Button("Сессии", id="worker-switch", compact=True)
         yield WrappedValue("Выбранный batch / dispatch", id="worker-selection")
@@ -312,19 +481,7 @@ class WorkerObservationScreen(ConsoleShell):
                     f"РАБОЧИЕ СЕССИИ   {len(self._choices)}",
                     id="worker-session-count",
                 )
-                yield ListView(
-                    *(
-                        ListItem(
-                            Static(
-                                self._session_card(label, value),
-                                classes="no-i18n",
-                            ),
-                            name=value,
-                        )
-                        for label, value in self._choices
-                    ),
-                    id="worker-picker",
-                )
+                yield ListView(*self._session_items(), id="worker-picker")
                 yield Static(
                     "Каждый worker — отдельная сессия\n\nВыбор сессии не запускает новый процесс.",
                     id="worker-list-foot",
@@ -459,6 +616,7 @@ class WorkerObservationScreen(ConsoleShell):
             )
         self._timer = self.set_interval(1, self.action_refresh)
         self.action_refresh()
+        self._load_sessions()
         self.translate_now()
 
     def on_unmount(self) -> None:
@@ -468,34 +626,55 @@ class WorkerObservationScreen(ConsoleShell):
         # owned by this screen and keeps running when the screen closes.
 
     def action_refresh(self) -> None:
-        if self._polling or not self.dispatch:
+        dispatch = self.dispatch
+        if not dispatch:
             return
-        self._polling = True
-        dispatch, offset = self.dispatch, self._stream_offset
+        generation = self._generation
+        if not self._polls.begin(generation):
+            if self._polls.stalled(generation):
+                self._show_unavailable()
+            return
+        observer_offset, server_offset = self._observer_offset, self._stream_offset
+        steps_failure = self._steps_failure
         reader: StepsReader | None = getattr(
             getattr(self.app, "home_client", None), "worker_steps", None
         )
 
         def poll() -> None:
-            try:
-                snapshot = self.observer(self.repo, dispatch, offset)
-            except Exception:
-                snapshot = {"dispatch_id": dispatch, "observation_error": True}
-            steps, failure = None, "no_server"
-            if reader is not None:
-                try:
-                    steps = reader(dispatch, offset)
-                    failure = "no_dispatch"
-                except ConsoleClientError:
-                    pass
-            if not snapshot.get("observation_error"):
-                snapshot = with_server_steps(snapshot, steps, failure)
-            call_from_worker(self, lambda: self._render_snapshot(snapshot, dispatch))
+            result = poll_worker(
+                self.repo,
+                dispatch,
+                self.observer,
+                reader,
+                observer_offset=observer_offset,
+                server_offset=server_offset,
+                steps_failure=steps_failure,
+            )
+            call_from_worker(self, lambda: self._polled(result, generation))
 
         self.run_worker(poll, thread=True, group="observation", exit_on_error=False)
 
+    def _polled(self, result: Poll, generation: int) -> None:
+        self._polls.finish(generation)
+        if generation != self._generation or not self.dispatch:
+            return
+        self._observer_offset = result.observer_offset
+        self._steps_failure = result.steps_failure
+        if result.snapshot.get("steps_source") != "observer":
+            self._stream_offset = result.snapshot.get(
+                "next_offset", self._stream_offset
+            )
+        self._render_snapshot(result.snapshot, self.dispatch)
+
+    def _show_unavailable(self) -> None:
+        self.query_one("#worker-status", Static).update(
+            i18n.tr_text(
+                getattr(self.app, "language", "ru"),
+                "⚠ Наблюдение недоступно; исход процесса неизвестен. Повторный worker не запускается.",
+            )
+        )
+
     def _render_snapshot(self, snapshot: JsonObject, dispatch: str) -> None:
-        self._polling = False
         if dispatch != self.dispatch:
             return
         language = getattr(self.app, "language", "ru")
@@ -504,11 +683,7 @@ class WorkerObservationScreen(ConsoleShell):
             return i18n.tr_text(language, text)
 
         if snapshot.get("observation_error"):
-            self.query_one("#worker-status", Static).update(
-                t(
-                    "⚠ Наблюдение недоступно; исход процесса неизвестен. Повторный worker не запускается."
-                )
-            )
+            self._show_unavailable()
             return
         self.snapshot = snapshot
         for button_id in ("worker-permission", "worker-permission-inline"):
@@ -595,19 +770,16 @@ class WorkerObservationScreen(ConsoleShell):
                     )
                 )
             )
+        # New events are appended; both logs are rebuilt only when the filter changes.
+        events_log = self.query_one("#worker-events", RichLog)
         for event in snapshot.get("events", []):
             self._events.append(event)
             if self._event_visible(event):
                 output.write(self._transcript(event))
-        self._events = self._events[-500:]
-        events_log = self.query_one("#worker-events", RichLog)
-        events_log.clear()
-        for row in self._events:
-            if self._event_visible(row):
                 events_log.write(
-                    Text(f"[{row.get('kind', 'event')}] {row.get('text', '')}")
+                    Text(f"[{event.get('kind', 'event')}] {event.get('text', '')}")
                 )
-        self._stream_offset = snapshot.get("next_offset", self._stream_offset)
+        self._events = self._events[-500:]
         bar = self.query_one(TopBar)
         bar.crumbs = f"Главная › Оркестрация › {snapshot.get('batch_id')} › Сессии"
         bar.refresh_status()
@@ -806,14 +978,21 @@ class WorkerObservationScreen(ConsoleShell):
 
     def _select_dispatch(self, dispatch: str) -> None:
         if dispatch != self.dispatch:
-            self.dispatch = dispatch
-            self._stream_offset = 0
-            self.snapshot = {}
-            self._events = []
-            self._last_operation = "—"
-            self.query_one("#worker-output", RichLog).clear()
-            self.query_one("#worker-events", RichLog).clear()
-            self.action_refresh()
+            self._restart(dispatch)
+
+    def _restart(self, dispatch: str) -> None:
+        """Observe `dispatch` from the start, asking the console server for its steps again."""
+        self._generation += 1
+        self.dispatch = dispatch
+        self._stream_offset = 0
+        self._observer_offset = 0
+        self._steps_failure = None
+        self.snapshot = {}
+        self._events = []
+        self._last_operation = "—"
+        self.query_one("#worker-output", RichLog).clear()
+        self.query_one("#worker-events", RichLog).clear()
+        self.action_refresh()
 
     def action_select_session(self, index: int) -> None:
         if index < len(self._choices):
@@ -845,7 +1024,8 @@ class WorkerObservationScreen(ConsoleShell):
         elif event.button.id == "worker-access":
             self.query_one("#worker-tabs", TabbedContent).active = "access"
         elif event.button.id == "worker-reconnect":
-            self.action_refresh()
+            if self.dispatch:
+                self._restart(self.dispatch)
         elif event.button.id == "worker-menu":
             self.remove_class("-sessions-open")  # the shell toggles the menu itself
         elif event.button.id in {"worker-permission", "worker-permission-inline"}:
