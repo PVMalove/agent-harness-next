@@ -22,6 +22,19 @@ class BatchFacts:
     dispatches: tuple[tuple[str, str, str], ...]
     decisions: tuple[Record, ...]
     branch: str = ""
+    # The approvals the `auto` approval policy recorded (`batch.auto_decisions`), in order, and
+    # the stop of the automatic path (`batch.auto_stop`); none outside that policy.
+    auto_decisions: tuple[Record, ...] = ()
+    auto_stop: Record | None = None
+
+
+def stop_key(stop: Record | None) -> str:
+    """What identifies a stop of the automatic path in the compact view; "" without one."""
+    if not stop:
+        return ""
+    return "/".join(
+        text(stop.get(name)) for name in ("category", "reason", "detected_at")
+    )
 
 
 @dataclass(frozen=True)
@@ -46,6 +59,8 @@ def compact(observation: Observation) -> View:
                 "branch": batch.branch,
                 "dispatches": [list(entry) for entry in batch.dispatches],
                 "decisions": len(batch.decisions),
+                "auto_decisions": len(batch.auto_decisions),
+                "auto_stop": stop_key(batch.auto_stop),
             }
             for batch_id, batch in observation.batches.items()
         },
@@ -68,7 +83,11 @@ def diff(previous: View, current: Observation) -> list[Event]:
     """The events between the last view and this observation, in a deterministic order: per batch
     (by id) its transition, its dispatch transitions, its new gate decisions and its QA runs;
     then dispatches known only by their status record, then new QA attempts. Removed records
-    give no event, and a shorter decision list only resets the count."""
+    give no event, and a shorter decision list only resets the count.
+
+    A batch also gives its new approvals of the `auto` policy and a new stop of the automatic
+    path. A view written before those fields existed holds no count: it counts as the current
+    one, so the first poll after an upgrade replays no history."""
     old_batches = _map(previous, "batches")
     old_states = _map(previous, "dispatch_states")
     events: list[Event] = []
@@ -139,6 +158,7 @@ def diff(previous: View, current: Observation) -> list[Event]:
                     "approved_at": _id(decision.get("approved_at")),
                 }
             )
+        events.extend(_auto_events(batch_id, batch, old))
         events.extend(qa_runs)
     for dispatch_id in sorted(set(current.dispatch_states) - seen):
         state = current.dispatch_states[dispatch_id]
@@ -166,6 +186,43 @@ def diff(previous: View, current: Observation) -> list[Event]:
                 "stage": _id(attempt.get("stage")),
                 "failed_at": _id(attempt.get("failed_at")),
                 "message": _clip(text(attempt.get("message")), MESSAGE_BYTES),
+            }
+        )
+    return events
+
+
+def _auto_events(batch_id: str, batch: BatchFacts, old: dict[str, object] | None) -> list[Event]:
+    """The new approvals of the `auto` policy and a new stop of the automatic path of one batch."""
+    count = old.get("auto_decisions") if old is not None else 0
+    known = count if isinstance(count, int) else len(batch.auto_decisions)
+    events: list[Event] = []
+    for record in batch.auto_decisions[known:]:
+        evidence = record.get("evidence")
+        decided = evidence.get("decision") if isinstance(evidence, Mapping) else None
+        events.append(
+            {
+                "event": "auto.decision",
+                "batch_id": _id(batch_id),
+                "dispatch_id": _id(record.get("dispatch_id")),
+                "decision": _id(decided) or _id(record.get("kind")),
+                "kind": _id(record.get("kind")),
+                "approved_by": _id(record.get("approved_by")),
+                "approved_at": _id(record.get("approved_at")),
+                "message": _clip(text(record.get("rationale")), MESSAGE_BYTES),
+            }
+        )
+    current = stop_key(batch.auto_stop)
+    before = old.get("auto_stop") if old is not None else ""
+    if old is not None and not isinstance(before, str):
+        before = current
+    if current and current != before and batch.auto_stop is not None:
+        events.append(
+            {
+                "event": "auto.stop",
+                "batch_id": _id(batch_id),
+                "category": _id(batch.auto_stop.get("category")),
+                "message": _clip(text(batch.auto_stop.get("reason")), MESSAGE_BYTES),
+                "detected_at": _id(batch.auto_stop.get("detected_at")),
             }
         )
     return events

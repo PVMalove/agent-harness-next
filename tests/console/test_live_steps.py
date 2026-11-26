@@ -160,6 +160,8 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "last_event_at": "",
             "silent": False,
             "observation": None,
+            "purpose": "",
+            "execution": None,
         },
         {
             "dispatch_id": "dispatch-d",
@@ -173,6 +175,8 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "last_event_at": "",
             "silent": False,
             "observation": None,
+            "purpose": "",
+            "execution": None,
         },
         {
             "dispatch_id": "dispatch-q",
@@ -186,6 +190,8 @@ def test_the_roster_comes_from_the_compact_view_with_status_states_winning() -> 
             "last_event_at": "",
             "silent": False,
             "observation": None,
+            "purpose": "",
+            "execution": None,
         },
     ]
     assert roster_from_view(None) == ()
@@ -226,6 +232,9 @@ def test_a_gate_decision_takes_its_role_and_ticket_from_the_roster() -> None:
         "outcome": None,
         "stage": None,
         "message": "",
+        # The approver reaches the client: a person, or the auto policy as here (#1296).
+        "approved_by": "policy:auto",
+        "category": None,
     }
     batch = orchestration_step(
         {"seq": 1, "event": "batch.transition", "batch_id": "batch-1", "to": "active"},

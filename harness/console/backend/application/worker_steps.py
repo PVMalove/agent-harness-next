@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ..domain.live_steps import (
     DispatchTiming,
+    ExecutionSummary,
     InProcessObservation,
     dispatch_timing,
     in_process_observation,
@@ -25,7 +26,12 @@ from ..domain.worker_steps import (
     select_source,
     worth_sending,
 )
-from .ports import CheckpointsReader, StepsLogReader, WorkerFactsReader
+from .ports import (
+    CheckpointsReader,
+    ExecutionReader,
+    StepsLogReader,
+    WorkerFactsReader,
+)
 
 POLL_SECONDS = 1.0
 
@@ -44,6 +50,7 @@ class WorkerStepsQuery:
         facts: WorkerFactsReader,
         log: StepsLogReader,
         checkpoints: CheckpointsReader,
+        execution: ExecutionReader | None = None,
         budget: int = STEP_BUDGET_BYTES,
         poll_seconds: float = POLL_SECONDS,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
@@ -52,6 +59,7 @@ class WorkerStepsQuery:
         self._facts = facts
         self._log = log
         self._checkpoints = checkpoints
+        self._execution = execution
         self._budget = budget
         self._poll = poll_seconds
         self._sleep = sleep
@@ -71,13 +79,24 @@ class WorkerStepsQuery:
         checkpoints = await asyncio.to_thread(self._checkpoints, self.repo, facts)
         return in_process_observation(facts.status, checkpoints)
 
+    async def execution(self, dispatch_id: str) -> ExecutionSummary | None:
+        """What the runtime observes of the dispatch's execution; None without one."""
+        if self._execution is None:
+            return None
+        facts = await asyncio.to_thread(self._facts, self.repo, dispatch_id)
+        if facts is None:
+            return None
+        return await asyncio.to_thread(self._execution, self.repo, facts)
+
     async def read(self, dispatch_id: str, offset: int) -> StepsPage:
         facts = await asyncio.to_thread(self._facts, self.repo, dispatch_id)
         if facts is None:
             raise WorkerNotFound(dispatch_id)
         source = select_source(facts)
         if source == "none":
-            return no_log_page(dispatch_id, offset)
+            return no_log_page(
+                dispatch_id, offset, qa=facts.dispatch.get("role") == "qa"
+            )
         reading = await asyncio.to_thread(
             self._log, self.repo, facts, source, offset, self._budget
         )

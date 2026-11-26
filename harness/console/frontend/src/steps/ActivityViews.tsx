@@ -174,9 +174,18 @@ const ROUTE: [string, string[], string][] = [
   ["Developer", ["developer"], "developer"],
   ["Review", ["review", "code-review"], "review"],
   ["QA", ["qa"], "qa"],
+  ["Publish", ["developer"], "branch"],
 ];
 
-/** The route of the selected session's batch: Architect -> Developer -> Review -> QA -> PR. */
+/** A roster dispatch belongs to a route stage by role; publish is a developer dispatch with
+    purpose `publish`, and the Developer stage never counts it. */
+function onStage(name: string, roles: string[], entry: RosterDispatch): boolean {
+  if (!roles.includes(entry.role)) return false;
+  if (name === "Publish") return entry.purpose === "publish";
+  return entry.purpose !== "publish";
+}
+
+/** The route of the selected session's batch: Architect -> Developer -> Review -> QA -> Publish -> PR. */
 export function SessionRoute({
   session,
   dispatches,
@@ -199,7 +208,7 @@ export function SessionRoute({
   const batch = dispatches.filter((entry) => entry.batch_id === session.batch_id);
   const tone = STATUS_TONE[sessionStatus(session)];
   const steps = ROUTE.map(([name, roles, icon]) => {
-    const entry = batch.filter((item) => roles.includes(item.role)).at(-1);
+    const entry = batch.filter((item) => onStage(name, roles, item)).at(-1);
     const state = !entry ? "pending" : sessionStatus(entry) === "running" ? "current" : "done";
     return { name, state, icon, label: entry ? stateText(entry.state) : t("Не начат") };
   });

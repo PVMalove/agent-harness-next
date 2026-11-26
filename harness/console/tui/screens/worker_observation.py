@@ -30,6 +30,7 @@ from textual.widgets.option_list import Option
 from harness.orchestration.core.utils import JsonObject
 from ...kernel import brand, i18n
 from ...kernel import reports
+from ...kernel.execution_facts import ExecutionSummary, observe_execution
 from ..chrome import TopBar
 from ...kernel.runner import CommandRunner
 from ..client import WorkerSteps
@@ -59,6 +60,7 @@ STEP_REASONS = {
     "log_unreadable": "лог worker не читается",
     "log_outside_storage": "лог worker вне хранилища harness",
     "log_unrecognised": "формат лога worker не распознан, текст не показывается",
+    "qa_on_host": "QA идёт на хосте: результаты стадий появятся после прогона",
     "no_dispatch": "ledger не знает этот dispatch",
     "no_server": "нет соединения с сервером консоли",
 }
@@ -249,6 +251,60 @@ def session_options(
     return options
 
 
+# The runtime reconciles an execution it is asked about, and the ledger view is read whole: both
+# are asked less often than the worker log (#1296).
+EXECUTION_SECONDS = 5.0
+TIMELINE_SECONDS = 10.0
+TIMELINE_LIMIT = 40
+
+
+def execution_lines(summary: ExecutionSummary | None, t: Callable[[str], str]) -> list[str]:
+    """What the runtime observes of the session's execution, one fact per line (#1296)."""
+    if summary is None:
+        return [t("Runtime не надзирает за этим dispatch или не ответил.")]
+    none = t("не сообщается")
+    kind = t("Контейнер worker") if summary.kind == "container" else t("Процесс worker")
+    exit_parts = [
+        f"{t('код')} {summary.exit_code}" if summary.exit_code is not None else "",
+        f"{t('остановлено')}: {summary.stopped_by}" if summary.stopped_by else "",
+        t("нехватка памяти (OOM)") if summary.oom_killed else "",
+    ]
+    exit_text = " · ".join(part for part in exit_parts if part) or t("ещё не завершилось")
+    teardown = (
+        t("объекты удалены")
+        if summary.teardown == "removed"
+        else summary.teardown or t("ещё не выполнялась")
+    )
+    lines = [
+        f"{kind}: {summary.state or none}",
+        f"{t('Движок')}: {summary.engine or none}",
+        f"{t('Образ')}: {summary.image or none}",
+    ]
+    if summary.container_id:
+        lines.append(f"{t('ID контейнера')}: {summary.container_id[:12]}")
+    lines += [
+        f"{t('Дедлайн')}: {summary.deadline or none}",
+        f"{t('Наблюдалось')}: {summary.observed_at or none}",
+        f"{t('Завершение')}: {exit_text}",
+        f"{t('Очистка')}: {teardown}",
+    ]
+    if summary.stderr_tail:
+        lines.append(t("Последние строки stderr") + ":")
+        lines += [f"  {line}" for line in summary.stderr_tail]
+    return lines
+
+
+def timeline_lines(timeline: reports.BatchTimeline | None, limit: int = TIMELINE_LIMIT) -> list[str]:
+    """The newest orchestration events of the batch, oldest first: time, kind, role and text."""
+    if timeline is None:
+        return []
+    return [
+        f"{event.at[11:19] or '--:--:--'}  {event.kind:<8} "
+        f"{(event.role or '-'):<10} {event.text}"
+        for event in timeline.events[-limit:]
+    ]
+
+
 def observe(repo: Path, dispatch: str, offset: int) -> JsonObject:
     from harness.orchestration.workflow.delivery import observe_dispatch
 
@@ -362,7 +418,8 @@ class WorkerObservationScreen(ConsoleShell):
     WorkerObservationScreen Tabs { padding: 0 2; }
     WorkerObservationScreen #worker-output, WorkerObservationScreen #worker-events { height: 1fr; border: none; margin: 0; padding: 1 2; }
     WorkerObservationScreen #worker-filter { height: 3; margin: 0 1; }
-    WorkerObservationScreen #worker-access-scroll { height: 1fr; padding: 1 2; }
+    WorkerObservationScreen #worker-access-scroll, WorkerObservationScreen #worker-execution-scroll { height: 1fr; padding: 1 2; }
+    WorkerObservationScreen #worker-timeline { height: 1fr; border: none; margin: 0; padding: 1 2; }
     WorkerObservationScreen #worker-access-facts { height: auto; }
     WorkerObservationScreen #worker-actions { height: 4; padding: 0 2; border-top: solid $border-subtle; overflow-x: auto; }
     WorkerObservationScreen #worker-actions Button { margin-right: 1; min-width: 5; }
@@ -420,6 +477,12 @@ class WorkerObservationScreen(ConsoleShell):
             found.choices,
         )
         self._timer: Timer | None = None
+        # What the runtime observes of the execution and the batch's orchestration timeline,
+        # each read at its own cadence (#1296).
+        self._execution: ExecutionSummary | None = None
+        self._execution_asked = float("-inf")
+        self._timeline: reports.BatchTimeline | None = None
+        self._timeline_asked = float("-inf")
 
     def _session_card(self, label: str, dispatch_id: str) -> Text:
         stage = self._stages.get(dispatch_id)
@@ -550,6 +613,21 @@ class WorkerObservationScreen(ConsoleShell):
                             markup=False,
                             highlight=False,
                         )
+                    with TabPane("Оркестрация", id="orchestration"):
+                        yield RichLog(
+                            id="worker-timeline",
+                            max_lines=TIMELINE_LIMIT * 2,
+                            min_width=1,
+                            wrap=True,
+                            markup=False,
+                            highlight=False,
+                        )
+                    with TabPane("Выполнение", id="execution"):
+                        with VerticalScroll(id="worker-execution-scroll"):
+                            yield WrappedValue(
+                                "Runtime ещё не опрошен",
+                                id="worker-execution-facts",
+                            )
                     with TabPane("Доступы", id="access"):
                         with VerticalScroll(id="worker-access-scroll"):
                             yield WrappedValue(
@@ -631,10 +709,23 @@ class WorkerObservationScreen(ConsoleShell):
         reader: StepsReader | None = getattr(
             getattr(self.app, "home_client", None), "worker_steps", None
         )
+        now = time.monotonic()
+        ask_execution = now - self._execution_asked >= EXECUTION_SECONDS
+        batch_id = self.snapshot.get("batch_id")
+        ask_timeline = (
+            isinstance(batch_id, str)
+            and bool(batch_id)
+            and now - self._timeline_asked >= TIMELINE_SECONDS
+        )
+        if ask_execution:
+            self._execution_asked = now
+        if ask_timeline:
+            self._timeline_asked = now
+        repo = self.repo
 
         def poll() -> None:
             result = poll_worker(
-                self.repo,
+                repo,
                 dispatch,
                 self.observer,
                 reader,
@@ -643,6 +734,16 @@ class WorkerObservationScreen(ConsoleShell):
                 steps_failure=steps_failure,
             )
             call_from_worker(self, lambda: self._polled(result, generation))
+            if ask_execution:
+                execution = observe_execution(repo, dispatch)
+                call_from_worker(self, lambda: self._executed(execution, generation))
+            if ask_timeline:
+                try:
+                    timeline = reports.load_ledger_view(repo).timeline(str(batch_id))
+                except Exception:
+                    timeline = None  # The ledger cannot be read now: keep the last timeline.
+                if timeline is not None:
+                    call_from_worker(self, lambda: self._timelined(timeline, generation))
 
         self.run_worker(poll, thread=True, group="observation", exit_on_error=False)
 
@@ -657,6 +758,28 @@ class WorkerObservationScreen(ConsoleShell):
                 "next_offset", self._stream_offset
             )
         self._render_snapshot(result.snapshot, self.dispatch)
+
+    def _executed(self, summary: ExecutionSummary | None, generation: int) -> None:
+        if generation != self._generation or not self.dispatch:
+            return
+        self._execution = summary
+        self._paint_execution()
+
+    def _paint_execution(self) -> None:
+        language = getattr(self.app, "language", "ru")
+        lines = execution_lines(self._execution, lambda text: i18n.tr_text(language, text))
+        self.query_one("#worker-execution-facts", WrappedValue).set_value("\n".join(lines))
+
+    def _timelined(self, timeline: reports.BatchTimeline, generation: int) -> None:
+        if generation != self._generation or not self.dispatch:
+            return
+        if self._timeline is not None and self._timeline.events == timeline.events:
+            return
+        self._timeline = timeline
+        log = self.query_one("#worker-timeline", RichLog)
+        log.clear()
+        for line in timeline_lines(timeline):
+            log.write(Text(line))
 
     def _show_unavailable(self) -> None:
         self.query_one("#worker-status", Static).update(
@@ -976,8 +1099,11 @@ class WorkerObservationScreen(ConsoleShell):
         self.snapshot = {}
         self._events = []
         self._last_operation = "—"
+        self._execution, self._execution_asked = None, float("-inf")
+        self._timeline, self._timeline_asked = None, float("-inf")
         self.query_one("#worker-output", RichLog).clear()
         self.query_one("#worker-events", RichLog).clear()
+        self.query_one("#worker-timeline", RichLog).clear()
         self.action_refresh()
 
     def action_select_session(self, index: int) -> None:

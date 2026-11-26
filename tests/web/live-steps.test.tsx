@@ -160,6 +160,7 @@ describe("the agent activity route", () => {
       "Developer",
       "Review",
       "QA",
+      "Publish",
       "PR",
     ]);
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Статистика" })));
@@ -194,6 +195,7 @@ describe("the agent activity route", () => {
       "developer",
       "review",
       "qa",
+      "branch",
       "pr",
     ]);
     expect(route.querySelector('[data-step="Developer"] small')!.textContent).toBe("Выполняется");
@@ -383,5 +385,52 @@ describe("the step list as a timeline (#1092)", () => {
     act(() => socket.reply(stepsReply(id, many)));
     expect(list().querySelectorAll(".work-event")).toHaveLength(100);
     expect(list().closest(".panel")!.querySelector(".panel-head")!.textContent).toContain("100 из 500");
+  });
+
+  test("live activity of #1296: the auto policy's decisions, a container's execution and QA stages", () => {
+    const execution = {
+      kind: "container",
+      state: "running",
+      engine: "podman",
+      image: "sha256:abc",
+      container_id: "abcdef1234567890",
+      deadline: "2026-11-05T11:00:00+00:00",
+      observed_at: "2026-11-05T10:20:00+00:00",
+      exit_code: null,
+      stopped_by: "",
+      oom_killed: null,
+      teardown: "",
+      stderr_tail: ["Error: model unavailable"],
+    };
+    const [dev, rev] = ROSTER;
+    const publish = { ...dev!, dispatch_id: "dispatch-pub", purpose: "publish", state: "reported" };
+    const { socket, id } = renderActivity([{ ...dev!, execution }, rev!, publish]);
+    const panel = document.querySelector("#work-execution") as HTMLElement;
+    expect(panel.textContent).toContain("podman");
+    expect(panel.textContent).toContain("sha256:abc");
+    expect(panel.textContent).toContain("abcdef123456");
+    expect(panel.textContent).toContain("Error: model unavailable");
+    const route = document.querySelector("#work-route")!;
+    expect(route.querySelector('[data-step="Developer"] small')!.textContent).toBe("Выполняется");
+    expect(route.querySelector('[data-step="Publish"]')!.className).toContain("done");
+    act(() =>
+      socket.reply(
+        stepsReply(id, [
+          // Hours apart: steps close in time would merge into one cluster row.
+          { ...ORCHESTRATION_STEP, seq: 9, observed_at: "2026-11-06T11:00:00+00:00", event: "auto.decision", decision: "accept", approved_by: "policy:auto" },
+          { ...ORCHESTRATION_STEP, seq: 10, observed_at: "2026-11-06T13:00:00+00:00", event: "auto.stop", category: "no-automatic-route", message: "carried-items-not-closed" },
+          { ...AGENT_STEP, observed_at: "2026-11-06T15:00:00+00:00", source: "stages", kind: "stage-result", text: "tests: fail · exit 1 · 1.5 s" },
+        ]),
+      ),
+    );
+    const events = [...list().querySelectorAll(".work-event")];
+    const decision = events.find((row) => row.getAttribute("data-kind") === "auto.decision")!;
+    expect(decision.querySelector("b")!.textContent).toBe("Политика auto: accept dispatch-dev");
+    expect(decision.querySelector('[data-approver="auto"]')!.textContent).toBe("политика auto");
+    const stop = events.find((row) => row.getAttribute("data-kind") === "auto.stop")!;
+    expect(stop.querySelector("b")!.textContent).toBe("Автоматический путь остановлен: no-automatic-route");
+    const stage = events.find((row) => row.getAttribute("data-kind") === "stage-result")!;
+    expect(stage.getAttribute("data-result")).toBe("fail");
+    expect(stage.querySelector(".orch-pill.err")!.textContent).toBe("итог стадии");
   });
 });

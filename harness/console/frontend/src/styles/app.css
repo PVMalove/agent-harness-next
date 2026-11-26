@@ -816,3 +816,13 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .publish-page h3,
 #candidate-drawer b { font-weight: 600; }
 #candidate-readiness dd { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+/* Live activity (#1296): a supervised execution's facts, stage results of a container QA run. */
+.orch-pill.ok { color: var(--ok); border-color: currentColor; }
+.orch-pill.err { color: var(--err); border-color: currentColor; }
+.work-execution-facts code { font: var(--fs-1) var(--mono); }
+.work-execution-stderr {
+  margin: 0 16px 12px; padding: 8px; max-height: 160px; overflow: auto;
+  font: var(--fs-1)/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  border: 1px solid var(--rule); border-radius: 4px;
+}
+.work-event[data-kind="output"] .work-event-main b { font: var(--fs-1) var(--mono); font-weight: 400; white-space: pre-wrap; }

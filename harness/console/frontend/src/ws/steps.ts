@@ -22,7 +22,12 @@ export const EVENT_LABELS: Readonly<Record<OrchestrationStep["event"], string>> 
   "gate.decision": "Гейт {dispatch}: {decision}",
   "qa.run": "Прогон QA {dispatch}: {outcome}",
   "qa.attempt": "Попытка QA {dispatch} не прошла этап {stage}",
+  "auto.decision": "Политика auto: {decision} {dispatch}",
+  "auto.stop": "Автоматический путь остановлен: {category}",
 };
+
+/** Who approved a decision: the `auto` approval policy, or a person by name. */
+export const AUTO_APPROVER = "policy:auto";
 
 export type StepsEvent =
   | {
@@ -82,6 +87,8 @@ const ORCHESTRATION_TEXT = [
   "next_role",
   "outcome",
   "stage",
+  "approved_by",
+  "category",
 ];
 
 /** Exactly the allowlisted fields: a step with any other field is refused. */
@@ -91,7 +98,7 @@ function parseStep(value: unknown): Step | null {
     const keys = Object.keys(value);
     if (keys.length !== AGENT_FIELDS.length || !AGENT_FIELDS.every((key) => key in value)) return null;
     if (!AGENT_FIELDS.every((key) => isText(value[key]))) return null;
-    if (value.source !== "structured" && value.source !== "plain") return null;
+    if (value.source !== "structured" && value.source !== "plain" && value.source !== "stages") return null;
     if (value.structure !== "available" && value.structure !== "unavailable") return null;
     return value as unknown as AgentStep;
   }
@@ -119,9 +126,25 @@ function parseDispatch(value: unknown): RosterDispatch | null {
     "started_at",
     "last_event_at",
   ];
-  if (Object.keys(value).length !== fields.length + 2 || typeof value.silent !== "boolean") return null;
+  if (Object.keys(value).length !== fields.length + 4 || typeof value.silent !== "boolean") return null;
   if (!(value.observation === null || isObservation(value.observation))) return null;
+  if (!isText(value.purpose) || !(value.execution === null || isExecution(value.execution))) return null;
   return fields.every((key) => isText(value[key])) ? (value as unknown as RosterDispatch) : null;
+}
+
+const EXECUTION_TEXT = ["kind", "state", "engine", "image", "container_id", "deadline", "observed_at", "stopped_by", "teardown"];
+
+/** What the runtime observes of a supervised execution, with exactly the allowlisted fields. */
+function isExecution(value: unknown): boolean {
+  if (!isObject(value) || Object.keys(value).length !== EXECUTION_TEXT.length + 3) return false;
+  const { exit_code, oom_killed, stderr_tail } = value;
+  return (
+    EXECUTION_TEXT.every((key) => isText(value[key])) &&
+    (exit_code === null || typeof exit_code === "number") &&
+    (oom_killed === null || typeof oom_killed === "boolean") &&
+    Array.isArray(stderr_tail) &&
+    stderr_tail.every(isText)
+  );
 }
 
 /** The ledger facts of an in-process dispatch: its stream reason, heartbeat, self-report and
@@ -215,5 +238,6 @@ export function eventText(step: OrchestrationStep, t: Translate): string {
     decision: step.decision ?? dash,
     outcome: step.outcome ?? dash,
     stage: step.stage ?? dash,
+    category: step.category ?? dash,
   });
 }

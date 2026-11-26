@@ -906,6 +906,44 @@ def _build_timeline(view: LedgerView, batch: JsonObject) -> BatchTimeline:
             )
         )
 
+    # The automatic path (#1296): each approval of the `auto` policy, its stop, and each
+    # recovery event (a pause, a resume, a restart) with who approved it.
+    for record in _objects(batch.get("auto_decisions")):
+        evidence = record.get("evidence")
+        decided = text(evidence.get("decision")) if isinstance(evidence, dict) else ""
+        dispatch_id = text(record.get("dispatch_id"))
+        rationale = text(record.get("rationale"))
+        events.append(
+            TimelineEvent(
+                at=text(record.get("approved_at")),
+                kind="decision",
+                text=f"политика auto: {decided or text(record.get('kind'), '?')}"
+                + (f" ({dispatch_id})" if dispatch_id else "")
+                + (f" — {rationale}" if rationale else ""),
+            )
+        )
+    stop = batch.get("auto_stop")
+    if isinstance(stop, dict):
+        events.append(
+            TimelineEvent(
+                at=text(stop.get("detected_at")),
+                kind="state",
+                text=f"автоматический путь остановлен: {text(stop.get('category'), '?')}"
+                f" — {text(stop.get('reason'), '?')}",
+            )
+        )
+    for recovery in _objects(batch.get("recovery_events")):
+        note = text(recovery.get("note"))
+        events.append(
+            TimelineEvent(
+                at=text(recovery.get("approved_at")),
+                kind="decision",
+                text=f"восстановление: {text(recovery.get('kind'), '?')} "
+                f"({text(recovery.get('approved_by'), '?')})"
+                + (f" — {note}" if note else ""),
+            )
+        )
+
     for assessment in _objects(batch.get("risk_assessments")):
         risk = view._risks.get(text(assessment.get("risk_assessment_id")), {})
         triggers = strings(assessment.get("matched_triggers"))

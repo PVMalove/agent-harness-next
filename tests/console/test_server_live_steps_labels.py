@@ -28,6 +28,8 @@ EVENT_LABELS = {
     "gate.decision": "Гейт {dispatch}: {decision}",
     "qa.run": "Прогон QA {dispatch}: {outcome}",
     "qa.attempt": "Попытка QA {dispatch} не прошла этап {stage}",
+    "auto.decision": "Политика auto: {decision} {dispatch}",
+    "auto.stop": "Автоматический путь остановлен: {category}",
 }
 # The page strings of the "Ход работы" route.
 PAGE_LABELS = (
@@ -88,7 +90,7 @@ def test_every_event_type_and_page_string_has_its_english_text() -> None:
     assert set(EVENT_LABELS) == set(get_args(event))
     for template in EVENT_LABELS.values():
         english = _english(template)
-        for name in ("batch", "dispatch", "from", "to", "decision", "outcome", "stage"):
+        for name in ("batch", "dispatch", "from", "to", "decision", "outcome", "stage", "category"):
             assert (f"{{{name}}}" in template) == (f"{{{name}}}" in english), template
     for label in PAGE_LABELS:
         _english(label)

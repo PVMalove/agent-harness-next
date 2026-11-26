@@ -9,7 +9,7 @@ file generation; a store that does not answer is ``WorkerLedgerUnavailable``.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from harness.orchestration.core.constants import STATE_REL
@@ -23,7 +23,9 @@ from harness.orchestration.worker_observation import (
     checkpoint_view,
     dispatch_checkpoint_ids,
     external_log_path,
+    qa_commands_dir,
     read_plain_steps,
+    read_qa_stage_steps,
     read_structured_steps,
     structured_log_path,
     supervised_log_path,
@@ -31,6 +33,7 @@ from harness.orchestration.worker_observation import (
 )
 
 from ..application.ports import WorkerLedgerUnavailable
+from ...kernel.execution_facts import ExecutionSummary, observe_execution
 from ..domain.worker_steps import WorkerFacts, valid_dispatch_id
 
 # A short read: a page of steps is asked for every second.
@@ -98,7 +101,11 @@ def read_worker_checkpoints(repo: Path, facts: WorkerFacts) -> list[Mapping[str,
 def read_worker_log(
     repo: Path, facts: WorkerFacts, source: str, offset: int, budget: int
 ) -> Mapping[str, object]:
-    if source == "structured" and facts.dispatch.get("execution"):
+    reader: Callable[[Path, int, int], Mapping[str, object]]
+    if source == "stages":
+        path, reason = qa_commands_dir(repo / STATE_REL, facts.dispatch, facts.status)
+        reader = read_qa_stage_steps
+    elif source == "structured" and facts.dispatch.get("execution"):
         path, reason = supervised_log_path(repo / STATE_REL, facts.dispatch)
         reader = read_structured_steps
     elif source == "structured":
@@ -111,3 +118,13 @@ def read_worker_log(
     if path is None:
         return unavailable_page(source, reason or "no_log", offset)
     return reader(path, offset, budget)
+
+
+
+def read_execution_summary(repo: Path, facts: WorkerFacts) -> ExecutionSummary | None:
+    """What the runtime observes of the execution of a supervised worker or a container QA run
+    (#1296); None for an unsupervised dispatch, on the file ledger or when the runtime does not
+    answer. Only the runtime is asked; the ledger is not written."""
+    if not (facts.dispatch.get("execution") or facts.dispatch.get("qa_execution")):
+        return None
+    return observe_execution(repo, facts.dispatch_id)

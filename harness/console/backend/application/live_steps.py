@@ -11,12 +11,14 @@ after the position fell below the kept events, the backlog and the worker logs a
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import AsyncGenerator, Awaitable, Callable, Collection
 from dataclasses import dataclass, replace
 from typing import Protocol
 
 from ..domain.live_steps import (
     DispatchTiming,
+    ExecutionSummary,
     InProcessObservation,
     RosterDispatch,
     Step,
@@ -35,6 +37,10 @@ from .worker_steps import WorkerNotFound
 POLL_SECONDS = 1.0
 BACKLOG_EVENTS = 200
 MAX_FOLLOWED = 4
+# `execution.observe` makes the runtime reconcile: a live execution is asked at most this often,
+# and an ended one for this long after its dispatch left the live states (exit and cleanup).
+EXECUTION_SECONDS = 5.0
+EXECUTION_AFTER_END_SECONDS = 60.0
 _BATCH_EVENTS = 32
 
 
@@ -82,9 +88,17 @@ class LiveSteps:
         timing: Callable[[str], Awaitable[DispatchTiming | None]] | None = None,
         observation: Callable[[str], Awaitable[InProcessObservation | None]]
         | None = None,
+        execution: Callable[[str], Awaitable[ExecutionSummary | None]] | None = None,
+        monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         self._timing = timing
         self._observation = observation
+        self._execution = execution
+        self._monotonic = monotonic
+        # dispatch -> (asked at, state when asked, ended at or None, summary)
+        self._executions: dict[
+            str, tuple[float, str, float | None, ExecutionSummary | None]
+        ] = {}
         # A dispatch out of the live states records nothing new until its state changes.
         self._settled: dict[tuple[str, str], InProcessObservation | None] = {}
         self._events = events
@@ -137,6 +151,36 @@ class LiveSteps:
             found.append(replace(entry, observation=observation))
         return tuple(found)
 
+    async def _executed(
+        self, roster: tuple[RosterDispatch, ...]
+    ) -> tuple[RosterDispatch, ...]:
+        """The roster with what the runtime observes of its executions (#1296): a live dispatch
+        is asked at most every `EXECUTION_SECONDS`, one that ended while it was followed for
+        `EXECUTION_AFTER_END_SECONDS` more; a dispatch never seen live is not asked."""
+        if self._execution is None:
+            return roster
+        now = self._monotonic()
+        found: list[RosterDispatch] = []
+        for entry in roster:
+            cached = self._executions.get(entry.dispatch_id)
+            live = entry.state in self._live
+            if cached is None and not live:
+                found.append(entry)
+                continue
+            asked, state, ended, summary = cached or (0.0, entry.state, None, None)
+            if not live and ended is None:
+                ended = now
+            due = cached is None or state != entry.state or now - asked >= EXECUTION_SECONDS
+            if due and (live or (ended is not None and now - ended < EXECUTION_AFTER_END_SECONDS)):
+                try:
+                    summary = await self._execution(entry.dispatch_id)
+                except WorkerLedgerUnavailable:
+                    pass  # Unknown this tick: keep the last summary.
+                asked = now
+            self._executions[entry.dispatch_id] = (asked, entry.state, ended, summary)
+            found.append(replace(entry, execution=summary))
+        return tuple(found)
+
     async def subscribe(self) -> AsyncGenerator[RosterItem | StepsItem, None]:
         """The roster and the steps until the subscriber stops."""
         await self._events.ensure_started()
@@ -161,9 +205,11 @@ class LiveSteps:
                 journal_id = page.journal_id
                 position = max(page.floor, page.head - self._backlog)
                 page = self._events.read_after(position, _BATCH_EVENTS)
-            roster = await self._observed(
-                await self._timed(
-                    roster_from_view(page.view if page is not None else None)
+            roster = await self._executed(
+                await self._observed(
+                    await self._timed(
+                        roster_from_view(page.view if page is not None else None)
+                    )
                 )
             )
             source = (

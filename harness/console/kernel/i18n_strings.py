@@ -3136,6 +3136,40 @@ EN.update(
     }
 )
 
+# Live activity (#1296): decisions of the auto policy, its stop, stages of a container QA run and
+# the runtime's view of an execution.
+EN.update(
+    {
+        "Политика auto: {decision} {dispatch}": "Auto policy: {decision} {dispatch}",
+        "Автоматический путь остановлен: {category}": "Automatic path stopped: {category}",
+        "политика auto": "auto policy",
+        "решил: {who}": "decided by {who}",
+        "стадия": "stage",
+        "итог стадии": "stage result",
+        "вывод": "output",
+        "Выполнение в runtime": "Runtime execution",
+        "Процесс worker": "Worker process",
+        "ещё не завершилось": "not finished yet",
+        "код {code}": "code {code}",
+        "остановлено: {by}": "stopped by {by}",
+        "нехватка памяти (OOM)": "out of memory (OOM)",
+        "объекты удалены": "objects removed",
+        "ещё не выполнялась": "not done yet",
+        "Образ": "Image",
+        "Дедлайн": "Deadline",
+        "Наблюдалось": "Observed",
+        "Завершение": "Exit",
+        "Последние строки stderr": "Last stderr lines",
+        "Выполнение": "Execution",
+        "Runtime ещё не опрошен": "The runtime has not been asked yet",
+        "Runtime не надзирает за этим dispatch или не ответил.": "The runtime does not supervise this dispatch or did not answer.",
+        "Контейнер worker": "Worker container",
+        "ID контейнера": "Container ID",
+        "код": "code",
+        "остановлено": "stopped by",
+    }
+)
+
 def state_labels() -> dict[str, dict[str, str]]:
     """The state labels as the SPA reads them: state -> {\"ru\": ..., \"en\": ...}."""
     return {state: {"ru": ru, "en": en} for state, (ru, en) in STATE_LABELS.items()}

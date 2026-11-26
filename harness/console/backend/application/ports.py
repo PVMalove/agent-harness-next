@@ -19,6 +19,7 @@ from ...kernel.protocol import _clip
 from ..domain.events import Event, Observation, View
 from ..domain.jobs import CommandDescription
 from ..domain.task_board import REASON_BYTES, SpecList, SpecTickets, TrackerSpec
+from ..domain.live_steps import ExecutionSummary
 from ..domain.worker_steps import WorkerFacts
 
 
@@ -320,8 +321,15 @@ class CheckpointsReader(Protocol):
     ) -> Sequence[Mapping[str, object]]: ...
 
 
+class ExecutionReader(Protocol):
+    """What the runtime observes of the execution of the dispatch of ``facts``; ``None`` when it
+    has none or the runtime does not answer. Asks the runtime only, never writes the ledger."""
+
+    def __call__(self, repo: Path, facts: WorkerFacts, /) -> ExecutionSummary | None: ...
+
+
 class StepsLogReader(Protocol):
-    """One page of the worker log of ``source`` (``structured`` or ``plain``) from a byte
+    """One page of the worker log of ``source`` (``structured``, ``plain`` or ``stages``) from a byte
     offset, whose steps take at most ``budget`` bytes as JSON. Opens the log for reading and stats it
     only; an unusable log is a page with ``state`` ``unavailable`` and a typed ``reason``."""
 

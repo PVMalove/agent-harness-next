@@ -92,6 +92,7 @@ from .infrastructure.screen_facts import (
 )
 from .infrastructure.task_board_tracker import TrackerBoardReader
 from .infrastructure.worker_steps import (
+    read_execution_summary,
     read_worker_checkpoints,
     read_worker_facts,
     read_worker_log,
@@ -284,6 +285,7 @@ def worker_steps_query(
         facts=read_worker_facts,
         log=read_worker_log,
         checkpoints=read_worker_checkpoints,
+        execution=read_execution_summary,
         poll_seconds=poll_seconds,
     )
 
@@ -304,6 +306,7 @@ def live_steps(
         poll_seconds=poll_seconds,
         timing=workers.timing,
         observation=workers.observation,
+        execution=workers.execution,
     )
 
 

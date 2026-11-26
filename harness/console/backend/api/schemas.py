@@ -769,7 +769,7 @@ class WorkerStepsPage(_Strict):  # type: ignore[explicit-any]
     """Allowlisted worker steps from a log byte offset; never thinking, tool inputs or raw JSON."""
 
     dispatch_id: str
-    source: Literal["structured", "plain", "none"]
+    source: Literal["structured", "plain", "stages", "none"]
     structure: Literal["available", "unavailable"]
     state: Literal["connected", "waiting", "unavailable"]
     reason: (
@@ -779,6 +779,7 @@ class WorkerStepsPage(_Strict):  # type: ignore[explicit-any]
             "log_unreadable",
             "log_outside_storage",
             "log_unrecognised",
+            "qa_on_host",
         ]
         | None
     )
@@ -821,9 +822,29 @@ class InProcessObservation(_Strict):  # type: ignore[explicit-any]
     checkpoint_count: Annotated[int, Field(ge=0)]
 
 
+class ExecutionSummary(_Strict):  # type: ignore[explicit-any]
+    """What the runtime observes of a supervised execution, a process or a container; a field
+    the runtime did not report is "" or null. `stderr_tail` is redacted."""
+
+    kind: str
+    state: str
+    engine: str
+    image: str
+    container_id: str
+    deadline: str
+    observed_at: str
+    exit_code: int | None
+    stopped_by: str
+    oom_killed: bool | None
+    teardown: str
+    stderr_tail: list[str]
+
+
 class RosterDispatch(_Strict):  # type: ignore[explicit-any]
     """A dispatch of the journal view; the timing is read for a live dispatch only ("" and
-    false otherwise), and the observation for an in-process dispatch only (null otherwise)."""
+    false otherwise), and the observation for an in-process dispatch only (null otherwise).
+    `purpose` is `work` or `publish` once its record was read; `execution` is set for a
+    dispatch whose execution the runtime supervises."""
 
     dispatch_id: str
     batch_id: str
@@ -836,6 +857,8 @@ class RosterDispatch(_Strict):  # type: ignore[explicit-any]
     last_event_at: str
     silent: bool
     observation: InProcessObservation | None
+    purpose: str
+    execution: ExecutionSummary | None
 
 
 class StepsRosterReply(_Envelope):  # type: ignore[explicit-any]
@@ -856,7 +879,7 @@ class AgentStep(_Strict):  # type: ignore[explicit-any]
     dispatch_id: str
     batch_id: str
     role: str
-    source: Literal["structured", "plain"]
+    source: Literal["structured", "plain", "stages"]
     structure: Literal["available", "unavailable"]
     kind: str
     text: str
@@ -875,6 +898,8 @@ class OrchestrationStep(_Strict):  # type: ignore[explicit-any]
         "gate.decision",
         "qa.run",
         "qa.attempt",
+        "auto.decision",
+        "auto.stop",
     ]
     batch_id: str | None
     dispatch_id: str | None
@@ -887,6 +912,8 @@ class OrchestrationStep(_Strict):  # type: ignore[explicit-any]
     outcome: str | None
     stage: str | None
     message: str
+    approved_by: str | None
+    category: str | None
 
 
 class StepsReply(_Envelope):  # type: ignore[explicit-any]

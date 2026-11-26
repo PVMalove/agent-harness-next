@@ -204,6 +204,7 @@ _STEP_REASONS = frozenset(
         "log_unreadable",
         "log_outside_storage",
         "log_unrecognised",
+        "qa_on_host",
     }
 )
 
@@ -243,7 +244,7 @@ def _worker_steps(value: object) -> WorkerSteps:
         page["last_step_age_seconds"],
     )
     if (
-        page["source"] not in {"structured", "plain", "none"}
+        page["source"] not in {"structured", "plain", "stages", "none"}
         or page["structure"] not in {"available", "unavailable"}
         or page["state"] not in {"connected", "waiting", "unavailable"}
         or not (reason is None or reason in _STEP_REASONS)

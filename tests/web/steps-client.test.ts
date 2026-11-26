@@ -157,4 +157,18 @@ describe("the steps reducer", () => {
     }
     expect(translate("en", STRUCTURE_LABELS.unavailable)).toBe("structure unavailable");
   });
+
+  test("a roster entry carries its purpose and an execution with exactly the allowlisted fields (#1296)", () => {
+    const execution = {
+      kind: "process", state: "exited", engine: "", image: "", container_id: "", deadline: "",
+      observed_at: "", exit_code: 0, stopped_by: "", oom_killed: null, teardown: "removed", stderr_tail: [],
+    };
+    const entry = { ...ROSTER[0]!, purpose: "publish", execution };
+    expect(parseStepsReply(rosterReply(1, true, [entry]))).toMatchObject({ type: "roster", dispatches: [entry] });
+    expect(parseStepsReply(rosterReply(1, true, [{ ...entry, execution: { ...execution, secret: "x" } }]))).toBeNull();
+    expect(parseStepsReply(rosterReply(1, true, [{ ...entry, execution: { ...execution, exit_code: "0" } }]))).toBeNull();
+    const step = { ...ORCHESTRATION_STEP, event: "auto.stop", category: "no-automatic-route" };
+    expect(parseStepsReply(stepsReply(1, [step]))).toEqual({ type: "steps", steps: [step] });
+    expect(parseStepsReply(stepsReply(1, [{ ...AGENT_STEP, source: "stages" }]))).not.toBeNull();
+  });
 });

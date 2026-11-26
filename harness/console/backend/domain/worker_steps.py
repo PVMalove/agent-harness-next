@@ -17,7 +17,7 @@ from ...kernel.protocol import MESSAGE_BYTES, _clip
 # Step text in one page: with the other fields the reply stays below `MESSAGE_LIMIT`.
 STEP_BUDGET_BYTES = 48 * 1024
 RECEIPT_PROTOCOL = "harness-worker-v1"
-SOURCES = ("structured", "plain", "none")
+SOURCES = ("structured", "plain", "stages", "none")
 STATES = ("connected", "waiting", "unavailable")
 REASONS = (
     "no_log",
@@ -25,8 +25,10 @@ REASONS = (
     "log_unreadable",
     "log_outside_storage",
     "log_unrecognised",
+    "qa_on_host",
 )
 NO_LOG_MESSAGE = "Worker supplied no observable log; worker outcome is independent"
+QA_ON_HOST_MESSAGE = "QA runs on the host: its stage results appear when the run ends"
 _DISPATCH_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,99}")
 
 
@@ -84,7 +86,9 @@ class StepsPage:
 
 def select_source(facts: WorkerFacts) -> str:
     """A supervised worker's run log or a bound runtime receipt gives structured steps; an
-    external adapter gives a plain log."""
+    external adapter gives a plain log; a QA run in containers gives its stages (#1296)."""
+    if facts.dispatch.get("role") == "qa":
+        return "stages" if facts.dispatch.get("qa_execution") else "none"
     if facts.dispatch.get("execution"):
         return "structured"
     receipt = facts.status.get("adapter_receipt") if facts.status else None
@@ -105,14 +109,15 @@ def in_process(facts: WorkerFacts) -> bool:
     return facts.dispatch.get("resolved_transport") == "in-process"
 
 
-def no_log_page(dispatch_id: str, offset: int) -> StepsPage:
+def no_log_page(dispatch_id: str, offset: int, *, qa: bool = False) -> StepsPage:
+    """A dispatch without an observable log; a QA run on the host says when its results come."""
     return StepsPage(
         dispatch_id=dispatch_id,
         source="none",
         structure="unavailable",
         state="unavailable",
-        reason="no_log",
-        message=NO_LOG_MESSAGE,
+        reason="qa_on_host" if qa else "no_log",
+        message=QA_ON_HOST_MESSAGE if qa else NO_LOG_MESSAGE,
         offset=max(0, offset),
         reset=False,
         more=False,
@@ -132,7 +137,7 @@ def page_from_reading(dispatch_id: str, reading: Mapping[str, object]) -> StepsP
     return StepsPage(
         dispatch_id=dispatch_id,
         source=source if source in SOURCES else "none",
-        structure="available" if source == "structured" else "unavailable",
+        structure="available" if source in ("structured", "stages") else "unavailable",
         state=state if state in STATES else "unavailable",
         reason=reason if isinstance(reason, str) and reason in REASONS else None,
         message=_clip(text(reading.get("message")), MESSAGE_BYTES),
