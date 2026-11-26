@@ -24,6 +24,7 @@ files = [
     "harness",
     "tests",
     "scripts/verify.py",
+    "scripts/fmea_catalog.py",
     "scripts/verification",
     "scripts/perf",
     "scripts/check_license_headers.py",
@@ -70,6 +71,7 @@ core = "sysmon"
 "harness/repo_map/repo_map.py" = ["E402"]
 "harness/reporting/delivery_stats.py" = ["E402"]
 "scripts/check_upstream_drift.py" = ["E402"]
+"scripts/fmea_catalog.py" = ["E402"]
 "scripts/test_clean_room.py" = ["E402"]
 "scripts/verify.py" = ["E402"]
 "tests/orchestration/test_advisory.py" = ["E402"]
