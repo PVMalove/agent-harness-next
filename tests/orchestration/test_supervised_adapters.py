@@ -155,6 +155,26 @@ def test_a_worker_exit_code_is_the_execution_exit_code_and_the_runtime_failure_c
     assert dig(status, "runtime_failure", "exit_code") == 7
 
 
+def test_a_worker_whose_background_checks_claude_stopped_names_that_cause(
+    supervised: Factory,
+) -> None:
+    """#1283: the exit reaction reads the adapter's stderr line, not only ``blocked``."""
+    repo = supervised()
+    repo.use_adapter(
+        "claude",
+        stderr='Background tasks still running 10m after the last turn (shell "Run checks"); '
+        "stopping them. Set CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=0 to wait indefinitely.\n",
+    )
+
+    sent(repo.send())
+    status = settled(repo)
+
+    assert status["state"] == "blocked"
+    assert dig(status, "runtime_failure", "kind") == "worker-exited-without-report"
+    assert dig(status, "runtime_failure", "cause") == "background-tasks-stopped"
+    assert "background tasks" in str(dig(status, "runtime_failure", "error"))
+
+
 @pytest.mark.parametrize("runtime", ["claude", "codex"])
 def test_a_runtime_stop_of_the_execution_also_ends_the_worker(
     supervised: Factory, runtime: str

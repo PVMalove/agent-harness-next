@@ -29,7 +29,7 @@ from ..domain.live_steps import (
 )
 from ..domain.worker_steps import StepsPage
 from .events import JournalPage
-from .ports import WallClock
+from .ports import WallClock, WorkerLedgerUnavailable
 from .worker_steps import WorkerNotFound
 
 POLL_SECONDS = 1.0
@@ -105,7 +105,12 @@ class LiveSteps:
         now = self._now()
         found: list[RosterDispatch] = []
         for entry in roster:
-            timing = await self._timing(entry.dispatch_id) if entry.state in self._live else None
+            timing = None
+            if entry.state in self._live:
+                try:
+                    timing = await self._timing(entry.dispatch_id)
+                except WorkerLedgerUnavailable:
+                    pass  # Unknown this tick; the roster goes on without the timing.
             found.append(timed(entry, timing, now))
         return tuple(found)
 
@@ -121,7 +126,12 @@ class LiveSteps:
             if key in self._settled:
                 observation = self._settled[key]
             else:
-                observation = await self._observation(entry.dispatch_id)
+                try:
+                    observation = await self._observation(entry.dispatch_id)
+                except WorkerLedgerUnavailable:
+                    # Unknown this tick: never settled, so it is read again on the next one.
+                    found.append(entry)
+                    continue
                 if entry.state not in self._live:
                     self._settled[key] = observation
             found.append(replace(entry, observation=observation))
@@ -189,6 +199,8 @@ class LiveSteps:
                     # The ledger has no record yet or any more: read again on the next tick.
                     draining.discard(key)
                     continue
+                except WorkerLedgerUnavailable:
+                    continue  # The ledger cannot be read now: the same offset next tick.
                 offsets[key] = worker_page.offset
                 for group in chunks(agent_steps(worker_page, entry, self._now())):
                     yield StepsItem(group)

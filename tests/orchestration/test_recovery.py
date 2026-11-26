@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+from collections.abc import Callable
 from datetime import datetime, timedelta, tzinfo
 from typing import cast
 from unittest import mock
@@ -617,6 +618,92 @@ class RecoveryTests(unittest.TestCase):
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
         # The historical handoff must not freeze legitimate post-startup writer progress.
         self._developer_commit("continued")
+        self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
+
+    def test_writer_that_exited_without_report_after_commits_recovers_by_preserved_rewind(
+        self,
+    ) -> None:
+        """#1282: a proven exit with no report is a stopped writer boundary, not a dead end."""
+        from harness.orchestration.workflow import execution_reaction
+
+        self._configure_preserved_recovery(approval_policy="auto")
+        batch = self._create_batch(allowed_paths=["services/*.py"])
+        self._accepted_architect(batch["batch_id"])
+        brief = self._dispatch(batch["batch_id"], "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        candidate, _ = self._developer_commit("exited")
+        root = ledger_ops._state_root(self._args(), self.repo)
+        # The runtime observed the worker exit with code 0 and no report was submitted.
+        execution_reaction.react(
+            self.repo,
+            root,
+            ledger_ops._load_dispatch(root, brief["dispatch_id"]),
+            {"state": "exited", "exit": {"exit_code": 0, "source": "wait-status"}},
+        )
+        paused = coordinator.auto_decide(self._args(batch=batch["batch_id"]))
+        self.assertEqual(paused["batch_state"], "paused")
+        self.assertEqual(
+            self._batch_record(batch["batch_id"])["auto_stop"]["reason"],
+            "abandon-dead-end",
+        )
+
+        refusals: dict[str, Callable[[], object]] = {
+            "resume-stop --restart": lambda: coordinator.resume_stopped_batch(
+                self._args(
+                    batch=batch["batch_id"], restart=True, note="restart", **self._approval()
+                )
+            ),
+            "resume-stop": lambda: coordinator.resume_stopped_batch(
+                self._args(batch=batch["batch_id"], note="resume", **self._approval())
+            ),
+            "rewind": lambda: coordinator.rewind_batch(
+                self._args(
+                    batch=batch["batch_id"], to="developer", note="rewind", **self._approval()
+                )
+            ),
+            "dispatch cancel": lambda: coordinator.cancel_dispatch(
+                self._args(
+                    dispatch=brief["dispatch_id"],
+                    runtime_stopped=True,
+                    reason="the worker already exited",
+                    **self._approval(),
+                )
+            ),
+            "batch resume": lambda: coordinator.resume_batch(
+                self._args(
+                    batch=batch["batch_id"],
+                    runtime_stopped=True,
+                    reason="the worker already exited",
+                    **self._approval(),
+                )
+            ),
+        }
+        for command, call in refusals.items():
+            with self.subTest(command=command):
+                with self.assertRaises(coordinator.CoordinatorError) as refused:
+                    call()
+                # Every refusal names the command that accepts this state.
+                self.assertIn("batch rewind", refused.exception.remedy)
+                self.assertIn("--preserved-commit", refused.exception.remedy)
+
+        coordinator.rewind_batch(
+            self._args(
+                batch=batch["batch_id"],
+                to="developer",
+                preserved_commit=candidate,
+                preserved_file=[],
+                note="continue the commits of the writer that exited without a report",
+                **self._approval(),
+            )
+        )
+
+        self.assertEqual(_git(self.worktree, "rev-parse", "HEAD"), candidate)
+        renewed = self._dispatch(batch["batch_id"], "developer")["brief"]
+        self.assertEqual(renewed["snapshot_commit"], candidate)
+        self.assertEqual(
+            renewed["preserved_progress"]["source_dispatch_id"], brief["dispatch_id"]
+        )
+        self._start(renewed["dispatch_id"])
         self.assertTrue(coordinator.validate_ledger(self._args())["valid"])
 
     def test_cli_rewind_preserves_files_missing_from_blocked_tooling_report(

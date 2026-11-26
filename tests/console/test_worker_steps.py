@@ -553,3 +553,103 @@ def test_query_observes_an_in_process_dispatch_and_reads_no_checkpoints_for_anot
     assert observed.to_wire()["checkpoints"] == [checkpoint]
     assert (external, unknown) == (None, None)
     assert asked == ["dispatch-a"]
+
+
+def _store_project(repo: Path) -> Path:
+    """A project whose ledger lives in the runtime store; its old file generation is stale."""
+    root = _ledger(repo)
+    (root / "ledger.json").write_text(json.dumps({"version": 4, "generation": "g"}))
+    stale = {"dispatch_id": "dispatch-a", "state": "dispatched"}
+    (root / "dispatches/dispatch-a.json").write_text(json.dumps(stale))
+    return root
+
+
+def _runtime(
+    monkeypatch: pytest.MonkeyPatch, records: dict[str, object] | Exception
+) -> list[list[str]]:
+    from harness.console.backend.infrastructure import worker_steps as infrastructure
+    from harness.orchestration.runtime_client import StateRead
+
+    asked: list[list[str]] = []
+
+    def read_state(
+        client: object, payload: dict[str, object], **_: object
+    ) -> StateRead:
+        assert payload["collections"] == []
+        asked.append(list(payload["paths"]))  # type: ignore[call-overload]
+        if isinstance(records, Exception):
+            raise records
+        wanted = set(payload["paths"])  # type: ignore[call-overload]
+        return StateRead(
+            records={
+                path: record for path, record in records.items() if path in wanted
+            },
+            revisions={},
+            snapshot=None,
+            generation_revision=None,
+            revision=None,
+        )
+
+    monkeypatch.setattr(infrastructure, "RuntimeClient", lambda repo: object())
+    monkeypatch.setattr(infrastructure, "read_state", read_state)
+    return asked
+
+
+def test_a_store_backed_project_reads_the_dispatch_and_its_checkpoints_from_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _store_project(tmp_path)
+    dispatch = {"dispatch_id": "dispatch-a", "batch_id": "batch-1", "state": "working"}
+    asked = _runtime(
+        monkeypatch,
+        {
+            "dispatches/dispatch-a.json": dispatch,
+            "dispatch-status/dispatch-a.json": {
+                "dispatch_id": "dispatch-a",
+                "state": "working",
+            },
+            "batches/batch-1.json": {
+                "batch_id": "batch-1",
+                "checkpoints": [
+                    {"dispatch_id": "dispatch-a", "checkpoint_id": "checkpoint-1"}
+                ],
+            },
+            "checkpoints/checkpoint-1.json": {
+                "checkpoint_id": "checkpoint-1",
+                "commit_sha": "a" * 40,
+                "created_at": "2026-11-26T13:00:00Z",
+            },
+        },
+    )
+
+    facts = read_worker_facts(tmp_path, "dispatch-a")
+
+    assert facts is not None
+    assert facts.dispatch == dispatch
+    assert facts.status == {"dispatch_id": "dispatch-a", "state": "working"}
+    assert [c["checkpoint_id"] for c in read_worker_checkpoints(tmp_path, facts)] == [
+        "checkpoint-1"
+    ]
+    assert asked[0] == ["dispatches/dispatch-a.json", "dispatch-status/dispatch-a.json"]
+    assert read_worker_facts(tmp_path, "dispatch-b") is None
+
+
+def test_an_unanswering_runtime_is_an_unavailable_ledger_never_an_unknown_dispatch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console.backend.application.ports import WorkerLedgerUnavailable
+    from harness.orchestration.runtime_client import RuntimeClientError
+
+    _store_project(tmp_path)
+    _runtime(
+        monkeypatch,
+        RuntimeClientError(
+            "runtime_unavailable", "no socket", remedy="start it", domain="transport"
+        ),
+    )
+
+    with pytest.raises(WorkerLedgerUnavailable, match="runtime_unavailable"):
+        read_worker_facts(tmp_path, "dispatch-a")
+    facts = _facts({"dispatch_id": "dispatch-a", "batch_id": "batch-1"})
+    with pytest.raises(WorkerLedgerUnavailable):
+        read_worker_checkpoints(tmp_path, facts)

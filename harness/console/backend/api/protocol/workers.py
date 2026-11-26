@@ -17,6 +17,7 @@ from ....kernel.protocol import (
     WORKER_STEPS_REQUEST,
     WORKER_SUBSCRIBE_REQUEST,
 )
+from ...application.ports import WorkerLedgerUnavailable
 from ...application.worker_steps import WorkerNotFound, WorkerStepsQuery
 from ...domain.worker_steps import StepsPage, valid_dispatch_id
 from . import Rejected, encode, error_reply, parse_envelope
@@ -87,5 +88,9 @@ async def replies(raw: str, query: WorkerStepsQuery) -> AsyncGenerator[str, None
                 yield reply(page)
     except WorkerNotFound:
         yield error_reply("not_found", request_id, kind, NOT_FOUND)
+    except WorkerLedgerUnavailable as exc:
+        yield error_reply(
+            "collect_failed", request_id, kind, f"ledger unavailable: {exc}"
+        )
     except Exception as exc:
         yield error_reply("collect_failed", request_id, kind, type(exc).__name__)
