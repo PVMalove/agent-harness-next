@@ -13,15 +13,16 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.2 — 26 November 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Added: 1 · Changed: 3 · Fixed: 9 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
+<p class="ah-release-meta">Added: 2 · Changed: 3 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
 
-<p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions.</p>
+<p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions · orchestration progress in the console.</p>
 
 ??? note "Full notes"
 
     **Added**
 
     - **[Release Gate for an integration branch]:** `integration prepare --ticket "#<epic>" --branch <integration/...>` records the pair of the integration branch head and `base_branch` (or another `integration/*` through `--target`) without a publish batch, when the epic's `## Integration Branch` section names that branch. The integration PR passes `confirm-pr`, a CI or local-QA check of that pair, `handoff` and the tree check after the merge, like a ticket PR; the pair requires the full check, and a `-light` check never confirms it. (#1278)
+    - **[Orchestration progress in the console]:** the "Work progress" screen of the TUI and the web console shows the batch timeline with the `auto` policy decisions and the stop of the automatic path, the QA stages in the container with the output tail and the result of each stage, and the state of the worker container: image, engine, teardown and the last stderr lines. The console only reads these data from the console server and the runtime; when the runtime does not answer, the screen names the reason. (#1296)
 
     **Changed**
 
@@ -40,6 +41,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
     - **["Work progress" screen]:** the console screen no longer freezes in its initial state when the console server is busy with another request or does not know the dispatch: within 1–2 seconds it shows the process, the ledger state, the stream, the heartbeat and the last operation, and the "Session" tab shows the steps from the worker log that the observer reads. If polling does not answer for 10 seconds, the screen shows "⚠ Observation unavailable". The session list loads in the background, so opening the screen no longer blocks the console. (#1281)
     - **[Retry without a new commit]:** a developer retry that needs no new commit reports a `blocked` or `failed` report with an empty `commit_map`, and the batch waits for the coordinator's decision instead of pausing at `abandon-dead-end`. A `completed` report without commits is still refused, but its `remedy` proposes a `blocked` report or a new commit instead of mapping commits that do not exist. (#1290)
     - **[Adapter inside a worker]:** `dispatch send` run from a worker's checks no longer waits 30 seconds for an answer that never comes: the Claude Code adapter keeps its worker in the foreground only when the runtime started the adapter for that same dispatch. So the developer check `pytest -q tests/orchestration tests/memory` passes inside a worker again. (#1291)
+    - **[Console interface]:** on a wide screen the console no longer hides the Publish buttons, no longer shows a green QA mark for a failed check and no longer draws empty command description frames; an in-progress stage is marked ▶, and a screen opens with the focus on a visible list. The `b` key now opens the task board everywhere: the Repo Map build moved to `u`, and the timeline of a report card to `t`. The web console tells loading, an empty ledger and a server error apart. (#1296)
 
 ## v2.0.1 — 24 November 2026 {.ah-release-title}
 
