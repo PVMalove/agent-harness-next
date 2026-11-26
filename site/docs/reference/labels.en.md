@@ -57,7 +57,7 @@ A rejected ticket loses its `status::*` label, gets `resolution::wontfix`, and i
 | `/publish-epic` | `type::*`, `status::specs` and `task-report::required` on the epic |
 | `/to-tickets` | Mode, the `pipeline::*` route, `status::ready` or `status::blocked` |
 | `/implement`, `/fast-implement` | `status::in-progress` in place of the current state label |
-| `/to-pull-requests` | After a merge: `status::blocked` → `status::ready` on the unblocked dependents |
+| `/to-pull-requests` | After a merge: `status::blocked` → `status::ready` on the unblocked dependents. With `--release <epic>`, after the integration PR merges into `base_branch`: `status::done` in place of the epic's `status::specs` |
 
 ## Next
 

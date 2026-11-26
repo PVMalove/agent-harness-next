@@ -2,6 +2,13 @@
 
 Изменения выпусков записываются в формате [Keep a Changelog](https://keepachangelog.com/ru/1.1.0/) и версионируются по SemVer.
 
+## [Unreleased]
+
+### Added
+
+- **[Режим интеграционного PR]:** `/to-pull-requests --release <epic>` открывает PR integration-ветки эпика с меткой `pr::integration` в `base_branch` или, с `--target <branch>`, в другую ветку `integration/*`, а в проекте с opt-in вызывает Release Gate. После подтверждённого merge в `base_branch` эпик закрывается и получает `status::done`, а integration-ветка остаётся, пока разработчик не решит её судьбу. (#1027)
+
+
 ## [2.0.3] - 2026-11-27
 
 ### Fixed
