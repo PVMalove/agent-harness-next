@@ -9,7 +9,7 @@ does the work: a ticket can be `status::ready` and `hitl`, and these are two dif
 | --- | --- | --- |
 | Type | `type::bug`, `type::feature`, `type::refactoring`, `type::chore`, `type::security`, `type::performance`, `type::hotfix` | `/triage` |
 | Execution mode | `hitl`, `afk` | `/triage`, `/to-tickets` |
-| State | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked` | `/triage`, `/publish-epic`, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
+| State | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked`, `status::done` | `/triage`, `/publish-epic`, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
 | Route | `pipeline::fast`, `pipeline::full` | `/to-tickets` |
 | Context | `task-report::required`, `resolution::wontfix` | `/publish-epic`, `/to-tickets`, `/triage` |
 | Wayfinder | `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, `wayfinder:task` | `/wayfinder` |
@@ -44,7 +44,8 @@ will do the work. The `pipeline::*` route is not set on `hitl` tickets: the shor
 6. **Back to `status::ready`.** The blocker clears when the predecessor is closed, and the predecessor is closed only
    after its merge is confirmed. An open PR, accepted QA, and a push do not remove the blocker.
 
-After the merge and closing, the ticket keeps `status::in-progress`: the closed state itself means "done".
+After the confirmed merge, `/to-pull-requests` replaces `status::in-progress` with `status::done` and closes the
+ticket; a ticket the tracker closed by itself through `Closes #<ID>` gets the label right after the close is verified.
 
 A rejected ticket loses its `status::*` label, gets `resolution::wontfix`, and is closed.
 

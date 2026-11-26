@@ -37,8 +37,9 @@
 
 ## После merge
 
-Навык проверяет merge и для opt-in — дерево merge-коммита (`--merge-commit`,
-`merge-tree-mismatch`). Затем он закрывает тикет или проверяет его автозакрытие командами из
+Навык доказывает merge по состоянию PR/MR (слит в ожидаемую цель, head SHA равен SHA ветки), а не по
+истории Git, и для opt-in проверяет дерево merge-коммита (`--merge-commit`, `merge-tree-mismatch`).
+Затем он заменяет `status::in-progress` на `status::done`, закрывает тикет или проверяет его автозакрытие командами из
 `.harness/instructions/git-workflow.md` §2, шаг 7 → Close the ticket after merge, и переводит в
 `status::ready` тикеты, у которых больше нет открытых блокеров. Черновики `docs/tasks/` тикетами не
 считаются. Управляемый worktree удаляется через `coordinator.py worktree remove`, worktree сессии —
@@ -50,7 +51,9 @@ rebase `git branch -d` не видит слияния. Ветку удаляет
 команда отказывает, если ветка не подходит под `branch_pattern`, открыта в worktree или её вершина
 недостижима из `origin` и не совпадает с head слитого PR/MR. Для локального трекера без PR ветку
 удаляет `git branch -d` после проверки `git merge-base --is-ancestor`. Если PR не слит или SHA
-различаются, ветка остаётся. Когда
+различаются, ветка остаётся. Ветку на `origin` навык удаляет `git push origin --delete <branch-name>` после той же
+проверки и вашего согласия; если хук проекта блокирует команду, навык называет причину и отдаёт команду вам.
+Когда
 закрыт последний дочерний тикет эпика, навык предлагает `/to-pull-requests --release <epic>`.
 
 ## Релиз (`--release <epic>`)

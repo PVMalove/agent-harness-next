@@ -39,8 +39,9 @@ merged one to the merge checks, the ticket closure and the cleanup.
 
 ## After the merge
 
-The skill checks the merge and, for an opt-in project, the tree of the merge commit
-(`--merge-commit`, `merge-tree-mismatch`). It then closes the ticket or verifies its auto-close with
+The skill proves the merge from the PR/MR state (merged into the expected target, head SHA equal to the
+branch SHA), not from Git history, and for an opt-in project checks the tree of the merge commit
+(`--merge-commit`, `merge-tree-mismatch`). It then replaces `status::in-progress` with `status::done`, closes the ticket or verifies its auto-close with
 the commands of `.harness/instructions/git-workflow.md` §2 step 7 → Close the ticket after merge, and
 moves to `status::ready` the tickets that no longer have an open blocker. Drafts in `docs/tasks/` are
 not tickets. A managed worktree is removed with `coordinator.py worktree remove`, a session worktree
@@ -52,7 +53,10 @@ rebase merge `git branch -d` does not see the merge. `harness branch-delete <rep
 deletes the branch: it refuses when the branch does not match `branch_pattern`, is checked out in a
 worktree, or has a tip that is neither reachable from `origin` nor the head of a merged PR/MR. For a
 local tracker without a PR, `git branch -d` deletes the branch after the `git merge-base --is-ancestor`
-check. When the PR is not merged or the SHAs differ, the branch stays. When
+check. When the PR is not merged or the SHAs differ, the branch stays. The skill deletes the `origin` branch with `git push origin --delete <branch-name>`
+after the same check and your consent; when a project hook blocks the command, the skill names the reason and hands
+you the command.
+When
 the epic's last child ticket closes, the skill offers `/to-pull-requests --release <epic>`.
 
 ## Release (`--release <epic>`)
