@@ -97,7 +97,9 @@ Coordinator берёт любую процедуру только из исто�
 coordinator останавливается, сообщает о нём разработчику и не восстанавливает шаг сам.
 
 Начинайте эти шаги только после pre-flight тикета из раздела «Контракт coordinator»
-(блокеры, `status::in-progress`).
+(блокеры, `status::in-progress`). Сначала прочитайте `approval_policy` в `.harness/orchestration.json`.
+При `approval_policy: auto` прочитайте `references/auto-path.md` до шага 5: он определяет, кто
+запускает `batch approve` и даёт все последующие одобрения.
 
 1. **Integration ref.** Возьмите значение секции `## Integration Branch` тикета (строку
    `**Integration branch:**` в локальном трекере). Если её нет,
@@ -120,6 +122,15 @@ coordinator останавливается, сообщает о нём разр�
    `## Non-Goals & Rejected Alternatives` родительского эпика → `--prohibited-change`, если тикет
    называет `## Parent: #<epic>`, пути из `## Contract touchpoints` и
    `## Relevant Files (Discovery Context)` → `--allowed-path` и `--expected-file`.
+
+   **Цена пайплайна.** После успешного `batch preflight` и до `batch create` сравните метку
+   `pipeline::full` с фактическим объёмом тикета. Покажите разработчику оценку: `expected_files` и
+   `expected_changed_lines` из preflight, `## Story Points` тикета и `story_points.fast_threshold` из
+   `.harness/project.json`. Если все ожидаемые файлы — документация или тексты скиллов (`*.md`,
+   `docs/**`, `site/**`, `skills/**`) или Story Points не больше `fast_threshold`, предложите сменить
+   метку на `pipeline::fast` в трекере и запустить `/fast-implement`. Решает разработчик: дождитесь
+   ответа при любой `approval_policy`. Если он не выбрал `/fast-implement`, переходите к шагу 4, иначе
+   остановитесь до `batch create`. Сами метку тикета не меняйте.
 4. **Создание batch.** Повторяйте флаги-списки по одному разу на каждое значение.
 
    ```bash
@@ -135,9 +146,13 @@ coordinator останавливается, сообщает о нём разр�
    хотя бы один `--allowed-path`. `--branch` должен соответствовать `branch_pattern`.
    `--expected-file`, `--expected-service` и `--expected-changed-lines` обязательны, если политика
    проекта требует оценок. Слишком большой тикет CLI отклоняет и печатает `remedy`.
-5. **Одобрение batch.** `batch approve --batch <id> --approved-by <operator> --approved-at <UTC time>`
-   переводит batch из `planned` в `awaiting-approval`. Для этого нужно явное одобрение оператора:
-   покажите команду, как для `batch abandon`, и не запускайте её за него.
+5. **Одобрение batch.** `batch approve` переводит batch из `planned` в `awaiting-approval`. Шаг
+   зависит от `approval_policy`:
+   - `auto`: запустите `batch approve --batch <id>` сами, без `--approved-by` и `--approved-at`;
+     одобрение записывает политика (`references/auto-path.md`).
+   - Любая другая политика: нужно явное одобрение оператора. Покажите
+     `batch approve --batch <id> --approved-by <operator> --approved-at <UTC time>`, как для
+     `batch abandon`, и не запускайте команду за него.
 
 **План коммитов.** Architect кладёт свой план в поле отчёта `commit_plan`. `report submit` отклоняет
 план, который нарушает правила ниже или называет путь вне `allowed_paths` batch; accept закрепляет
@@ -290,8 +305,9 @@ commands» в `.harness/orchestration/playbook.md`.
 как `policy:auto`; следуйте разделу «Automatic path» в `.harness/orchestration/playbook.md`. Не пишите
 `--approved-by` и `--approved-at`: запускайте `batch approve`, `dispatch create` и плановый
 `dispatch resume --trigger` без них. Для каждого ожидающего отчёта, который цепочка `report submit`
-или `qa run` не приняла, включая отчёт publish, запустите `batch auto-decide --batch <id>`. Передавайте
-только:
+или `qa run` не приняла, включая отчёт publish, запустите `batch auto-decide --batch <id>`. Перед
+`batch auto-decide` по отчёту developer с упавшей проверкой выполните проверку из раздела «Упавшая
+проверка, которую дифф может не вызывать» ниже. Передавайте только:
 
 - `--commit-plan-file` с точной копией плана architect, только если в отчёте нет `commit_plan`;
 - `--findings-file` для findings coordinator по отчёту developer;
@@ -337,6 +353,29 @@ commands» в `.harness/orchestration/playbook.md`.
 developer, которую подтверждают доказательства. Attention `tooling-retry-repeated` поднимает третий
 подряд tooling retry на одном candidate; разрешайте его только после исправления инструмента.
 
+**Упавшая проверка, которую дифф может не вызывать.** Если в отчёте developer есть проверка с
+`checks_run[].result: fail`, выясните, вызывает ли падение дифф. Делайте это до `batch auto-decide`
+при `approval_policy: auto` и до предложения `retry` при любой другой политике:
+
+1. Назовите упавшие тесты по доказательствам проверки или её логу.
+2. Получите дифф кандидата: `git -C <abs issue worktree> diff --name-only <batch base>..<candidate>`.
+   Падение связано с диффом, если дифф меняет упавший тестовый файл, модуль, который этот тест
+   импортирует, или конфигурацию тестов (`conftest.py`, `pyproject.toml`, `uv.lock`).
+3. Запустите только упавшие тесты на кандидате из сессии coordinator, не меняя её рабочий каталог:
+   используйте собственный параметр команды, например
+   `env -C <abs issue worktree> <test command> <failed test ids>`. Если они снова падают, запустите
+   их так же на базе batch.
+
+Запишите доказательства в файл findings в `.harness/.sandboxes/scratch/inbox/`: упавшие тесты, файлы
+диффа, каждый прогон с коммитом, результатом и длительностью и известные отличия окружения воркера
+(например, его песочницу). Если дифф не затрагивает ни один упавший тест, а тесты проходят отдельно
+или падают и на базе, повтор developer падение не исправит. Не запускайте `batch auto-decide` и не
+предлагайте `retry`: покажите доказательства разработчику и дождитесь его выбора. Маршруты:
+`accept-conditional --infrastructure-failure --note <cause>` (см. выше), если работа стадии
+закончена; исправление окружения, а затем `retry` или `batch resume-stop`; или `block`. Укажите файл
+findings в `--note`. Если доказательства показывают, что падение вызывает дифф, продолжайте через
+`batch auto-decide` или обычный `retry`.
+
 Если вы нашли дефект в чистом отчёте developer, чей DoD выполнен внутри его allowed paths, не делайте
 retry. Примите отчёт через `batch decide --findings-file <path>`, а после auto-accept по политике
 выполните `batch carry-over --batch <id> --findings-file <path>`, пока dispatch code-review ещё не
@@ -356,6 +395,11 @@ review, а не дубль для каждой роли. Продолжения 
 Между send и report запускайте `dispatch wait`. `stale`, несовпадение модели или worktree, изменённый
 снимок harness и упавший детерминированный gate это блокеры для coordinator, а не повод для широкого
 восстановления силами LLM. Молчание или timeout не доказывают, что воркер остановился.
+Жив ли воркер, показывает только `dispatch status --dispatch <id>`: `startup.worker_state`,
+`execution.state` у воркера под надзором runtime, `heartbeat_at` и `stale`. Не считайте
+доказательством `ps`, `pgrep` или `kill -0` из сессии coordinator: песочница Claude Code запускает
+каждую команду в отдельном PID namespace, поэтому `ps -g <pgid>` пуст даже для живого воркера, чей
+heartbeat продолжает приходить.
 `batch resume-stop` отказывает воркеру, чьё состояние `startup` равно `live` или `unknown`:
 остановите его через runtime и повторите команду с `--runtime-stopped`. Transport `in-process` и
 external сохраняют один и тот же контракт brief и доказательств.

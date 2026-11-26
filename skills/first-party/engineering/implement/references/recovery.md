@@ -59,6 +59,31 @@ with the developer reason category its evidence supports. Resolve the `tooling-r
 attention, raised by the third consecutive tooling retry on one candidate, only once the tool is
 fixed.
 
+## A failed check the diff may not cause
+
+When a developer report has a check with `checks_run[].result: fail`, find out whether the diff
+causes the failure before `batch auto-decide` under `approval_policy: auto`, or before you propose
+`retry` under any other policy:
+
+1. Name the failed tests from the check's evidence or its log.
+2. List the candidate's diff: `git -C <abs issue worktree> diff --name-only <batch base>..<candidate>`.
+   The failure is related when the diff changes a failed test file, a module that test imports, or
+   the test configuration (`conftest.py`, `pyproject.toml`, `uv.lock`).
+3. Run only the failed tests at the candidate from the coordinator session, without moving the
+   session: use the command's own working-directory option, for example
+   `env -C <abs issue worktree> <test command> <failed test ids>`. If they fail again, run them at the
+   batch base in the same way.
+
+Write the evidence to a findings file under `.harness/.sandboxes/scratch/inbox/`: the failed tests,
+the diff files, each run with its commit, result and duration, and the known differences of the
+worker environment (for example, its sandbox). If the diff touches none of the failed tests and they
+pass alone or fail at the base too, a developer retry cannot fix the failure. Do not run
+`batch auto-decide` and do not propose `retry`: show the evidence to the developer and wait for
+their choice. The routes are `accept-conditional --infrastructure-failure --note <cause>` (section
+"Infrastructure-only failure") when the stage's work is complete, a fix of the environment followed
+by `retry` or `batch resume-stop`, or `block`. Name the findings file in the `--note`. If the evidence
+shows that the diff causes the failure, continue with `batch auto-decide` or the usual `retry`.
+
 ## Defect in a clean developer report
 
 When you find a defect in a clean developer report whose DoD is met inside its allowed paths, do not retry
