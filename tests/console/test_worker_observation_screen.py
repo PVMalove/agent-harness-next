@@ -15,6 +15,7 @@ from harness.console.tui.screens.worker_observation import (
     PollGate,
     poll_worker,
     session_choices,
+    session_options,
 )
 
 DISPATCH = "dispatch-18b68696-832e-437d-9721-c80114285a64"
@@ -206,3 +207,20 @@ def test_the_session_list_puts_running_sessions_first_and_keeps_a_dispatch_the_l
     assert found.batches == frozenset({"batch-1"})
     assert set(found.stages) == {"dispatch-old", "dispatch-run", "dispatch-new"}
     assert session_choices(LedgerView(), None).choices == []
+
+
+def test_each_session_is_one_option_with_its_card_and_the_dispatch_as_its_id() -> None:
+    from rich.text import Text
+
+    choices = [(f"#{n} · developer", f"dispatch-{n}") for n in range(800)]
+
+    options = session_options(
+        choices, lambda label, dispatch: Text(f"{label}\n{dispatch}")
+    )
+
+    shown = [option for option in options if option is not None]
+    assert [option.id for option in shown] == [dispatch for _, dispatch in choices]
+    assert str(shown[1].prompt) == "#1 · developer\ndispatch-1"
+    # A separator follows every card, as the border under each list row did.
+    assert options[1::2] == [None] * len(choices)
+    assert session_options([], lambda label, dispatch: Text(label)) == []
