@@ -663,6 +663,7 @@ Screen.shell { background: $background !important; }
 }
 .shell ShellSidebar ListView:focus > ListItem.-highlight { text-style: underline; }
 .shell Footer, .shell WorkspaceHeader { background: transparent; }
+.shell.-wide Footer, .shell.-spacious Footer { height: 2; border-top: solid $component-border; }
 .shell ListView, .shell ListView:focus { background-tint: transparent; }
 .shell ShellSidebar ListView > ListItem.-active { background: $selection-background; color: $selection-foreground; border-left: solid $selection-edge; }
 .shell .shell-frame { height: 1fr; }
