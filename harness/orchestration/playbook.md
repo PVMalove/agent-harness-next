@@ -527,6 +527,14 @@ the inputs that need judgement:
 | `--bug-ticket <ticket>` | A `tooling-retry`. Before the command, the session creates or reuses a bug ticket for the blocking tool through the tracker CLI. Without it, the command refuses and records nothing. |
 | `--block-bypass --note <text>` | The role worked around a hook or tool block. The note names the violation. |
 
+The coordinator session withholds `batch auto-decide` in one case: a developer report with a
+failed check that, by the evidence the session collected (`/implement` → `references/recovery.md`,
+"A failed check the diff may not cause"), the diff does not cause. A retry cannot fix that failure,
+so the session shows the evidence and waits. The developer's decision is a human approval
+(`--approved-by`), like any explicit approval under `auto`, and records no `auto_stop`. A question a
+skill asks before `batch create`, such as the pipeline-cost question of `/implement`, precedes the
+automatic path, which starts at `batch approve`.
+
 Review reports may include `review.recommendation: accept|retry`. The project setting
 `auto_retry_min_severity` defaults to `info` and is frozen into each batch; a human can override it
 for one batch with `batch create --auto-retry-min-severity warning` (or `error` / `blocker`). At

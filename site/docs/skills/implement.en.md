@@ -309,7 +309,10 @@ Under `approval_policy: auto`, the coordinator makes each path decision by polic
 `dispatch resume --trigger` without them. For every pending report that the `report submit` or
 `qa run` chain did not accept, including the publish report, run `batch auto-decide --batch <id>`.
 Before `batch auto-decide` on a developer report with a failed check, run the check in "A failed
-check the diff may not cause" below. Pass only:
+check the diff may not cause" below. This is the one exception: when the evidence shows that the
+diff does not cause the failure, do not run `batch auto-decide` and wait for the developer's
+decision, a human approval under `auto`. The pipeline-cost question comes before `batch create`, so
+it precedes the automatic path, which starts at `batch approve`. Pass only:
 
 - `--commit-plan-file` with an exact copy of the architect's plan, only when the report carries no
   `commit_plan`;
@@ -371,15 +374,27 @@ policy:
    `env -C <abs issue worktree> <test command> <failed test ids>`. If they fail again, run them at the
    batch base in the same way.
 
-Write the evidence to a findings file under `.harness/.sandboxes/scratch/inbox/`: the failed tests,
-the diff files, each run with its commit, result and duration, and the known differences of the
-worker environment (for example, its sandbox). If the diff touches none of the failed tests and they
-pass alone or fail at the base too, a developer retry cannot fix the failure. Do not run
-`batch auto-decide` and do not propose `retry`: show the evidence to the developer and wait for
-their choice. The routes are `accept-conditional --infrastructure-failure --note <cause>` (above)
-when the stage's work is complete, a fix of the environment followed by `retry` or
-`batch resume-stop`, or `block`. Name the findings file in the `--note`. If the evidence shows that
-the diff causes the failure, continue with `batch auto-decide` or the usual `retry`.
+Write the evidence in English as a findings file under `.harness/.sandboxes/scratch/inbox/`, in the
+`--findings-file` format `{"findings": [{"summary", "files", "expected_evidence"}]}`: the failed
+tests, the diff files, each run with its commit, result and duration, and the known differences of
+the worker environment (for example, its sandbox). If the evidence shows that the diff causes the
+failure, continue with `batch auto-decide` or the usual `retry`.
+
+If the diff touches none of the failed tests and they pass alone or fail at the base too, a
+developer retry cannot fix the code. No decision accepts that report: a failed check is a
+`code_test` failure, so `accept-conditional` and `override-warning` refuse it, and every `retry` of
+it is a developer-retry. Do not run `batch auto-decide` and do not propose `retry`: show the evidence
+to the developer and wait for their choice:
+
+- Fix the environment first (or the checks the brief carries), then
+  `batch decide --decision retry --note <findings file and cause>`. The developer-retry reruns the
+  checks without a code change and reports `outcome: blocked` with an empty `commit_map` and no
+  failed check. For that report, propose `batch decide --decision retry --reason-category
+  verification-infrastructure`: the route `verification` reruns the checks read-only on the same
+  candidate. Or the developer decides `accept-conditional --infrastructure-failure --note <cause>`
+  (above); after that accept, `batch carry-over --batch <id> --findings-file <path>` hands the
+  evidence to code-review as a carried item.
+- Or `block` the batch.
 
 A defect found in a clean developer report whose DoD is met inside its allowed paths is no reason for a retry:
 accept the report through `batch decide --findings-file <path>`, or after a policy auto-accept run

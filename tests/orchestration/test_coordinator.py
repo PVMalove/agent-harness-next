@@ -12975,6 +12975,81 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
                 decided = self._decide(batch_id, "retry", reason_category="code")
                 self.assertEqual(decided["next_action"], "developer-retry")
 
+    def _failed_check_report(self, outcome: str) -> JsonObject:
+        """A developer report with one failed check that the environment, not the diff, caused."""
+        self._create_batch()
+        self._accepted_architect(self.batch_id)
+        brief = self._dispatch(self.batch_id, "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        candidate, changed = self._developer_commit("x")
+        failed = outcome == "completed"
+        return self._submit(
+            brief["dispatch_id"],
+            self._developer_report(
+                brief,
+                candidate,
+                changed,
+                outcome=outcome,
+                checks_run=self._checks(brief, "fail" if failed else "not_run"),
+                **(
+                    {}
+                    if failed
+                    else {
+                        "blockers": {
+                            "status": "present",
+                            "details": "the check passed once the worker sandbox was fixed",
+                        }
+                    }
+                ),
+            ),
+        )
+
+    def test_a_failed_check_admits_only_the_routes_the_implement_skill_names(
+        self,
+    ) -> None:
+        """Issue #1294: `/implement` → recovery "A failed check the diff may not cause" names the
+        routes the coordinator really admits. A failed check is a code_test failure: no accept,
+        and every retry is a developer-retry."""
+        self._failed_check_report("completed")
+
+        for category in (None, "verification-infrastructure"):
+            with self.subTest(category=category):
+                preview = self._packet(reason_category=category, retry_role=None)
+                self.assertEqual(preview["route_preview"]["retry"]["route"], "developer-retry")
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "blocked report"):
+            self._decide(
+                self.batch_id,
+                "accept-conditional",
+                infrastructure_failure=True,
+                note="the worker sandbox",
+            )
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "can be overridden"):
+            self._decide(self.batch_id, "override-warning", note="the worker sandbox")
+
+    def test_a_blocked_report_without_a_failed_check_reruns_or_carries_the_evidence(
+        self,
+    ) -> None:
+        """Issue #1294: once the environment is fixed, a blocked report with no failed check
+        takes the read-only `verification` route under verification-infrastructure, or a human
+        accept-conditional after which `batch carry-over` hands the evidence to code-review."""
+        self._failed_check_report("blocked")
+
+        preview = self._packet(
+            reason_category="verification-infrastructure", retry_role=None
+        )
+        self._decide(
+            self.batch_id,
+            "accept-conditional",
+            infrastructure_failure=True,
+            note="the worker sandbox; evidence in the findings file",
+        )
+        carried = coordinator.carry_over_findings(
+            self._args(batch=self.batch_id, findings_file=self._findings_file())
+        )
+
+        self.assertEqual(preview["route_preview"]["retry"]["route"], "verification")
+        self.assertEqual(carried["carried_item_ids"], ["coordinator-finding-1"])
+
     def test_a_retry_that_rewrites_the_snapshot_history_is_refused(self) -> None:
         for rewrite in ("amend", "reset"):
             with self.subTest(rewrite=rewrite):

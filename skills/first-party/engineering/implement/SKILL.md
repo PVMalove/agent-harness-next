@@ -81,8 +81,9 @@ The coordinator must not copy conventions from another batch and must not read l
 blocker: the coordinator must stop and report it to the developer, and must not reconstruct the step.
 
 Start these steps only after the ticket pre-flight above (blockers, `status::in-progress`).
-Read `approval_policy` from `.harness/orchestration.json` first. Under `approval_policy: auto`, read
-`references/auto-path.md` before step 5: it decides who runs `batch approve` and every later approval.
+The coordinator reads `approval_policy` from `.harness/orchestration.json` first. Under
+`approval_policy: auto`, the coordinator reads `references/auto-path.md` before step 5, because that
+reference governs `batch approve` and every later decision.
 
 1. **Integration ref.** Use the ticket's `## Integration Branch` value (the `**Integration branch:**`
    line on the local tracker). If the ticket has no such section, use its `## Git base` value. If it has neither, use the same section of the parent epic.
@@ -197,9 +198,6 @@ create `dispatch create --role rebaser`; after its accepted report run the risk 
 to QA, never to a new code-review. Report each startup failure under its own classification (unsupported flag, missing
 or refused self-report, capacity, rate-limit, service-unavailable) together with its recovery
 route.
-
-Under `approval_policy: auto`, `references/auto-path.md`, read before step 5 of "Batch
-preparation", governs every decision.
 
 Before a decision on a developer report with a failed check (`checks_run[].result: fail`), read
 `references/recovery.md` → "A failed check the diff may not cause": a retry cannot fix a failure the
