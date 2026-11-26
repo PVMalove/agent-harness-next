@@ -12,6 +12,7 @@ from typing import Callable
 
 from rich.table import Table
 from rich.text import Text
+from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -255,6 +256,8 @@ def session_options(
 # The runtime reconciles an execution it is asked about, and the ledger view is read whole: both
 # are asked less often than the worker log (#1296).
 EXECUTION_SECONDS = 5.0
+# Below this terminal width the session list is narrower, so the main pane keeps its action bar.
+TIGHT_WIDTH = 160
 TIMELINE_SECONDS = 10.0
 TIMELINE_LIMIT = 40
 
@@ -318,6 +321,167 @@ def timeline_table(rows: list[tuple[str, str, str, str]]) -> Table:
     for row in rows:
         table.add_row(*row)
     return table
+
+
+# An event kind's glyph, Russian and English label and palette colour on the «Сессия» and
+# «События» tabs; an unknown kind is shown with the `system` look and its own name.
+EVENT_KINDS: dict[str, tuple[str, str, str, str]] = {
+    "output": ("›", "вывод", "output", "foreground"),
+    "tool": ("▸", "инструмент", "tool", "primary"),
+    "tool-result": ("↳", "результат", "result", "muted"),
+    "result": ("✔", "итог", "outcome", "success"),
+    "error": ("✖", "ошибка", "error", "error"),
+    "stderr": ("!", "stderr", "stderr", "warning"),
+    "permission": ("⚠", "разрешение", "permission", "warning"),
+    "system": ("·", "система", "system", "muted"),
+    "log": (" ", "лог", "log", "muted"),
+    "stage": ("◆", "стадия", "stage", "primary"),
+    "stage-result": ("■", "итог стадии", "stage result", "foreground"),
+    "omitted": ("…", "пропущено", "omitted", "muted"),
+}
+
+
+def _event_look(kind: str, language: str) -> tuple[str, str, str]:
+    glyph, ru, en, colour = EVENT_KINDS.get(kind, ("·", kind, kind, "muted"))
+    return glyph, en if language == "en" else ru, brand.PALETTE[colour]
+
+
+def transcript_row(event: JsonObject, language: str = "ru") -> Table:
+    """One event of the «Сессия» tab: its glyph, then its text with a hanging indent; no blank
+    lines between events. A tool's text is plain, its result and a log line are muted."""
+    kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
+    glyph, _label, colour = _event_look(kind, language)
+    plain = kind in {"output", "tool", "stage-result"}
+    row = Table.grid(padding=(0, 1), expand=True)
+    row.add_column(width=1, no_wrap=True, style=colour)
+    row.add_column(ratio=1, overflow="fold")
+    row.add_row(glyph, Text(text, style=brand.PALETTE["foreground"] if plain else colour))
+    return row
+
+
+def event_row(event: JsonObject, language: str = "ru") -> Table:
+    """One line of the «События» tab: the event kind as a coloured word, then the first line of
+    its text, cut with an ellipsis."""
+    kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
+    _glyph, label, colour = _event_look(kind, language)
+    width = max(len(_event_look(name, language)[1]) for name in EVENT_KINDS)
+    row = Table.grid(padding=(0, 1), expand=True)
+    row.add_column(width=width, no_wrap=True, style=colour)
+    row.add_column(ratio=1, no_wrap=True, overflow="ellipsis")
+    lines = text.splitlines() or [""]
+    more = len(lines) - 1
+    shown = Text(lines[0], style=brand.PALETTE["foreground"])
+    if more:
+        shown.append(f"  +{more}", style=brand.PALETTE["muted"])
+    row.add_row(label, shown)
+    return row
+
+
+# The longest label of `context_rows` in either language: «Dispatch», «Snapshot», «Worktree».
+CONTEXT_LABEL_WIDTH = 8
+
+
+def context_rows(
+    snapshot: JsonObject, width: int, t: Callable[[str], str]
+) -> list[tuple[str, Text]]:
+    """The launch facts of the context panel: one short line each, coloured by meaning. `width` is
+    the room for a value; a long identifier is cut with an ellipsis."""
+    room = max(width, 12)
+    role = str(snapshot.get("role") or "—")
+    runtime = {"claude": "Claude Code", "codex": "Codex"}.get(
+        str(snapshot.get("runtime") or ""), str(snapshot.get("runtime") or "—")
+    )
+    mode = str(snapshot.get("access_mode") or "inherit")
+    failure = snapshot.get("failure")
+    reason = (
+        str(failure.get("error") or failure.get("kind") or "")
+        if isinstance(failure, dict)
+        else ""
+    )
+    rows: list[tuple[str, Text]] = []
+    if reason:
+        rows.append(("Причина", Text(reason, style=brand.PALETTE["error"])))
+    rows.append(
+        (
+            "Dispatch",
+            Text(brand.shorten(str(snapshot.get("dispatch_id") or "—"), room), style=brand.PALETTE["primary"]),
+        )
+    )
+    who = Text(role, style=f"bold {brand.ROLE_COLORS.get(role, brand.PALETTE['foreground'])}")
+    who.append(f" · {runtime}", style=brand.PALETTE["foreground"])
+    rows.append(("Роль", who))
+    model = Text(str(snapshot.get("model") or "—"), style=brand.PALETTE["foreground"])
+    model.append(f" · {snapshot.get('effort') or '—'}", style=brand.PALETTE["muted"])
+    rows.append(("Модель", model))
+    rows.append(
+        (
+            "Запуск",
+            Text(mode, style=brand.PALETTE["primary" if mode == "container" else "muted"]),
+        )
+    )
+    session = snapshot.get("runtime_session_id")
+    rows.append(
+        (
+            "Сессия",
+            Text(brand.shorten(str(session), room), style=brand.PALETTE["muted"])
+            if session
+            else Text(t("не наблюдалась"), style=brand.PALETTE["muted"]),
+        )
+    )
+    commit = snapshot.get("snapshot_commit")
+    rows.append(
+        (
+            "Snapshot",
+            Text(str(commit)[:12], style=brand.PALETTE["foreground"])
+            if commit
+            else Text(t("не наблюдался"), style=brand.PALETTE["muted"]),
+        )
+    )
+    rows.append(
+        (
+            "Worktree",
+            Text(_worktree(str(snapshot.get("worktree") or "—"), room), style=brand.PALETTE["muted"]),
+        )
+    )
+    return rows
+
+
+def _worktree(path: str, room: int) -> str:
+    """The worktree path when it fits, else `…/` and its directory, which is named after the
+    branch; a directory too long for one line wraps at its separators."""
+    return path if len(path) <= room else wrap_value(f"…/{Path(path).name}", room)
+
+
+def context_table(rows: list[tuple[str, Text]], language: str) -> Table:
+    """The context facts as a grid: the label column is as wide as its longest label."""
+    labels = [i18n.fact_label(language, label) for label, _ in rows]
+    table = Table.grid(padding=(0, 1), expand=True)
+    table.add_column(width=CONTEXT_LABEL_WIDTH, no_wrap=True, style=brand.PALETTE["muted"])
+    table.add_column(ratio=1, overflow="fold")
+    for label, (_, value) in zip(labels, rows):
+        table.add_row(label, value)
+    return table
+
+
+def readiness_text(snapshot: JsonObject) -> Text:
+    """The environment checks, one per line: ✔ confirmed, ✖ refuted, ○ not checked."""
+    model_report = snapshot.get("model_self_report") or {}
+    tree = snapshot.get("worktree_attestation") or {}
+    checks = Text()
+    for index, (name, verified) in enumerate(
+        (
+            ("Checkout", tree.get("match") if isinstance(tree, dict) else None),
+            ("Git metadata", None),
+            ("Ledger / inbox", None),
+            ("Self-report", model_report.get("match") if isinstance(model_report, dict) else None),
+        )
+    ):
+        state = "ok" if verified is True else "fail" if verified is False else "skipped"
+        if index:
+            checks.append("\n")
+        checks.append(f"{brand.STATUS_ICONS[state]} ", style=brand.STATUS_COLORS[state])
+        checks.append(name, style=brand.PALETTE["foreground" if state != "skipped" else "muted"])
+    return checks
 
 
 def observe(repo: Path, dispatch: str, offset: int) -> JsonObject:
@@ -414,13 +578,13 @@ class WorkerObservationScreen(ConsoleShell):
     ]
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
+    WorkerObservationScreen.-spacious.-tight #worker-sessions { width: 26; }
     WorkerObservationScreen #worker-sessions { width: 34; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
     WorkerObservationScreen #worker-live { width: 2; height: 1; margin-left: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
     WorkerObservationScreen #worker-picker > .option-list--option { padding: 0 1; }
     WorkerObservationScreen #worker-picker > .option-list--separator { color: $border-subtle; }
-    WorkerObservationScreen #worker-list-foot { height: auto; border-top: solid $border-subtle; padding: 1; color: $text-muted; }
     WorkerObservationScreen #worker-main { width: 1fr; min-width: 0; height: 1fr; }
     WorkerObservationScreen #worker-heading { height: auto; min-height: 4; padding: 1 2 0 2; }
     WorkerObservationScreen #worker-title { width: 1fr; height: 2; text-style: bold; }
@@ -433,11 +597,12 @@ class WorkerObservationScreen(ConsoleShell):
     WorkerObservationScreen ContentSwitcher { height: 1fr; }
     WorkerObservationScreen Tabs { padding: 0 2; }
     WorkerObservationScreen #worker-output, WorkerObservationScreen #worker-events { height: 1fr; border: none; margin: 0; padding: 1 2; }
-    WorkerObservationScreen #worker-filter { height: 3; margin: 0 1; }
+    WorkerObservationScreen #worker-filter { width: 30; height: 1; margin: 1 2 0 2; }
     WorkerObservationScreen #worker-access-scroll, WorkerObservationScreen #worker-execution-scroll { height: 1fr; padding: 1 2; }
     WorkerObservationScreen #worker-timeline { height: 1fr; border: none; margin: 0; padding: 1 2; }
     WorkerObservationScreen #worker-access-facts { height: auto; }
-    WorkerObservationScreen #worker-actions { height: 4; padding: 0 2; border-top: solid $border-subtle; overflow-x: auto; }
+    WorkerObservationScreen #worker-actions { height: 4; padding: 0 2; border-top: solid $component-border; overflow-x: auto; }
+    WorkerObservationScreen #worker-permissions-note { height: auto; margin-top: 1; color: $text-muted; }
     WorkerObservationScreen #worker-actions Button { margin-right: 1; min-width: 5; }
     WorkerObservationScreen #worker-stop { color: $error; }
     WorkerObservationScreen #worker-cost { height: 1; padding: 0 2; color: $text-muted; }
@@ -515,7 +680,8 @@ class WorkerObservationScreen(ConsoleShell):
             dispatch_id=dispatch_id,
             state=stage.state,
             language=language,
-            id_limit=34,
+            # The dispatch ID fits one line of the list, however wide the list is.
+            id_limit=max(12, self.query_one("#worker-picker", OptionList).content_size.width - 2),
             stacked=True,
             outcome=stage.report.outcome if stage.report is not None else "",
         )
@@ -564,10 +730,6 @@ class WorkerObservationScreen(ConsoleShell):
                     classes="no-i18n",
                 )
                 yield OptionList(id="worker-picker")
-                yield Static(
-                    "Каждый worker — отдельная сессия\n\nВыбор сессии не запускает новый процесс.",
-                    id="worker-list-foot",
-                )
             with Vertical(id="worker-main"):
                 with Horizontal(id="worker-heading"):
                     yield Static(
@@ -622,6 +784,7 @@ class WorkerObservationScreen(ConsoleShell):
                             value="all",
                             allow_blank=False,
                             id="worker-filter",
+                            compact=True,
                         )
                         yield RichLog(
                             id="worker-events",
@@ -677,29 +840,31 @@ class WorkerObservationScreen(ConsoleShell):
             disabled=True,
             compact=True,
         )
-        yield WrappedValue(
+        yield Static(
             "Ожидание данных сессии", id="worker-context-facts", classes="context-value"
         )
         yield Static("ГОТОВНОСТЬ СРЕДЫ", classes="context-label")
         yield Static(
-            "? Не проверено",
+            "○ Не проверено",
             id="worker-readiness",
             classes="context-value no-i18n",
             markup=False,
         )
-        yield Button("Проверка доступов", id="worker-access", compact=True)
+        yield Button("Проверка доступов →", id="worker-access", compact=True)
         yield Static(
-            "Готовность проверяется в контексте инструментов worker, а не только процесса запуска.",
-            classes="context-value",
+            "Разрешения и hooks действуют; монитор их не выдаёт.",
+            id="worker-permissions-note",
         )
-        yield Static(
-            "NATIVE PERMISSIONS\nРазрешения и hooks действуют. Монитор не выдаёт права.",
-            classes="context-note",
-        )
-        yield Static(
-            "НАБЛЮДЕНИЕ · БЕЗ LLM\nСобытия runtime → консоль. Без дополнительных запросов к модели.",
-            classes="context-note",
-        )
+
+    def on_resize(self, event: events.Resize) -> None:
+        super().on_resize(event)
+        # From 140 to 159 columns three panes share the screen; a narrower session list leaves the
+        # main pane room for its one-line action bar.
+        tight = event.size.width < TIGHT_WIDTH
+        if tight != self.has_class("-tight"):
+            self.set_class(tight, "-tight")
+            # The session cards cut their dispatch IDs to the list's new width.
+            self.call_after_refresh(self._paint_sessions)
 
     def on_mount(self) -> None:
         self._timer = self.set_interval(1, self.action_refresh)
@@ -906,43 +1071,16 @@ class WorkerObservationScreen(ConsoleShell):
             )
         # New events are appended; both logs are rebuilt only when the filter changes.
         events_log = self.query_one("#worker-events", RichLog)
+        language = getattr(self.app, "language", "ru")
         for event in snapshot.get("events", []):
             self._events.append(event)
             if self._event_visible(event):
-                output.write(self._transcript(event))
-                events_log.write(
-                    Text(f"[{event.get('kind', 'event')}] {event.get('text', '')}")
-                )
+                output.write(transcript_row(event, language), expand=True)
+                events_log.write(event_row(event, language), expand=True)
         self._events = self._events[-500:]
         bar = self.query_one(TopBar)
         bar.crumbs = f"Главная › Оркестрация › {snapshot.get('batch_id')} › Сессии"
         bar.refresh_status()
-
-    def _transcript(self, event: JsonObject) -> Text:
-        kind, text = event.get("kind", "event"), str(event.get("text", ""))
-        row = Text()
-        if kind in {"tool", "tool-result"}:
-            row.append(
-                "  —   │ " + text.replace("\n", "\n      │ ") + "\n",
-                style=f"{brand.PALETTE['foreground']} on {brand.SHELL_TOKENS['event-background']}",
-            )
-        elif kind == "output":
-            row.append("  —   WORKER\n", style=brand.PALETTE["primary"])
-            row.append("      " + text.replace("\n", "\n      ") + "\n\n")
-        elif kind == "log":
-            row.append("      " + text.replace("\n", "\n      ") + "\n")
-        else:
-            color = (
-                "error"
-                if kind == "error"
-                else "warning"
-                if kind == "permission"
-                else "success"
-                if kind == "result"
-                else "muted"
-            )
-            row.append("  —   " + text + "\n\n", style=brand.PALETTE[color])
-        return row
 
     def _worker_crumbs(self, snapshot: JsonObject) -> list[Crumb]:
         """The path with the observed batch, which links to that batch's timeline when there is one."""
@@ -1019,51 +1157,17 @@ class WorkerObservationScreen(ConsoleShell):
         self.query_one("#worker-selection", WrappedValue).set_value(
             f"{ticket} · {role} · {snapshot.get('dispatch_id') or ''}"
         )
-        path = str(snapshot.get("worktree") or "—")
-        failure = snapshot.get("failure")
-        reason = (
-            str(failure.get("error") or failure.get("kind") or "")
-            if isinstance(failure, dict)
-            else ""
-        )
-        facts = f"Dispatch\n{snapshot.get('dispatch_id') or '—'}\n\n"
-        if reason:
-            facts += f"Причина блокировки\n{reason}\n\n"
-        facts += f"Runtime-сессия\n{snapshot.get('runtime_session_id') or t('не наблюдался')}\n\nWorktree\n{path}\n\nSnapshot\n{snapshot.get('snapshot_commit') or t('не наблюдался')}\n\nМодель / effort\n{snapshot.get('model') or '—'} / {snapshot.get('effort') or '—'}\n\nРежим запуска\n{snapshot.get('access_mode') or 'inherit'}"
-        self.query_one("#worker-context-facts", WrappedValue).set_value(t(facts))
-        model_report = snapshot.get("model_self_report") or {}
-        tree = snapshot.get("worktree_attestation") or {}
-        checks = Text()
-        for index, (name, verified) in enumerate(
-            (
-                ("Checkout", tree.get("match")),
-                ("Git metadata", None),
-                ("Ledger / inbox", None),
-                ("Self-report", model_report.get("match")),
-            )
-        ):
-            if index:
-                checks.append("\n")
-            checks.append(name + "  ", style=brand.PALETTE["muted"])
-            checks.append(
-                "✓" if verified is True else "✖" if verified is False else "?",
-                style=brand.PALETTE[
-                    "success"
-                    if verified is True
-                    else "error"
-                    if verified is False
-                    else "muted"
-                ],
-            )
-        self.query_one("#worker-readiness", Static).update(checks)
+        facts = self.query_one("#worker-context-facts", Static)
+        rows = context_rows(snapshot, facts.content_size.width - CONTEXT_LABEL_WIDTH - 1, t)
+        facts.update(context_table(rows, language))
+        readiness = readiness_text(snapshot)
+        self.query_one("#worker-readiness", Static).update(readiness)
         self.query_one("#worker-access-facts", WrappedValue).set_value(
-            t(facts)
+            "\n".join(f"{t(label)}: {value.plain}" for label, value in rows)
             + "\n\n"
-            + checks.plain
+            + readiness.plain
             + "\n\n"
             + "\n".join(lines)
-            + "\n\n"
-            + str((snapshot.get("failure") or {}).get("error", ""))
         )
 
     def sync_language(self) -> None:
@@ -1096,12 +1200,11 @@ class WorkerObservationScreen(ConsoleShell):
             output.clear()
             events = self.query_one("#worker-events", RichLog)
             events.clear()
+            language = getattr(self.app, "language", "ru")
             for row in self._events:
                 if self._event_visible(row):
-                    output.write(self._transcript(row))
-                    events.write(
-                        Text(f"[{row.get('kind', 'event')}] {row.get('text', '')}")
-                    )
+                    output.write(transcript_row(row, language), expand=True)
+                    events.write(event_row(row, language), expand=True)
             return
 
     def _select_dispatch(self, dispatch: str) -> None:

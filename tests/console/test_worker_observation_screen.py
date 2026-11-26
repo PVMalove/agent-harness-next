@@ -224,3 +224,64 @@ def test_each_session_is_one_option_with_its_card_and_the_dispatch_as_its_id() -
     # A separator follows every card, as the border under each list row did.
     assert options[1::2] == [None] * len(choices)
     assert session_options([], lambda label, dispatch: Text(label)) == []
+
+
+def _plain(renderable: object, width: int = 40) -> list[str]:
+    from rich.console import Console
+
+    console = Console(width=width, record=True, color_system=None)
+    console.print(renderable)
+    return [line.rstrip() for line in console.export_text().splitlines()]
+
+
+def test_a_session_event_is_one_glyph_and_its_text_with_a_hanging_indent() -> None:
+    from harness.console.tui.screens.worker_observation import transcript_row
+
+    assert _plain(transcript_row({"kind": "output", "text": "Читаю тикет"})) == [
+        "› Читаю тикет"
+    ]
+    assert _plain(
+        transcript_row({"kind": "tool", "text": "Bash uv sync\n--locked"})
+    ) == [
+        "▸ Bash uv sync",
+        "  --locked",
+    ]
+    assert _plain(transcript_row({"kind": "error", "text": "boom"}))[0] == "✖ boom"
+    assert _plain(transcript_row({"kind": "new-kind", "text": "x"}))[0] == "· x"
+
+
+def test_an_events_row_names_the_kind_and_shows_the_first_line() -> None:
+    from harness.console.tui.screens.worker_observation import event_row
+
+    row = _plain(event_row({"kind": "tool", "text": "Bash pytest\nmore\nlines"}), 60)
+    assert row == ["инструмент  Bash pytest  +2"]
+    # The kind column is as wide as the longest label of the language: «stage result».
+    assert _plain(event_row({"kind": "error", "text": "boom"}, "en"), 60) == [
+        "error        boom"
+    ]
+
+
+def test_the_context_names_the_block_reason_first_and_fits_long_values() -> None:
+    from harness.console.tui.screens.worker_observation import context_rows
+
+    rows = context_rows(
+        {
+            "dispatch_id": "dispatch-e98a4a72-50ac-4fd8-b421-1db55c17f287",
+            "role": "developer",
+            "runtime": "claude",
+            "model": "opus",
+            "effort": "high",
+            "access_mode": "container",
+            "failure": {"error": "permission denied"},
+            "worktree": "/work/project/.harness/.sandboxes/worktrees/feature-issue-887-kpi",
+        },
+        30,
+        lambda text: text,
+    )
+    shown = {label: value.plain for label, value in rows}
+    assert rows[0][0] == "Причина" and shown["Причина"] == "permission denied"
+    assert shown["Dispatch"] == "dispatch-e98a4a72-50ac-4fd8-b…"
+    assert shown["Роль"] == "developer · Claude Code"
+    assert shown["Модель"] == "opus · high"
+    assert shown["Сессия"] == "не наблюдалась"
+    assert shown["Worktree"] == "…/feature-issue-887-kpi"
