@@ -25,6 +25,25 @@ This skill has you show commands, outputs and captured artifacts. **Redact every
 
 If the redacted output is not enough to diagnose the bug, say so and ask the user.
 
+## RCA phase — on an error stop
+
+Enter this phase only on an **error stop**: any call to a human caused by an error — a hook block,
+an unexpected failure, or a dead end with no analysed way forward. Ordinary questions do not enter
+it: an unclear requirement, a choice of solution, or a planned confirmation gate (opening a PR,
+creating a ticket, a merge). An error that carries a `FMEA: <guid> (<title>)` line first runs that
+entry's recovery within the existing attempt budget; enter the phase only if the failure remains.
+
+The phase is a separate entry, not a step after Phases 1–6, and this is the explicit justification
+for skipping them: it fixes nothing. The fix comes later, through a bug ticket and `/tdd`.
+
+Follow [references/rca.md](references/rca.md). [Redact](#redact) applies to every evidence line,
+to the draft and to everything you show.
+
+The phase ends with exactly this line to the calling skill:
+`RCA draft: <path>. Continue with the next free ticket.` The phase never selects or takes the next
+ticket itself. When a human invoked this skill directly, with no calling skill, report the draft
+path and stop.
+
 ## Phase 1 — Build a feedback loop
 
 **This is the skill.** Everything else is mechanical. If you have a **tight** pass/fail signal for the bug — one that goes red on _this_ bug — you will find the cause; bisection, hypothesis-testing, and instrumentation all just consume it. If you don't have one, no amount of staring at code will save you.
