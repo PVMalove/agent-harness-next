@@ -234,31 +234,48 @@ def _plain(renderable: object, width: int = 40) -> list[str]:
     return [line.rstrip() for line in console.export_text().splitlines()]
 
 
-def test_a_session_event_is_one_glyph_and_its_text_with_a_hanging_indent() -> None:
+def test_a_session_event_is_one_chip_and_its_text_with_a_hanging_indent() -> None:
     from harness.console.tui.screens.worker_observation import transcript_row
 
     assert _plain(transcript_row({"kind": "output", "text": "Читаю тикет"})) == [
-        "› Читаю тикет"
+        " ●  Читаю тикет"
     ]
     assert _plain(
         transcript_row({"kind": "tool", "text": "Bash uv sync\n--locked"})
-    ) == [
-        "▸ Bash uv sync",
-        "  --locked",
-    ]
-    assert _plain(transcript_row({"kind": "error", "text": "boom"}))[0] == "✖ boom"
-    assert _plain(transcript_row({"kind": "new-kind", "text": "x"}))[0] == "· x"
+    ) == [" ◆  Bash uv sync", "    --locked"]
+    assert _plain(transcript_row({"kind": "error", "text": "boom"})) == [" ✖  boom"]
+    assert _plain(transcript_row({"kind": "new-kind", "text": "x"})) == [" ○  x"]
 
 
-def test_an_events_row_names_the_kind_and_shows_the_first_line() -> None:
+def test_a_finished_qa_stage_shows_its_result_as_the_chip() -> None:
+    from harness.console.tui.screens.worker_observation import transcript_row
+
+    def chip(text: str) -> str:
+        return _plain(transcript_row({"kind": "stage-result", "text": text}))[0][:3]
+
+    assert chip("pytest: pass · exit 0") == " ✔ "
+    assert chip("pytest: fail · exit 1") == " ✖ "
+    assert chip("lint: not_run") == " ○ "
+
+
+def test_an_events_row_shows_the_chip_the_kind_and_the_first_line() -> None:
     from harness.console.tui.screens.worker_observation import event_row
 
     row = _plain(event_row({"kind": "tool", "text": "Bash pytest\nmore\nlines"}), 60)
-    assert row == ["инструмент  Bash pytest  +2"]
+    assert row == [" ◆  инструмент  Bash pytest  +2"]
     # The kind column is as wide as the longest label of the language: «stage result».
     assert _plain(event_row({"kind": "error", "text": "boom"}, "en"), 60) == [
-        "error        boom"
+        " ✖  error        boom"
     ]
+
+
+def test_the_legend_names_every_chip_and_never_splits_a_pair() -> None:
+    from harness.console.tui.screens.worker_observation import EVENT_KINDS, legend_text
+
+    lines = _plain(legend_text(), 60)
+    text = "\n".join(lines)
+    for glyph, label, _english, _colour in EVENT_KINDS.values():
+        assert f"{glyph}  {label}" in text
 
 
 def test_the_context_names_the_block_reason_first_and_fits_long_values() -> None:

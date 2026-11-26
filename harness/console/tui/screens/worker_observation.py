@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from rich.columns import Columns
 from rich.table import Table
 from rich.text import Text
 from textual import events
@@ -323,49 +324,72 @@ def timeline_table(rows: list[tuple[str, str, str, str]]) -> Table:
     return table
 
 
-# An event kind's glyph, Russian and English label and palette colour on the «Сессия» and
-# «События» tabs; an unknown kind is shown with the `system` look and its own name.
+# An event kind's glyph, Russian and English label and colour on the «Сессия» and «События»
+# tabs. Each glyph is a solid shape of its own, drawn as a chip, so the kinds differ at a glance;
+# an unknown kind is shown with the `system` look and its own name.
 EVENT_KINDS: dict[str, tuple[str, str, str, str]] = {
-    "output": ("›", "вывод", "output", "foreground"),
-    "tool": ("▸", "инструмент", "tool", "primary"),
-    "tool-result": ("↳", "результат", "result", "muted"),
-    "result": ("✔", "итог", "outcome", "success"),
-    "error": ("✖", "ошибка", "error", "error"),
-    "stderr": ("!", "stderr", "stderr", "warning"),
-    "permission": ("⚠", "разрешение", "permission", "warning"),
-    "system": ("·", "система", "system", "muted"),
-    "log": (" ", "лог", "log", "muted"),
-    "stage": ("◆", "стадия", "stage", "primary"),
-    "stage-result": ("■", "итог стадии", "stage result", "foreground"),
-    "omitted": ("…", "пропущено", "omitted", "muted"),
+    "output": ("●", "вывод", "output", brand.PALETTE["foreground"]),
+    "tool": ("◆", "инструмент", "tool", brand.PALETTE["primary"]),
+    "tool-result": ("◇", "результат", "result", brand.PALETTE["muted"]),
+    "result": ("✔", "итог", "outcome", brand.PALETTE["success"]),
+    "error": ("✖", "ошибка", "error", brand.PALETTE["error"]),
+    "stderr": ("▲", "stderr", "stderr", brand.PALETTE["warning"]),
+    "permission": ("⚠", "разрешение", "permission", brand.PALETTE["warning"]),
+    "stage": ("■", "стадия QA", "QA stage", brand.PALETTE["primary"]),
+    "stage-result": ("□", "итог стадии", "stage result", brand.PALETTE["foreground"]),
+    "log": ("▪", "лог", "log", brand.PALETTE["muted"]),
+    "system": ("○", "система", "system", brand.PALETTE["muted"]),
+    "omitted": ("⋯", "пропущено", "omitted", brand.PALETTE["muted"]),
 }
+# The glyph of a finished QA stage follows its result, as `_stage_result` words it.
+_STAGE_RESULTS = {
+    "pass": ("✔", brand.PALETTE["success"]),
+    "fail": ("✖", brand.PALETTE["error"]),
+    "not_run": ("○", brand.PALETTE["muted"]),
+}
+CHIP_WIDTH = 3
 
 
-def _event_look(kind: str, language: str) -> tuple[str, str, str]:
-    glyph, ru, en, colour = EVENT_KINDS.get(kind, ("·", kind, kind, "muted"))
-    return glyph, en if language == "en" else ru, brand.PALETTE[colour]
+def _event_look(kind: str, text: str, language: str) -> tuple[str, str, str]:
+    glyph, ru, en, colour = EVENT_KINDS.get(kind, ("○", kind, kind, brand.PALETTE["muted"]))
+    if kind == "stage-result":
+        words = text.partition(":")[2].split()
+        glyph, colour = _STAGE_RESULTS.get(words[0] if words else "", (glyph, colour))
+    return glyph, en if language == "en" else ru, colour
+
+
+def _chip(glyph: str, colour: str) -> Text:
+    """A glyph as a three-cell chip on a tinted ground, so it reads larger than a bare symbol."""
+    return Text(
+        f" {glyph} ",
+        style=f"bold {colour} on {brand.SHELL_TOKENS['event-active-background']}",
+    )
 
 
 def transcript_row(event: JsonObject, language: str = "ru") -> Table:
-    """One event of the «Сессия» tab: its glyph, then its text with a hanging indent; no blank
+    """One event of the «Сессия» tab: its chip, then its text with a hanging indent; no blank
     lines between events. A tool's text is plain, its result and a log line are muted."""
     kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
-    glyph, _label, colour = _event_look(kind, language)
+    glyph, _label, colour = _event_look(kind, text, language)
     plain = kind in {"output", "tool", "stage-result"}
     row = Table.grid(padding=(0, 1), expand=True)
-    row.add_column(width=1, no_wrap=True, style=colour)
+    row.add_column(width=CHIP_WIDTH, no_wrap=True)
     row.add_column(ratio=1, overflow="fold")
-    row.add_row(glyph, Text(text, style=brand.PALETTE["foreground"] if plain else colour))
+    row.add_row(
+        _chip(glyph, colour),
+        Text(text, style=brand.PALETTE["foreground"] if plain else colour),
+    )
     return row
 
 
 def event_row(event: JsonObject, language: str = "ru") -> Table:
-    """One line of the «События» tab: the event kind as a coloured word, then the first line of
-    its text, cut with an ellipsis."""
+    """One line of the «События» tab: the chip and the kind as a coloured word, then the first
+    line of the text, cut with an ellipsis."""
     kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
-    _glyph, label, colour = _event_look(kind, language)
-    width = max(len(_event_look(name, language)[1]) for name in EVENT_KINDS)
+    glyph, label, colour = _event_look(kind, text, language)
+    width = max(len(_event_look(name, "", language)[1]) for name in EVENT_KINDS)
     row = Table.grid(padding=(0, 1), expand=True)
+    row.add_column(width=CHIP_WIDTH, no_wrap=True)
     row.add_column(width=width, no_wrap=True, style=colour)
     row.add_column(ratio=1, no_wrap=True, overflow="ellipsis")
     lines = text.splitlines() or [""]
@@ -373,8 +397,20 @@ def event_row(event: JsonObject, language: str = "ru") -> Table:
     shown = Text(lines[0], style=brand.PALETTE["foreground"])
     if more:
         shown.append(f"  +{more}", style=brand.PALETTE["muted"])
-    row.add_row(label, shown)
+    row.add_row(_chip(glyph, colour), label, shown)
     return row
+
+
+def legend_text(language: str = "ru") -> Columns:
+    """The legend under the «Сессия» and «События» tabs: every chip with its kind, in columns
+    that never split a chip from its word."""
+    items = []
+    for kind in EVENT_KINDS:
+        glyph, label, colour = _event_look(kind, "", language)
+        item = _chip(glyph, colour)
+        item.append(f" {label}", style=brand.PALETTE["muted"])
+        items.append(item)
+    return Columns(items, padding=(0, 2))
 
 
 # The longest label of `context_rows` in either language: «Dispatch», «Snapshot», «Worktree».
@@ -603,6 +639,7 @@ class WorkerObservationScreen(ConsoleShell):
     WorkerObservationScreen #worker-access-facts { height: auto; }
     WorkerObservationScreen #worker-actions { height: 4; padding: 0 2; border-top: solid $component-border; overflow-x: auto; }
     WorkerObservationScreen #worker-permissions-note { height: auto; margin-top: 1; color: $text-muted; }
+    WorkerObservationScreen .worker-legend { height: auto; padding: 0 2; border-top: solid $border-subtle; }
     WorkerObservationScreen #worker-actions Button { margin-right: 1; min-width: 5; }
     WorkerObservationScreen #worker-stop { color: $error; }
     WorkerObservationScreen #worker-cost { height: 1; padding: 0 2; color: $text-muted; }
@@ -772,6 +809,7 @@ class WorkerObservationScreen(ConsoleShell):
                             markup=False,
                             highlight=False,
                         )
+                        yield Static(legend_text(), classes="worker-legend no-i18n")
                     with TabPane("События", id="events"):
                         yield Select(
                             [
@@ -794,6 +832,7 @@ class WorkerObservationScreen(ConsoleShell):
                             markup=False,
                             highlight=False,
                         )
+                        yield Static(legend_text(), classes="worker-legend no-i18n")
                     with TabPane("Хронология batch", id="orchestration"):
                         yield RichLog(
                             id="worker-timeline",
@@ -1185,6 +1224,8 @@ class WorkerObservationScreen(ConsoleShell):
             ]
         )
         select.value = selected
+        for legend in self.query(".worker-legend").results(Static):
+            legend.update(legend_text(language))
         self._paint_sessions()
         if self.snapshot:
             self._render_snapshot({**self.snapshot, "events": []}, self.dispatch or "")
