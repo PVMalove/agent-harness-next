@@ -996,6 +996,40 @@ def _refusal_event(dispatch: JsonObject, status: JsonObject) -> JsonObject | Non
     return None
 
 
+def _status_collections(
+    view: state_view.StateView, batch_id: str | None, dispatch_id: str | None
+) -> tuple[dict[str, JsonObject], dict[str, JsonObject], dict[str, JsonObject]]:
+    """The status, dispatch and batch records that ``dispatch status`` selects from the store.
+
+    An unfiltered read of a whole collection can exceed one runtime frame once the store holds a
+    long batch history (#1276). The records are then read one batch at a time from the same
+    snapshot, so the answer does not depend on the size of the history."""
+    names = ("dispatch-status", "dispatches", "batches")
+    try:
+        try:
+            statuses, dispatches, batches = (
+                view.collection(name, batch_id=batch_id, dispatch_id=dispatch_id)
+                for name in names
+            )
+        except state_view.AnswerTooLarge:
+            if batch_id is not None or dispatch_id is not None:
+                raise
+        else:
+            return statuses, dispatches, batches
+        batches = view.collection("batches")
+        statuses, dispatches = {}, {}
+        for record in batches.values():
+            identifier = cast(str, record["batch_id"])
+            statuses.update(view.collection("dispatch-status", batch_id=identifier))
+            dispatches.update(view.collection("dispatches", batch_id=identifier))
+    except state_view.AnswerTooLarge as exc:
+        raise CoordinatorError(
+            f"dispatch status: {exc}",
+            remedy="pass --dispatch <dispatch-id> to read one dispatch",
+        ) from exc
+    return statuses, dispatches, batches
+
+
 def _status_records(
     args: argparse.Namespace, root: Path, *, from_store: bool
 ) -> Iterator[tuple[JsonObject, JsonObject, JsonObject]]:
@@ -1013,15 +1047,9 @@ def _status_records(
                 f"the runtime store of {root} is not bound to this command",
                 remedy="read it inside the command's read_state block",
             )
-        batch_id = args.batch or None
-        dispatch_id = args.dispatch or None
-        statuses = view.collection(
-            "dispatch-status", batch_id=batch_id, dispatch_id=dispatch_id
+        statuses, dispatches, batches = _status_collections(
+            view, args.batch or None, args.dispatch or None
         )
-        dispatches = view.collection(
-            "dispatches", batch_id=batch_id, dispatch_id=dispatch_id
-        )
-        batches = view.collection("batches", batch_id=batch_id, dispatch_id=dispatch_id)
         with _ledger_errors():
             statuses_by_path = {
                 path: DispatchStatusRecord.from_dict(dict(record)).to_dict()
