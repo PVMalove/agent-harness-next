@@ -297,9 +297,14 @@ class TaskBoardReader(Protocol):
     def board(self, repo: Path, spec_ref: str) -> SpecTickets: ...
 
 
+class WorkerLedgerUnavailable(Exception):
+    """The ledger cannot be read now: the runtime store did not answer. The dispatch may exist."""
+
+
 class WorkerFactsReader(Protocol):
     """The dispatch record and its status record, read without the ledger lock; ``None`` when
-    the ledger has no such dispatch. Blocks until read and never writes."""
+    the ledger has no such dispatch. Blocks until read and never writes; raises
+    ``WorkerLedgerUnavailable`` when the ledger cannot be read."""
 
     def __call__(self, repo: Path, dispatch_id: str, /) -> WorkerFacts | None: ...
 
@@ -307,7 +312,8 @@ class WorkerFactsReader(Protocol):
 class CheckpointsReader(Protocol):
     """The checkpoints the dispatch of ``facts`` recorded, oldest first, each with
     ``checkpoint_id``, ``commit_sha`` and ``created_at``; read without the ledger lock, a missing or
-    malformed record is skipped. Blocks until read and never writes."""
+    malformed record is skipped. Blocks until read and never writes; raises
+    ``WorkerLedgerUnavailable`` when the ledger cannot be read."""
 
     def __call__(
         self, repo: Path, facts: WorkerFacts, /

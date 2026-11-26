@@ -2,15 +2,23 @@
 
 The records are read without the ledger lock, which a coordinator command can hold for minutes,
 like the decisions list does; the log is opened for reading and stat'ed only. Nothing is written.
+In the runtime-store epoch (ADR 0020) the records come from the store, never from the archived
+file generation; a store that does not answer is ``WorkerLedgerUnavailable``.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import uuid
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from harness.orchestration.core.constants import STATE_REL
-from harness.orchestration.ledger.lifecycle import LifecycleLedger
+from harness.orchestration.ledger.lifecycle import LifecycleLedger, store_is_authority
+from harness.orchestration.runtime_client import (
+    RuntimeClient,
+    RuntimeClientError,
+    read_state,
+)
 from harness.orchestration.worker_observation import (
     checkpoint_view,
     dispatch_checkpoint_ids,
@@ -22,44 +30,69 @@ from harness.orchestration.worker_observation import (
     unavailable_page,
 )
 
+from ..application.ports import WorkerLedgerUnavailable
 from ..domain.worker_steps import WorkerFacts, valid_dispatch_id
+
+# A short read: a page of steps is asked for every second.
+STORE_READ_SECONDS = 2
+
+
+def _records(repo: Path, paths: Sequence[str]) -> dict[str, Mapping[str, object]]:
+    """The ledger records at ``paths`` (``<collection>/<id>.json``) that exist and are objects."""
+    state = repo / STATE_REL
+    if store_is_authority(state):
+        try:
+            raw = read_state(
+                RuntimeClient(repo),
+                {"collections": [], "paths": list(paths)},
+                operation_id=f"console.worker-steps-{uuid.uuid4().hex}",
+                timeout_seconds=STORE_READ_SECONDS,
+            ).records
+        except RuntimeClientError as exc:
+            raise WorkerLedgerUnavailable(f"{exc.code}: {exc.message}") from None
+        return {
+            path: record
+            for path, record in raw.items()
+            if path in paths and isinstance(record, dict)
+        }
+    root = LifecycleLedger(state).records_root_lenient()
+    if root is None:
+        return {}
+    found: dict[str, Mapping[str, object]] = {}
+    for path in paths:
+        record = LifecycleLedger.read_record_lenient(root / path)
+        if record is not None:
+            found[path] = record
+    return found
 
 
 def read_worker_facts(repo: Path, dispatch_id: str) -> WorkerFacts | None:
     if not valid_dispatch_id(dispatch_id):
         return None
-    root = LifecycleLedger(repo / STATE_REL).records_root_lenient()
-    if root is None:
-        return None
-    dispatch = LifecycleLedger.read_record_lenient(
-        root / "dispatches" / f"{dispatch_id}.json"
-    )
+    dispatch_path = f"dispatches/{dispatch_id}.json"
+    status_path = f"dispatch-status/{dispatch_id}.json"
+    records = _records(repo, [dispatch_path, status_path])
+    dispatch = records.get(dispatch_path)
     if dispatch is None or dispatch.get("dispatch_id") != dispatch_id:
         return None
-    status = LifecycleLedger.read_record_lenient(
-        root / "dispatch-status" / f"{dispatch_id}.json"
+    return WorkerFacts(
+        dispatch_id=dispatch_id, dispatch=dispatch, status=records.get(status_path)
     )
-    return WorkerFacts(dispatch_id=dispatch_id, dispatch=dispatch, status=status)
 
 
 def read_worker_checkpoints(repo: Path, facts: WorkerFacts) -> list[Mapping[str, object]]:
     batch_id = facts.dispatch.get("batch_id")
-    root = LifecycleLedger(repo / STATE_REL).records_root_lenient()
-    if root is None or not isinstance(batch_id, str) or not valid_dispatch_id(batch_id):
+    if not isinstance(batch_id, str) or not valid_dispatch_id(batch_id):
         return []
-    batch = LifecycleLedger.read_record_lenient(root / "batches" / f"{batch_id}.json")
-    found: list[Mapping[str, object]] = []
-    for checkpoint_id in dispatch_checkpoint_ids(batch or {}, facts.dispatch_id):
-        record = (
-            LifecycleLedger.read_record_lenient(
-                root / "checkpoints" / f"{checkpoint_id}.json"
-            )
-            if valid_dispatch_id(checkpoint_id)
-            else None
-        )
-        if record is not None:
-            found.append(checkpoint_view(record))
-    return found
+    batch_path = f"batches/{batch_id}.json"
+    batch = _records(repo, [batch_path]).get(batch_path)
+    paths = [
+        f"checkpoints/{checkpoint_id}.json"
+        for checkpoint_id in dispatch_checkpoint_ids(batch or {}, facts.dispatch_id)
+        if valid_dispatch_id(checkpoint_id)
+    ]
+    records = _records(repo, paths) if paths else {}
+    return [checkpoint_view(records[path]) for path in paths if path in records]
 
 
 def read_worker_log(
