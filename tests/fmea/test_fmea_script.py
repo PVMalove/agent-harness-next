@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import uuid
 import types
 from pathlib import Path
 
@@ -108,3 +109,56 @@ def test_invalid_catalog_reports_an_error(
 def test_committed_module_matches_the_shipped_catalog() -> None:
     assert fmea_catalog.main(["generate", "--check"]) == 0
     assert REAL_MODULE.read_text(encoding="utf-8") == fmea_catalog.render_module(load_catalog())
+
+
+def test_new_appends_a_uuid4_skeleton_and_regenerates(paths: tuple[Path, Path]) -> None:
+    run(paths, "generate")
+    before = paths[0].read_text(encoding="utf-8")
+
+    assert run(paths, "new", "lock-busy") == 0
+
+    entries = load_catalog(paths[0])
+    assert paths[0].read_text(encoding="utf-8").startswith(before)
+    assert [item.title for item in entries] == ["git-timeout", "lock-busy"]
+    added = entries[1]
+    assert uuid.UUID(added.id).version == 4
+    assert (added.mode, added.detection, added.recovery, added.test, added.residual_risk) == (
+        "",
+        "",
+        "",
+        "",
+        "",
+    )
+    assert run(paths, "generate", "--check") == 0
+    assert import_module(paths[1]).FmeaId.LOCK_BUSY == added.id
+
+
+def test_new_on_a_file_without_trailing_newline(paths: tuple[Path, Path]) -> None:
+    paths[0].write_text("# header", encoding="utf-8")
+
+    assert run(paths, "new", "git-timeout") == 0
+    assert [item.title for item in load_catalog(paths[0])] == ["git-timeout"]
+
+
+def test_new_ids_differ(paths: tuple[Path, Path]) -> None:
+    run(paths, "new", "a")
+    run(paths, "new", "b")
+    assert len({item.id for item in load_catalog(paths[0])}) == 3
+
+
+@pytest.mark.parametrize("title", ["git-timeout", "git_timeout", "Bad Title"])
+def test_rejected_new_leaves_files_unchanged(paths: tuple[Path, Path], title: str) -> None:
+    run(paths, "generate")
+    catalog_before = paths[0].read_bytes()
+    module_before = paths[1].read_bytes()
+
+    assert run(paths, "new", title) == 2
+    assert paths[0].read_bytes() == catalog_before
+    assert paths[1].read_bytes() == module_before
+
+
+def test_new_accepts_no_id(paths: tuple[Path, Path]) -> None:
+    with pytest.raises(SystemExit) as info:
+        run(paths, "new", "lock-busy", "--id", GUID_B)
+    assert info.value.code == 2
+    assert GUID_B not in paths[0].read_text(encoding="utf-8")

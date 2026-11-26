@@ -2,13 +2,16 @@
 """Build-time инструмент каталога FMEA (ADR 0041).
 
 `generate` пишет `harness/fmea/ids.py` с `FmeaId` из `harness/fmea/catalog.toml`;
-`generate --check` только сравнивает модуль с каталогом и завершается с кодом 1 при расхождении.
+`generate --check` только сравнивает модуль с каталогом и завершается с кодом 1 при расхождении;
+`new <title>` дописывает заготовку записи с новым uuid4 и перегенерирует модуль. `id` никогда
+не вводится вручную: у CLI нет такой опции.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
+import uuid
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -21,8 +24,10 @@ from harness.fmea.catalog import (
     CATALOG_PATH,
     FmeaCatalogError,
     FmeaEntry,
+    FIELDS,
     load_catalog,
     member_name,
+    parse_catalog,
 )
 
 MODULE_PATH = CATALOG_PATH.with_name("ids.py")
@@ -58,6 +63,19 @@ def check_module(catalog: Path, module: Path) -> bool:
     return module.is_file() and module.read_bytes() == expected
 
 
+def append_entry(catalog: Path, title: str) -> FmeaEntry:
+    """Дописать заготовку записи с новым uuid4; файл меняется только если каталог остаётся валидным."""
+    text = catalog.read_text(encoding="utf-8")
+    if text and not text.endswith("\n"):
+        text += "\n"
+    values = {name: "" for name in FIELDS} | {"id": str(uuid.uuid4()), "title": title}
+    block = "".join(f'{name} = "{value}"\n' for name, value in values.items())
+    combined = f"{text}\n[[failure_mode]]\n{block}"
+    entries = parse_catalog(combined, str(catalog))
+    catalog.write_text(combined, encoding="utf-8", newline="\n")
+    return entries[-1]
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="scripts/fmea_catalog.py", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -65,7 +83,9 @@ def _parser() -> argparse.ArgumentParser:
     generate.add_argument(
         "--check", action="store_true", help="fail when ids.py drifts from the catalog"
     )
-    for command in (generate,):
+    new = commands.add_parser("new", help="append an entry skeleton with a fresh uuid4 id")
+    new.add_argument("title", help="slug of the failure mode, for example git-timeout")
+    for command in (generate, new):
         command.add_argument("--catalog", type=Path, default=CATALOG_PATH)
         command.add_argument("--module", type=Path, default=MODULE_PATH)
     return parser
@@ -77,7 +97,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     catalog: Path = args.catalog
     module: Path = args.module
     try:
-        if args.check:
+        if args.command == "new":
+            added = append_entry(catalog, args.title)
+            write_module(catalog, module)
+            print(f"added {added.title} with id {added.id}; fill in its fields in {catalog}")
+        elif args.check:
             if check_module(catalog, module):
                 return 0
             print(
@@ -85,7 +109,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 file=sys.stderr,
             )
             return 1
-        write_module(catalog, module)
+        else:
+            write_module(catalog, module)
     except FmeaCatalogError as error:
         return print_and_exit(error)
     return 0
