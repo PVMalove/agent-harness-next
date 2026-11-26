@@ -614,7 +614,38 @@ def ticket_diff_selection(
 ) -> TicketDiffSelection:
     """The `TicketDiffSelection` of `git diff base..candidate`; each crate is read from `candidate`."""
     timeout = (policy or RepoMapPolicy()).timeout_seconds
-    changed = _diff(repo, base, candidate, timeout)
+    return _selection_of(repo, candidate, _diff(repo, base, candidate, timeout), timeout)
+
+
+def expected_diff_selection(
+    repo: Path,
+    base: str,
+    snapshot: str,
+    expected_files: Sequence[str],
+    *,
+    policy: RepoMapPolicy | None = None,
+) -> TicketDiffSelection:
+    """The `TicketDiffSelection` of the diff a first developer is expected to make (issue #1292).
+
+    That diff is `git diff base..snapshot` (commits a superseding batch inherits) plus the batch's
+    `expected_files`, each counted as modified unless the diff already lists it. Each crate is
+    read from `snapshot`.
+    """
+    timeout = (policy or RepoMapPolicy()).timeout_seconds
+    changed = _diff(repo, base, snapshot, timeout)
+    listed = {item.path for item in changed}
+    changed += [
+        ChangedPath("modified", path) for path in expected_files if path not in listed
+    ]
+    return _selection_of(
+        repo, snapshot, sorted(changed, key=lambda item: (item.path, item.status)), timeout
+    )
+
+
+def _selection_of(
+    repo: Path, commit: str, changed: list[ChangedPath], timeout: int
+) -> TicketDiffSelection:
+    """The tests a name-status list selects; each Rust crate's manifest is read from `commit`."""
     dirs = sorted(
         {
             located[0]
@@ -623,7 +654,7 @@ def ticket_diff_selection(
         }
     )
     paths = [f"{name}/{leaf}" for name in dirs for leaf in ("Cargo.toml", "src/lib.rs")]
-    contents = blob_contents(repo, candidate, paths, timeout)
+    contents = blob_contents(repo, commit, paths, timeout)
     crates: dict[str, RustCrate] = {}
     for name in dirs:
         package = _package_name(contents.get(f"{name}/Cargo.toml"))

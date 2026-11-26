@@ -113,8 +113,12 @@ keep the plan `focused`, set the import roots in
 **Ticket-diff selection.** With `ticket_diff_selection` enabled for `integration/*`, retry,
 review **and QA** plans select tests from `base..candidate` (`ticket-diff`), without widening
 to `full`. Added/modified Python tests and corresponding Rust test targets are included.
-If the diff contains no tests, static stages remain and the test stage is `not_run`.
-Commands for these briefs are derived from the plan. This diagnoses the ticket branch; publish
+The first developer has no diff of its own yet, so its plan uses the expected diff: the
+`base..snapshot` commits plus the `--expected-file` paths from `batch preflight`. If the diff
+contains no tests, static stages remain and the test stage is `not_run` with reason
+`no-tests-in-diff`. Commands for these briefs are derived from the plan, so a ticket that changes
+only skill Markdown runs `lint` without the full pytest suite. A batch without expected files keeps
+`developer_verification_commands` for the first developer. This diagnoses the ticket branch; publish
 still requires the full gate on the final SHA. With `false` or a default-branch target, ordinary
 planning applies. The detailed contract is in
 [ADR 0023](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0023-incremental-verification.md).

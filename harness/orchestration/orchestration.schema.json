@@ -279,7 +279,7 @@
         "ticket_diff_selection": {
           "type": "boolean",
           "default": false,
-          "description": "Выключатель выбора тестов по diff тикета (ADR 0023). При true и цели integration/* планы developer-retry, code-review и qa выбирают ровно тесты diff base..candidate (selection ticket-diff) и никогда не расширяются до full; при false или цели в ветку по умолчанию планы прежние. Замораживается в batch вместе с политикой."
+          "description": "Выключатель выбора тестов по diff тикета (ADR 0023). При true и цели integration/* планы developer-retry, code-review и qa выбирают ровно тесты diff base..candidate (selection ticket-diff) и никогда не расширяются до full. Первый developer получает такой же план по ожидаемому diff: base..snapshot плюс expected_files из batch preflight. Команды этих brief выводятся из плана; стадия pytest без тестов команды не получает, а not_run_stages называет причину no-tests-in-diff. При false или цели в ветку по умолчанию планы и команды прежние. Замораживается в batch вместе с политикой."
         },
         "stages": {
           "type": "array",

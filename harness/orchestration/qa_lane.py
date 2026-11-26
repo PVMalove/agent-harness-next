@@ -268,7 +268,7 @@ def _artifact_path(ledger: LifecycleLedger, checksum: str) -> Path:
     return _records_root(ledger) / "qa-artifacts" / f"{checksum}.log"
 
 
-NO_TESTS_IN_DIFF = "no-tests-in-diff"
+NO_TESTS_IN_DIFF = verification_plan.NO_TESTS_IN_DIFF
 
 
 def _plan_stages(

@@ -2153,6 +2153,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         *,
         definition_of_done: list[str] | None = None,
         integration_ref: str | None = None,
+        expected_files: list[str] | None = None,
     ) -> JsonObject:
         _git(
             self.repo,
@@ -2166,6 +2167,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         plan = self._batch_plan()
         if integration_ref is not None:
             plan["integration_ref"] = integration_ref
+        if expected_files is not None:
+            plan["expected_file"] = expected_files
         if definition_of_done is not None:
             plan["definition_of_done"] = definition_of_done
         batch = coordinator.create_batch(self._args(**plan))

@@ -29,6 +29,7 @@ from .core.constants import (
     DEFAULT_EXECUTION_POLICY,
     DEFAULT_PREFLIGHT_POLICY,
     DEFAULT_RETRY_POLICY,
+    EXPECTED_FILES_SOURCE,
     MAX_LEASE_TTL_SECONDS,
     SENSITIVE_KEY,
     VERIFICATION_STAGE_KINDS,
@@ -394,6 +395,12 @@ def retry_verification_commands(
         return None
     tests = " ".join(shlex.quote(path) for path in related_tests)
     return [*lint, f"{test_command} {tests}"]
+
+
+def expected_diff_plan(plan: object) -> bool:
+    """Whether a plan is a first developer's plan over its expected diff (issue #1292)."""
+    source = plan.get("diff_source") if isinstance(plan, dict) else None
+    return isinstance(source, dict) and source.get("kind") == EXPECTED_FILES_SOURCE
 
 
 def ticket_diff_plan_commands(plan: object) -> list[str] | None:
@@ -1018,6 +1025,10 @@ def accepted_verification_commands(
 
     Роль с полным gate допускает его и в форме, которую замораживает ``batch create``: проверки
     ``pre_qa_commands`` перед списком (``qa_gate_commands``).
+
+    Brief с планом ``ticket-diff`` допускает команды, выведенные из плана
+    (``ticket_diff_plan_commands``), в том числе brief первого developer с планом по ожидаемому
+    diff (#1292).
     """
     accepted = [role_verification_commands(source, role, purpose)]
     if purpose != "work" or role not in FOCUSED_GATE_WORK_ROLES | NO_GATE_WORK_ROLES:
@@ -1036,8 +1047,11 @@ def accepted_verification_commands(
     )
     if profile is not None and field is not None and string_list(profile.get(field)):
         accepted.append(profile[field])
-    if brief is not None and (role != "developer" or is_developer_retry(brief)):
-        derived = ticket_diff_plan_commands(brief.get("verification_plan"))
+    plan = brief.get("verification_plan") if brief is not None else None
+    if brief is not None and (
+        role != "developer" or is_developer_retry(brief) or expected_diff_plan(plan)
+    ):
+        derived = ticket_diff_plan_commands(plan)
         if derived is not None:
             accepted.append(derived)
     if role == "developer" and brief is not None and is_developer_retry(brief):

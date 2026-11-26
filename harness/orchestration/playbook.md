@@ -1386,8 +1386,8 @@ It must contain, at minimum:
   timeout_seconds}`, at least one of kind `pytest`) and the ChangeImpact of `base..candidate`
   (ADR 0023, sections 1, 2 and 6). `batch create` freezes the project's `repo_map_policy` beside
   the policy, because it shapes the import graph. It is present only on a developer-retry, code-review or QA brief of a batch that configured the
-  policy; a first developer has no diff, and a batch without the policy keeps the brief it always
-  had. Each stage adds `selection` (`full`, `focused` or `failed-only`), `nodeids` and
+  policy, and on a first developer brief under the ticket-diff selection described below; any other
+  first developer has no diff, and a batch without the policy keeps the brief it always had. Each stage adds `selection` (`full`, `focused` or `failed-only`), `nodeids` and
   `environment_fingerprint`. The pytest stage is `focused` over every related test of the import
   graph, without a first-N cutoff, and widens to `full` instead of failing when the impact is
   unknown: a changed `conftest.py`, `pyproject.toml`, `uv.lock`, `Makefile`, `.github/**`, verify
@@ -1399,7 +1399,12 @@ It must contain, at minimum:
   policy flag (off by default, frozen with the policy), which a batch whose `integration_ref` starts with
   `integration/` turns into a plan of exactly the tests of its own `base..candidate` diff (selection
   `ticket-diff`, a `ticket_diff` section, one `custom` cargo stage per Rust test target; never widened
-  to `full`; ADR 0023, section 7). The plan's digest is bound into the transition as
+  to `full`; ADR 0023, section 7). Under that flag a first developer, which has no diff yet, gets the
+  same kind of plan over `base..snapshot_commit` plus the batch's `scope_preflight.expected_files`,
+  each counted as modified, and the plan records them as `diff_source` (issue #1292); a batch
+  without expected files keeps the fixed developer commands. A ticket-diff plan derives the brief's
+  `verification_commands` from its stages, and a pytest stage that selects no test gets no command
+  and a `not_run_stages` record with reason `no-tests-in-diff`. The plan's digest is bound into the transition as
   `verification_plan_sha256`; `verification_commands` stays the list a role reports in `checks_run`.
   `dispatch propose` and `dispatch create` for code-review and QA refuse with `impact_not_covered`
   (exit code 2, the uncovered tests listed) when the plan's pytest stage is not `full` and does not

@@ -350,6 +350,8 @@ DISPATCH_PURPOSES = {"work", "verification", "publish"}
 REQUIRED_GATES = ("none", "review", "qa")
 # ADR 0023 section 2: how a verification-plan stage picks its tests, and what the stage runs.
 VERIFICATION_PLAN_SELECTIONS = ("full", "focused", "failed-only", "ticket-diff")
+# The `diff_source.kind` of a first developer's plan over its expected diff (issue #1292).
+EXPECTED_FILES_SOURCE = "expected_files"
 VERIFICATION_STAGE_KINDS = ("lint", "typecheck", "pytest", "clean-room", "custom")
 ROLE_TRANSPORTS = {"in-process", "external"}
 ACCESS_MODES = ("inherit", "sandbox", "unsandboxed")

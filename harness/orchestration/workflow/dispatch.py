@@ -197,35 +197,61 @@ def _verification_plan(
     """План проверки brief по замороженной ``verification_plan_policy`` (ADR 0023), либо ``None``.
 
     План строится для developer-retry (diff до кандидата, который он дорабатывает), code-review
-    и qa (diff до кандидата роли). Первый developer диффа не имеет, а batch без политики остаётся
-    без плана и без нового поля в brief. ``runtime_images`` — образы docker-dispatch, которые
-    входят в ``environment_fingerprint`` стадий.
+    и qa (diff до кандидата роли). Первый developer своего diff не имеет: план ему строится только
+    при выборе по diff тикета, из ожидаемых файлов batch (#1292). Без них, при выключенном флаге
+    или при цели не ``integration/*`` он остаётся без плана, как и batch без политики.
+    ``runtime_images`` — образы docker-dispatch, которые входят в ``environment_fingerprint`` стадий.
     """
     policy = batch.get("verification_plan_policy")
     if not isinstance(policy, dict) or purpose != "work":
-        return None
-    if role_name == "developer" and next_action == "developer-retry":
-        head = snapshot_commit
-    elif role_name in {"code-review", "qa"} and candidate is not None:
-        head = candidate
-    else:
         return None
     # The ref is read only when the frozen flag asks for it: a flag-off plan never depends on it.
     integration_ref = (
         _integration_ref(repo, batch) if policy.get("ticket_diff_selection") else None
     )
+    repo_map_policy = repo_map_policy_from_section(
+        cast(dict[str, object], batch.get("repo_map_policy") or {})
+    )
+    if role_name == "developer" and next_action == "developer-retry":
+        head = snapshot_commit
+    elif role_name in {"code-review", "qa"} and candidate is not None:
+        head = candidate
+    elif role_name == "developer":
+        expected = _expected_files(batch)
+        if not expected or not verification_plan.ticket_diff_active(
+            policy, integration_ref
+        ):
+            return None
+        return verification_plan.build_expected_plan(
+            repo,
+            policy,
+            base=_effective_base(batch),
+            snapshot=snapshot_commit,
+            expected_files=expected,
+            repo_map_policy=repo_map_policy,
+            runtime_images=runtime_images,
+        )
+    else:
+        return None
     return verification_plan.build_plan(
         repo,
         policy,
         base=_effective_base(batch),
         candidate=head,
         role=role_name,
-        repo_map_policy=repo_map_policy_from_section(
-            cast(dict[str, object], batch.get("repo_map_policy") or {})
-        ),
+        repo_map_policy=repo_map_policy,
         runtime_images=runtime_images,
         integration_ref=integration_ref,
     )
+
+
+def _expected_files(batch: JsonObject) -> list[str]:
+    """The files ``batch preflight`` expects the ticket to change, or none for an older batch."""
+    preflight = batch.get("scope_preflight")
+    expected = preflight.get("expected_files") if isinstance(preflight, dict) else None
+    if not isinstance(expected, list):
+        return []
+    return [path for path in expected if isinstance(path, str) and path]
 
 
 def _developer_commit_plan(
