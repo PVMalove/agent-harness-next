@@ -37,7 +37,8 @@ Write the draft to `docs/tasks/rca-<symptom-slug>/rca-<symptom-slug>.md`: one fo
 as `.harness/instructions/artifacts.md` requires. When the bug ticket gets a number, rename the
 folder and the file by the same rule. `/docs/tasks/` is gitignored: never commit the draft.
 
-Use this template. Leave out the sections marked `harness only` for `environment-or-misuse`.
+Use this template. Leave out the sections marked `harness only` for `environment-or-misuse`. For
+`harness`, run step 4 before you write `Bug ticket draft`.
 
 ````markdown
 # RCA: <symptom in a few words>
@@ -92,7 +93,45 @@ Write `recovery` as an action and a retry ("do X and retry"), never as a descrip
 Choose `Target tracker: the harness tracker` when the root cause is in the harness but the stopped
 work runs in a target project.
 
-## 4. Return
+## 4. Search for a duplicate (harness only)
+
+Before you write the bug-ticket draft, search the open `type::bug` tickets of the target tracker
+for the same root cause. Use "List issues" from `.harness/instructions/issue-tracker.md` for that
+tracker with `--label type::bug` and the open state; for the local markdown tracker, search
+`.scratch/*/issues/`. Match on the root cause or the FMEA `title`, never on the symptom alone.
+
+On a match, replace `Bug ticket draft` with a `Comment draft` for the existing ticket: the new
+symptom, the why-chain and the evidence. Set `Duplicate of: #<N>`.
+
+When the search cannot run (for example, the sandbox blocks the tracker host), write
+`Duplicate search: not run (<reason>)` in the draft. Never skip it silently.
+
+## 5. Publish an approved RCA draft
+
+The phase does not wait for an answer: it writes the draft, returns control, and offers publication
+in its final message. Run this step only after the developer's explicit "yes" for a specific draft,
+in the same session or a later one that names the draft path. Without that "yes", write nothing to
+the tracker. A `Class: environment-or-misuse` draft has nothing to publish: the draft with its FMEA
+entry is the outcome.
+
+The labels `type::bug` and `rca::done` must exist in the target tracker: `gh issue create --label`
+fails on a missing label, and GitLab creates one with a default color. Run `/setup-labels` first
+when they are missing.
+
+Follow the tracker's commands in `.harness/instructions/issue-tracker.md`:
+
+- **New ticket.** Write the bug-ticket title and body to a draft file, then run "Create an issue"
+  with `--body-file <path>` (GitHub) or `--description-file <path>` (GitLab) and the labels
+  `type::bug` and `rca::done`. For the local markdown tracker, create the issue file with a
+  `Labels: type::bug, rca::done` line.
+- **Duplicate.** Write the comment to `.harness/.sandboxes/pr_body/issue-comment-<N>-<slug>.md` and
+  run "Comment on an issue", as `.claude/rules/git-delivery.md` requires: one publication command
+  per shell call, and delete the file only after the command succeeds.
+- **`Blocks stopped ticket: yes`.** Give the stopped ticket `status::blocked` with "Replace the
+  status label", so it keeps exactly one `status::*` label, and add a `Blocked by #<bug>` line to
+  its body. On GitHub, also add the native dependency edge from "Blocking" in the same guide.
+
+## 6. Return
 
 End with the fixed line from `SKILL.md`:
 `RCA draft: <path>. Continue with the next free ticket.`
