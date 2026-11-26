@@ -18,14 +18,14 @@ from textual.screen import ModalScreen
 from textual.timer import Timer
 from textual.widgets import (
     Button,
-    ListItem,
-    ListView,
+    OptionList,
     RichLog,
     Select,
     Static,
     TabbedContent,
     TabPane,
 )
+from textual.widgets.option_list import Option
 
 from harness.orchestration.core.utils import JsonObject
 from ...kernel import brand, i18n
@@ -238,6 +238,17 @@ def session_choices(view: reports.LedgerView, dispatch: str | None) -> Sessions:
     )
 
 
+def session_options(
+    choices: list[tuple[str, str]], card: Callable[[str, str], Text]
+) -> list[Option | None]:
+    """One option per session with its card, a separator after each; the option id is the
+    dispatch. One list widget draws them all, so a long ledger mounts no widget per session."""
+    options: list[Option | None] = []
+    for label, dispatch in choices:
+        options += [Option(card(label, dispatch), id=dispatch), None]
+    return options
+
+
 def observe(repo: Path, dispatch: str, offset: int) -> JsonObject:
     from harness.orchestration.workflow.delivery import observe_dispatch
 
@@ -335,9 +346,8 @@ class WorkerObservationScreen(ConsoleShell):
     WorkerObservationScreen #worker-live { width: 2; height: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
-    WorkerObservationScreen #worker-picker > ListItem { height: auto; padding: 0 1; border-left: solid transparent; border-bottom: solid $border-subtle; }
-    WorkerObservationScreen #worker-picker > ListItem.-highlight, WorkerObservationScreen #worker-picker:focus > ListItem.-highlight { background: $row-highlight; border-left: solid $selection-edge; text-style: none; }
-    WorkerObservationScreen #worker-picker Static { height: auto; }
+    WorkerObservationScreen #worker-picker > .option-list--option { padding: 0 1; }
+    WorkerObservationScreen #worker-picker > .option-list--separator { color: $border-subtle; }
     WorkerObservationScreen #worker-list-foot { height: auto; border-top: solid $border-subtle; padding: 1; color: $text-muted; }
     WorkerObservationScreen #worker-main { width: 1fr; min-width: 0; height: 1fr; }
     WorkerObservationScreen #worker-heading { height: auto; min-height: 4; padding: 1 2 0 2; }
@@ -374,7 +384,7 @@ class WorkerObservationScreen(ConsoleShell):
     CSS = SHELL_CSS + brand.shell_css("""
     .shell #worker-sessions { background: transparent; }
     .shell #worker-picker, .shell #worker-picker:focus { border: none; background: transparent; }
-    .shell #worker-picker > ListItem.-highlight, .shell #worker-picker:focus > ListItem.-highlight {
+    .shell #worker-picker > .option-list--option-highlighted, .shell #worker-picker:focus > .option-list--option-highlighted {
         background: $row-highlight; color: $foreground; text-style: none;
     }
     .shell #worker-actions Button { border: round $component-border; color: $foreground; }
@@ -429,14 +439,16 @@ class WorkerObservationScreen(ConsoleShell):
             stacked=True,
         )
 
-    def _session_items(self) -> list[ListItem]:
-        return [
-            ListItem(
-                Static(self._session_card(label, value), classes="no-i18n"),
-                name=value,
-            )
-            for label, value in self._choices
-        ]
+    def _paint_sessions(self) -> None:
+        """The session count and cards in the current language, with the observed one highlighted."""
+        language = getattr(self.app, "language", "ru")
+        self.query_one("#worker-session-count", Static).update(
+            i18n.tr_text(language, f"РАБОЧИЕ СЕССИИ   {len(self._choices)}")
+        )
+        picker = self.query_one("#worker-picker", OptionList)
+        picker.set_options(session_options(self._choices, self._session_card))
+        if self.dispatch is not None:
+            picker.highlighted = picker.get_option_index(self.dispatch)
 
     def _load_sessions(self) -> None:
         repo, dispatch = self.repo, self.dispatch
@@ -447,27 +459,15 @@ class WorkerObservationScreen(ConsoleShell):
 
         self.run_worker(load, thread=True, group="sessions", exit_on_error=False)
 
-    async def _show_sessions(self, found: Sessions) -> None:
+    def _show_sessions(self, found: Sessions) -> None:
         self._stages, self._batches, self._choices = (
             found.stages,
             found.batches,
             found.choices,
         )
-        self.query_one("#worker-session-count", Static).update(
-            f"РАБОЧИЕ СЕССИИ   {len(self._choices)}"
-        )
-        picker = self.query_one("#worker-picker", ListView)
-        await picker.clear()
-        await picker.extend(self._session_items())
-        self.translate_now()
-        if not self._choices:
-            return
-        if self.dispatch is None:
+        if self.dispatch is None and self._choices:
             self._restart(self._choices[0][1])
-        picker.index = next(
-            (i for i, (_, value) in enumerate(self._choices) if value == self.dispatch),
-            0,
-        )
+        self._paint_sessions()
 
     def compose_strip(self) -> ComposeResult:
         yield Button("Сессии", id="worker-switch", compact=True)
@@ -480,8 +480,9 @@ class WorkerObservationScreen(ConsoleShell):
                 yield Static(
                     f"РАБОЧИЕ СЕССИИ   {len(self._choices)}",
                     id="worker-session-count",
+                    classes="no-i18n",
                 )
-                yield ListView(*self._session_items(), id="worker-picker")
+                yield OptionList(id="worker-picker")
                 yield Static(
                     "Каждый worker — отдельная сессия\n\nВыбор сессии не запускает новый процесс.",
                     id="worker-list-foot",
@@ -605,15 +606,6 @@ class WorkerObservationScreen(ConsoleShell):
         )
 
     def on_mount(self) -> None:
-        if self._choices:
-            self.query_one("#worker-picker", ListView).index = next(
-                (
-                    i
-                    for i, (_, value) in enumerate(self._choices)
-                    if value == self.dispatch
-                ),
-                0,
-            )
         self._timer = self.set_interval(1, self.action_refresh)
         self.action_refresh()
         self._load_sessions()
@@ -947,13 +939,7 @@ class WorkerObservationScreen(ConsoleShell):
             ]
         )
         select.value = selected
-        for item in self.query("#worker-picker > ListItem").results(ListItem):
-            if item.name:
-                label = next(
-                    (label for label, value in self._choices if value == item.name),
-                    item.name,
-                )
-                item.query_one(Static).update(self._session_card(label, item.name))
+        self._paint_sessions()
         if self.snapshot:
             self._render_snapshot({**self.snapshot, "events": []}, self.dispatch or "")
         super().sync_language()
@@ -996,12 +982,12 @@ class WorkerObservationScreen(ConsoleShell):
 
     def action_select_session(self, index: int) -> None:
         if index < len(self._choices):
-            self.query_one("#worker-picker", ListView).index = index
+            self.query_one("#worker-picker", OptionList).highlighted = index
             self._select_dispatch(self._choices[index][1])
 
-    async def on_list_view_selected(self, event: ListView.Selected) -> None:
-        if event.list_view.id == "worker-picker" and event.item.name:
-            self._select_dispatch(event.item.name)
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        if event.option_list.id == "worker-picker" and event.option.id:
+            self._select_dispatch(event.option.id)
 
     async def action_section(self, index: int) -> None:
         # This screen is a view inside Orchestration: its menu entry still opens that section.
@@ -1019,7 +1005,7 @@ class WorkerObservationScreen(ConsoleShell):
             self.toggle_class("-sessions-open")
             if self.has_class("-sessions-open"):
                 self.call_after_refresh(
-                    self.query_one("#worker-picker", ListView).focus
+                    self.query_one("#worker-picker", OptionList).focus
                 )
         elif event.button.id == "worker-access":
             self.query_one("#worker-tabs", TabbedContent).active = "access"
