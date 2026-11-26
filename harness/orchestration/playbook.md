@@ -1556,7 +1556,10 @@ The report must include:
   and only `override-warning` with a note other than `none` (recorded as `carried_items_gap`) or
   `retry` decides it. A developer-retry that creates no commit and records at least one item
   `not_closed` reports an empty `commit_map`; every other item names commits of its retry chain.
-  Without a `not_closed` item, a retry with no new commit is refused as before. Without a rebase target (the brief's non-null `rebase_target_commit`, or the
+  Without a `not_closed` item, a `blocked` or `failed` retry with no new commit reports an empty
+  or absent `commit_map` and waits for a decision (`retry`, `block`, `accept-conditional
+  --infrastructure-failure`); a `completed` one is refused, and its remedy names that blocked
+  report or a new fix commit, never a commit to map that does not exist. Without a rebase target (the brief's non-null `rebase_target_commit`, or the
   batch's target on a legacy stale-base record with `base_rebase_required`), the report's
   `commit_sha` must descend from `snapshot_commit`. A retry that rewrote that history (amend, squash or reset) is
   refused; its remedy is to recover the commits from `git reflog` and re-apply the fix as new
