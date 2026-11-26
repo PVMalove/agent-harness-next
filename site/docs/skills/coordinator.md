@@ -43,7 +43,11 @@ Coordinator записывает ровно одно текущее состоя
 - `integration prepare --ticket T --branch B [--batch ID] [--candidate-commit SHA]` выбирает
   единственный завершённый batch с принятым publish, сверяет SHA с принятым отчётом и с remote,
   берёт принятый зелёный QA того же SHA и идемпотентно пишет запись. Другой batch команда не
-  подставляет, и каждый отказ называет способ исправления.
+  подставляет, и каждый отказ называет способ исправления. Для ветки `integration/*` эпика
+  (`--ticket "#<epic>" --branch integration/... [--target REF]`) команда сверяет `--branch` с секцией
+  `## Integration Branch` эпика в трекере и записывает пару «удалённая голова ветки → удалённая
+  голова цели» без batch; цель по умолчанию — `base_branch`. Такая пара требует полной проверки
+  CI или локального QA, а `integration refresh` и `integration resolve` её отклоняют.
 - `integration status` только наблюдает, ничего не пишет и не создаёт dispatch. Ответ: `current`,
   `stale` (integration ref ушёл вперёд, пару нужно проверить заново) или `unavailable`. Старый QA на
   новую пару не переносится.

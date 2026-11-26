@@ -1715,9 +1715,12 @@ dispatch or report, or changes Git:
   including an unpublished result, a different ticket or branch, a candidate that is not the
   published SHA, and an integration ref that already moved while no record exists.
   For an epic's `integration/*` branch (issue #1278), `integration prepare --ticket "#<epic>" --branch
-  <integration-branch> [--target REF]` records the pull request of that branch instead: the
+  <integration-branch> [--target REF]` records the pull request of that branch instead. The epic's
+  `## Integration Branch` section, read through the GitHub or GitLab CLI, must name the branch. The
   candidate is the remote head of the branch, the target the remote head of `--target`
-  (`base_branch` by default, or another `integration/*` branch), and `source_batch_id` is `null`.
+  (`base_branch` by default, or another `integration/*` branch); the identity adds
+  `source_kind: integration-branch` and the target ref, and `source_batch_id` is `null`. A ticket
+  branch refuses `--target`.
   No batch QA covers this pair, so its pair record requires `full`: `integration next` answers
   `confirm-pr` with `qa_source: verification-pending-after-pr`, then `verify` until CI that
   `integration collect-ci` accepts or local QA (`integration local-qa`) confirms exactly that pair,

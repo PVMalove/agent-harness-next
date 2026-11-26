@@ -8,19 +8,39 @@ bare remote); CI is a controlled in-memory ``CiSource``.
 
 from __future__ import annotations
 
+import json
+import sys
 import unittest
+
+import pytest
 
 from harness.orchestration import coordinator
 from harness.orchestration.core.ci_source import CheckRun, CiObservation
 from harness.orchestration.core.utils import CoordinatorError, JsonObject
 from harness.orchestration.ledger import LifecycleLedger, ledger_ops
-from harness.orchestration.workflow import release_gate
+from harness.orchestration.workflow import integration, release_gate
 from tests.orchestration.test_ci_collect import GITHUB, MERGE, PR, REPO, FakeSource
 from tests.orchestration.test_ci_collect import write_project
+from tests.orchestration import runtime_store_support as support
 from tests.orchestration.test_integration_record import PublishedBranch, _git
 
 EPIC = "#1022"
 BRANCH = "integration/epic"
+EPIC_BODY = (
+    "## Problem Statement\n\n...\n\n## Integration Branch\n\n"
+    f"- Branch: `{BRANCH}`\n- Created from: `integration/parent`\n\n## Further Notes\n"
+)
+
+
+def epic_source(body: str = EPIC_BODY) -> object:
+    """A tracker that answers every epic with ``body``; it records which tickets it read."""
+
+    def read(_repo: object, ticket: str) -> str:
+        read.tickets.append(ticket)  # type: ignore[attr-defined]
+        return body
+
+    read.tickets = []  # type: ignore[attr-defined]
+    return read
 
 
 class IntegrationBranchFixture(unittest.TestCase):
@@ -54,6 +74,7 @@ class IntegrationBranchFixture(unittest.TestCase):
             "candidate_commit": None,
             "remote": "origin",
             "target": None,
+            "epic_source": epic_source(),
         }
         values.update(overrides)
         return coordinator.integration_prepare(self.branch.args(**values))
@@ -116,10 +137,11 @@ class IntegrationBranchPrepareTests(IntegrationBranchFixture):
             ),
             (EPIC, BRANCH, None, self.head, self.target, "master"),
         )
+        self.assertEqual(prepared["source_kind"], "integration-branch")
         self.assertEqual(
             prepared["source_evidence"],
             {
-                "kind": "integration-branch",
+                "epic": {"ticket": EPIC, "integration_branch": BRANCH},
                 "pair": {"candidate_sha": self.head, "target_sha": self.target},
             },
         )
@@ -173,6 +195,48 @@ class IntegrationBranchPrepareTests(IntegrationBranchFixture):
         nested = self.prepare(target="integration/parent")
 
         self.assertEqual(nested["integration_ref"], "integration/parent")
+
+    def test_two_targets_at_one_sha_are_two_records(self) -> None:
+        """The pull request target is part of the record: ``integration/parent`` at the SHA of
+        ``master`` is another pull request than the one into ``master``."""
+        _git(
+            self.branch.repo,
+            "push",
+            "origin",
+            f"{self.target}:refs/heads/integration/parent",
+        )
+
+        into_base = self.prepare()
+        into_parent = self.prepare(target="integration/parent")
+
+        self.assertNotEqual(
+            into_base["integration_record_id"], into_parent["integration_record_id"]
+        )
+        self.assertEqual(
+            (into_base["integration_ref"], into_parent["integration_ref"]),
+            ("master", "integration/parent"),
+        )
+        self.assertTrue(into_parent["created"])
+
+    def test_the_epic_must_name_the_branch(self) -> None:
+        for body, refusal in (
+            (EPIC_BODY.replace(BRANCH, "integration/other"), "integration/other"),
+            ("## Problem Statement\n\nno branch here\n", "None"),
+        ):
+            with self.subTest(refusal=refusal):
+                with self.assertRaisesRegex(CoordinatorError, refusal):
+                    self.prepare(epic_source=epic_source(body))
+        reader = epic_source()
+
+        self.prepare(epic_source=reader)
+
+        self.assertEqual(reader.tickets, [EPIC])  # type: ignore[attr-defined]
+
+    def test_a_ticket_branch_refuses_a_target(self) -> None:
+        with self.assertRaisesRegex(CoordinatorError, "--target"):
+            self.prepare(
+                ticket="#244", branch=self.branch.branch, target="integration/parent"
+            )
 
     def test_a_batch_or_another_candidate_is_refused(self) -> None:
         with self.assertRaisesRegex(CoordinatorError, "no batch published it"):
@@ -228,6 +292,24 @@ class IntegrationBranchNextTests(IntegrationBranchFixture):
         )
         self.assertEqual(result["step"], "verify")
 
+    def test_a_local_qa_of_the_pair_hands_it_over(self) -> None:
+        local = coordinator.integration_local_qa(
+            self.branch.args(
+                record=self.record_id,
+                ci_condition="absent",
+                reason="No combined CI",
+                request=None,
+                retry=False,
+                lease_seconds=None,
+            )
+        )
+
+        result = self.next(self.record_id, PR)
+
+        self.assertEqual(local["state"], "completed")
+        self.assertEqual(result["step"], "handoff")
+        self.assertEqual(result["handoff"]["qa_source"], "local-qa")
+
     def test_the_merged_tree_is_checked_as_for_a_ticket_pr(self) -> None:
         repo = self.branch.repo
         tree = _git(repo, "rev-parse", f"{self.head}^{{tree}}")
@@ -264,3 +346,56 @@ class IntegrationBranchNextTests(IntegrationBranchFixture):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EpicIntegrationBranchTests(unittest.TestCase):
+    def test_the_branch_line_wins_over_other_integration_names(self) -> None:
+        self.assertEqual(integration.epic_integration_branch(EPIC_BODY), BRANCH)
+
+    def test_a_bare_name_in_the_section_is_found(self) -> None:
+        body = "## Integration Branch\n\n`integration/x-1`\n\nChild branches...\n"
+
+        self.assertEqual(integration.epic_integration_branch(body), "integration/x-1")
+
+    def test_a_name_outside_the_section_is_not_taken(self) -> None:
+        body = "## Integration Branch\n\nnone yet\n\n## Notes\n\nsee integration/x\n"
+
+        self.assertIsNone(integration.epic_integration_branch(body))
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="the runtime uses a Unix socket")
+def test_the_runtime_store_verdict_confirms_the_collected_ci_of_the_branch_pair() -> None:
+    """In the runtime-store epoch the handoff of an integration-branch pair needs the runtime's
+    ``qa.evidence.verify`` verdict ``ok``: the CI that ``integration collect-ci`` accepted for
+    exactly that pair confirms it, as for a ticket pair (ADR 0021, section 7)."""
+    support.runtime_binary()
+    fixture = IntegrationBranchNextTests()
+    fixture.setUp()
+    runtime = None
+    try:
+        fixture.collect(fixture.record_id, fixture.pair, "lint", "tests")
+        migrated = support.migrate(fixture.branch.repo)
+        assert migrated.returncode == 0, migrated.stderr
+        runtime = support.ServingRuntime(fixture.branch.repo)
+
+        done = support.coordinator_with(
+            fixture.branch.repo,
+            runtime,
+            "integration",
+            "next",
+            "--record",
+            fixture.record_id,
+            "--pull-request",
+            str(PR),
+        )
+
+        assert done.returncode == 0, done.stderr
+        result = json.loads(done.stdout)
+        assert result["step"] == "handoff", result
+        assert result["handoff"]["qa_source"] == "ci"
+        # The runtime's verdict; the file-ledger epoch has none.
+        assert result["handoff"]["qa_evidence"]["source"] == "ci"
+    finally:
+        if runtime is not None:
+            runtime.stop()
+        fixture.doCleanups()

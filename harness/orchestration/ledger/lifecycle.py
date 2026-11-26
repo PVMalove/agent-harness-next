@@ -31,7 +31,12 @@ from typing import BinaryIO, ClassVar, Protocol, cast
 
 from ...errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from ..core import state_view
-from ..core.constants import STATE_REL, BatchState, DispatchState
+from ..core.constants import (
+    INTEGRATION_SOURCE_BRANCH,
+    STATE_REL,
+    BatchState,
+    DispatchState,
+)
 from ..core.utils import sealed
 from .recovery_chain import event_audit, terminal
 
@@ -432,14 +437,26 @@ class IntegrationRecord:
         "candidate_sha",
         "target_sha",
     )
+    # An integration-branch record also names its pull request target: two targets at one SHA
+    # are two pull requests (issue #1278). Publish records keep their ids.
+    BRANCH_IDENTITY_MEMBERS: ClassVar[tuple[str, ...]] = (
+        *IDENTITY_MEMBERS,
+        "source_kind",
+        "integration_ref",
+    )
 
     integration_record_id: str
     extra: JsonObject = field(default_factory=dict)
 
     @classmethod
     def derive_id(cls, identity: JsonObject) -> str:
+        members = (
+            cls.BRANCH_IDENTITY_MEMBERS
+            if identity.get("source_kind") == INTEGRATION_SOURCE_BRANCH
+            else cls.IDENTITY_MEMBERS
+        )
         return _derived_id(
-            "integration", {key: identity.get(key) for key in cls.IDENTITY_MEMBERS}
+            "integration", {key: identity.get(key) for key in members}
         )
 
     @property

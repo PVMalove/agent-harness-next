@@ -43,7 +43,12 @@ and the target SHA in a separate immutable integration record:
 - `integration prepare --ticket T --branch B [--batch ID] [--candidate-commit SHA]` selects the
   single completed batch with an accepted publish, checks the SHA against the accepted report and
   against the remote, takes the accepted green QA of the same SHA, and writes the record
-  idempotently. It does not substitute another batch, and every refusal contains a remedy.
+  idempotently. It does not substitute another batch, and every refusal contains a remedy. For an
+  epic's `integration/*` branch (`--ticket "#<epic>" --branch integration/... [--target REF]`), it
+  checks `--branch` against the epic's `## Integration Branch` section in the tracker and records
+  the pair of the remote branch head and the remote target head without a batch; the target is
+  `base_branch` by default. That pair requires a full CI or local-QA check, and `integration refresh`
+  and `integration resolve` refuse it.
 - `integration status` is an observation with no write and no dispatch: `current`, `stale` (the
   integration ref moved ahead, so a new check of the pair is needed), or `unavailable`. Old QA is not
   carried over to a new pair.

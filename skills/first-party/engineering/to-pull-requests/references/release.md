@@ -41,15 +41,6 @@ SHA as the release candidate before running checks.
 - For an opt-in project with `verification_plan_policy.ticket_diff_selection` on, the release pair
   needs the `full` run: a `-light` check never confirms it (see "Test policy by PR target" in
   `references/integration-route.md`).
-- For an opt-in project, record the release pair before the PR:
-  `integration prepare --ticket "#<epic>" --branch "<integration-branch>"` (the target is
-  `base_branch`; pass `--target <integration/...>` for a PR into another integration branch). Then
-  follow `integration next` as for a ticket PR (parts A and B of `references/integration-route.md`,
-  with `--record <id>` from prepare): `confirm-pr` before the PR, `verify` until CI or local QA of
-  exactly that pair passes, `handoff` before the merge, and `--merge-commit` after it. Its
-  `qa_source` is never `original-qa`. On `refresh` or `route-failure`, stop: fix the integration
-  branch through a child ticket and run `integration prepare` again for its new head; never run
-  `integration refresh` on it.
 
 ### Verify the epic criteria
 
@@ -71,6 +62,28 @@ SHA as the release candidate before running checks.
 - If the epic has no structured criteria, record epic acceptance as unverified and continue with
   the existing child and QA checks.
 
+### Release Gate (opt-in project)
+
+Run this part after `/qa-gate` only for a project with a valid `backend-orchestration` opt-in, as the
+skill defines it; skip it otherwise. Every command is
+`python .harness/orchestration/coordinator.py --repo . <command>`.
+
+- Record the pair; a repeat is idempotent:
+  `integration prepare --ticket "#<epic>" --branch "<integration-branch>"`. The target is
+  `<base-branch>`; for a PR into another `integration/*` branch, add `--target <that branch>`. The
+  command checks that the epic's `## Integration Branch` section names the branch and records the
+  remote heads of the branch and the target. The pair always requires the `full` check, so a
+  `-light` check never confirms it. Any refusal is an operational stop: report it to the developer.
+- Run `integration next --record <id>` with the `integration_record_id` of prepare. Continue only on
+  step `confirm-pr` whose `candidate_sha` equals the release candidate and whose `target_sha` equals
+  `git rev-parse origin/<base-branch>`. Its `qa_source` is `verification-pending-after-pr` until CI or
+  local QA of exactly that pair passes, never `original-qa`. Handle any other `step` as
+  `references/integration-route.md` describes for a record of an `integration/*` branch: stop and
+  hand the data to the coordinator session, and never commit to the integration branch.
+- After the PR opens, run part B of `references/integration-route.md` with `--record <id>` in place of
+  `<ticket-branch>`. After the merge, check the tree as **Check the tree** in skill step 7 describes,
+  with `--record <id>`.
+
 ## 4. Prepare the body
 
 Follow `.harness/instructions/git-workflow.md` §3 and store the body at
@@ -85,8 +98,8 @@ as the target.
 ## 5. Confirm and open
 
 Ask the developer for explicit, separate confirmation that the release PR may be opened; state the
-release candidate SHA, the QA and epic acceptance results, and the child list. Stop for their
-answer. After approval, fetch and recheck that both the local and remote integration refs match the
+release candidate SHA, the QA and epic acceptance results, and the child list; with a Release Gate
+record, also its `candidate_sha`, `target_sha` and `qa_source`. Stop for their answer. After approval, fetch and recheck that both the local and remote integration refs match the
 release candidate SHA. If either changed, repeat verification and request fresh confirmation.
 Then, from the checkout of part 3, with the epic title as `<title>`:
 
@@ -102,7 +115,8 @@ Act only after the developer confirms the merge.
 
 - Check the merge, then close or verify the epic by its footer, as
   `.harness/instructions/git-workflow.md` §2 step 7 → Close the ticket after merge describes, with `<epic>` for
-  `<ID>` and `<base-branch>` as the expected target.
+  `<ID>` and `<base-branch>` as the expected target. With a Release Gate record, also check the tree
+  as part 3 describes. If a check fails, leave the epic unchanged and tell the developer.
 - Offer `/delivery-stats <epic>`. Never delete `<integration-branch>`; that is the developer's call.
 
 ## Local markdown tracker

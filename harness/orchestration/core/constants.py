@@ -889,6 +889,11 @@ LOCAL_QA_CI_CONDITIONS = ("absent", "unavailable", "unusable")
 INTEGRATION_EVIDENCE_RESULTS = tuple(IntegrationCheckResult)
 INTEGRATION_RECORD_ID_PATTERN = re.compile(r"integration-[0-9a-f]{32}")
 INTEGRATION_SHA_PATTERN = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
+# The two sources of an integration record (``identity.source_kind``): the accepted publish of a
+# ticket branch, or the head of an epic's ``integration/*`` branch and its pull request target
+# (issue #1278). A record without the field is a publish record.
+INTEGRATION_SOURCE_PUBLISH = "publish"
+INTEGRATION_SOURCE_BRANCH = "integration-branch"
 INTEGRATION_REFERENCE_MAX_CHARS = 2_048
 # Issue #535: the ``verification`` marks only 'integration collect-ci' writes; a CI check linked by
 # hand stays 'unverified' and never satisfies verification.
