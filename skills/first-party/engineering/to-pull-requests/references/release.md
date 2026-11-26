@@ -127,10 +127,24 @@ GitHub `gh pr checks <n>`, GitLab the pipeline of the MR. Never merge it.
 
 Act only after the developer confirms the merge.
 
-- Check the merge, then close or verify the epic by its footer, as
-  `.harness/instructions/git-workflow.md` §2 step 7 → Close the ticket after merge describes, with `<epic>` for
-  `<ID>` and `<base-branch>` as the expected target.
-- Offer `/delivery-stats <epic>`. Never delete `<integration-branch>`; that is the developer's call.
+- Check the merge as `.harness/instructions/git-workflow.md` §2 step 7 → Close the ticket after merge
+  describes, with `<epic>` for `<ID>` and `<target-branch>` as the expected target. With a Release Gate
+  record, also check the tree as part 3 describes. If the check fails, leave the epic unchanged and tell
+  the developer.
+- **Target `base_branch`:** close or verify the epic by its footer with the commands of that step 7.
+  Replace the epic's `status::specs` with `status::done` by the replacement rule of
+  `.harness/instructions/triage-labels.md` (State machine step 5; on GitLab with `--unlabel`): before an
+  explicit close for `Related to #<epic>`, right after the verified auto-close for `Closes #<epic>`. If
+  the epic has no `status::specs` or more than one `status::*` label, stop and ask the developer. Offer
+  `/delivery-stats <epic>`.
+- **Target another `integration/*` branch:** leave the epic open and its labels unchanged, because the
+  work is not in `base_branch` yet.
+- **Worktree:** remove the worktree only when part 3 created it, with `git worktree remove <path>`. If it
+  fails because `.git/worktrees` is read-only in the sandbox, give the developer that command. Never
+  remove the main checkout or a worktree this mode did not create.
+- **Integration branch:** never delete `<integration-branch>`. Ask the developer whether it is needed
+  for the next epic. On a no, give the developer the deletion commands to run themselves; the agent
+  never runs them.
 
 ## Local markdown tracker
 

@@ -294,3 +294,21 @@ def test_integration_pr_uses_a_worktree_of_the_integration_branch() -> None:
         "<integration-branch>`"
     ) in verify
     assert "Remember whether this mode created the worktree" in verify
+
+
+def test_integration_pr_after_merge_marks_the_epic_done_and_keeps_the_branch() -> None:
+    """#1027: after a merge into `base_branch` the epic is done; the branch stays for the developer."""
+    after = _section(REFERENCES / "release.md", "6. After the merge")
+    assert "Replace the epic's `status::specs` with `status::done`" in after
+    assert "leave the epic open and its labels unchanged" in after
+    assert "`git worktree remove <path>`" in after
+    assert "needed for the next epic" in after
+    for command in ("git push origin --delete", "harness branch-delete", "git branch -d"):
+        assert command not in after, command
+
+
+def test_triage_labels_move_the_epic_to_done() -> None:
+    """#1027: the state machine names the epic transition `status::specs` → `status::done`."""
+    machine = _section(INSTRUCTIONS / "triage-labels.md", "State machine")
+    assert "an epic moves from `status::specs` to `status::done`" in machine
+    assert "integration PR into `base_branch`" in machine
