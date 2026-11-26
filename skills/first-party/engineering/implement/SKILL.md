@@ -331,5 +331,5 @@ Under `approval_policy: auto`, first show the final report of `batch auto-report
 Then offer `/to-pull-requests <ticket>`. Do not invoke it automatically, open
 or merge a PR, write to an integration branch, or close the ticket in this skill. A pull request
 needs the developer's explicit confirmation under every `approval_policy`; auto-merge is forbidden. Leave
-`status::in-progress` on the ticket: closing it and moving its unblocked dependents to
-`status::ready` belong to `/to-pull-requests` after the merge.
+`status::in-progress` on the ticket: replacing it with `status::done`, closing the ticket and moving its
+unblocked dependents to `status::ready` belong to `/to-pull-requests` after the merge.

@@ -35,8 +35,8 @@ then `/tdd`, the optional test author under `tdd/references/test-author.md`, and
 checks. `/qa-gate` runs the full suite before the PR; it runs only `qa_gate_commands`, while
 `pre_qa_commands` and the QA overlays apply to `/implement` alone. The skill then asks whether to run code
 review, waits for permission to commit and push, and pushes the issue branch. Finally, it offers to
-run `/to-pull-requests <ticket>` manually. The ticket keeps `status::in-progress`: after the merge,
-`/to-pull-requests` closes it and moves its unblocked dependents to `status::ready`.
+run `/to-pull-requests <ticket>` manually. The ticket keeps `status::in-progress` until the merge:
+then `/to-pull-requests` replaces it with `status::done`, closes the ticket and moves its unblocked dependents to `status::ready`.
 
 ## Test author
 

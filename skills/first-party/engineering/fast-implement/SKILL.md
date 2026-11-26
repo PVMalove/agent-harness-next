@@ -80,5 +80,5 @@ reason in one line, and never start an unprotected author.
 ## Finish
 
 After a successful push, offer `/to-pull-requests <ticket>` as the next command. Never invoke it.
-Leave `status::in-progress` on the ticket: `/to-pull-requests` closes it and moves its unblocked
-dependents to `status::ready` after the merge.
+Leave `status::in-progress` on the ticket: after the merge, `/to-pull-requests` replaces it with
+`status::done`, closes the ticket and moves its unblocked dependents to `status::ready`.
