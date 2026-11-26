@@ -90,7 +90,9 @@ def test_release_confirmation_only_covers_the_tested_sha() -> None:
 
 def test_git_workflow_names_the_release_step_and_runs_qa_before_confirmation() -> None:
     text = _text(INSTRUCTIONS / "git-workflow.md")
-    assert "**Release (integration → base_branch):**" in text
+    assert "**Integration PR (integration/* → base_branch or another integration/*):**" in text
+    assert "`pr::integration`" in text
+    assert "needed for the next epic" in text
     assert "`/to-pull-requests --release <epic>`" in text
     assert text.index("run the `qa-gate` skill") < text.index("**Confirm before opening:**")
 

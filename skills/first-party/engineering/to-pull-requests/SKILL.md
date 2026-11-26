@@ -1,6 +1,6 @@
 ---
 name: to-pull-requests
-description: Opens the PR/MR for a pushed issue branch after explicit confirmation and, once the developer confirms the merge, closes the ticket, unblocks dependent tickets and cleans up; with `--release <epic>`, opens the integration PR of the epic's integration branch into `base_branch` or another `integration/*` branch and closes the epic. Use explicitly after /implement or /fast-implement; not for an unpushed branch and never to merge.
+description: Opens the PR/MR for a pushed issue branch after explicit confirmation and, once the developer confirms the merge, closes the ticket, unblocks dependent tickets and cleans up; with `--release <epic>`, opens the epic's integration PR and closes the epic. Use explicitly after /implement or /fast-implement; not for an unpushed branch and never to merge.
 disable-model-invocation: true
 ---
 
