@@ -41,6 +41,15 @@ SHA as the release candidate before running checks.
 - For an opt-in project with `verification_plan_policy.ticket_diff_selection` on, the release pair
   needs the `full` run: a `-light` check never confirms it (see "Test policy by PR target" in
   `references/integration-route.md`).
+- For an opt-in project, record the release pair before the PR:
+  `integration prepare --ticket "#<epic>" --branch "<integration-branch>"` (the target is
+  `base_branch`; pass `--target <integration/...>` for a PR into another integration branch). Then
+  follow `integration next` as for a ticket PR (parts A and B of `references/integration-route.md`,
+  with `--record <id>` from prepare): `confirm-pr` before the PR, `verify` until CI or local QA of
+  exactly that pair passes, `handoff` before the merge, and `--merge-commit` after it. Its
+  `qa_source` is never `original-qa`. On `refresh` or `route-failure`, stop: fix the integration
+  branch through a child ticket and run `integration prepare` again for its new head; never run
+  `integration refresh` on it.
 
 ### Verify the epic criteria
 

@@ -64,7 +64,14 @@ the epic's last child ticket closes, the skill offers `/to-pull-requests --relea
 
 Following `references/release.md`, the mode opens the PR of the epic's integration branch into
 `base_branch`. It checks that every child ticket is closed, runs the full `/qa-gate` on the
-integration branch, and checks the epic criteria against evidence on the same SHA. The release PR
+integration branch, and checks the epic criteria against evidence on the same SHA. In an opt-in
+project the release PR passes the same Release Gate as a ticket PR:
+`integration prepare --ticket "#<epic>" --branch "<integration-branch>"` records the pair of the
+integration branch head and `base_branch` (or another `integration/*` through `--target`), and
+`integration next` takes it through `confirm-pr`, a CI or local-QA check of that pair, and
+`handoff`. The pair always requires the full check, and a moved head or target is a new pair. The
+harness never rewrites an `integration/*` branch: when the target moves, a child ticket fixes the
+branch and `integration prepare` runs again. The release PR
 lists child PRs and the results by epic criterion. Every epic criterion is required: missing
 evidence for any criterion blocks the release before the confirmation request. The separate
 confirmation applies to the verified SHA. After the confirmed merge, the skill closes the epic and

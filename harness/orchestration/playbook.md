@@ -1706,6 +1706,18 @@ dispatch or report, or changes Git:
   idempotent: repeating it neither loses nor duplicates the record. Every refusal states a remedy,
   including an unpublished result, a different ticket or branch, a candidate that is not the
   published SHA, and an integration ref that already moved while no record exists.
+  For an epic's `integration/*` branch (issue #1278), `integration prepare --ticket "#<epic>" --branch
+  <integration-branch> [--target REF]` records the pull request of that branch instead: the
+  candidate is the remote head of the branch, the target the remote head of `--target`
+  (`base_branch` by default, or another `integration/*` branch), and `source_batch_id` is `null`.
+  No batch QA covers this pair, so its pair record requires `full`: `integration next` answers
+  `confirm-pr` with `qa_source: verification-pending-after-pr`, then `verify` until CI that
+  `integration collect-ci` accepts or local QA (`integration local-qa`) confirms exactly that pair,
+  and `handoff`; a `-light` check never confirms it, and `--merge-commit` checks the merged tree as
+  for a ticket. A moved head or target is a new pair with a new record. The harness never rewrites
+  an integration branch: `integration refresh` and `integration resolve` refuse such a record, a
+  stale target asks for a fix ticket based on the branch and a new `integration prepare`, and a
+  failed check routes to a fix ticket (`route: fix-ticket`).
 - `integration status` is a read-only observation: `current`, `stale` (the integration ref moved;
   `refresh_required`) or `unavailable`. A stale record never lets the old QA stand in for a new
   candidate/target pair, and observing it never creates a dispatch. After a refresh it reports the

@@ -1075,6 +1075,11 @@ def build_parser(
         help="optional published SHA to check against the accepted publish report",
     )
     integration_prepare.add_argument("--remote", default="origin")
+    integration_prepare.add_argument(
+        "--target",
+        help="for an integration/* --branch: the pull request target, base_branch (default) or "
+        "another integration/* branch",
+    )
     integration_prepare.set_defaults(handler=handlers.integration_prepare)
     integration_status = integration_commands.add_parser(
         "status",
