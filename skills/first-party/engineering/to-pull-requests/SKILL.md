@@ -1,12 +1,12 @@
 ---
 name: to-pull-requests
-description: Opens the PR/MR for a pushed issue branch after explicit confirmation and, once the developer confirms the merge, closes the ticket, unblocks dependent tickets and cleans up; with `--release <epic>`, opens the release PR of the epic's integration branch and closes the epic. Use explicitly after /implement or /fast-implement; not for an unpushed branch and never to merge.
+description: Opens the PR/MR for a pushed issue branch after explicit confirmation and, once the developer confirms the merge, closes the ticket, unblocks dependent tickets and cleans up; with `--release <epic>`, opens the epic's integration PR and closes the epic. Use explicitly after /implement or /fast-implement; not for an unpushed branch and never to merge.
 disable-model-invocation: true
 ---
 
 # To Pull Requests
 
-Create the pull request for the named ticket. This is a manual command: never run it merely because `/implement` completed. With `--release <epic>`, read `references/release.md` and follow it instead of the steps below.
+Create the pull request for the named ticket. This is a manual command: never run it merely because `/implement` completed. With `--release <epic>` (optionally `--target <branch>`), read `references/release.md` and follow it instead of the steps below.
 
 On GitLab, name the project explicitly: every `glab` command takes `-R <project-url>`, and every `glab api` call is written `GITLAB_HOST=<host> glab api projects/<project-id>/...`. `<host>`, `<project-url>` and `<project-id>` are defined in `.harness/instructions/issue-tracker.md` → GitLab → Conventions. A GitLab merge request is referenced as `!<iid>` and an issue as `#<iid>`; on GitHub both are `#<n>`.
 

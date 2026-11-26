@@ -57,7 +57,7 @@ points: мелкая задача идёт коротким путём, круп
 | `/publish-epic` | `type::*`, `status::specs` и `task-report::required` на эпик |
 | `/to-tickets` | Режим, маршрут `pipeline::*`, `status::ready` или `status::blocked` |
 | `/implement`, `/fast-implement` | `status::in-progress` вместо текущей метки состояния |
-| `/to-pull-requests` | После merge: `status::done` вместо `status::in-progress`; `status::blocked` → `status::ready` у разблокированных зависимых |
+| `/to-pull-requests` | После merge: `status::done` вместо `status::in-progress`; `status::blocked` → `status::ready` у разблокированных зависимых. С `--release <epic>` после merge интеграционного PR в `base_branch`: `status::done` вместо `status::specs` у эпика |
 
 ## Дальше
 

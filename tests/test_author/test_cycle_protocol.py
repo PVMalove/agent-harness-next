@@ -182,10 +182,14 @@ def test_short_route_section_points_to_the_skill() -> None:
 
 
 def test_changelog_records_the_full_route_worktree_fix() -> None:
-    # The release cut moves the entry from Unreleased into the newest release section.
-    unreleased = "".join(_text(CHANGELOG).split("\n## [", 3)[1:3])
-    assert "#768" in unreleased
-    assert "checkout_mismatch" in unreleased
+    # The release cut moved the entry from Unreleased into the 2.0.0 release section.
+    release = next(
+        section
+        for section in _text(CHANGELOG).split("\n## [")
+        if section.startswith("2.0.0]")
+    )
+    assert "#768" in release
+    assert "checkout_mismatch" in release
 
 
 def test_common_contract_points_to_the_cycle() -> None:
