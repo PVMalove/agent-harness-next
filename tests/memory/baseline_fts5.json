@@ -12,7 +12,7 @@
  "max_noise_ratio": 0.7,
  "dataset_hash": "27ae576158e8a67a0524831467f2e4d157f5beb707d8c7bf2ed5c24c04060d17",
  "source_hashes": {
-  "CONTEXT.md": "74ff305f4e3d18de74998f1a9c0d59177006a8213e74fd642164eec35382858d",
+  "CONTEXT.md": "0bfc9bc66274afb056f1f7de20e0bb79a1dc95d8fb364912cbde90d004771d90",
   "docs/adr/0001-portable-capability-delivery.md": "7f35b9513f2a9b63ad081ef5ade53b971a39aa94743167b426b6e7be5611c602",
   "docs/adr/0002-controlled-delivery.md": "769be42fd2da1bfbcdf27829d672df48e85a91cc9d283f1be28b5e3235b063aa",
   "docs/adr/0003-orchestration-core.md": "e6522ae291e82560e5b12a48131652b5cfdc3025fd4ac383122c274735c879a6",
