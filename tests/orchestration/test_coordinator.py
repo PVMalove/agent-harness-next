@@ -17122,6 +17122,51 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
             result, "budget-exhausted", "retry_policy.max_developer_retries"
         )
 
+    def test_a_retry_without_commits_reports_blocked_and_never_ends_in_a_dead_end(
+        self,
+    ) -> None:
+        """Issue #1290: under auto, a developer-retry that needs no code change reports blocked
+        with an empty commit_map; the batch keeps a decision to take instead of ending blocked,
+        so neither batch auto-report nor batch auto-decide shows abandon-dead-end."""
+        developer = self._auto_developer_brief()
+        candidate, changed = self._developer_commit("x")
+        self._submit(
+            developer["dispatch_id"],
+            self._developer_report(
+                developer, candidate, changed, checks_run=self._checks(developer, "fail")
+            ),
+        )
+        self.assertEqual(self._auto_decide()["route"], "developer-retry")
+        retry = self._auto_dispatch("developer")
+        self._start(retry["dispatch_id"])
+
+        submitted = self._submit(
+            retry["dispatch_id"],
+            self._developer_report(
+                retry,
+                candidate,
+                changed,
+                outcome="blocked",
+                blockers={
+                    "status": "present",
+                    "details": "the failed check is environmental; no change is needed",
+                },
+                commit_map=[],
+                checks_run=self._checks(retry, "not_run"),
+            ),
+        )
+        observed = coordinator.auto_report(self._args(batch=self.batch_id))
+        decided = self._auto_decide()
+
+        self.assertEqual(submitted["state"], "reported")
+        self.assertNotIn(self._batch_record(self.batch_id)["state"], {"blocked", "failed"})
+        self.assertNotEqual(
+            (observed.get("observed_stop") or {}).get("reason"), "abandon-dead-end"
+        )
+        self.assertNotEqual(
+            ((decided.get("stop") or {}).get("reason")), "abandon-dead-end"
+        )
+
     def test_carried_items_left_not_closed_stop_the_automatic_path(self) -> None:
         """Issue #1265: a developer-retry that reasons a carried item is not closable by code is
         not retried; the path stops, and a human overrides it with a note."""

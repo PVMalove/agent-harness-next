@@ -362,20 +362,23 @@ NO_COMMIT_RETRY_REMEDY = (
 )
 
 
-def _retry_without_commits(report: JsonObject, created: list[str]) -> bool:
-    """Whether a developer-retry report maps no commit because it created none (issue #1290).
+def is_commitless_retry(
+    dispatch: JsonObject, report: JsonObject, created: list[str]
+) -> bool:
+    """Whether a developer-retry report created no commit after ``snapshot_commit`` and maps none
+    (issues #1265 and #1290): no commit map is owed, and ``check_report`` does not apply."""
+    return is_developer_retry(dispatch) and not created and not report.get("commit_map")
 
-    A ``blocked`` or ``failed`` report is valid: the coordinator gets a recovery decision instead of
-    a dead end. A ``completed`` one is refused, since an unchanged candidate did not fix the failure
-    that sent it back; its remedy never asks to map a commit that does not exist."""
-    if created or report.get("commit_map"):
-        return False
+
+def require_commitless_outcome(report: JsonObject) -> None:
+    """Refuse a ``completed`` commitless retry (issue #1290): an unchanged candidate did not fix
+    what sent it back. A ``blocked`` or ``failed`` one stands, so the coordinator gets a recovery
+    decision instead of a dead end; the remedy never asks to map a commit that does not exist."""
     if report.get("outcome") == ReportOutcome.COMPLETED:
         raise CoordinatorError(
             "completed developer-retry report created no commit after snapshot_commit",
             remedy=NO_COMMIT_RETRY_REMEDY,
         )
-    return True
 
 
 def _required_commit_map(report: JsonObject, retry: bool) -> list[object]:
@@ -721,12 +724,6 @@ def check_report(
     ``rebase_target_commit`` rebased: those after the old base up to ``snapshot_commit``.
     """
     retry = is_developer_retry(dispatch)
-    if (
-        retry
-        and rebase_target(dispatch) is None
-        and _retry_without_commits(report, created)
-    ):
-        return
     commit_map = _required_commit_map(report, retry)
     plan_ids = _plan_ids(dispatch)
     if retry and rebase_target(dispatch) is not None:
