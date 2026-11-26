@@ -537,3 +537,38 @@ def test_the_feed_observes_in_process_dispatches_in_any_state_and_reads_a_settle
         "dispatch-q",
         "dispatch-q",
     ]
+
+
+def test_an_unavailable_ledger_skips_the_tick_without_ending_the_feed() -> None:
+    from harness.console.backend.application.ports import WorkerLedgerUnavailable
+
+    class Unavailable(Workers):
+        async def read(self, dispatch_id: str, offset: int) -> StepsPage:
+            self.reads.append((dispatch_id, offset))
+            raise WorkerLedgerUnavailable("runtime_unavailable: no socket")
+
+    async def timing(dispatch_id: str) -> DispatchTiming | None:
+        raise WorkerLedgerUnavailable("runtime_unavailable: no socket")
+
+    async def observation(dispatch_id: str) -> object:
+        raise WorkerLedgerUnavailable("runtime_unavailable: no socket")
+
+    journal = Journal(_view({"dispatch-d": "working"}), [])
+    workers = Unavailable({})
+
+    async def scenario() -> RosterItem | StepsItem:
+        items = _feed(journal, workers, timing=timing, observation=observation).subscribe()
+        first = await anext(items)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        journal.view = _view({"dispatch-d": "reported"})
+        await anext(items)
+        await items.aclose()
+        return first
+
+    first = asyncio.run(scenario())
+
+    assert isinstance(first, RosterItem)
+    by_id = {entry.dispatch_id: entry for entry in first.dispatches}
+    assert by_id["dispatch-d"].started_at == ""
+    assert ("dispatch-d", 0) in workers.reads
