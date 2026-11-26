@@ -124,6 +124,22 @@ def test_dispatch_send_launches_once_from_the_runtime_and_a_repeat_returns_the_s
     assert repo.status()["state"] == "dispatched"
 
 
+def test_the_runtime_labels_the_launch_with_its_own_dispatch(
+    supervised: Factory,
+) -> None:
+    """The Claude Code adapter keeps a worker in the foreground only when ``HARNESS_DISPATCH_ID``
+    names the brief's own dispatch (issue #1291), so the runtime labels each launch with the
+    dispatch it starts, beside its operation."""
+    repo = supervised()
+
+    sent(repo.send())
+
+    (launch,) = repo.wait_launches(1)
+    assert launch.dispatch_id == repo.dispatch
+    assert launch.operation_id == dig(repo.execution(), "execution_id")
+    reconciled(repo)
+
+
 def proc_start_time(pid: int) -> str:
     return (
         Path(f"/proc/{pid}/stat")

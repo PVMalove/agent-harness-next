@@ -18,24 +18,6 @@ from .release_1x import release_1x as release_1x
 __all__ = ["release_1x"]
 
 
-# The labels harness-runtime sets on a process it supervises (supervisor/src/launch.rs).
-RUNTIME_LABELS = ("HARNESS_OPERATION_ID", "HARNESS_DISPATCH_ID")
-
-
-@pytest.fixture(autouse=True)
-def _outside_runtime_supervision(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Run every test as if no runtime supervises the test process (issue #1291).
-
-    A worker that harness-runtime launched inherits ``HARNESS_OPERATION_ID``, and so do the tests
-    it runs. The Claude Code adapter reads that label as "the runtime started this adapter" and
-    keeps the fake worker in the foreground, so ``dispatch send`` in a test waits for a permission
-    answer the test sends only after it returns, and times out after 30 s. A test that needs the
-    label sets it explicitly.
-    """
-    for label in RUNTIME_LABELS:
-        monkeypatch.delenv(label, raising=False)
-
-
 def _required() -> bool:
     return os.environ.get(fault_injection_matrix.REQUIRE_ENV) == "1"
 

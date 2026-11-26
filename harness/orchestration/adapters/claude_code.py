@@ -459,6 +459,18 @@ def supervise(args: argparse.Namespace, brief: JsonObject) -> JsonObject:
     return receipt
 
 
+def _runtime_supervised(brief: JsonObject) -> bool:
+    """Whether the runtime supervisor started this adapter for the brief's own dispatch.
+
+    The runtime labels a launch with ``HARNESS_OPERATION_ID`` and ``HARNESS_DISPATCH_ID``, and
+    every child process inherits both. A process that inherited them from a supervised worker,
+    such as a test the worker runs, names another dispatch, so it keeps the background launch
+    (issue #1291)."""
+    return bool(os.environ.get("HARNESS_OPERATION_ID")) and (
+        os.environ.get("HARNESS_DISPATCH_ID") == brief["dispatch_id"]
+    )
+
+
 def dispatch(args: argparse.Namespace, brief: JsonObject) -> JsonObject:
     if brief["role"] == "qa" or brief.get("purpose") == "publish":
         raise CoordinatorError(
@@ -528,7 +540,7 @@ def dispatch(args: argparse.Namespace, brief: JsonObject) -> JsonObject:
     )
     root.mkdir(parents=True, mode=0o700)
     receipt_file = root / "receipt.json"
-    if os.environ.get("HARNESS_OPERATION_ID"):
+    if _runtime_supervised(brief):
         # The runtime supervisor started this adapter (ADR 0022): the worker runs in the
         # foreground and the adapter exits with it, so the runtime watches the worker itself.
         foreground = argparse.Namespace(**{**vars(args), "receipt": str(receipt_file)})
