@@ -85,9 +85,7 @@ A developer-retry report maps each new commit to exactly one distinct plan entry
 field. A `not_covered` item is never accepted as clean.
 For initial work, including startup recovery, the map covers every commit after the batch base: the
 startup SHA can already include unfinished progress. For `developer-retry`, map only commits after
-`snapshot_commit`. A `developer-retry` that needs no code change creates no commit: it reports
-`outcome: blocked` with an empty `commit_map`, its `commit_sha` at `snapshot_commit`, and in
-`blockers` why no change is needed. `report submit` refuses such a report as `completed`.
+`snapshot_commit`.
 The first developer of a superseding batch (`batch create --supersedes`) starts at the abandoned
 batch's last accepted candidate as its `snapshot_commit`: an initial brief maps the inherited
 commits after the batch base too, and a developer-retry brief with a non-null
