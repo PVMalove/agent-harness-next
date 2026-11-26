@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | Тип | `type::bug`, `type::feature`, `type::refactoring`, `type::chore`, `type::security`, `type::performance`, `type::hotfix` | `/triage` |
 | Режим исполнения | `hitl`, `afk` | `/triage`, `/to-tickets` |
-| Состояние | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked` | `/triage`, `/publish-epic`, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
+| Состояние | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked`, `status::done` | `/triage`, `/publish-epic`, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
 | Маршрут | `pipeline::fast`, `pipeline::full` | `/to-tickets` |
 | Контекст | `task-report::required`, `resolution::wontfix` | `/publish-epic`, `/to-tickets`, `/triage` |
 | Wayfinder | `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, `wayfinder:task` | `/wayfinder` |
@@ -44,7 +44,8 @@ points: мелкая задача идёт коротким путём, круп
 6. **Обратно в `status::ready`.** Блокер снят, когда предшественник закрыт, а закрывают его только
    после подтверждённого мержа. Открытый PR, принятый QA и push блокер не снимают.
 
-После мержа и закрытия тикет сохраняет `status::in-progress`: закрытое состояние и означает «готово».
+После подтверждённого мержа `/to-pull-requests` заменяет `status::in-progress` на `status::done` и закрывает
+тикет; тикет, который трекер закрыл сам по `Closes #<ID>`, получает метку сразу после проверки закрытия.
 
 Если тикет отклонён, с него снимают `status::*`, ставят `resolution::wontfix` и закрывают его.
 
@@ -56,7 +57,7 @@ points: мелкая задача идёт коротким путём, круп
 | `/publish-epic` | `type::*`, `status::specs` и `task-report::required` на эпик |
 | `/to-tickets` | Режим, маршрут `pipeline::*`, `status::ready` или `status::blocked` |
 | `/implement`, `/fast-implement` | `status::in-progress` вместо текущей метки состояния |
-| `/to-pull-requests` | После merge: `status::blocked` → `status::ready` у разблокированных зависимых |
+| `/to-pull-requests` | После merge: `status::done` вместо `status::in-progress`; `status::blocked` → `status::ready` у разблокированных зависимых |
 
 ## Дальше
 

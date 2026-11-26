@@ -31,8 +31,8 @@
 набор тестов запускает `/qa-gate` перед PR; он выполняет только `qa_gate_commands`, а
 `pre_qa_commands` и оверлеи QA действуют только в `/implement`. Затем навык спрашивает «Провести code review?», ждёт
 разрешения на commit и push и пушит issue-ветку. В конце он предлагает вручную запустить
-`/to-pull-requests <ticket>`. Метка `status::in-progress` остаётся на тикете: после слияния
-`/to-pull-requests` закрывает тикет и переводит разблокированные зависимые тикеты в `status::ready`.
+`/to-pull-requests <ticket>`. Метка `status::in-progress` остаётся на тикете до слияния:
+после него `/to-pull-requests` заменяет её на `status::done`, закрывает тикет и переводит разблокированные зависимые тикеты в `status::ready`.
 
 ## Тест-автор
 

@@ -580,8 +580,8 @@ Then offer `/to-pull-requests <ticket>`. Do not run it automatically,
 do not open or merge a PR, do not write to the integration branch, and do not close the ticket with this skill. A pull
 request needs the developer's explicit confirmation under every `approval_policy`; auto-merge is
 prohibited. Leave
-`status::in-progress` on the ticket: closing it and moving the unblocked dependents to `status::ready` is done by
-`/to-pull-requests` after the merge.
+`status::in-progress` on the ticket: replacing it with `status::done`, closing the ticket and moving the unblocked dependents to `status::ready` is
+done by `/to-pull-requests` after the merge.
 
 </div>
 
