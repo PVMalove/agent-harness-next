@@ -100,6 +100,7 @@ _COMPILED_SCRIPTS = (
     ROOT / "scripts" / "build_registry.py",
     ROOT / "scripts" / "check_license_headers.py",
     ROOT / "scripts" / "check_skill_descriptions.py",
+    ROOT / "scripts" / "fmea_catalog.py",
     ROOT / "scripts" / "verify.py",
     ROOT / "scripts" / "test_clean_room.py",
 )
@@ -233,6 +234,10 @@ def _static_checks(test_env: dict[str, str]) -> None:
     _check_global_skills()
     run_ok([sys.executable, str(ROOT / "scripts" / "build_registry.py")], env=test_env)
     run_ok(["git", "-C", str(ROOT), "diff", "--exit-code", "--", "skills/REGISTRY.md"])
+    run_ok(
+        [sys.executable, str(ROOT / "scripts" / "fmea_catalog.py"), "generate", "--check"],
+        env=test_env,
+    )
     run_ok(
         [sys.executable, str(ROOT / "scripts" / "check_skill_descriptions.py")],
         env=test_env,
