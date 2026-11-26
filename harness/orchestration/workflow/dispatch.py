@@ -205,23 +205,28 @@ def _verification_plan(
     policy = batch.get("verification_plan_policy")
     if not isinstance(policy, dict) or purpose != "work":
         return None
-    # The ref is read only when the frozen flag asks for it: a flag-off plan never depends on it.
-    integration_ref = (
-        _integration_ref(repo, batch) if policy.get("ticket_diff_selection") else None
-    )
-    repo_map_policy = repo_map_policy_from_section(
-        cast(dict[str, object], batch.get("repo_map_policy") or {})
-    )
+    head: str | None
     if role_name == "developer" and next_action == "developer-retry":
         head = snapshot_commit
     elif role_name in {"code-review", "qa"} and candidate is not None:
         head = candidate
     elif role_name == "developer":
-        expected = _expected_files(batch)
-        if not expected or not verification_plan.ticket_diff_active(
-            policy, integration_ref
-        ):
-            return None
+        head = None
+    else:
+        return None
+    # The ref is read only when the frozen flag asks for it: a flag-off plan never depends on it.
+    integration_ref = (
+        _integration_ref(repo, batch) if policy.get("ticket_diff_selection") else None
+    )
+    expected = _expected_files(batch) if head is None else []
+    if head is None and not (
+        expected and verification_plan.ticket_diff_active(policy, integration_ref)
+    ):
+        return None
+    repo_map_policy = repo_map_policy_from_section(
+        cast(dict[str, object], batch.get("repo_map_policy") or {})
+    )
+    if head is None:
         return verification_plan.build_expected_plan(
             repo,
             policy,
@@ -231,8 +236,6 @@ def _verification_plan(
             repo_map_policy=repo_map_policy,
             runtime_images=runtime_images,
         )
-    else:
-        return None
     return verification_plan.build_plan(
         repo,
         policy,

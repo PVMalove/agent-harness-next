@@ -104,14 +104,17 @@ class PlanFixture(unittest.TestCase):
             )
 
     def _configure(
-        self, policy: JsonObject | None, repo_map_policy: JsonObject | None = None
+        self,
+        policy: JsonObject | None,
+        repo_map_policy: JsonObject | None = None,
+        developer: list[str] | None = None,
     ) -> None:
         config: JsonObject = {
             "provider_profiles": {},
             "assignment_plans": {},
             "concurrency_budget": 1,
             "verification_commands": ["make verify"],
-            "developer_verification_commands": ["make dev"],
+            "developer_verification_commands": developer or ["make dev"],
             "review_verification_commands": ["make review"],
             "auto_retry_min_severity": "info",
         }
@@ -498,7 +501,8 @@ class TicketDiffDispatchTests(TicketDiffFixture):
         self,
     ) -> None:
         """Issue #1292: a ticket that changes only skill Markdown runs lint, not the suite."""
-        self._configure(self._on())
+        suite = ".harness/.venv/bin/python -m pytest -q tests/orchestration tests/memory"
+        self._configure(self._on(), developer=["make lint", suite])
 
         briefs = self._briefs(
             expected_files=["skills/first-party/engineering/x/SKILL.md"]
@@ -506,7 +510,7 @@ class TicketDiffDispatchTests(TicketDiffFixture):
 
         first = briefs["first"]
         self.assertEqual(first["verification_commands"], ["make lint"])
-        self.assertNotIn("make dev", first["verification_commands"])
+        self.assertNotIn(suite, first["verification_commands"])
         self.assertEqual(
             first["verification_plan"]["not_run_stages"],
             [{"stage_id": "tests", "reason": "no-tests-in-diff"}],
@@ -523,6 +527,38 @@ class TicketDiffDispatchTests(TicketDiffFixture):
                     briefs[name]["verification_plan"]["not_run_stages"],
                     [{"stage_id": "tests", "reason": "no-tests-in-diff"}],
                 )
+
+    def test_a_mandatory_static_stage_stays_in_the_first_developer_brief(
+        self,
+    ) -> None:
+        """Issue #1292: the diff selects only the tests; every static stage of the policy, such
+        as a project's mandatory ``scripts/verify.py``, stays in the derived list."""
+        verify: JsonObject = {
+            "stage_id": "verify",
+            "kind": "custom",
+            "argv": ["python", "scripts/verify.py"],
+            "timeout_seconds": 1800,
+        }
+        self._configure(self._on(stages=[*POLICY["stages"], verify]))
+
+        briefs = self._briefs(
+            expected_files=["skills/first-party/engineering/x/SKILL.md"]
+        )
+
+        self.assertEqual(
+            briefs["first"]["verification_commands"],
+            ["make lint", "python scripts/verify.py"],
+        )
+
+    def test_a_batch_without_the_policy_keeps_the_first_developer_commands(
+        self,
+    ) -> None:
+        self._configure(None)
+
+        briefs = self._briefs("test_y", "z", expected_files=["services/test_y.py"])
+
+        self.assertNotIn("verification_plan", briefs["first"])
+        self.assertEqual(briefs["first"]["verification_commands"], ["make dev"])
 
     def test_the_flag_off_keeps_the_first_developer_brief_unchanged(self) -> None:
         self._configure(self._on(ticket_diff_selection=False))

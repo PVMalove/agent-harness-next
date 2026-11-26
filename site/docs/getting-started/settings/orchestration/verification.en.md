@@ -117,8 +117,10 @@ The first developer has no diff of its own yet, so its plan uses the expected di
 `base..snapshot` commits plus the `--expected-file` paths from `batch preflight`. If the diff
 contains no tests, static stages remain and the test stage is `not_run` with reason
 `no-tests-in-diff`. Commands for these briefs are derived from the plan, so a ticket that changes
-only skill Markdown runs `lint` without the full pytest suite. A batch without expected files keeps
-`developer_verification_commands` for the first developer. This diagnoses the ticket branch; publish
+only skill Markdown runs `lint` without the full pytest suite. The diff selects only the tests:
+every static stage of the policy stays, so add a mandatory check such as `scripts/verify.py` as a
+`custom` stage. A batch without expected files keeps `developer_verification_commands` for the
+first developer. This diagnoses the ticket branch; publish
 still requires the full gate on the final SHA. With `false` or a default-branch target, ordinary
 planning applies. The detailed contract is in
 [ADR 0023](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0023-incremental-verification.md).

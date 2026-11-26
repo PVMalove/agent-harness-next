@@ -117,8 +117,10 @@ targets. Первый developer своего diff ещё не имеет, поэ
 коммиты `base..snapshot` плюс файлы `--expected-file` из `batch preflight`. Если тестов в diff нет,
 остаются статические стадии, а стадия тестов получает `not_run` с причиной `no-tests-in-diff`.
 Команды этих brief coordinator выводит из плана, поэтому тикет, который меняет только Markdown
-скилла, проходит `lint` без полного pytest. Batch без ожидаемых файлов оставляет первому developer
-список `developer_verification_commands`. Это диагностика ветки тикета: для публикации
+скилла, проходит `lint` без полного pytest. Дифф выбирает только тесты: все статические стадии
+политики остаются, поэтому обязательную проверку, например `scripts/verify.py`, задайте стадией
+`custom`. Batch без ожидаемых файлов оставляет первому developer список
+`developer_verification_commands`. Это диагностика ветки тикета: для публикации
 по-прежнему нужен полный gate на финальном SHA. При `false` или цели в ветку по умолчанию
 действует обычный план. Подробный контракт описан в
 [ADR 0023](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0023-incremental-verification.md).
