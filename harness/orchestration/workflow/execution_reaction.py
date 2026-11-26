@@ -13,7 +13,9 @@ what the runtime observed:
   submit``. A refusal of that code keeps the report pending, and ``dispatch status --dispatch``
   shows it as ``reaction_error``.
 - ``exited`` without a report: ``blocked``, domain ``timeout`` when the runtime stopped the
-  worker at its deadline, otherwise the classification ``worker-exited-without-report``. A
+  worker at its deadline, otherwise the classification ``worker-exited-without-report``; its
+  ``cause`` is ``background-tasks-stopped`` when the execution stderr carries the adapter's line
+  for background tasks Claude Code stopped after the last turn (#1283). A
   host-attested container worker that staged its report keeps the dispatch live with
   ``staged_report`` until ``report submit`` records that file (#1014).
 - ``lost``: ``blocked``, domain ``infrastructure``; the developer retry budget is untouched. A
@@ -48,6 +50,14 @@ from harness.orchestration.ledger.lifecycle import (
 
 # The execution states after which the process may still run: no dispatch transition.
 UNSETTLED_EXECUTION_STATES = frozenset({"launching", "running", "stopping", "unknown"})
+# The stderr line of harness/adapters/claude_worker.py for background tasks Claude Code stopped
+# after the last turn. The adapter is stdlib-only and installed outside this package, so this
+# repeats its literal; a parity test keeps both equal (#1283).
+BACKGROUND_TASKS_STOPPED = (
+    "claude worker: Claude Code stopped background tasks after the last turn"
+)
+# The adapter prints that line last, so a bounded tail of a long stderr still holds it.
+STDERR_TAIL_BYTES = 64 * 1024
 
 
 def supervised(root: Path, dispatch: JsonObject) -> bool:
@@ -107,7 +117,28 @@ def hold_report(
     _replace_record(ledger, DispatchStatusRecord.from_dict(status))
 
 
-def _failure(execution: JsonObject) -> JsonObject:
+def _stderr_tail(root: Path, execution: JsonObject) -> str:
+    """The end of the execution's stderr log, only inside the store's executions; "" otherwise."""
+    from harness.orchestration import container_attestation
+
+    launch = execution.get("launch")
+    logs = launch.get("logs") if isinstance(launch, dict) else None
+    stderr = logs.get("stderr") if isinstance(logs, dict) else None
+    if not isinstance(stderr, str):
+        return ""
+    path = Path(stderr).resolve()
+    if not path.is_relative_to(container_attestation.stream_root(root).resolve()):
+        return ""
+    try:
+        with path.open("rb") as stream:
+            size = stream.seek(0, 2)
+            stream.seek(max(0, size - STDERR_TAIL_BYTES))
+            return stream.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+
+
+def _failure(root: Path, execution: JsonObject) -> JsonObject:
     """The ``runtime_failure`` of an execution that ended without a report."""
     exit_ = execution.get("exit")
     stopped_by = (
@@ -132,12 +163,17 @@ def _failure(execution: JsonObject) -> JsonObject:
     exit_code = (
         cast(JsonObject, exit_).get("exit_code") if isinstance(exit_, dict) else None
     )
+    stopped = BACKGROUND_TASKS_STOPPED in _stderr_tail(root, execution)
     return {
         "kind": "worker-exited-without-report",
+        **({"cause": "background-tasks-stopped"} if stopped else {}),
         "operation": "execution",
         "worker_started": True,
         "execution_state": "exited",
-        "error": "the worker exited without a completion report",
+        "error": "the worker ended its last turn while background tasks still ran; Claude Code "
+        "stopped them, and no completion report was written"
+        if stopped
+        else "the worker exited without a completion report",
         # The supervised adapter exits with its worker's code (#1124).
         **({"exit_code": exit_code} if isinstance(exit_code, int) else {}),
     }
@@ -192,7 +228,7 @@ def react(repo: Path, root: Path, dispatch: JsonObject, execution: JsonObject) -
             {
                 "state": "blocked",
                 "updated_at": utils._now(),
-                "runtime_failure": _failure(execution),
+                "runtime_failure": _failure(root, execution),
                 **({"held_report": pending} if isinstance(pending, dict) else {}),
             }
         )

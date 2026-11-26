@@ -21,6 +21,15 @@ from harness.orchestration.ledger.ledger_ops import (
 )
 from harness.orchestration.ledger.recovery_chain import active_dispatches
 
+# The one recovery of a stopped writer whose commits must survive; every refusal on that path
+# names it (#1282).
+PRESERVED_REWIND_REMEDY = (
+    "for a writer that exited without a completion report, was cancelled with --runtime-stopped, "
+    "or left an unaccepted blocked report at its exact commit, run human-approved batch rewind "
+    "--to <writer gate> --preserved-commit <full-HEAD-SHA> with --preserved-file <path> for every "
+    "pending file; never reset or stash"
+)
+
 
 def _refuse(message: str) -> NoReturn:
     raise CoordinatorError(
@@ -127,6 +136,16 @@ def _checkout_state(checkout: Path, scope: list[str]) -> JsonObject:
     }
 
 
+def _exited_without_report(root: Path, entry: JsonObject) -> bool:
+    """The runtime saw the writer's execution exit and no report came: a proven stop (#1282)."""
+    failure = _load_dispatch_status(root, entry["dispatch_id"]).get("runtime_failure")
+    return (
+        isinstance(failure, dict)
+        and failure.get("operation") == "execution"
+        and failure.get("execution_state") == "exited"
+    )
+
+
 def _source_matches(
     root: Path,
     batch: JsonObject,
@@ -135,7 +154,8 @@ def _source_matches(
     *,
     retired: bool = False,
 ) -> bool:
-    """A cancelled writer or immutable blocked report proves a finished source boundary."""
+    """A cancelled or exited writer, or an immutable blocked report, proves a finished source
+    boundary."""
     if entry.get("report"):
         from harness.orchestration.workflow.history import _pending_report
 
@@ -150,6 +170,10 @@ def _source_matches(
             and entry.get("decision", {}).get("decision")
             not in {"accept", "accept-conditional", "override-warning"}
         )
+    if entry.get("state") == "blocked" or (
+        retired and entry.get("state") == "abandoned"
+    ):
+        return _exited_without_report(root, entry)
     return (
         entry.get("state") == "cancelled"
         and entry.get("cancellation", {}).get("runtime_stopped") is True
@@ -176,8 +200,8 @@ def capture(
         or not _source_matches(root, batch, entry, commit)
     ):
         _refuse(
-            "preserved progress requires the latest writer cancelled with --runtime-stopped "
-            "or an unaccepted blocked report at its exact commit"
+            "preserved progress requires the latest writer cancelled with --runtime-stopped, "
+            "exited without a report, or with an unaccepted blocked report at its exact commit"
         )
     brief = _load_dispatch(root, entry["dispatch_id"])
     status = _load_dispatch_status(root, entry["dispatch_id"])

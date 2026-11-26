@@ -55,6 +55,17 @@ WRITE_PROBE_TIMEOUT_SECONDS = 45
 STDERR_TAIL_LINES = 40
 # Tools that already let a role write files; a role with none of them is read-only.
 WRITE_TOOLS = frozenset({"Edit", "Write", "MultiEdit", "NotebookEdit"})
+# Headless `claude -p` stops background tasks 10 minutes after the last turn and exits 0, so a
+# check left in the background loses the report (#1283). The worker session cannot start one.
+WORKER_ENVIRONMENT = {"CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1"}
+# The notice Claude Code prints on stderr when it stops them.
+BACKGROUND_STOP_NOTICE = "Background tasks still running"
+# The line the adapter adds for that stop. The coordinator reads it from the execution stderr and
+# repeats the literal in harness/orchestration/workflow/execution_reaction.py; a parity test keeps
+# both equal.
+BACKGROUND_TASKS_STOPPED = (
+    "claude worker: Claude Code stopped background tasks after the last turn"
+)
 
 
 class Liveness(TypedDict):
@@ -144,6 +155,8 @@ report submit.
 WORK = """\
 Context Package {package}: start from its summary in the brief. Read only the indicated
 start_line-end_line ranges needed for the task.
+Run every command, checks and tests included, in the foreground and wait for its result; this
+session cannot run background tasks, and your final reply ends it.
 {context_hint}Work within the brief; escalate a blocker for anything the brief and the package leave out.
 Before your final reply, write the completion report JSON to the exact report staging path using
 the common and role-specific report contract, with report_language: ru.
@@ -535,7 +548,7 @@ def run_worker(job: WorkerJob, receipt: Path | None = None) -> int:
     """Send task input only after the same CLI process completes the native probe."""
     with subprocess.Popen(
         job["command"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, encoding="utf-8",
+        text=True, encoding="utf-8", env={**os.environ, **WORKER_ENVIRONMENT},
     ) as process:
         assert process.stdin is not None
         output: queue.Queue[str | None] = queue.Queue(maxsize=64)
@@ -577,7 +590,11 @@ def run_worker(job: WorkerJob, receipt: Path | None = None) -> int:
             while (line := output.get()) is not None:
                 sys.stdout.write(line)
                 sys.stdout.flush()
-            return exit_status(process.wait())
+            code = exit_status(process.wait())
+            stderr_reader.join(timeout=2)
+            if any(BACKGROUND_STOP_NOTICE in line for line in errors):
+                print(BACKGROUND_TASKS_STOPPED, file=sys.stderr, flush=True)
+            return code
         finally:
             if process.poll() is None:
                 process.terminate()

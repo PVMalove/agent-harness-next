@@ -107,6 +107,7 @@ from harness.orchestration.workflow import resolver as resolver_route
 from harness.orchestration.workflow import rebaser
 from harness.orchestration.workflow import resolver_state
 from harness.orchestration.workflow import supersede
+from harness.orchestration.workflow.preserved_progress import PRESERVED_REWIND_REMEDY
 from harness.orchestration.workflow import risk as risk_policy
 from harness.orchestration.workflow import approval as approvals
 from harness.orchestration.workflow.approval import (
@@ -149,6 +150,12 @@ from harness.orchestration.workflow.risk import (
     _risk_triggers,
 )
 from harness.repo_map.policy import policy_from_section as repo_map_policy_from_section
+
+# A dispatch that already ended needs no cancel; its writer commits survive a preserved rewind.
+CANCEL_REMEDY = (
+    "only cancel an approved, unsent dispatch, or a sent one with --runtime-stopped while its "
+    "worker may still run; " + PRESERVED_REWIND_REMEDY
+)
 
 
 def _dispatch_verification_commands(
@@ -801,7 +808,7 @@ def cancel_dispatch(args: argparse.Namespace) -> JsonObject:
         if entry.get("state") not in cancellable:
             raise CoordinatorError(
                 "only an approved, unsent dispatch may be cancelled",
-                remedy="only cancel a dispatch that is approved and not yet sent",
+                remedy=CANCEL_REMEDY,
             )
         status = _load_dispatch_status(root, dispatch["dispatch_id"])
         if status.get("state") not in (
@@ -809,7 +816,7 @@ def cancel_dispatch(args: argparse.Namespace) -> JsonObject:
         ):
             raise CoordinatorError(
                 "only an approved, unsent dispatch may be cancelled",
-                remedy="only cancel a dispatch that is approved and not yet sent",
+                remedy=CANCEL_REMEDY,
             )
         readiness = (
             infrastructure_retry.authorize_unsent(repo, root, batch, dispatch)

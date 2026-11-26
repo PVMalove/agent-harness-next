@@ -1243,6 +1243,9 @@ def lifecycle():
             done = subprocess.run(cli + step, capture_output=True, text=True,
                                   stdin=subprocess.DEVNULL, env={**os.environ, "PYTHONPATH": path})
             record(event=" ".join(step[:2]), code=done.returncode, stderr=done.stderr[-2000:])
+    if plan.get("stderr"):
+        sys.stderr.write(plan["stderr"])
+        sys.stderr.flush()
     return plan.get("exit_code", 0)
 """
 
