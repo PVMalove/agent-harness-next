@@ -11,6 +11,36 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <div class="ah-releases" markdown="1">
 
+## v2.0.2 — 26 November 2026 {.ah-release-title}
+
+<p class="ah-release-meta">Added: 1 · Changed: 3 · Fixed: 9 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
+
+<p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions.</p>
+
+??? note "Full notes"
+
+    **Added**
+
+    - **[Release Gate for an integration branch]:** `integration prepare --ticket "#<epic>" --branch <integration/...>` records the pair of the integration branch head and `base_branch` (or another `integration/*` through `--target`) without a publish batch, when the epic's `## Integration Branch` section names that branch. The integration PR passes `confirm-pr`, a CI or local-QA check of that pair, `handoff` and the tree check after the merge, like a ticket PR; the pair requires the full check, and a `-light` check never confirms it. (#1278)
+
+    **Changed**
+
+    - **[Fast session list]:** the worker session list of the "Work progress" screen shows 775 sessions within a fraction of a second after the ledger is read, instead of ~8 seconds, and the console keeps answering input meanwhile. The list stays complete, with the same cards and selection by mouse, keys and `alt+1`…`alt+3`. (#1286)
+    - **[First developer checks]:** with `verification_plan_policy.ticket_diff_selection` and an `integration/*` target, the first developer gets checks selected by the expected diff (`base..snapshot` plus `--expected-file` from `batch preflight`) instead of the full `developer_verification_commands`: a ticket that changes only skill Markdown runs `lint` without the full pytest suite. The brief's verification plan names the reason `no-tests-in-diff` for the skipped tests. A batch without expected files, the flag off and a default-branch target keep the previous commands. (#1292)
+    - **[/implement coordinator]:** after `batch preflight`, `/implement` shows the ticket estimate and offers `/fast-implement` when the ticket changes only documentation or skill texts or fits `fast_threshold`. Before `batch auto-decide` on a failed check, the coordinator finds out whether the diff causes it and, for an unrelated failure, waits for the developer's decision; it judges worker liveness only by `dispatch status`, and under `approval_policy: auto` it runs `batch approve` itself. (#1294)
+
+    **Fixed**
+
+    - **[Publish with pre-QA checks]:** in a project with `assignment_plans` and non-empty `pre_qa_commands`, `dispatch create --purpose publish` and a QA brief without a verification plan no longer refuse with `dispatch brief verification_commands must exactly match its project role configuration`. `dispatch preflight` for publish now refuses in the same cases as `dispatch create`. Batches created earlier continue without a ledger edit. (#1270)
+    - **[Retry on a failed verification plan]:** `batch auto-decide` no longer sends the developer to fix-forward when a `verification_plan` stage failed on its own configuration: a `pytest` stage with exit code 4, or a repeat of the same failure with the same output, stops the automatic path with `no-automatic-route`/`verification-plan-failure` and a remedy, and `retry_policy.max_developer_retries` is not spent. A repeated failure of the same stage no longer hides the `carried-items-not-closed` stop. (#1272)
+    - **[Status with a long history]:** `dispatch status` without `--batch` and `--dispatch` no longer fails with `the answer would not fit one frame` when the records of all batches do not fit one runtime frame: the coordinator reads them one batch at a time from the same snapshot, so the `/implement` route starts again in a project with a long history. If the answer still does not fit, the command returns a coordinator error with a `remedy` instead of a Python traceback. (#1276)
+    - **[Recovery of a writer without a report]:** when a writer made commits and exited without a report, and the runtime recorded that exit, the batch no longer has to be abandoned through `batch abandon`: `batch rewind --to <writer gate> --preserved-commit <HEAD>` accepts such a dispatch, keeps the branch without rewriting history and starts a new writer on the current HEAD. In this state the `remedy` of `batch resume-stop`, `batch rewind`, `dispatch cancel` and `batch resume` names this command instead of each other. (#1282)
+    - **[Background checks of the Claude worker]:** the `claude_worker.py` adapter starts `claude -p` with background tasks disabled, and the worker prompt requires checks to run in the foreground, so a headless session no longer loses its report when Claude Code stops background checks 10 minutes after the last turn. If such a stop still happens, `dispatch status` shows the reason `background-tasks-stopped` in `runtime_failure`, not only `blocked`. (#1283)
+    - **[Worker steps on the runtime store]:** in a project with the runtime store, the console server finds the dispatch again and serves the worker steps to the "Work progress" screen and the Web console instead of answering `not_found`: the dispatch, its status and checkpoints are read from the store, not from the archived file generation. If the runtime does not answer, the steps request returns `collect_failed` with the reason `ledger unavailable`, and the live feed skips that tick instead of breaking off. (#1285)
+    - **["Work progress" screen]:** the console screen no longer freezes in its initial state when the console server is busy with another request or does not know the dispatch: within 1–2 seconds it shows the process, the ledger state, the stream, the heartbeat and the last operation, and the "Session" tab shows the steps from the worker log that the observer reads. If polling does not answer for 10 seconds, the screen shows "⚠ Observation unavailable". The session list loads in the background, so opening the screen no longer blocks the console. (#1281)
+    - **[Retry without a new commit]:** a developer retry that needs no new commit reports a `blocked` or `failed` report with an empty `commit_map`, and the batch waits for the coordinator's decision instead of pausing at `abandon-dead-end`. A `completed` report without commits is still refused, but its `remedy` proposes a `blocked` report or a new commit instead of mapping commits that do not exist. (#1290)
+    - **[Adapter inside a worker]:** `dispatch send` run from a worker's checks no longer waits 30 seconds for an answer that never comes: the Claude Code adapter keeps its worker in the foreground only when the runtime started the adapter for that same dispatch. So the developer check `pytest -q tests/orchestration tests/memory` passes inside a worker again. (#1291)
+
 ## v2.0.1 — 24 November 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Fixed: 6 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.1">Open on GitHub</a></p>
