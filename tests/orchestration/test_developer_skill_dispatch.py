@@ -172,6 +172,29 @@ def test_resume_without_the_skill_refuses_before_any_ledger_change(
     assert _resume(routing, brief, checkpoint)["state"] == "dispatched"
 
 
+def test_the_runtime_snapshot_leaves_out_a_local_npm_install(tmp_path: Path) -> None:
+    """A developer checkout holds the console frontend's ``node_modules``; the runtime package,
+    its hash and its snapshot never include it, so a checkout and an install pin the same files."""
+    package = tmp_path / "harness"
+    for relative in (
+        "orchestration/__init__.py",
+        "console/__init__.py",
+        "console/frontend/src/main.ts",
+        "console/frontend/node_modules/tool/skills/SKILL.md",
+    ):
+        path = package / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x\n", encoding="utf-8")
+
+    files = [
+        path.relative_to(package).as_posix()
+        for path in workspace._runtime_files(package)
+    ]
+
+    assert "console/frontend/src/main.ts" in files
+    assert not [path for path in files if "node_modules" in path]
+
+
 def test_a_pinned_runtime_snapshot_names_the_project_install(routing: Routing) -> None:
     """A batch on a pinned snapshot resolves the skill in the project, not in the snapshot."""
     source = workspace.MODULE_ROOT.parent
