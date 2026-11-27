@@ -11,6 +11,18 @@ toc_depth: 2
 
 <div class="ah-releases" markdown="1">
 
+## v2.0.3, 27 ноября 2026 {.ah-release-title}
+
+<p class="ah-release-meta">Исправлено: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.3">Открыть на GitHub</a></p>
+
+<p class="ah-release-summary">Главное: проба тест-автора различает отказ модели и провал hook.</p>
+
+??? note "Полные заметки"
+
+    **Исправлено**
+
+    - **[Отказ модели в пробе тест-автора]:** `make test-author-probe` больше не падает с `the transcript has no Write call`, когда модель отказывается от запрещённого шага guard-сценария без вызова инструмента: проба просит модель сделать вызов и оставить отказ hook, а если вызова всё же нет, называет исход `model_declined` и не засчитывает его как подтверждение hook. Отчёт `test-author-probe-*.json` упавшего вызова хранит вызовы инструментов и итоговый ответ модели, поэтому причину можно разобрать без повторного платного запуска. (#1298)
+
 ## v2.0.2, 26 ноября 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Добавлено: 3 · Изменено: 18 · Исправлено: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Открыть на GitHub</a></p>

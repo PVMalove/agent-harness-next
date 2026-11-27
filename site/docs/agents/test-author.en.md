@@ -274,6 +274,13 @@ unchanged test.
 
 Each CLI call leaves a sanitized `test-author-probe-*.json` in the shared
 `.harness/.sandboxes/reports/`: checkout, stage, exit code, time, usage and cost reported by the
-runtime, and a separate limit. Unknown metrics stay `null`; a limit is not usage. The reports
+runtime, and a separate limit. Unknown metrics stay `null`; a limit is not usage. The `outcome`
+field is `passed` or `failed`. The report of a failed call also keeps `tool_calls` (the tool name,
+input, answer and error flag of each call, up to 2000 characters per field) and `final_result` with
+the model's final answer, so the cause can be examined without another paid run. The reports
 survive the removal of the clean-room project, without full transcripts or credentials. The share
 of a subscription quota can be absent from the runtime data and is never calculated from USD.
+
+If the model declines a forbidden step of the guard scenario and makes no tool call, the probe
+ends with `claude probe: model_declined: …`. Such a run did not exercise the hook, so the probe
+does not pass.
