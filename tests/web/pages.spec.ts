@@ -1,6 +1,7 @@
 /* The page sweep of the real build: every menu section at 1440 and 390 px over the recorded
    fixtures has no horizontal overflow and no WCAG 2.1 AA violation found by axe-core, on every tab
-   of the page no panel leaves its frame, and under
+   of the page no panel leaves its frame, at 1440 px every tab is axe-clean in the light theme too,
+   the theme switch pins a theme over the system scheme, and under
    prefers-reduced-motion nothing on the live pages animates. DOM assertions only; no screenshot
    comparison (ADR 0029). */
 import { readFileSync } from "node:fs";
@@ -135,6 +136,48 @@ for (const width of [1440, 390]) {
     });
   }
 }
+
+for (const route of ROUTES) {
+  test(`#/${route} at 1440 px in the light theme: every tab is axe-clean`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await mockSocket(page);
+    await open(page, route, 1440);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("light dark");
+    expect(await page.locator(".ds-app").evaluate((app) => getComputedStyle(app).backgroundColor)).toBe("rgb(244, 245, 248)");
+    const tabs = page.locator("main [role=tablist]").first().getByRole("tab");
+    const count = await tabs.count();
+    for (let index = 0; index < Math.max(count, 1); index++) {
+      if (count > 0) await tabs.nth(index).click();
+      const label = count > 0 ? await tabs.nth(index).textContent() : "page";
+      expect(await axeViolations(page), `${route} · ${label}`).toEqual([]);
+    }
+  });
+}
+
+test("the theme switch pins light, then dark, then hands the theme back to the system", async ({ page }) => {
+  await mockSocket(page);
+  await open(page, "", 1440);
+  const app = page.locator(".ds-app");
+  const toggle = page.locator("#theme-toggle");
+  const background = () => app.evaluate((element) => getComputedStyle(element).backgroundColor);
+  // The suite runs with a dark system scheme.
+  expect(await background()).toBe("rgb(31, 37, 46)");
+  await expect(toggle).toHaveAttribute("aria-label", "Тема: как в системе · сменить тему");
+  await toggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(await background()).toBe("rgb(244, 245, 248)");
+  await page.reload();
+  await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(toggle).toHaveAttribute("aria-label", "Тема: светлая · сменить тему");
+  await toggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.emulateMedia({ colorScheme: "light" });
+  expect(await background()).toBe("rgb(31, 37, 46)");
+  await toggle.click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+  expect(await background()).toBe("rgb(244, 245, 248)");
+});
 
 test("under prefers-reduced-motion no element of the live pages animates", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });

@@ -398,10 +398,10 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
           <defs>
             {(
               [
-                ["aqua", "#a9dcc0"],
-                ["sky", "#a6d5e8"], // matches `.orch-map-edge.sky` in app.css
-                ["rose", "#cbb8f0"], // matches `.orch-map-edge.rose` in app.css
-                ["orange", "#a9c4f5"],
+                ["aqua", "var(--ok)"],
+                ["sky", "var(--sky)"], // matches `.orch-map-edge.sky` in app.css
+                ["rose", "var(--lavender)"], // matches `.orch-map-edge.rose` in app.css
+                ["orange", "var(--primary)"],
               ] as const
             ).map(([id, fill]) => (
               <marker key={id} id={`om-${id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">

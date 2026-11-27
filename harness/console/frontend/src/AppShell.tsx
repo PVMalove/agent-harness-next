@@ -7,6 +7,7 @@ import { Icon } from "./icons";
 import { useI18n, LANGUAGES } from "./i18n";
 import { DS_ROUTES, HIDDEN_LABELS, NAV_GROUPS, SHORTCUTS, href, navItemOf } from "./navigation";
 import type { NavItem } from "./navigation";
+import { NEXT_THEME, THEME_ICON, THEME_LABEL, applyTheme, readTheme } from "./theme";
 import { useConsole } from "./useConsole";
 import type { HomeSnapshot } from "./ws/types";
 
@@ -85,6 +86,8 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(readCollapsed);
+  const [theme, setTheme] = useState(readTheme);
+  useEffect(() => applyTheme(theme), [theme]);
   const current = location.pathname.replace(/^\/+/, "").split("/")[0] ?? "";
   const selected = navItemOf(current);
   const legacyPage = connectionPage || !DS_ROUTES.has(current);
@@ -224,6 +227,16 @@ export function AppShell({ chip, banner, connectionPage = false, children }: App
             onClick={() => setLanguage(language === "ru" ? "en" : "ru")}
           >
             {language.toUpperCase()}
+          </button>
+          <button
+            id="theme-toggle"
+            className="ds-icon-btn"
+            type="button"
+            aria-label={`${t(THEME_LABEL[theme])} · ${t("сменить тему")}`}
+            title={t(THEME_LABEL[theme])}
+            onClick={() => setTheme(NEXT_THEME[theme])}
+          >
+            <Icon name={THEME_ICON[theme]} className="ds-ic" />
           </button>
           <a className="ds-icon-btn" href={href("help")} aria-label={section("Help")} title={section("Help")}>
             <Icon name="help" className="ds-ic" />

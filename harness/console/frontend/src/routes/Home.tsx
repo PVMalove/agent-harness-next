@@ -347,7 +347,7 @@ export function HealthStrip({ health }: { health: HealthCounters }) {
     ["ok", "var(--ok)", "bar-ok"],
     ["warn", "var(--warn)", "bar-warn"],
     ["fail", "var(--err)", "bar-fail"],
-    ["skipped", "#6b7686", "bar-muted"],
+    ["skipped", "var(--edge)", "bar-muted"],
   ];
   let x = 0;
   const label = `${t("пройдено")}: ${health.ok}; ${t("внимание")}: ${health.warn}; ${t("ошибки")}: ${health.fail}; ${t("пропущено")}: ${health.skipped}`;
@@ -401,7 +401,7 @@ function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activi
           <svg className="contour-svg" viewBox="0 0 1000 400" role="img" aria-label={t("Схема контура Harness")}>
             <defs>
               <marker id="ct-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M0 0 8 4 0 8z" fill="#6b7787" />
+                <path d="M0 0 8 4 0 8z" fill="var(--edge)" />
               </marker>
             </defs>
             <rect className="ct-lane" x="12" y="10" width="976" height="105" rx="6" />
