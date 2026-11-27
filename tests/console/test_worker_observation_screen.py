@@ -234,28 +234,90 @@ def _plain(renderable: object, width: int = 40) -> list[str]:
     return [line.rstrip() for line in console.export_text().splitlines()]
 
 
-def test_a_session_event_is_one_chip_and_its_text_with_a_hanging_indent() -> None:
+def test_a_session_event_reads_as_in_claude_cli() -> None:
+    """A message or a tool call is a ● line after a blank line; its result hangs under it on
+    ⎿; a long line wraps under the text, not under the marker."""
     from harness.console.tui.screens.worker_observation import transcript_row
 
     assert _plain(transcript_row({"kind": "output", "text": "Читаю тикет"})) == [
-        " 💬  Читаю тикет"
+        "",
+        "● Читаю тикет",
     ]
-    assert _plain(
-        transcript_row({"kind": "tool", "text": "Bash uv sync\n--locked"})
-    ) == [" 🔧  Bash uv sync", "     --locked"]
-    assert _plain(transcript_row({"kind": "error", "text": "boom"})) == [" ❌  boom"]
-    assert _plain(transcript_row({"kind": "new-kind", "text": "x"})) == [" ⚪  x"]
+    assert _plain(transcript_row({"kind": "tool", "text": "Read"})) == ["", "● Read"]
+    assert _plain(transcript_row({"kind": "tool-result", "text": "4 passed"})) == [
+        "  ⎿  4 passed"
+    ]
+    assert _plain(transcript_row({"kind": "output", "text": "a\nb"})) == [
+        "",
+        "● a",
+        "  b",
+    ]
+    assert _plain(transcript_row({"kind": "error", "text": "boom"})) == ["", "● boom"]
+    assert _plain(transcript_row({"kind": "new-kind", "text": "x"})) == ["", "● x"]
 
 
-def test_a_finished_qa_stage_shows_its_result_as_the_chip() -> None:
+def test_a_tool_result_with_line_numbers_shows_them_in_a_gutter() -> None:
+    """Read output (`number<TAB>line` or `number→line`) keeps the numbers in a muted column
+    apart from the code, so a numbered line no longer reads as text."""
     from harness.console.tui.screens.worker_observation import transcript_row
 
-    def chip(text: str) -> str:
-        return _plain(transcript_row({"kind": "stage-result", "text": text}))[0][:3]
+    text = "    38\t\n    45\tand, only\n   102→- refs"
+    assert _plain(transcript_row({"kind": "tool-result", "text": text})) == [
+        "  ⎿   38",
+        "      45  and, only",
+        "     102  - refs",
+    ]
 
-    assert chip("pytest: pass · exit 0") == " 🟢 "
-    assert chip("pytest: fail · exit 1") == " 🔴 "
-    assert chip("lint: not_run") == " ⚪ "
+
+def test_a_long_tool_result_folds_to_its_first_lines_until_expanded() -> None:
+    from harness.console.tui.screens.worker_observation import (
+        RESULT_LINES,
+        transcript_row,
+    )
+
+    text = "\n".join(f"line {n}" for n in range(1, RESULT_LINES + 8))
+    folded = _plain(transcript_row({"kind": "tool-result", "text": text}))
+    assert folded[0] == "  ⎿  line 1"
+    assert folded[RESULT_LINES - 1] == f"     line {RESULT_LINES}"
+    assert folded[RESULT_LINES:] == ["     … ещё 7 строк · ctrl+o"]
+    english = _plain(transcript_row({"kind": "tool-result", "text": text}, "en"))
+    assert english[-1] == "     … 7 more lines · ctrl+o"
+    expanded = _plain(
+        transcript_row({"kind": "tool-result", "text": text}, expanded=True)
+    )
+    assert len(expanded) == RESULT_LINES + 7
+    assert expanded[-1] == f"     line {RESULT_LINES + 7}"
+
+
+def test_a_diff_in_a_tool_result_marks_added_and_removed_lines() -> None:
+    from rich.console import Console
+
+    from harness.console.kernel import brand
+    from harness.console.tui.screens.worker_observation import transcript_row
+
+    text = "@@ -1,2 +1,2 @@\n-old line\n+new line\n same"
+    console = Console(width=40)
+    segments = list(
+        console.render(transcript_row({"kind": "tool-result", "text": text}))
+    )
+
+    def colour(word: str) -> str:
+        found = next(segment for segment in segments if word in segment.text)
+        return str(found.style.color.name if found.style and found.style.color else "")
+
+    assert colour("new line") == brand.PALETTE["success"].lower()
+    assert colour("old line") == brand.PALETTE["error"].lower()
+
+
+def test_a_finished_qa_stage_shows_its_result_under_the_stage() -> None:
+    from harness.console.tui.screens.worker_observation import transcript_row
+
+    def mark(text: str) -> str:
+        return _plain(transcript_row({"kind": "stage-result", "text": text}))[0][:7]
+
+    assert mark("pytest: pass · exit 0") == "  ⎿  🟢 "
+    assert mark("pytest: fail · exit 1") == "  ⎿  🔴 "
+    assert mark("lint: not_run") == "  ⎿  ⚪ "
 
 
 def test_an_events_row_shows_the_chip_the_kind_and_the_first_line() -> None:

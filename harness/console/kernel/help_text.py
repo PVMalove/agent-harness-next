@@ -72,6 +72,7 @@ init/adopt/update. Установка требует подтверждения 
 | `t` | Хронология batch в карточке отчёта |
 | `u` | Построение карты в Repo Map |
 | `w` | «Ход работы» в Оркестрации |
+| `Ctrl+O` | Весь вывод инструментов во вкладке «Сессия» «Хода работы»; повторное нажатие сворачивает его |
 | `F3` | QA-логи в Reports |
 | `F1` | Эта справка с любого экрана |
 | `F2` | Язык меню: русский / English (по умолчанию из `HARNESS_CONSOLE_LANG`) |
@@ -201,6 +202,7 @@ every screen. Conflicts in discovery paths and managed files must be resolved be
 | `t` | Batch timeline in a report card |
 | `u` | Build the map in Repo Map |
 | `w` | Agent activity in Orchestration |
+| `Ctrl+O` | Full tool output on the Session tab of Agent activity; press again to fold it |
 | `F3` | QA logs in Reports |
 | `F1` | This guide from any screen |
 | `F2` | Menu language: Russian / English (default from `HARNESS_CONSOLE_LANG`) |

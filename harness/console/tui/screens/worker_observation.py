@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from rich.columns import Columns
+from rich.console import Group, RenderableType
 from rich.table import Table
 from rich.text import Text
 from textual import events
@@ -439,20 +441,116 @@ def _chip(glyph: str, colour: str) -> Text:
     )
 
 
-def transcript_row(event: JsonObject, language: str = "ru") -> Table:
-    """One event of the «Сессия» tab: its chip, then its text with a hanging indent; no blank
-    lines between events. A tool's text is plain, its result and a log line are muted."""
-    kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
-    glyph, _label, colour = _event_look(kind, text, language)
-    plain = kind in {"output", "tool", "stage-result"}
-    row = Table.grid(padding=(0, 1), expand=True)
-    row.add_column(width=CHIP_WIDTH, no_wrap=True)
+# The «Сессия» tab reads as Claude CLI: a message or a tool call is a ● line after a blank line,
+# and what it returned hangs under it on ⎿. A tool call shows only the tool's name: the kernel never
+# passes tool inputs (`visible_events`). The colour of each kind's ●:
+_BULLETS: dict[str, str] = {
+    "output": brand.PALETTE["foreground"],
+    "tool": brand.PALETTE["success"],
+    "result": brand.PALETTE["success"],
+    "error": brand.PALETTE["error"],
+    "permission": brand.PALETTE["warning"],
+    "stage": brand.PALETTE["primary"],
+    "system": brand.PALETTE["muted"],
+}
+# A tool result folds to its first lines until `expanded`, as Claude CLI does until ctrl+o.
+RESULT_LINES = 5
+# A numbered line of a Read result: `   45<TAB>text` or `   45→text`.
+_NUMBERED = re.compile(r"^\s*(\d+)(?:\t|→)(.*)$")
+# A result that holds a unified diff marks its added and removed lines.
+_DIFF_START = re.compile(r"^(?:@@ |diff --git |\+\+\+ |--- )")
+_RESULT_PREFIX = "  ⎿  "
+
+
+def _bullet(kind: str, text: str) -> RenderableType:
+    colour = _BULLETS.get(kind, brand.PALETTE["muted"])
+    style = {
+        "tool": f"bold {brand.PALETTE['foreground']}",
+        "error": brand.PALETTE["error"],
+        "system": brand.PALETTE["muted"],
+        "omitted": brand.PALETTE["muted"],
+    }.get(kind, brand.PALETTE["foreground"])
+    row = Table.grid(expand=True)
+    row.add_column(width=2, no_wrap=True)
     row.add_column(ratio=1, overflow="fold")
     row.add_row(
-        _chip(glyph, colour),
-        SeparatorWrap(Text(text, style=brand.PALETTE["foreground"] if plain else colour)),
+        Text("●", style=f"bold {colour}"), SeparatorWrap(Text(text, style=style))
     )
-    return row
+    return Group(Text(""), row)
+
+
+def _line_style(line: str, diff: bool, default: str) -> str:
+    if diff and line.startswith("+") and not line.startswith("+++"):
+        return brand.PALETTE["success"]
+    if diff and line.startswith("-") and not line.startswith("---"):
+        return brand.PALETTE["error"]
+    if diff and line.startswith("@@"):
+        return brand.PALETTE["primary"]
+    return default
+
+
+def _result(kind: str, text: str, language: str, expanded: bool) -> RenderableType:
+    """What a call returned, under ⎿: numbered code keeps its numbers in a muted column, a diff
+    marks its lines, and a long result shows its first lines with the count of the rest."""
+    muted = brand.PALETTE["muted"]
+    default = {
+        "stderr": brand.PALETTE["warning"],
+        "stage-result": brand.PALETTE["foreground"],
+    }.get(kind, muted)
+    lines = text.splitlines() or [""]
+    numbered = [_NUMBERED.match(line) for line in lines]
+    code = sum(match is not None for match in numbered) * 2 >= len(lines)
+    diff = any(_DIFF_START.match(line) for line in lines)
+    shown = len(lines) if expanded or len(lines) <= RESULT_LINES else RESULT_LINES
+    grid = Table.grid(expand=True)
+    grid.add_column(width=len(_RESULT_PREFIX), no_wrap=True)
+    if code:
+        digits = max(len(match.group(1)) for match in numbered if match)
+        grid.add_column(width=digits, no_wrap=True, justify="right")
+        grid.add_column(width=2, no_wrap=True)
+    grid.add_column(ratio=1, overflow="fold")
+    for index, (line, match) in enumerate(zip(lines[:shown], numbered[:shown])):
+        prefix = Text(_RESULT_PREFIX if index == 0 else "", style=muted)
+        if kind == "stage-result" and index == 0:
+            words = line.partition(":")[2].split()
+            glyph, colour = _STAGE_RESULTS.get(words[0] if words else "", ("⚪", muted))
+            body = Text(f"{glyph} ", style=colour)
+            body.append(line, style=default)
+        elif code:
+            body = Text(
+                match.group(2) if match else line, style=brand.PALETTE["foreground"]
+            )
+        else:
+            body = Text(line, style=_line_style(line, diff, default))
+        if code:
+            grid.add_row(
+                prefix, Text(match.group(1) if match else "", style=muted), "", body
+            )
+        else:
+            grid.add_row(prefix, SeparatorWrap(body))
+    if shown == len(lines):
+        return grid
+    rest = len(lines) - shown
+    more = (
+        f"… {rest} more {'line' if rest == 1 else 'lines'}"
+        if language == "en"
+        else f"… ещё {i18n.count_noun(language, rest, ('строка', 'строки', 'строк'), ('line', 'lines'))}"
+    )
+    return Group(grid, Text(f"{' ' * len(_RESULT_PREFIX)}{more} · ctrl+o", style=muted))
+
+
+def transcript_row(
+    event: JsonObject, language: str = "ru", *, expanded: bool = False
+) -> RenderableType:
+    """One event of the «Сессия» tab as Claude CLI shows it: a message, a tool call or an outcome
+    is a ● line; a tool result, stderr and a QA stage's result hang under it on ⎿; a Codex log
+    line continues the message text; a system note and an omitted stretch are muted."""
+    kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
+    if kind in {"tool-result", "stderr", "stage-result"}:
+        return _result(kind, text, language, expanded)
+    if kind == "log":
+        return Text(f"  {text}", style=brand.PALETTE["muted"])
+    return _bullet(kind, text)
 
 
 def event_row(event: JsonObject, language: str = "ru") -> Table:
@@ -475,8 +573,8 @@ def event_row(event: JsonObject, language: str = "ru") -> Table:
 
 
 def legend_text(language: str = "ru") -> Columns:
-    """The legend under the «Сессия» and «События» tabs: every chip with its kind, in columns
-    that never split a chip from its word."""
+    """The legend under the «События» tab: every chip with its kind, in columns that never split a
+    chip from its word. The «Сессия» tab reads as Claude CLI and needs none."""
     items = []
     for kind in EVENT_KINDS:
         glyph, label, colour = _event_look(kind, "", language)
@@ -684,6 +782,7 @@ class WorkerObservationScreen(ConsoleShell):
     AUTO_FOCUS = "#worker-picker"
     BINDINGS = [
         Binding("r", "refresh", "Обновить"),
+        Binding("ctrl+o", "toggle_results", "Весь вывод"),
         *(Binding(f"alt+{i+1}", f"select_session({i})", show=False) for i in range(3)),
     ]
     DEFAULT_CSS = brand.shell_css("""
@@ -757,6 +856,8 @@ class WorkerObservationScreen(ConsoleShell):
         self._steps_failure: str | None = None
         self.snapshot: JsonObject = {}
         self._events: list[JsonObject] = []
+        # ctrl+o shows every line of the tool results on the «Сессия» tab.
+        self._expanded = False
         self._last_operation = "—"
         self._polls = PollGate()
         # Bumped when the view starts over, so a late poll of the previous view is dropped.
@@ -892,7 +993,6 @@ class WorkerObservationScreen(ConsoleShell):
                             markup=False,
                             highlight=False,
                         )
-                        yield Static(legend_text(), classes="worker-legend no-i18n")
                     with TabPane("События", id="events"):
                         yield Select(
                             [
@@ -1200,7 +1300,10 @@ class WorkerObservationScreen(ConsoleShell):
         for event in snapshot.get("events", []):
             self._events.append(event)
             if self._event_visible(event):
-                output.write(transcript_row(event, language), expand=True)
+                output.write(
+                    transcript_row(event, language, expanded=self._expanded),
+                    expand=True,
+                )
                 events_log.write(event_row(event, language), expand=True)
         self._events = self._events[-500:]
         bar = self.query_one(TopBar)
@@ -1321,17 +1424,28 @@ class WorkerObservationScreen(ConsoleShell):
         selected = self.query_one("#worker-filter", Select).value
         return selected == "all" or str(event.get("kind", "")).startswith(str(selected))
 
+    def _rebuild_logs(self) -> None:
+        """Write the kept events again: the filter or the fold of tool results changed."""
+        output = self.query_one("#worker-output", RichLog)
+        output.clear()
+        events = self.query_one("#worker-events", RichLog)
+        events.clear()
+        language = getattr(self.app, "language", "ru")
+        for row in self._events:
+            if self._event_visible(row):
+                output.write(
+                    transcript_row(row, language, expanded=self._expanded), expand=True
+                )
+                events.write(event_row(row, language), expand=True)
+
+    def action_toggle_results(self) -> None:
+        """Show every line of the tool results on the «Сессия» tab, or fold them again."""
+        self._expanded = not self._expanded
+        self._rebuild_logs()
+
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "worker-filter":
-            output = self.query_one("#worker-output", RichLog)
-            output.clear()
-            events = self.query_one("#worker-events", RichLog)
-            events.clear()
-            language = getattr(self.app, "language", "ru")
-            for row in self._events:
-                if self._event_visible(row):
-                    output.write(transcript_row(row, language), expand=True)
-                    events.write(event_row(row, language), expand=True)
+            self._rebuild_logs()
             return
 
     def _select_dispatch(self, dispatch: str) -> None:

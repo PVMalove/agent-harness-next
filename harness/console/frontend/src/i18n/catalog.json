@@ -306,6 +306,7 @@
     "Версия": "Version",
     "Версия CLI": "CLI version",
     "Версия актуальна": "Version is up to date",
+    "Весь вывод": "Full output",
     "Взять версию пакета": "Take the package version",
     "Взять значение по умолчанию": "Use the default",
     "Вид символа считается только для карты из кэша сервера": "The symbol kind is derived only for the server's cached map",
