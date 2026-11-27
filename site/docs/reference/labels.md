@@ -11,12 +11,20 @@
 | Режим исполнения | `hitl`, `afk` | `/triage`, `/to-tickets` |
 | Состояние | `status::specs`, `status::ready`, `status::in-progress`, `status::blocked`, `status::done` | `/triage`, `/publish-epic`, `/to-tickets`, `/implement`, `/fast-implement`, `/to-pull-requests` |
 | Маршрут | `pipeline::fast`, `pipeline::full` | `/to-tickets` |
-| Контекст | `task-report::required`, `resolution::wontfix` | `/publish-epic`, `/to-tickets`, `/triage` |
+| Контекст | `task-report::required`, `resolution::wontfix`, `rca::done` | `/publish-epic`, `/to-tickets`, `/triage`, фаза RCA `/diagnosing-bugs` |
+| Вид PR | `pr::ticket`, `pr::integration` | `/to-pull-requests` |
 | Wayfinder | `wayfinder:map`, `wayfinder:research`, `wayfinder:prototype`, `wayfinder:grilling`, `wayfinder:task` | `/wayfinder` |
 
 `hitl` означает, что работу выполняет человек по руководству. `afk` означает, что задачу можно
 отдать агенту. `/to-tickets` выводит `pipeline::fast` или `pipeline::full` из оценки объёма в story
 points: мелкая задача идёт коротким путём, крупная проходит полный цикл с гейтами.
+
+Ось `pr::*` ставится на PR, а не на тикет, и у каждого PR ровно одна такая метка. `pr::ticket`
+получает PR одного тикета, в том числе PR тикета без эпика в `base_branch`; он наследует `type::*`
+тикета. `pr::integration` получает любой PR, у которого head — ветка `integration/*`, в какую бы
+ветку он ни шёл; `type::*` у него нет, потому что он собирает тикеты разных типов. `rca::done`
+означает, что баг-тикет создан из завершённого RCA: метка ставится рядом с `type::bug` и не
+заменяет её.
 
 Необязательные информационные оси `priority::*`, `severity::*` и `env::*` (только в целевом проекте)
 описаны в `.harness/instructions/triage-labels.md` целевого проекта.
@@ -57,7 +65,8 @@ points: мелкая задача идёт коротким путём, круп
 | `/publish-epic` | `type::*`, `status::specs` и `task-report::required` на эпик |
 | `/to-tickets` | Режим, маршрут `pipeline::*`, `status::ready` или `status::blocked` |
 | `/implement`, `/fast-implement` | `status::in-progress` вместо текущей метки состояния |
-| `/to-pull-requests` | После merge: `status::done` вместо `status::in-progress`; `status::blocked` → `status::ready` у разблокированных зависимых. С `--release <epic>` после merge интеграционного PR в `base_branch`: `status::done` вместо `status::specs` у эпика |
+| `/to-pull-requests` | PR тикета: `pr::ticket` и `type::*` тикета; интеграционный PR: `pr::integration` без `type::*`. После merge: `status::done` вместо `status::in-progress`; `status::blocked` → `status::ready` у разблокированных зависимых. С `--release <epic>` после merge интеграционного PR в `base_branch`: `status::done` вместо `status::specs` у эпика |
+| Фаза RCA `/diagnosing-bugs` | После явного «да» разработчика: `type::bug` и `rca::done` на новый баг-тикет; `status::blocked` у остановленного тикета, если баг его блокирует |
 
 ## Дальше
 

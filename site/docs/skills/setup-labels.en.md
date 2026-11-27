@@ -43,6 +43,13 @@ disable-model-invocation: true
 - **Input (Input/Brief):** `.harness/instructions/triage-labels.md` and the explicit confirmation of the maintainer.
 - **Output (Output/Report):** one result line for each label.
 
+## New labels in an existing project
+
+When `harness update` brings new table rows, such as the `pr::*` axis, `rca::done` and
+`status::done`, run `/setup-labels` again: it creates the missing labels. Existing PRs and tickets
+are not backfilled with the new labels. The label meanings are in the
+[label reference](../reference/labels.md).
+
 ## Source
 
 [SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/setup-labels/SKILL.md)

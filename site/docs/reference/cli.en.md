@@ -14,6 +14,7 @@ repository at that path and copies a verifiable snapshot into it.
 | `update` | Pulls in a new version of the capability; on a version-3 ledger with `--approved-by`, `--approved-at` and `--reason` it runs `harness-runtime migrate` ([upgrade to 2.0](../guides/upgrade-2-0.md)) | yes |
 | `registry` | Rebuilds the project skill registry | yes |
 | `lock-project-skills` | Fixes the hashes of the skills that the project itself owns | yes |
+| `fmea show` | Prints an [FMEA catalog](../concepts/fmea.md) entry by `title` or GUID from the harness clone's `.harness/fmea.db`; takes no `<repo>` | no |
 | `memory build/search/rebuild/sync/eval` | Local memory index and pointers to allowed sources | `build`, `rebuild`, `sync` — yes; `search`, `eval` — no |
 | `parsers status/install` | Project graph parsers: bundle state and language installation | `install` — yes; `status` — no |
 | `health` | Diagnostics of the installation and the environment | only with `--fix` |
@@ -135,6 +136,20 @@ Search returns pointers — the title, status, path, and hash of the source — 
 open the source only when needed. The index is derived: deleting it loses nothing, and
 `rebuild` restores it from scratch. Without an explicit allowlist in `memory_policy`, nothing
 is indexed.
+
+## FMEA catalog
+
+`harness fmea show <title|id>` reads the SQLite file `.harness/fmea.db`, built from
+`harness/fmea/catalog.toml` in the harness clone, and prints the `FMEA: <guid> (<title>)` line and
+the fields `mode`, `detection`, `recovery`, `test` and `residual_risk`. The file is never committed;
+when it is missing, the command refuses and names the build command.
+
+```bash
+python scripts/fmea_catalog.py db
+python3 harness/bin/harness.py fmea show git-timeout
+```
+
+The catalog format and entry rules are on the [FMEA catalog](../concepts/fmea.md) page.
 
 ## Repo Map
 

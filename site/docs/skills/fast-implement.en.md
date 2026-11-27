@@ -48,4 +48,27 @@ continues with the usual `/tdd` in the same session, names the reason in one lin
 an unprotected author. The configuration is in section 2 of the
 [test-author guide](../agents/test-author.md).
 
+## Error stops
+
+Before calling a human about an error, the skill follows `references/error-stops.md`. The error-stop
+definition, the order before a stop and the RCA phase are the same as in
+[`/implement`](implement.md#error-stops); the overall order is on the
+[Error stops and RCA](../concepts/error-stops.md) page. `/fast-implement` differs as follows:
+
+- the planned confirmation gates, which are not error stops, are the seam, code review, commit and
+  push; a `hitl` ticket or an open blocker is a stop without an error;
+- an error with an `FMEA:` line gets the catalog recovery and at most three repeats of the failed
+  step; without it the remedy is applied once, without working around a hook;
+- on an error stop, the skill leaves the stopped ticket's checkout untouched: its `status::*`
+  label, branch and uncommitted changes stay, and nothing is committed, stashed, reset or discarded;
+- after the RCA phase, the skill takes the epic's next free ticket by the same selection as
+  "Resolve the ticket" step 2 and starts it from the pre-flight in a clean checkout; when the
+  current checkout has uncommitted changes, the next ticket gets a new worktree;
+- the skill stops and reports the draft path and the reason when the ticket has no epic, no ticket
+  qualifies, or a new worktree cannot be created.
+
+An error stop relaxes no other rule: commit and push still need your permission, a PR still needs
+your confirmation, auto-merge stays forbidden, and the tracker is written only after your explicit
+"yes".
+
 [Source SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/fast-implement/SKILL.md)

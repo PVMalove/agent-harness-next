@@ -43,6 +43,12 @@ disable-model-invocation: true
 - **Вход (Input/Brief):** `.harness/instructions/triage-labels.md` и явное подтверждение мейнтейнера.
 - **Выход (Output/Report):** по одной строке результата для каждой метки.
 
+## Новые метки в существующем проекте
+
+Когда `harness update` приносит новые строки таблиц, например ось `pr::*`, `rca::done` и
+`status::done`, запустите `/setup-labels` ещё раз: он создаст недостающие метки. Старые PR и тикеты
+новыми метками не дополняются. Значения меток описаны в [справочнике меток](../reference/labels.md).
+
 ## Источник
 
 [SKILL.md](https://github.com/PVMalove/agent-harness-next/blob/master/skills/first-party/engineering/setup-labels/SKILL.md)
