@@ -249,6 +249,10 @@ body.nav-collapsed .ds-nav-group + .ds-nav-group { margin-top: 8px; padding-top:
   font-family: var(--text);
   line-height: 1.55;
 }
+/* On a wide window they start at the DS gutter, as the moved screens (UX review of #1296). */
+@media (min-width: 901px) {
+  .ds-main--legacy { padding-top: 16px; padding-right: 28px; padding-left: 28px; }
+}
 
 /* Footer */
 .ds-foot {

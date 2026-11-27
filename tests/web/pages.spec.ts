@@ -1,7 +1,8 @@
 /* The page sweep of the real build: every menu section at 1440 and 390 px over the recorded
    fixtures has no horizontal overflow and no WCAG 2.1 AA violation found by axe-core, on every tab
    of the page no panel leaves its frame, at 1440 px every tab is axe-clean in the light theme too,
-   the theme switch pins a theme over the system scheme, and under
+   the theme switch pins a theme over the system scheme, the legacy screens take the design
+   system's gutter, subtitle, buttons and filters, and under
    prefers-reduced-motion nothing on the live pages animates. DOM assertions only; no screenshot
    comparison (ADR 0029). */
 import { readFileSync } from "node:fs";
@@ -153,6 +154,37 @@ for (const route of ROUTES) {
     }
   });
 }
+
+/** The look of a screen's chrome: the title gutter, the subtitle, a header button and a filter. */
+const chrome = (page: Page) =>
+  page.evaluate(() => {
+    const style = (selector: string) => {
+      const element = document.querySelector(selector);
+      return element ? getComputedStyle(element) : null;
+    };
+    const button = style("main .page-title .btn, main .ds-head-actions .ds-btn");
+    const filter = style("main .chip, main .ds-filter button");
+    return {
+      gutter: Math.round(document.querySelector("main#content h1")!.getBoundingClientRect().left),
+      subtitle: style("main .page-title p:not(.home-facts), main .ds-sub")?.fontSize,
+      button: button && [button.minHeight, button.borderRadius, button.fontSize, button.backgroundColor],
+      filter: filter && [filter.minHeight, filter.borderRadius, filter.fontSize],
+    };
+  });
+
+test("at 1440 px the legacy screens take the design system's gutter, subtitle, buttons and filters", async ({ page }) => {
+  await mockSocket(page);
+  await open(page, "orchestration", 1440);
+  const ds = await chrome(page);
+  for (const route of ["", "board", "agent-activity", "recovery", "container-route"]) {
+    await open(page, route, 1440);
+    const legacy = await chrome(page);
+    expect(legacy.gutter, route).toBe(ds.gutter);
+    expect(legacy.subtitle, route).toBe(ds.subtitle);
+    expect(legacy.button, route).toEqual(ds.button);
+    if (legacy.filter) expect(legacy.filter, route).toEqual(ds.filter);
+  }
+});
 
 test("the theme switch pins light, then dark, then hands the theme back to the system", async ({ page }) => {
   await mockSocket(page);

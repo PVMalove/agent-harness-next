@@ -854,5 +854,33 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 }
 /* Container route (UX review of #1296): each field has a visible label; a dl keeps its pairs
    in div rows, as the definition-list rules of axe require. */
-.route-select .route-field { display: inline-flex; flex-direction: column; gap: 2px; font-size: var(--fs-1); color: var(--muted); }
+.route-select { align-items: flex-end; }
+.route-select .route-field { display: inline-flex; flex: 1 1 140px; flex-direction: column; gap: 2px; min-width: 0; font-size: var(--fs-1); color: var(--muted); }
+/* The label is the flex item of the row; inside its column the input keeps its own height. */
+.route-select .route-field input { flex: none; }
 #route-env .route-env-row { display: contents; }
+/* UX review of #1296, item 18 (wide): the screens not yet moved to the design system keep their
+   markup and take its sizes. The page starts at the DS gutter, the subtitle is the DS sub line,
+   a button is a .ds-btn (a primary one filled), and every filter row looks like .ds-filter.
+   :where() keeps the base rules at the old specificity, so a screen's own compact rule still wins. */
+@media (min-width: 901px) {
+  .ds-main--legacy .page-title { margin-bottom: 12px; }
+  .ds-main--legacy .page-title h1 { line-height: 1.25; }
+  .ds-main--legacy .page-title p:not(.home-facts) { margin-top: 0; color: var(--ds-muted); font-size: var(--ds-fs-2); line-height: 1.5; }
+  .ds-main--legacy :where(.btn) {
+    min-height: 32px; padding: 4px 12px; border-color: var(--ds-line-strong); border-radius: var(--ds-radius);
+    background: var(--ds-surface); color: var(--ds-fg); font-size: var(--ds-fs-2); font-weight: 500;
+  }
+  .ds-main--legacy :where(.btn):hover { background: var(--ds-hover); border-color: var(--ds-line-strong); }
+  .ds-main--legacy .btn:where(.primary) { background: var(--ds-accent); border-color: var(--ds-accent); color: var(--ds-on-accent); font-weight: 600; }
+  .ds-main--legacy .btn:where(.primary):hover { background: var(--ds-accent); color: var(--ds-on-accent); filter: brightness(1.08); }
+  .ds-main--legacy .btn:where(.small) { min-height: 28px; padding: 2px 8px; }
+  .chips { gap: 4px; }
+  div.seg { gap: 4px; border: 0; border-radius: 0; overflow: visible; }
+  .chip, .ds-app .seg button {
+    min-height: 28px; padding: 2px 12px; border: 1px solid var(--ds-line); border-radius: 8px;
+    background: none; color: var(--ds-muted); font-size: var(--ds-fs-2);
+  }
+  .chip:hover, .ds-app .seg button:hover { border-color: var(--ds-accent); color: var(--ds-fg); }
+  .chip.on, .ds-app .seg button[aria-pressed="true"] { background: var(--ds-accent-bg); border-color: var(--ds-accent); color: var(--ds-fg); }
+}
