@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.2 — 26 November 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Added: 2 · Changed: 7 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
+<p class="ah-release-meta">Added: 2 · Changed: 8 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
 
 <p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions · orchestration progress in the console.</p>
 
@@ -33,6 +33,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
     - **[Words, durations and dates]:** the report card, the Orchestration statistics, Repo Map and "Work progress" word check, review, report and file parsing results in the console language. Every duration in the console reads the same way — the two largest units in days, hours and minutes, seconds only under a minute — and dates in the Orchestration history read as everywhere else: `08.11.2026 09:00 UTC`. (#1296)
     - **[Diagnostics keys]:** Diagnostics runs the offline and online checks with `r` and `o`, as Home does, and the "Export — key e" hint no longer repeats the button and the footer. Beside the Offline / Online switch, Home names only the number of skipped checks. (#1296)
     - **[Footer and ledger lock]:** the key row of every TUI screen starts with `esc` and ends with `f1`, `f2` and the command palette. The ledger lock card in the TUI and the web console starts with the state's icon and colour (free, held, not read), and for a live owner the timeout line no longer repeats the verdict. (#1296)
+    - **[Loading and check titles]:** every loading or running line in the TUI carries one "in progress" icon, the same as the running status. Home names the checks as Diagnostics and the web console do: "Skill snapshot", "Hook policy", not with separate wordings. (#1296)
 
     **Fixed**
 
