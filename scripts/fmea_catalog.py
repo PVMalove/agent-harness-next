@@ -4,7 +4,8 @@
 `generate` пишет `harness/fmea/ids.py` с `FmeaId` из `harness/fmea/catalog.toml`;
 `generate --check` только сравнивает модуль с каталогом и завершается с кодом 1 при расхождении;
 `new <title>` дописывает заготовку записи с новым uuid4 и перегенерирует модуль. `id` никогда
-не вводится вручную: у CLI нет такой опции.
+не вводится вручную: у CLI нет такой опции. `db` собирает из каталога SQLite-файл
+`.harness/fmea.db` только для запросов `harness fmea show`; файл не коммитится.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ from harness.fmea.catalog import (
     member_name,
     parse_catalog,
 )
+from harness.fmea.db import DB_PATH, FmeaDbError, build_db
 
 MODULE_PATH = CATALOG_PATH.with_name("ids.py")
 REGENERATE = "python scripts/fmea_catalog.py generate"
@@ -86,17 +88,23 @@ def _parser() -> argparse.ArgumentParser:
     new = commands.add_parser("new", help="append an entry skeleton with a fresh uuid4 id")
     new.add_argument("title", help="slug of the failure mode, for example git-timeout")
     for command in (generate, new):
-        command.add_argument("--catalog", type=Path, default=CATALOG_PATH)
         command.add_argument("--module", type=Path, default=MODULE_PATH)
+    db = commands.add_parser("db", help="build the read-only SQLite file .harness/fmea.db")
+    db.add_argument("--db", type=Path, default=DB_PATH)
+    for command in (generate, new, db):
+        command.add_argument("--catalog", type=Path, default=CATALOG_PATH)
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Точка входа CLI: 0 успех, 1 расхождение модуля, 2 ошибка каталога."""
+    """Точка входа CLI: 0 успех, 1 расхождение модуля, 2 ошибка каталога или сборки файла."""
     args = _parser().parse_args(argv)
     catalog: Path = args.catalog
-    module: Path = args.module
     try:
+        if args.command == "db":
+            build_db(load_catalog(catalog), args.db)
+            return 0
+        module: Path = args.module
         if args.command == "new":
             added = append_entry(catalog, args.title)
             write_module(catalog, module)
@@ -111,7 +119,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return 1
         else:
             write_module(catalog, module)
-    except FmeaCatalogError as error:
+    except (FmeaCatalogError, FmeaDbError) as error:
         return print_and_exit(error)
     return 0
 
