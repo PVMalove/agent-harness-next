@@ -222,6 +222,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     CSS = SHELL_CSS + brand.shell_css("""
     OrchestrationScreen #orchestration-page { height: 1fr; padding: 0 2; }
     OrchestrationScreen #orchestration-header { height: auto; margin-bottom: 1; overflow-x: auto; }
+    OrchestrationScreen.-wide #orchestration-header, OrchestrationScreen.-spacious #orchestration-header { margin-bottom: 0; }
     OrchestrationScreen #orchestration-title { width: auto; height: 1; text-style: bold; padding-right: 2; }
     OrchestrationScreen #orchestration-subtitle { width: 1fr; height: 1; color: $text-muted; }
     OrchestrationScreen #orchestration-header Button { margin-left: 2; color: $primary; text-style: underline; }
@@ -233,11 +234,14 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     OrchestrationScreen #pipeline-analytics-card, OrchestrationScreen #pipeline-analytics TabPane { height: auto; }
     OrchestrationScreen #pipeline-analytics { height: auto; }
     OrchestrationScreen #pipeline-analytics-card, OrchestrationScreen #pipeline-kpi-card, OrchestrationScreen #pipeline-stats-card, OrchestrationScreen #ledger-lock-card { margin: 0 0 1 0; }
+    OrchestrationScreen.-wide #pipeline-analytics-card, OrchestrationScreen.-spacious #pipeline-analytics-card, OrchestrationScreen.-wide #pipeline-kpi-card, OrchestrationScreen.-spacious #pipeline-kpi-card, OrchestrationScreen.-wide #pipeline-stats-card, OrchestrationScreen.-spacious #pipeline-stats-card, OrchestrationScreen.-wide #ledger-lock-card, OrchestrationScreen.-spacious #ledger-lock-card { margin: 0; }
     OrchestrationScreen #pipeline-history { height: 13; margin: 0 0 1 0; }
+    OrchestrationScreen.-wide #pipeline-history, OrchestrationScreen.-spacious #pipeline-history { margin: 0; }
     OrchestrationScreen #state-filter-card { width: 32; height: 100%; }
     OrchestrationScreen #batch-history-card { width: 1fr; height: 100%; }
     OrchestrationScreen #state-filter, OrchestrationScreen #batch-history { height: 1fr; border: none; padding: 0; }
     OrchestrationScreen #command-body { height: 18; margin: 0 0 1 0; }
+    OrchestrationScreen.-wide #command-body, OrchestrationScreen.-spacious #command-body { margin: 0; }
     OrchestrationScreen #command-menu-card { height: 100%; }
     OrchestrationScreen.-wide #command-menu-card, OrchestrationScreen.-spacious #command-menu-card { width: 48; }
     OrchestrationScreen #command-detail-card { width: 1fr; height: 100%; }

@@ -395,7 +395,9 @@ class DashboardScreen(ConsoleShell):
     DashboardScreen #dashboard-overview { width: 1fr; height: 1fr; padding: 0 2; overflow-y: auto; }
     DashboardScreen #dashboard-title { height: 1; text-style: bold; }
     DashboardScreen #dashboard-subtitle { height: 1; color: $text-muted; margin-bottom: 1; }
+    DashboardScreen.-wide #dashboard-subtitle, DashboardScreen.-spacious #dashboard-subtitle { margin-bottom: 0; }
     DashboardScreen #dashboard-attention-card { margin-bottom: 1; }
+    DashboardScreen.-wide #dashboard-attention-card, DashboardScreen.-spacious #dashboard-attention-card { margin-bottom: 0; }
     DashboardScreen #dashboard-attention, DashboardScreen #dashboard-problems { height: auto; }
     DashboardScreen .problem-row { height: auto; border-bottom: solid $border-subtle; }
     DashboardScreen .problem-row:last-of-type { border-bottom: none; }
@@ -405,9 +407,11 @@ class DashboardScreen(ConsoleShell):
     DashboardScreen .problem-caption { height: 1; color: $text-muted; text-wrap: nowrap; text-overflow: ellipsis; }
     DashboardScreen .problem-row JumpLink { margin-left: 2; }
     DashboardScreen #dashboard-check { height: 1; margin-bottom: 1; }
+    DashboardScreen.-wide #dashboard-check, DashboardScreen.-spacious #dashboard-check { margin-bottom: 0; }
     DashboardScreen #dashboard-check-label { width: auto; padding-right: 2; color: $text-muted; }
     DashboardScreen #dashboard-attention-mode { width: 1fr; color: $text-muted; padding-left: 2; }
     DashboardScreen #home-sessions-card { margin-bottom: 1; }
+    DashboardScreen.-wide #home-sessions-card, DashboardScreen.-spacious #home-sessions-card { margin-bottom: 0; }
     DashboardScreen #home-sessions { height: auto; border: none; }
     DashboardScreen #home-sessions > ListItem { height: 1; padding: 0 1 0 0; border-left: solid transparent; }
     DashboardScreen #home-sessions > ListItem.-highlight { background: $row-highlight; text-style: none; color: $foreground; border-left: solid $selection-edge; }

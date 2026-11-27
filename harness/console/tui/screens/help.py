@@ -45,6 +45,8 @@ class HelpScreen(ConsoleShell):
     HelpScreen #help-scroll { width: 1fr; height: 1fr; padding: 0 2; }
     HelpScreen Markdown { padding: 0; }
     HelpScreen MarkdownH1 { margin: 0 0 1 0; padding: 0; border: none; content-align: left middle; }
+    /* Wide: a heading sits on the line after the paragraph above it (Textual gives headers 2 0 1 0). */
+    HelpScreen.-wide MarkdownH1, HelpScreen.-spacious MarkdownH1, HelpScreen.-wide MarkdownH2, HelpScreen.-spacious MarkdownH2 { margin: 0; }
     HelpScreen.shell .help-section { border: none; margin: 0; padding: 0; background: transparent; }
     HelpScreen.shell .help-section > Contents { padding: 0; }
     HelpScreen.shell .help-section > CollapsibleTitle { display: none; }

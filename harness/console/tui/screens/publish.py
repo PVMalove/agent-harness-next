@@ -92,6 +92,7 @@ class PublishScreen(ConsoleShell):
     PublishScreen #publish-batches > ListItem.-highlight, PublishScreen #publish-batches:focus > ListItem.-highlight { background: $row-highlight; color: $foreground; border-left: solid $selection-edge; }
     PublishScreen #publish-right { width: 1fr; height: 1fr; }
     PublishScreen #publish-right > .section-card { margin-bottom: 1; }
+    PublishScreen.-wide #publish-right > .section-card, PublishScreen.-spacious #publish-right > .section-card { margin-bottom: 0; }
     PublishScreen #publish-detail-title { height: auto; text-style: bold; color: $foreground; }
     PublishScreen #publish-detail-meta { height: auto; color: $text-muted; }
     PublishScreen #publish-detail-body { height: auto; }

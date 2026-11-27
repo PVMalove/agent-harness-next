@@ -261,7 +261,9 @@ class BoardScreen(ConsoleShell):
     CSS = SHELL_CSS + brand.shell_css("""
     BoardScreen #board-page { height: 1fr; padding: 0 2; }
     BoardScreen #board-controls { margin-bottom: 1; }
+    BoardScreen.-wide #board-controls, BoardScreen.-spacious #board-controls { margin-bottom: 0; }
     BoardScreen #board-control-row { height: 1; margin-bottom: 1; }
+    BoardScreen.-wide #board-control-row, BoardScreen.-spacious #board-control-row { margin-bottom: 0; }
     BoardScreen #board-spec { width: 1fr; margin-right: 1; }
     BoardScreen #board-refresh { width: auto; }
     BoardScreen #board-filter-fields { height: 1; }
@@ -270,9 +272,11 @@ class BoardScreen(ConsoleShell):
     BoardScreen #board-priority { width: 24; margin-right: 1; }
     BoardScreen #board-free { width: auto; }
     BoardScreen #board-status-line { height: 1; margin-bottom: 1; }
+    BoardScreen.-wide #board-status-line, BoardScreen.-spacious #board-status-line { margin-bottom: 0; }
     BoardScreen #board-live { width: 2; height: 1; margin-right: 1; color: $primary; }
     BoardScreen #board-status { width: 1fr; height: 1; color: $text-muted; }
     BoardScreen #board-segment { height: 1; margin-bottom: 1; overflow: hidden hidden; }
+    BoardScreen.-wide #board-segment, BoardScreen.-spacious #board-segment { margin-bottom: 0; }
     BoardScreen #board-segment Button { height: 1; min-width: 0; border: none; padding: 0 1; color: $text-muted; }
     BoardScreen #board-segment Button.-on { background: $selection-background; color: $selection-foreground; text-style: bold; }
     BoardScreen #board-body { height: 1fr; }

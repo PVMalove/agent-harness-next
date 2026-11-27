@@ -127,15 +127,19 @@ class RepoMapScreen(ConsoleShell):
     ]
     CSS = SHELL_CSS + brand.shell_css("""
     RepoMapScreen #repo-map-head { height: auto; padding: 0 2; margin-bottom: 1; }
+    RepoMapScreen.-wide #repo-map-head, RepoMapScreen.-spacious #repo-map-head { margin-bottom: 0; }
     RepoMapScreen #repo-map-title { height: 1; text-style: bold; }
     RepoMapScreen #repo-map-status { height: auto; }
     RepoMapScreen #repo-map-actions { height: 1; margin-top: 1; }
+    RepoMapScreen.-wide #repo-map-actions, RepoMapScreen.-spacious #repo-map-actions { margin-top: 0; }
     RepoMapScreen #repo-map-actions Button { margin-right: 1; }
     RepoMapScreen .strip-note { text-align: right; color: $text-muted; }
     RepoMapScreen #repo-map-tabs { height: 1fr; padding: 0 2; }
     RepoMapScreen TabPane { padding: 1 0 0 0; }
+    RepoMapScreen.-wide TabPane, RepoMapScreen.-spacious TabPane { padding: 0; }
     RepoMapScreen #tab-settings { padding: 0; }
     RepoMapScreen .section-card { margin-bottom: 1; }
+    RepoMapScreen.-wide .section-card, RepoMapScreen.-spacious .section-card { margin-bottom: 0; }
     RepoMapScreen .pair > .section-card, RepoMapScreen .settings-row > .section-card { margin-bottom: 0; }
     RepoMapScreen #file-search { height: auto; }
     RepoMapScreen #symbol-search { width: 1fr; }
@@ -150,6 +154,7 @@ class RepoMapScreen(ConsoleShell):
     RepoMapScreen.-wide #relations-fold > CollapsibleTitle, RepoMapScreen.-spacious #relations-fold > CollapsibleTitle { display: none; }
     RepoMapScreen #map-summary { margin-bottom: 0; }
     RepoMapScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    RepoMapScreen.-wide .pair, RepoMapScreen.-spacious .pair { margin-bottom: 0; }
     RepoMapScreen.-wide .pair, RepoMapScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     RepoMapScreen .pair > .section-card { height: 100%; }
     RepoMapScreen #map-summary-empty { height: auto; color: $text-muted; }

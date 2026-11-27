@@ -192,6 +192,7 @@ class DiagnosticsScreen(ConsoleShell):
     DiagnosticsScreen #diagnostics-heading { height: 1; text-style: bold; }
     DiagnosticsScreen #diagnostics-manual { height: auto; color: $text-muted; }
     DiagnosticsScreen #diagnostics-overview { height: auto; margin-bottom: 1; }
+    DiagnosticsScreen.-wide #diagnostics-overview, DiagnosticsScreen.-spacious #diagnostics-overview { margin-bottom: 0; }
     DiagnosticsScreen #diagnostics-summary { height: 1; }
     DiagnosticsScreen #diagnostics-actions { height: 1; }
     DiagnosticsScreen #diagnostics-actions Button { width: auto; min-width: 10; height: 1; margin-right: 1; }
@@ -203,6 +204,7 @@ class DiagnosticsScreen(ConsoleShell):
     DiagnosticsScreen.-wide #diagnostics-pair, DiagnosticsScreen.-spacious #diagnostics-pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     DiagnosticsScreen #diagnostics-pair > .section-card { height: 100%; }
     DiagnosticsScreen #diagnostics-filters { height: 1; margin-bottom: 1; }
+    DiagnosticsScreen.-wide #diagnostics-filters, DiagnosticsScreen.-spacious #diagnostics-filters { margin-bottom: 0; }
     DiagnosticsScreen #diagnostics-filters Button { height: 1; min-width: 7; width: auto; margin-right: 1; }
     DiagnosticsScreen #check-list { height: auto; max-height: 22; border: none; padding: 0; background: transparent; }
     DiagnosticsScreen #check-list > ListItem { height: auto; padding: 0 1; border-left: solid transparent; border-bottom: solid $border-subtle; }

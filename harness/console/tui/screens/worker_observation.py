@@ -828,7 +828,7 @@ class WorkerObservationScreen(ConsoleShell):
     WorkerObservationScreen #worker-subtitle { display: none; height: 1; padding: 0 2; color: $text-muted; }
     WorkerObservationScreen.-narrow #worker-subtitle { display: block; }
     WorkerObservationScreen #worker-pipeline { height: 1; padding: 0 2; }
-    WorkerObservationScreen #worker-status { height: auto; max-height: 6; padding: 0 2; border-top: solid $border-subtle; color: $text-muted; }
+    WorkerObservationScreen #worker-status { height: auto; max-height: 6; padding: 0 2; border-top: solid $border-subtle; border-bottom: solid $border-subtle; color: $text-muted; }
     WorkerObservationScreen #worker-tabs { height: 1fr; }
     WorkerObservationScreen TabPane { padding: 0; }
     WorkerObservationScreen ContentSwitcher { height: 1fr; }
@@ -1283,7 +1283,7 @@ class WorkerObservationScreen(ConsoleShell):
         process = process_line(snapshot, worker, language)
         heartbeat = heartbeat_line(snapshot, language)
         lines = [
-            f"{snapshot.get('batch_id')} / {dispatch} · {snapshot.get('role')}",
+            f"{snapshot.get('batch_id')} / {brand.short_dispatch(str(dispatch))} · {snapshot.get('role')}",
             process.plain,
             heartbeat.plain,
             f"{t('Операция')}: {self._last_operation}",
@@ -1560,7 +1560,7 @@ class WorkerObservationScreen(ConsoleShell):
                 return
             pending = requests[0]
             dispatch_id = self.dispatch
-            description = f"{self.snapshot.get('batch_id')} / {dispatch_id}\n{self.snapshot.get('worktree')}\nRequest: {pending['request_id']}\nTool: {pending['tool_name']}\n{pending['input_preview']}"
+            description = f"{self.snapshot.get('batch_id')} / {brand.short_dispatch(str(dispatch_id))}\n{self.snapshot.get('worktree')}\nRequest: {pending['request_id']}\nTool: {pending['tool_name']}\n{pending['input_preview']}"
 
             def answered(allow: bool | None) -> None:
                 if allow is None:

@@ -201,7 +201,9 @@ class ConfigurationScreen(ConsoleShell):
     ConfigurationScreen #configuration-scroll { width: 100%; height: 1fr; overflow-x: hidden; }
     ConfigurationScreen #configuration-title { height: 1; text-style: bold; }
     ConfigurationScreen #configuration-subtitle { color: $text-muted; margin-bottom: 1; }
+    ConfigurationScreen.-wide #configuration-subtitle, ConfigurationScreen.-spacious #configuration-subtitle { margin-bottom: 0; }
     ConfigurationScreen #configuration-row { width: 100%; height: auto; grid-size: 1; margin-bottom: 1; }
+    ConfigurationScreen.-wide #configuration-row, ConfigurationScreen.-spacious #configuration-row { margin-bottom: 0; }
     ConfigurationScreen.-spacious #configuration-row { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     ConfigurationScreen #configuration-row > SectionCard { height: 100%; }
     ConfigurationScreen .store-path { color: $text-muted; }

@@ -217,8 +217,10 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     ProjectSetupScreen #setup-subtitle { height: auto; color: $text-muted; }
     ProjectSetupScreen #setup-stage { height: auto; border: round $border-subtle; background: transparent; padding: 0 1; }
     ProjectSetupScreen #hub-current, ProjectSetupScreen #hub-row { margin-bottom: 1; }
+    ProjectSetupScreen.-wide #hub-current, ProjectSetupScreen.-spacious #hub-current, ProjectSetupScreen.-wide #hub-row, ProjectSetupScreen.-spacious #hub-row { margin-bottom: 0; }
     ProjectSetupScreen #hub-name { height: auto; margin-bottom: 1; }
     ProjectSetupScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    ProjectSetupScreen.-wide .pair, ProjectSetupScreen.-spacious .pair { margin-bottom: 0; }
     ProjectSetupScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     ProjectSetupScreen .pair > .section-card { height: 100%; }
     ProjectSetupScreen #hub-list { height: auto; max-height: 12; border: none; padding: 0; background: transparent; }

@@ -293,10 +293,13 @@ class UpdateHarnessScreen(ConsoleShell):
     UpdateHarnessScreen #update-page { width: 100%; height: 1fr; padding: 0 2; overflow-x: hidden; }
     UpdateHarnessScreen #update-title { height: 1; text-style: bold; }
     UpdateHarnessScreen #update-subtitle { color: $text-muted; margin-bottom: 1; }
+    UpdateHarnessScreen.-wide #update-subtitle, UpdateHarnessScreen.-spacious #update-subtitle { margin-bottom: 0; }
     UpdateHarnessScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    UpdateHarnessScreen.-wide .pair, UpdateHarnessScreen.-spacious .pair { margin-bottom: 0; }
     UpdateHarnessScreen.-wide .pair, UpdateHarnessScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     UpdateHarnessScreen .pair > .section-card { height: 100%; margin-bottom: 0; }
     UpdateHarnessScreen .section-card { margin-bottom: 1; }
+    UpdateHarnessScreen.-wide .section-card, UpdateHarnessScreen.-spacious .section-card { margin-bottom: 0; }
     UpdateHarnessScreen Static { height: auto; }
     UpdateHarnessScreen .actions { height: auto; }
     UpdateHarnessScreen .reason-note { height: auto; color: $text-muted; }

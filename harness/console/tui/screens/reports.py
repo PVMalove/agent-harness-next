@@ -190,6 +190,7 @@ class ReportsScreen(ConsoleShell):
     CSS = SHELL_CSS + brand.shell_css("""
     ReportsScreen #reports-page { height: 1fr; padding: 0 2; }
     ReportsScreen #report-header { height: auto; margin-bottom: 1; }
+    ReportsScreen.-wide #report-header, ReportsScreen.-spacious #report-header { margin-bottom: 0; }
     ReportsScreen #report-heading { width: 1fr; min-width: 30; height: auto; }
     ReportsScreen #reports-title { height: 1; text-style: bold; }
     ReportsScreen #reports-subtitle { height: 1; color: $text-muted; }
@@ -197,19 +198,24 @@ class ReportsScreen(ConsoleShell):
     ReportsScreen #report-toolbar { width: auto; height: 1; }
     ReportsScreen #report-toolbar Button { margin-left: 1; }
     ReportsScreen #report-filter-fold { margin-bottom: 1; }
+    ReportsScreen.-wide #report-filter-fold, ReportsScreen.-spacious #report-filter-fold { margin-bottom: 0; }
     ReportsScreen.-wide #report-filter-fold > CollapsibleTitle, ReportsScreen.-spacious #report-filter-fold > CollapsibleTitle { display: none; }
     ReportsScreen.-wide #report-filter-fold > Contents, ReportsScreen.-spacious #report-filter-fold > Contents { padding: 0; }
     ReportsScreen #report-filters { height: 1; }
     ReportsScreen #report-filters Input { width: 1fr; height: 1; margin-right: 1; border: none; padding: 0 1; background: transparent; }
     ReportsScreen #report-filters Input:focus { border: none; background: transparent; text-style: bold; }
     ReportsScreen #report-order { height: 1; margin-top: 1; }
+    ReportsScreen.-wide #report-order, ReportsScreen.-spacious #report-order { margin-top: 0; }
     ReportsScreen #report-order Select { width: 1fr; margin-right: 1; }
     ReportsScreen #report-order Select > SelectCurrent { border: none; height: 1; padding: 0 1; background: transparent; }
     ReportsScreen #reports-kpi-card { margin-bottom: 1; }
+    ReportsScreen.-wide #reports-kpi-card, ReportsScreen.-spacious #reports-kpi-card { margin-bottom: 0; }
     ReportsScreen #reports-body { height: 1fr; min-height: 18; }
     ReportsScreen #report-detail-scroll { height: 1fr; }
     ReportsScreen #report-panel { width: 1fr; height: 100%; margin-bottom: 1; }
+    ReportsScreen.-wide #report-panel, ReportsScreen.-spacious #report-panel { margin-bottom: 0; }
     ReportsScreen #report-detail-card { width: 44; height: 100%; margin: 0 0 1 1; }
+    ReportsScreen.-wide #report-detail-card, ReportsScreen.-spacious #report-detail-card { margin: 0 0 0 1; }
     ReportsScreen.-narrow #report-detail-card { display: none; }
     ReportsScreen .card-hint { height: 1; color: $text-muted; }
     ReportsScreen .report-list { height: 1fr; margin: 0; padding: 0; border: none; background: transparent; }
