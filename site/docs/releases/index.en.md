@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.2 — 26 November 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Added: 3 · Changed: 14 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
+<p class="ah-release-meta">Added: 3 · Changed: 15 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
 
 <p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions · orchestration progress in the console.</p>
 
@@ -41,6 +41,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
     - **[Web console wording]:** the web console words states in one form ("In progress", "Report received") and translates the remaining English labels on the Russian screen: «в сети», «Цепочка аудита», «Скиллы», «Проверки», «Evidence устарела», «Одобрение dispatch». Home shows the snapshot age as a duration, and the Board tiles read as phrases: "In an active batch … cannot join another batch", "Updated … ago". (#1296)
     - **[Empty values and summaries]:** a missing value looks the same everywhere: a muted caption-size "no data" with the reason in its tooltip, and a badge without a value (a ticket's SP) is not drawn. Recovery reduces its state to one verdict line and says why "Open recovery" is unavailable; Diagnostics gives the feature list more room and does not repeat the reason in "Switch plan". (#1296)
     - **[One look for every screen]:** on a wide screen Home, the Task Board, "Work progress", Recovery and the container route look like the other sections: the title starts at the same gutter, the subtitle has one size, the header buttons have one height, the primary button is filled, and panel heads and their rows start at one 12 px inset. The filters of every section ("All 7", QA/Review, "Offline/Online") look the same, and the container route fields sit in one row again. (#1296)
+    - **[Session as in Claude CLI]:** the Session tab of the TUI Agent activity screen reads as Claude CLI: a message and a tool call start with ●, and the result hangs under the call on ⎿. Code lines keep their numbers in a muted column, the added and removed lines of a diff are coloured, a long output folds to five lines, and `Ctrl+O` shows it in full; the icon legend stays with the Events tab. (#1296)
 
     **Fixed**
 
