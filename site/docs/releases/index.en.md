@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.2 — 26 November 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Added: 2 · Changed: 13 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
+<p class="ah-release-meta">Added: 3 · Changed: 13 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
 
 <p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions · orchestration progress in the console.</p>
 
@@ -23,6 +23,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
     - **[Release Gate for an integration branch]:** `integration prepare --ticket "#<epic>" --branch <integration/...>` records the pair of the integration branch head and `base_branch` (or another `integration/*` through `--target`) without a publish batch, when the epic's `## Integration Branch` section names that branch. The integration PR passes `confirm-pr`, a CI or local-QA check of that pair, `handoff` and the tree check after the merge, like a ticket PR; the pair requires the full check, and a `-light` check never confirms it. (#1278)
     - **[Orchestration progress in the console]:** the "Work progress" screen of the TUI and the web console shows the batch timeline with the `auto` policy decisions and the stop of the automatic path, the QA stages in the container with the output tail and the result of each stage, and the state of the worker container: image, engine, teardown and the last stderr lines. The console only reads these data from the console server and the runtime; when the runtime does not answer, the screen names the reason. (#1296)
+    - **[Web console light theme]:** the web console follows the system theme: with a light system theme every section is light, with a dark one it looks as before. The theme button in the top bar pins the light or dark theme in this browser and hands the choice back to the system; a narrow screen follows the system theme. (#1296)
 
     **Changed**
 
