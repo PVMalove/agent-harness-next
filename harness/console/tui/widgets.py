@@ -160,7 +160,7 @@ class ReasonNote(Static):
 
 
 class LiveDot(Static):
-    """A slow ✦/⁘ pulse for a live source. It is decoration: the adjacent text still says what is
+    """A slow ●/○ pulse for a live source. It is decoration: the adjacent text still says what is
     happening, so a terminal without animation (or a reader that ignores it) loses nothing."""
 
     DEFAULT_CLASSES = "live-dot no-i18n"
@@ -189,7 +189,7 @@ class LiveDot(Static):
 
 
 class StatusLine(Static):
-    """A status as a symbol and a text in the console language (`✦ актуален`), coloured; `relabel`
+    """A status as a symbol and a text in the console language (`● актуален`), coloured; `relabel`
     redraws it after a language switch."""
 
     DEFAULT_CLASSES = "status-line no-i18n"

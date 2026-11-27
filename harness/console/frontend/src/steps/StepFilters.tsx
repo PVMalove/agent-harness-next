@@ -18,6 +18,7 @@ import {
   statusCounts,
 } from "./ActivityViews";
 import type { SessionStatus } from "./ActivityViews";
+import { shortDispatch } from "../dispatchId";
 
 const tone = (state: string): string =>
   state === "dispatched" || state === "working" ? "ok" : state === "failed" || state === "blocked" ? "err" : "";
@@ -143,7 +144,7 @@ export function StepFilters({
               <span className="work-row-main">
                 <b>
                   {entry.ticket ? `${entry.ticket} · ` : ""}
-                  {entry.dispatch_id}
+                  {shortDispatch(entry.dispatch_id)}
                 </b>
                 <small>
                   {roleName(entry.role)} · {entry.branch || entry.batch_id}

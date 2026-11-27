@@ -4,6 +4,7 @@ import { useI18n } from "../i18n";
 import { useScreen } from "../screens/useScreen";
 import { parseTimeline } from "../ws/ledger";
 import { batchStartText, batchStatus, batchTimingText, renderStatus, roleFlowText } from "./format";
+import { shortDispatch } from "../dispatchId";
 
 /** `id` keeps the element unique where two timelines are mounted at once (Publish Evidence and
     the candidate drawer). */
@@ -39,7 +40,7 @@ export function Timeline({ batchId, id = "report-timeline" }: { batchId: string;
                   {event.at || "?"} · {event.kind}
                   {event.role ? ` · ${event.role}` : ""}
                 </small>
-                <span>{event.text}</span>
+                <span>{shortDispatch(event.text)}</span>
               </li>
             ))}
           </ol>

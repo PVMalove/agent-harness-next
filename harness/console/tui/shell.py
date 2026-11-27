@@ -588,7 +588,7 @@ Screen.shell { background: $background !important; }
 .shell .context-label { height: 2; color: $text-muted; margin-top: 1; }
 .shell .context-value { height: auto; margin-bottom: 1; }
 .shell .context-note { height: auto; background: transparent; border: round $component-border; padding: 0 1; margin-top: 1; color: $text-muted; }
-.shell ShellSidebar { width: 30; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1 0; }
+.shell ShellSidebar { width: 30; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 0; }
 .shell ShellSidebar ListView, .shell ShellSidebar ListView:focus { height: 1fr; border: none; padding: 0; margin: 0; background: transparent; }
 .shell ShellSidebar ListView > ListItem { height: 1; padding: 0 1; border-left: solid transparent; color: $text-muted; background: transparent; text-style: none; }
 .shell ShellSidebar ListView > ListItem.-highlight, .shell ShellSidebar ListView:focus > ListItem.-highlight {
@@ -609,7 +609,7 @@ Screen.shell { background: $background !important; }
 .shell .field { height: auto; margin-bottom: 1; }
 .shell.-spacious .context-panel { width: 38; }
 .shell.-spacious.-roomy .context-panel { width: 48; }
-.shell.-wide ShellSidebar { width: 25; }
+.shell.-wide ShellSidebar, .shell.-spacious ShellSidebar { width: 25; }
 .shell.-narrow .menu-toggle { display: block; }
 .shell.-narrow ShellSidebar { display: none; }
 .shell.-narrow.-menu-open ShellSidebar { display: block; }

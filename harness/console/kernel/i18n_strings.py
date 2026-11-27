@@ -762,6 +762,7 @@ FACT_LABELS_EN: dict[str, str] = {
     "Установлено": "Installed",
     "Роль": "Role",
     "Модель": "Model",
+    "Усилие": "Effort",
     "Запуск": "Launch",
     "Сессия": "Session",
     "Причина": "Reason",

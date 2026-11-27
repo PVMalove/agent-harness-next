@@ -11,6 +11,7 @@ import { Icon } from "../icons";
 import { NoData, roleIcon, roleName } from "../steps/ActivityViews";
 import type { Figure, OrchestrationSnapshot, StageHead } from "../ws/ledger";
 import { liveSteps, miniSteps } from "./format";
+import { shortDispatch } from "../dispatchId";
 
 const ACTIVE = new Set(["working", "dispatched", "approved"]);
 const ATTENTION = new Set(["failed", "blocked", "auto_stop"]);
@@ -230,7 +231,7 @@ export function BatchCards({ data, now = Date.now() }: { data: OrchestrationSnap
               ))}
             </div>
             <div className="orch-batch-foot">
-              <span>{last ? `${last.dispatch_id} · ${duration(ageSeconds(last.started_at || last.at, now))}` : "—"}</span>
+              <span>{last ? `${shortDispatch(last.dispatch_id)} · ${duration(ageSeconds(last.started_at || last.at, now))}` : "—"}</span>
               <span className="orch-batch-links">
                 <a href={href("agent-activity")}>
                   {t("Ход работы")} <Icon name="chevron" />
@@ -313,7 +314,7 @@ export function DispatchQueue({ data, now = Date.now() }: { data: OrchestrationS
                 <Icon name={roleIcon(stage.role)} />
               </span>
               <span className="orch-dispatch-main">
-                <b>{`${stage.dispatch_id} · ${stage.ticket || stage.batch_id}`}</b>
+                <b title={stage.dispatch_id}>{`${shortDispatch(stage.dispatch_id)} · ${stage.ticket || stage.batch_id}`}</b>
                 <small>{`${stage.batch_id} · ${roleName(stage.role)} · ${t("старт")} ${clock(stage.started_at || stage.at, language)}`}</small>
               </span>
               <span className="orch-state">

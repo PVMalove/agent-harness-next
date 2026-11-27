@@ -8,6 +8,7 @@ import type { CommandDescriptor } from "../ws/jobs";
 import { JOB_ERROR_LABELS } from "../ws/jobs";
 import type { DecisionItem } from "../ws/decisions";
 import { useDecisions } from "./useDecisions";
+import { shortDispatch } from "../dispatchId";
 
 const KINDS: Readonly<Record<string, string>> = {
   "native-permission": "Запрос разрешения native runtime", "dispatch-approval": "Одобрение dispatch",
@@ -108,7 +109,7 @@ export function DecisionPanel({ kinds, hideWhenEmpty = false }: { kinds?: readon
     {items.map((item) => <article className="panel decision-card" key={JSON.stringify(item)}>
       <div className="panel-head"><h3>{t(KINDS[item.kind] ?? item.kind)}</h3><span className="orch-pill violet">{item.ticket}</span></div>
       <dl className="decision-context"><dt>batch</dt><dd>{item.batch_id}</dd>
-        {item.dispatch_id && <><dt>dispatch</dt><dd>{item.dispatch_id}</dd></>}
+        {item.dispatch_id && <><dt>dispatch</dt><dd title={item.dispatch_id}>{shortDispatch(item.dispatch_id)}</dd></>}
         {item.role && <><dt>{t("Роль")}</dt><dd>{item.role}</dd></>}
         {Object.entries(item.details).filter(([, value]) => value).map(([name, value]) =>
           <div key={name}><dt>{name}</dt><dd><pre>{value}</pre></dd></div>)}

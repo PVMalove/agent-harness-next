@@ -14,6 +14,7 @@ import type { ReportHead, StageHead } from "../ws/ledger";
 import { KIND_TONE, REPORT_SECTION_TITLES, kindTone, reportSectionLines, stageStatus, statusWords } from "./format";
 import type { StatusKind } from "./format";
 import { clockTime } from "./StageList";
+import { shortDispatch } from "../dispatchId";
 
 const KIND_ICON: Readonly<Record<StatusKind, IconName>> = {
   accepted: "check",
@@ -38,7 +39,7 @@ export function ReportDetail({ stage, report }: { stage: StageHead; report: Repo
           <span className="report-type-label">
             <Icon name={roleIcon(stage.role)} /> {stage.role}
           </span>
-          <code>{stage.dispatch_id}</code>
+          <code title={stage.dispatch_id}>{shortDispatch(stage.dispatch_id)}</code>
         </div>
         <h3>{t("Отчёт {role} · {ticket}", { role: stage.role, ticket: stage.ticket || "?" })}</h3>
         <div className="report-meta">

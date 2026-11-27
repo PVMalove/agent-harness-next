@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from rich.cells import cell_len
 from rich.columns import Columns
 from rich.console import Group, RenderableType
 from rich.table import Table
@@ -307,7 +308,7 @@ def execution_lines(summary: ExecutionSummary | None, t: Callable[[str], str]) -
 _PROCESS_WORDS = {
     "live": ("►", "процесс работает", "process running", "success"),
     "stopped": (icons.STOP, "процесс завершён", "process exited", "muted"),
-    "absent": ("※", "процесс не найден", "process not found", "warning"),
+    "absent": (icons.STATUS_ICONS["skipped"], "процесс не найден", "process not found", "warning"),
 }
 # The state of the worker's event stream: Russian and English words and colour.
 _STREAM_WORDS = {
@@ -364,7 +365,7 @@ def heartbeat_line(snapshot: JsonObject, language: str) -> Text:
 
 
 def _status_colour(line: str) -> str:
-    """The colour of a status note by its leading symbol: ✤ warning, ✖ error, others muted."""
+    """The colour of a status note by its leading symbol: ▲ warning, ■ error, others muted."""
     return brand.PALETTE[
         "warning"
         if line.startswith((icons.STATUS_ICONS["warn"], "⚠"))
@@ -388,31 +389,35 @@ def timeline_rows(
 
 def timeline_table(rows: list[tuple[str, str, str, str]]) -> Table:
     """The timeline as a grid: an event's text wraps inside its own column, so the time, kind and
-    role columns stay aligned on a narrow main column. The role is its icon in its colour."""
+    role columns stay aligned on a narrow main column. The kind and the role are icons in their
+    colours; `timeline_legend` names them."""
     table = Table.grid(padding=(0, 1), expand=True)
     table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
-    table.add_column(no_wrap=True)
+    table.add_column(width=1, no_wrap=True)
     table.add_column(width=1, no_wrap=True)
     table.add_column(ratio=1, overflow="fold")
     for at, kind, role, text in rows:
-        glyph, colour = icons.role_icon(role)
+        kind_glyph, kind_colour = icons.timeline_icon(kind)
+        role_glyph, role_colour = icons.role_icon(role)
         table.add_row(
-            at, kind, Text(glyph, style=f"bold {colour}"), SeparatorWrap(brand.short_dispatch(text))
+            at,
+            Text(kind_glyph, style=f"bold {kind_colour}"),
+            Text(role_glyph, style=f"bold {role_colour}"),
+            SeparatorWrap(brand.short_dispatch(text)),
         )
     return table
 
 
-def role_legend(rows: list[tuple[str, str, str, str]]) -> Text:
-    """The roles of the shown events, each as its icon and name, under the timeline."""
-    legend = Text()
+def timeline_legend(rows: list[tuple[str, str, str, str]], language: str = "ru") -> Text:
+    """The kinds and then the roles of the shown events, each as its icon and word, under the
+    timeline."""
+    legend = icons.kinds_legend((kind for _at, kind, _role, _text in rows), language)
     for role in dict.fromkeys(role for _at, _kind, role, _text in rows):
         glyph, colour = icons.role_icon(role)
-        if not glyph:
-            continue
-        if legend:
+        if glyph:
             legend.append("   ")
-        legend.append(glyph, style=f"bold {colour}")
-        legend.append(f" {role}", style=brand.PALETTE["muted"])
+            legend.append(glyph, style=f"bold {colour}")
+            legend.append(f" {role}", style=brand.PALETTE["muted"])
     return legend
 
 
@@ -421,17 +426,17 @@ def role_legend(rows: list[tuple[str, str, str, str]]) -> Text:
 # unknown kind is shown with the `system` look and its own name.
 EVENT_KINDS: dict[str, tuple[str, str, str, str]] = {
     "output":       ("›", "вывод",       "output",       brand.PALETTE["foreground"]),
-    "tool":         ("✣", "инструмент",  "tool",         brand.PALETTE["primary"]),
-    "tool-result":  ("↫", "результат",   "result",       brand.PALETTE["muted"]),
+    "tool":         ("♦", "инструмент",  "tool",         brand.PALETTE["primary"]),
+    "tool-result":  ("◦", "результат",   "result",       brand.PALETTE["muted"]),
     "result":       (icons.STATUS_ICONS["ok"], "итог",        "outcome",      brand.PALETTE["success"]),
     "error":        (icons.STATUS_ICONS["fail"], "ошибка",      "error",        brand.PALETTE["error"]),
     "stderr":       (icons.STATUS_ICONS["warn"], "stderr",      "stderr",       brand.PALETTE["warning"]),
-    "permission":   ("◈", "разрешение",  "permission",   brand.PALETTE["warning"]),
+    "permission":   ("◊", "разрешение",  "permission",   brand.PALETTE["warning"]),
     "stage":        (icons.STATUS_KIND_ICONS["running"], "стадия QA",   "QA stage",     brand.PALETTE["primary"]),
     "stage-result": (icons.STATUS_ICONS["ok"], "итог стадии", "stage result", brand.PALETTE["foreground"]),
     "log":          (icons.PLAIN_LOG, "лог",         "log",          brand.PALETTE["muted"]),
-    "system":       ("⁑", "система",     "system",       brand.PALETTE["muted"]),
-    "omitted":      ("⁖", "пропущено",   "omitted",      brand.PALETTE["muted"]),
+    "system":       ("▪", "система",     "system",       brand.PALETTE["muted"]),
+    "omitted":      ("▫", "пропущено",   "omitted",      brand.PALETTE["muted"]),
 }
 # The glyph of a finished QA stage follows its result, as `_stage_result` words it.
 _STAGE_RESULTS = {
@@ -459,7 +464,7 @@ def _chip(glyph: str, colour: str) -> Text:
 
 
 # The «Сессия» tab reads as Claude CLI: a message or a tool call is a ● line after a blank line,
-# and what it returned hangs under it on ⎿. A tool call shows only the tool's name: the kernel never
+# and what it returned hangs under it on └. A tool call shows only the tool's name: the kernel never
 # passes tool inputs (`visible_events`). The colour of each kind's ●:
 _BULLETS: dict[str, str] = {
     "output": brand.PALETTE["foreground"],
@@ -476,7 +481,9 @@ RESULT_LINES = 5
 _NUMBERED = re.compile(r"^\s*(\d+)(?:\t|→)(.*)$")
 # A result that holds a unified diff marks its added and removed lines.
 _DIFF_START = re.compile(r"^(?:@@ |diff --git |\+\+\+ |--- )")
-_RESULT_PREFIX = "  ⎿  "
+# `└` is a box-drawing corner every monospace font carries (the terminal draws it itself), not
+# Claude CLI's `⎿`, which comes from a fallback font of another size.
+_RESULT_PREFIX = "  └  "
 
 
 def _bullet(kind: str, text: str) -> RenderableType:
@@ -507,7 +514,7 @@ def _line_style(line: str, diff: bool, default: str) -> str:
 
 
 def _result(kind: str, text: str, language: str, expanded: bool) -> RenderableType:
-    """What a call returned, under ⎿: numbered code keeps its numbers in a muted column, a diff
+    """What a call returned, under └: numbered code keeps its numbers in a muted column, a diff
     marks its lines, and a long result shows its first lines with the count of the rest."""
     muted = brand.PALETTE["muted"]
     default = {
@@ -560,7 +567,7 @@ def transcript_row(
     event: JsonObject, language: str = "ru", *, expanded: bool = False
 ) -> RenderableType:
     """One event of the «Сессия» tab as Claude CLI shows it: a message, a tool call or an outcome
-    is a ● line; a tool result, stderr and a QA stage's result hang under it on ⎿; a Codex log
+    is a ● line; a tool result, stderr and a QA stage's result hang under it on └; a Codex log
     line continues the message text; a system note and an omitted stretch are muted."""
     kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
     if kind in {"tool-result", "stderr", "stage-result"}:
@@ -571,21 +578,19 @@ def transcript_row(
 
 
 def event_row(event: JsonObject, language: str = "ru") -> Table:
-    """One line of the «События» tab: the chip and the kind as a coloured word, then the first
-    line of the text, cut with an ellipsis."""
+    """One line of the «События» tab: the chip of the kind (the legend under the tab names it),
+    then the first line of the text, cut with an ellipsis."""
     kind, text = str(event.get("kind", "event")), str(event.get("text", ""))
-    glyph, label, colour = _event_look(kind, text, language)
-    width = max(len(_event_look(name, "", language)[1]) for name in EVENT_KINDS)
+    glyph, _label, colour = _event_look(kind, text, language)
     row = Table.grid(padding=(0, 1), expand=True)
     row.add_column(width=CHIP_WIDTH, no_wrap=True)
-    row.add_column(width=width, no_wrap=True, style=colour)
     row.add_column(ratio=1, no_wrap=True, overflow="ellipsis")
     lines = text.splitlines() or [""]
     more = len(lines) - 1
     shown = Text(lines[0], style=brand.PALETTE["foreground"])
     if more:
         shown.append(f"  +{more}", style=brand.PALETTE["muted"])
-    row.add_row(_chip(glyph, colour), label, shown)
+    row.add_row(_chip(glyph, colour), shown)
     return row
 
 
@@ -635,12 +640,12 @@ def context_rows(
             ),
         )
     )
-    who = Text(role, style=f"bold {brand.ROLE_COLORS.get(role, brand.PALETTE['foreground'])}")
-    who.append(f" · {runtime}", style=brand.PALETTE["foreground"])
-    rows.append(("Роль", who))
-    model = Text(str(snapshot.get("model") or "—"), style=brand.PALETTE["foreground"])
-    model.append(f" · {snapshot.get('effort') or '—'}", style=brand.PALETTE["muted"])
-    rows.append(("Модель", model))
+    rows.append(
+        ("Роль", Text(role, style=f"bold {brand.ROLE_COLORS.get(role, brand.PALETTE['foreground'])}"))
+    )
+    rows.append(("Runtime", Text(runtime, style=brand.PALETTE["foreground"])))
+    rows.append(("Модель", Text(str(snapshot.get("model") or "—"), style=brand.PALETTE["foreground"])))
+    rows.append(("Усилие", Text(str(snapshot.get("effort") or "—"), style=brand.PALETTE["muted"])))
     rows.append(
         (
             "Запуск",
@@ -692,7 +697,7 @@ def context_table(rows: list[tuple[str, Text]], language: str) -> Table:
 
 
 def readiness_text(snapshot: JsonObject) -> Text:
-    """The environment checks, one per line: ✦ confirmed, ✖ refuted, ⁘ not checked."""
+    """The environment checks, one per line: ● confirmed, ■ refuted, ○ not checked."""
     model_report = snapshot.get("model_self_report") or {}
     tree = snapshot.get("worktree_attestation") or {}
     checks = Text()
@@ -808,30 +813,30 @@ class WorkerObservationScreen(ConsoleShell):
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
     WorkerObservationScreen.-spacious.-tight #worker-sessions { width: 26; }
-    /* The run context holds short facts (a dispatch reads as d8e030c3f), so it gives its room to the work. */
-    WorkerObservationScreen.-spacious #worker-context { width: 36; }
-    WorkerObservationScreen.-spacious.-roomy #worker-context { width: 40; }
-    WorkerObservationScreen #worker-sessions { width: 34; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
+    WorkerObservationScreen #worker-sessions { width: 34; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 0 1; }
     WorkerObservationScreen #worker-live { width: 2; height: 1; margin-left: 1; color: $success; }
-    WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
+    WorkerObservationScreen #worker-session-count { height: 1; padding: 0 1; color: $text-muted; }
     WorkerObservationScreen #worker-picker { height: 1fr; border: none; margin: 0; padding: 0; }
     WorkerObservationScreen #worker-picker > .option-list--option { padding: 0 1; }
     WorkerObservationScreen #worker-picker > .option-list--separator { color: $border-subtle; }
     WorkerObservationScreen #worker-main { width: 1fr; min-width: 0; height: 1fr; }
-    WorkerObservationScreen #worker-heading { height: auto; min-height: 4; padding: 1 2 0 2; }
-    WorkerObservationScreen #worker-title { width: 1fr; height: 2; text-style: bold; }
+    WorkerObservationScreen #worker-heading { height: auto; min-height: 1; padding: 0 2; }
+    WorkerObservationScreen #worker-title { width: 1fr; height: 1; text-style: bold; }
     WorkerObservationScreen #worker-badge { width: auto; color: $text-muted; }
-    WorkerObservationScreen #worker-subtitle { height: 1; padding: 0 2; color: $text-muted; }
-    WorkerObservationScreen #worker-pipeline { height: 2; padding: 0 2; }
-    WorkerObservationScreen #worker-status { height: auto; max-height: 6; padding: 0 2; border-top: solid $border-subtle; border-bottom: solid $border-subtle; color: $text-muted; }
+    /* The strip above names the ticket, role and dispatch and the context names the runtime, so
+       the wide layout leaves out the subtitle that repeats them. */
+    WorkerObservationScreen #worker-subtitle { display: none; height: 1; padding: 0 2; color: $text-muted; }
+    WorkerObservationScreen.-narrow #worker-subtitle { display: block; }
+    WorkerObservationScreen #worker-pipeline { height: 1; padding: 0 2; }
+    WorkerObservationScreen #worker-status { height: auto; max-height: 6; padding: 0 2; border-top: solid $border-subtle; color: $text-muted; }
     WorkerObservationScreen #worker-tabs { height: 1fr; }
     WorkerObservationScreen TabPane { padding: 0; }
     WorkerObservationScreen ContentSwitcher { height: 1fr; }
     WorkerObservationScreen Tabs { padding: 0 2; }
-    WorkerObservationScreen #worker-output, WorkerObservationScreen #worker-events { height: 1fr; border: none; margin: 0; padding: 1 2; }
-    WorkerObservationScreen #worker-filter { width: 30; height: 1; margin: 1 2 0 2; }
-    WorkerObservationScreen #worker-access-scroll, WorkerObservationScreen #worker-execution-scroll { height: 1fr; padding: 1 2; }
-    WorkerObservationScreen #worker-timeline { height: 1fr; border: none; margin: 0; padding: 1 2; }
+    WorkerObservationScreen #worker-output, WorkerObservationScreen #worker-events { height: 1fr; border: none; margin: 0; padding: 0 2; }
+    WorkerObservationScreen #worker-filter { width: 30; height: 1; margin: 0 2; }
+    WorkerObservationScreen #worker-access-scroll, WorkerObservationScreen #worker-execution-scroll { height: 1fr; padding: 0 2; }
+    WorkerObservationScreen #worker-timeline { height: 1fr; border: none; margin: 0; padding: 0 2; }
     WorkerObservationScreen #worker-access-facts { height: auto; }
     WorkerObservationScreen #worker-actions { height: 4; padding: 0 2; border-top: solid $component-border; overflow-x: auto; }
     WorkerObservationScreen #worker-permissions-note { height: auto; margin-top: 1; color: $text-muted; }
@@ -854,6 +859,14 @@ class WorkerObservationScreen(ConsoleShell):
     # The shell's rules plus this screen's own, which must outrank the app's generic widget rules.
     CSS = SHELL_CSS + brand.shell_css("""
     .shell #worker-sessions { background: transparent; }
+    /* The run context holds one short fact per line (a dispatch reads as d8e030c3f, the model
+       apart from its effort), so it gives its room to the work. Here, not in DEFAULT_CSS: the
+       shell's own width rules come in `CSS` and would win over a default rule. */
+    .shell.-spacious #worker-context, .shell.-spacious.-roomy #worker-context { width: 32; }
+    /* The context starts on the first row, and the access check sits right under the checks. */
+    .shell #worker-context-title { margin-top: 0; }
+    .shell #worker-readiness { margin-bottom: 0; }
+    .shell #worker-permissions-note { margin-top: 0; }
     .shell #worker-picker, .shell #worker-picker:focus { border: none; background: transparent; }
     .shell #worker-picker > .option-list--option-highlighted, .shell #worker-picker:focus > .option-list--option-highlighted {
         background: $row-highlight; color: $foreground; text-style: none;
@@ -909,6 +922,9 @@ class WorkerObservationScreen(ConsoleShell):
                 wrap_value(label, 18) + "\n\n", style=brand.PALETTE["foreground"]
             )
             return card.append_text(status_caption(session_status("unknown"), language))
+        room = self.query_one("#worker-picker", OptionList).content_size.width - 2
+        outcome = stage.report.outcome if stage.report is not None else ""
+        caption = status_caption(session_status(stage.state, outcome), language).plain
         return session_card(
             ticket=stage.ticket,
             role=stage.role,
@@ -916,9 +932,10 @@ class WorkerObservationScreen(ConsoleShell):
             state=stage.state,
             language=language,
             # The dispatch ID fits one line of the list, however wide the list is.
-            id_limit=max(12, self.query_one("#worker-picker", OptionList).content_size.width - 2),
-            stacked=True,
-            outcome=stage.report.outcome if stage.report is not None else "",
+            id_limit=max(12, room),
+            # A short dispatch and its caption share a line when the list has room: two lines a card.
+            stacked=cell_len(f"{brand.short_dispatch(dispatch_id)} · {caption}") > room,
+            outcome=outcome,
         )
 
     def _paint_sessions(self) -> None:
@@ -956,7 +973,7 @@ class WorkerObservationScreen(ConsoleShell):
                 i18n.tr(language, "Рабочих сессий нет: ledger не записал ни одного dispatch")
             )
             self.query_one("#worker-status", Static).update(
-                icons.tr(language, "⁘ Наблюдать нечего. Сессия появится, когда координатор запустит worker.")
+                icons.tr(language, "○ Наблюдать нечего. Сессия появится, когда координатор запустит worker.")
             )
         self._paint_sessions()
 
@@ -983,7 +1000,7 @@ class WorkerObservationScreen(ConsoleShell):
                         markup=False,
                     )
                     yield Static(
-                        "⁘ Ожидание",
+                        "○ Ожидание",
                         id="worker-badge",
                         classes="no-i18n",
                         markup=False,
@@ -1001,7 +1018,7 @@ class WorkerObservationScreen(ConsoleShell):
                     classes="no-i18n",
                 )
                 yield Static(
-                    "⁘ Ожидание наблюдения",
+                    "○ Ожидание наблюдения",
                     id="worker-status",
                     markup=False,
                     classes="no-i18n",
@@ -1078,7 +1095,9 @@ class WorkerObservationScreen(ConsoleShell):
                 )
 
     def compose_context(self) -> ComposeResult:
-        yield Static(f"{icons.LAUNCH_CONTEXT} КОНТЕКСТ ЗАПУСКА", classes="context-label")
+        yield Static(
+            f"{icons.LAUNCH_CONTEXT} КОНТЕКСТ ЗАПУСКА", id="worker-context-title", classes="context-label"
+        )
         yield Button(
             "Запрос native",
             id="worker-permission",
@@ -1090,7 +1109,7 @@ class WorkerObservationScreen(ConsoleShell):
         )
         yield Static("ГОТОВНОСТЬ СРЕДЫ", classes="context-label")
         yield Static(
-            "⁘ Не проверено",
+            "○ Не проверено",
             id="worker-readiness",
             classes="context-value no-i18n",
             markup=False,
@@ -1209,7 +1228,10 @@ class WorkerObservationScreen(ConsoleShell):
         rows = timeline_rows(timeline)
         if rows:
             log.write(timeline_table(rows), expand=True)
-            log.write(Group(Text(""), role_legend(rows)), expand=True)
+            log.write(
+                Group(Text(""), timeline_legend(rows, getattr(self.app, "language", "ru"))),
+                expand=True,
+            )
 
     def _show_unavailable(self) -> None:
         self.query_one("#worker-status", Static).update(
@@ -1290,7 +1312,7 @@ class WorkerObservationScreen(ConsoleShell):
                 t(f"{warn} Истёк срок первого self-report; таймаут не доказывает остановку.")
             )
         if snapshot.get("stream_state") in {"unavailable", "waiting"}:
-            lines.append(t("⁘ Нет новых событий; это не проверка здоровья worker."))
+            lines.append(t("○ Нет новых событий; это не проверка здоровья worker."))
         if snapshot.get("steps_source") == "plain":
             lines.append(
                 t(f"{icons.PLAIN_LOG} Структура недоступна: показан хвост обычного лога worker.")
@@ -1396,7 +1418,7 @@ class WorkerObservationScreen(ConsoleShell):
             ("architect", "developer", "review", "QA", "publish")
         ):
             if i:
-                pipeline.append("  →  ", style=brand.PALETTE["muted"])
+                pipeline.append(" → ", style=brand.PALETTE["muted"])
             active = stage == {"code-review": "review", "qa": "QA"}.get(role, role)
             pipeline.append(
                 f" {stage} ",

@@ -6,7 +6,7 @@ import { StatusIcon } from "../ds";
 import { Icon } from "../icons";
 import { roleIcon } from "../steps/ActivityViews";
 import type { ReportHead, StageHead } from "../ws/ledger";
-import { KIND_TONE, kindTone, shortId, stageStatus, statusWords, timestamp } from "./format";
+import { KIND_TONE, dispatchLabel, kindTone, stageStatus, statusWords, timestamp } from "./format";
 import type { StageFilters } from "./format";
 
 const two = (value: number) => String(value).padStart(2, "0");
@@ -115,7 +115,7 @@ export function StageList({
                 {stage.role} · {stage.ticket || "—"}
               </b>
               <small>
-                {shortId(stage.dispatch_id, "dispatch-")} · {stage.batch_id || "—"} · {report?.outcome || stage.state}
+                {dispatchLabel(stage.dispatch_id)} · {stage.batch_id || "—"} · {report?.outcome || stage.state}
               </small>
             </span>
             <StatusIcon tone={KIND_TONE[status.kind]} label={statusWords(status, language)} />

@@ -54,7 +54,7 @@ DRIFT_LABELS_EN = {"clean": "none", "drift": "yes", "missing": "not installed"}
 
 
 def _status_label(status: str) -> str:
-    """A status as its symbol plus its word, so it never rests on colour alone: `✖ fail`."""
+    """A status as its symbol plus its word, so it never rests on colour alone: `■ fail`."""
     return f"{icons.STATUS_ICONS.get(status, '·')} {status}"
 
 

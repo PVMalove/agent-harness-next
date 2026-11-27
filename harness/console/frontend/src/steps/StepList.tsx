@@ -8,6 +8,7 @@ import type { HeldStep, Step } from "../ws/steps";
 import { STEP_LIMIT } from "./ActivityViews";
 import { clusterSteps, durationText } from "./clusters";
 import type { StepCluster } from "./clusters";
+import { shortDispatch } from "../dispatchId";
 
 /** hh:mm:ss of an ISO 8601 time, as the server observed it. */
 const clock = (observedAt: string): string => observedAt.slice(11, 19);
@@ -64,7 +65,7 @@ function StepRow({ step, cluster, open, onToggle }: { step: Step; cluster: StepC
   const result = step.origin === "agent" && step.kind === "stage-result" ? stageResult(step.text) : undefined;
   const details =
     step.origin === "agent"
-      ? [`${step.kind} · ${step.dispatch_id}`]
+      ? [`${step.kind} · ${shortDispatch(step.dispatch_id)}`]
       : [step.ticket, step.batch_id, step.next_role ? t("дальше: {role}", { role: step.next_role }) : null, step.message].filter(
           (part): part is string => Boolean(part),
         );
@@ -79,7 +80,7 @@ function StepRow({ step, cluster, open, onToggle }: { step: Step; cluster: StepC
       <span className="work-event-time">{clock(step.observed_at)}</span>
       <span className="work-event-role">{step.origin === "agent" ? step.role : (step.role ?? section("Orchestration"))}</span>
       <span className="work-event-main">
-        <b>{step.origin === "agent" ? step.text : eventText(step, t)}</b>
+        <b>{shortDispatch(step.origin === "agent" ? step.text : eventText(step, t))}</b>
         <small>{details.join(" · ")}</small>
         {stage ? <em className={`orch-pill ${result === "fail" ? "err" : result === "pass" ? "ok" : "lavender"}`}>{t(stage)}</em> : null}
         {step.origin === "orchestration" ? <Approver by={step.approved_by} /> : null}
@@ -96,7 +97,7 @@ function StepRow({ step, cluster, open, onToggle }: { step: Step; cluster: StepC
           {cluster.members.map((member) => (
             <li key={member.key}>
               <span>{clock(member.step.observed_at)}</span>
-              {member.step.origin === "agent" ? member.step.text : eventText(member.step, t)}
+              {shortDispatch(member.step.origin === "agent" ? member.step.text : eventText(member.step, t))}
             </li>
           ))}
         </ul>

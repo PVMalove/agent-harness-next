@@ -18,7 +18,7 @@ HealthCounts = tuple[int, int, int, int]
 
 
 def health_counts_markup(counts: HealthCounts, *, gaps: str = "  ") -> str:
-    """`✦ 42  ✤ 0  ✖ 2  ⁘ 11`: a counter is coloured only when non-zero so a clean report stays calm."""
+    """`● 42  ▲ 0  ■ 2  ○ 11`: a counter is coloured only when non-zero so a clean report stays calm."""
     parts = []
     for status, value in zip(("ok", "warn", "fail", "skipped"), counts):
         color = brand.STATUS_COLORS[status] if value else brand.PALETTE["muted"]
@@ -92,7 +92,7 @@ class TopBar(Horizontal):
 
 
 def where_text(project: str, branch: str | None, width: int) -> str:
-    """The right side of the top bar: `project · ↬ branch` on a wide terminal and the branch alone,
+    """The right side of the top bar: `project · ◦ branch` on a wide terminal and the branch alone,
     shortened to fit, on a narrow one; only the project when there is no branch."""
     if not branch:
         return project

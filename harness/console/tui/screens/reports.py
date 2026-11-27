@@ -78,6 +78,12 @@ def _short_id(identifier: str, prefix: str) -> str:
     return rest if len(rest) <= 12 else rest[:8] + "…"
 
 
+def _dispatch_label(dispatch_id: str) -> str:
+    """A dispatch in a list row: a UUID as `d8e030c3f`, another ID without its `dispatch-`."""
+    short = brand.short_dispatch(dispatch_id)
+    return short if short != dispatch_id else _short_id(dispatch_id, "dispatch-")
+
+
 def _report_label(
     entry: StageEntry, language: str = "ru", narrow: bool = False
 ) -> Text:
@@ -88,7 +94,7 @@ def _report_label(
     colour = brand.ROLE_COLORS.get(entry.role, brand.PALETTE["muted"])
     label = Text(f"{date:<11} {entry.ticket:<6} ")
     label.append(f"[{entry.role}]", style=f"bold {colour}")
-    label.append(f" {_short_id(entry.dispatch_id, 'dispatch-')}\n")
+    label.append(f" {_dispatch_label(entry.dispatch_id)}\n")
     status = console_reports.stage_status(entry, narrow=narrow)
     label.append(icons.render_status(status, language), style=status.color)
     return label
@@ -537,7 +543,7 @@ class ReportsScreen(ConsoleShell):
                     else Text(i18n.tr(language, "время неизвестно"), style=brand.PALETTE["muted"]),
                 ),
                 ("Batch", Text(entry.batch_id)),
-                ("Dispatch", Text(entry.dispatch_id)),
+                ("Dispatch", Text(brand.short_dispatch(entry.dispatch_id))),
             ):
                 table.add_row(i18n.tr(language, label), SeparatorWrap(value))
         detail = self.query_one("#report-detail", Static)
@@ -653,7 +659,7 @@ class ReportsScreen(ConsoleShell):
                     self._client,
                     self.repo,
                     entry.batch_id,
-                    notice=f"{entry.dispatch_id} · {entry.state}: отчёт ещё не получен",
+                    notice=f"{brand.short_dispatch(entry.dispatch_id)} · {entry.state}: отчёт ещё не получен",
                 )
         elif event.list_view.id == "batch-list":
             open_timeline(self, self._client, self.repo, name)
@@ -696,15 +702,6 @@ _DETAIL_CSS = brand.shell_css("""
 .report-detail.-narrow .page-actions { margin-top: 1; }
 .report-detail.-narrow .page-actions Button:first-child { margin-left: 0; }
 """)
-_KIND_COLOURS = {
-    "state": brand.ROLE_COLORS["verification"],
-    "dispatch": brand.PALETTE["primary"],
-    "report": brand.PALETTE["success"],
-    "decision": brand.PALETTE["warning"],
-    "risk": brand.PALETTE["error"],
-}
-
-
 def _status_text(status: Status | None, body: str, language: str) -> Text:
     """A line of a report: the status (symbol and label) in its colour, then the text."""
     line = Text()
@@ -781,14 +778,14 @@ class ReportScreen(ConsoleShell):
         entry = self.entry
         files = ", ".join(strings(entry.report.get("changed_files")))
         return [
-            ("Dispatch", entry.dispatch_id),
+            ("Dispatch", brand.short_dispatch(entry.dispatch_id)),
             ("Batch", entry.batch_id or "?"),
             ("Commit", text(entry.report.get("commit_sha"), "—")),
             ("Файлы", files or "—"),
         ]
 
     def compose_strip(self) -> ComposeResult:
-        yield WrappedValue(self.entry.dispatch_id)
+        yield WrappedValue(brand.short_dispatch(self.entry.dispatch_id))
 
     def compose_content(self) -> ComposeResult:
         language = self._language()
@@ -900,13 +897,21 @@ class BatchTimelineScreen(ConsoleShell):
             language, f"маршрут: {console_reports.role_flow_text(self.timeline)}"
         )
 
+    def _legend(self) -> Text:
+        """The kinds of the shown events as their icons and words, under the events."""
+        legend = Text("\n")
+        legend.append_text(
+            icons.kinds_legend((event.kind for event in self.timeline.events), self._language())
+        )
+        return legend
+
     def _event_row(self, event: console_reports.TimelineEvent) -> Text:
         language = self._language()
         when = event.at[:16].replace("T", " ") if event.at else "?"
         row = Text(f"{when}  ")
-        colour = _KIND_COLOURS.get(event.kind, brand.PALETTE["muted"])
-        row.append(f"{event.kind:<9}", style=f"bold {colour}")
-        row.append(f" {i18n.tr_text(language, event.text)}")
+        glyph, colour = icons.timeline_icon(event.kind)
+        row.append(glyph, style=f"bold {colour}")
+        row.append(f" {brand.short_dispatch(i18n.tr_text(language, event.text))}")
         return row
 
     def _notice_text(self) -> Text:
@@ -954,6 +959,7 @@ class BatchTimelineScreen(ConsoleShell):
                         classes="timeline-event no-i18n",
                         markup=False,
                     )
+                yield Static(self._legend(), id="timeline-legend", classes="no-i18n", markup=False)
 
     def sync_language(self) -> None:
         ConsoleShell.sync_language(self)
@@ -965,6 +971,8 @@ class BatchTimelineScreen(ConsoleShell):
             self.query(".timeline-event").results(Static), self.timeline.events
         ):
             row.update(self._event_row(event))
+        for legend in self.query("#timeline-legend").results(Static):
+            legend.update(self._legend())
         for scroll in self.query(ScrollingView):
             translate_bindings(scroll, self._language())
 
@@ -1018,7 +1026,7 @@ class QaLogsScreen(ConsoleShell):
         return Text("\n").join(
             Text(
                 f"{icons.STATUS_ICONS['warn']} {attempt.failed_at or unknown} · "
-                f"{attempt.dispatch_id} · {attempt.stage}: {attempt.message}",
+                f"{brand.short_dispatch(attempt.dispatch_id)} · {attempt.stage}: {attempt.message}",
                 style=brand.STATUS_COLORS["warn"],
             )
             for attempt in attempts
@@ -1028,7 +1036,7 @@ class QaLogsScreen(ConsoleShell):
         en = self._language() == "en"
         verdict = console_reports.qa_run_status(run)
         failed = [(command, code) for command, code in run.commands if code != 0]
-        dispatch = run.dispatch_id or ("no report" if en else "без отчёта")
+        dispatch = brand.short_dispatch(run.dispatch_id) if run.dispatch_id else ("no report" if en else "без отчёта")
         outcome = ("report: " if en else "отчёт: ") + run.outcome
         counts = (
             f"{len(run.commands)} commands, {len(failed)} failed"

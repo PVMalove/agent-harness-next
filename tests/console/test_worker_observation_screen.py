@@ -236,7 +236,7 @@ def _plain(renderable: object, width: int = 40) -> list[str]:
 
 def test_a_session_event_reads_as_in_claude_cli() -> None:
     """A message or a tool call is a ● line after a blank line; its result hangs under it on
-    ⎿; a long line wraps under the text, not under the marker."""
+    └; a long line wraps under the text, not under the marker."""
     from harness.console.tui.screens.worker_observation import transcript_row
 
     assert _plain(transcript_row({"kind": "output", "text": "Читаю тикет"})) == [
@@ -245,7 +245,7 @@ def test_a_session_event_reads_as_in_claude_cli() -> None:
     ]
     assert _plain(transcript_row({"kind": "tool", "text": "Read"})) == ["", "● Read"]
     assert _plain(transcript_row({"kind": "tool-result", "text": "4 passed"})) == [
-        "  ⎿  4 passed"
+        "  └  4 passed"
     ]
     assert _plain(transcript_row({"kind": "output", "text": "a\nb"})) == [
         "",
@@ -263,7 +263,7 @@ def test_a_tool_result_with_line_numbers_shows_them_in_a_gutter() -> None:
 
     text = "    38\t\n    45\tand, only\n   102→- refs"
     assert _plain(transcript_row({"kind": "tool-result", "text": text})) == [
-        "  ⎿   38",
+        "  └   38",
         "      45  and, only",
         "     102  - refs",
     ]
@@ -277,7 +277,7 @@ def test_a_long_tool_result_folds_to_its_first_lines_until_expanded() -> None:
 
     text = "\n".join(f"line {n}" for n in range(1, RESULT_LINES + 8))
     folded = _plain(transcript_row({"kind": "tool-result", "text": text}))
-    assert folded[0] == "  ⎿  line 1"
+    assert folded[0] == "  └  line 1"
     assert folded[RESULT_LINES - 1] == f"     line {RESULT_LINES}"
     assert folded[RESULT_LINES:] == ["     … ещё 7 строк · ctrl+o"]
     english = _plain(transcript_row({"kind": "tool-result", "text": text}, "en"))
@@ -315,13 +315,13 @@ def test_a_finished_qa_stage_shows_its_result_under_the_stage() -> None:
     def mark(text: str) -> str:
         return _plain(transcript_row({"kind": "stage-result", "text": text}))[0][:7]
 
-    assert mark("pytest: pass · exit 0") == "  ⎿  ✦ "
-    assert mark("pytest: fail · exit 1") == "  ⎿  ✖ "
-    assert mark("lint: not_run") == "  ⎿  ⁘ "
+    assert mark("pytest: pass · exit 0") == "  └  ● "
+    assert mark("pytest: fail · exit 1") == "  └  ■ "
+    assert mark("lint: not_run") == "  └  ○ "
 
 
-def test_the_batch_timeline_shows_a_role_as_its_icon_with_a_legend() -> None:
-    from harness.console.tui.screens.worker_observation import role_legend, timeline_table
+def test_the_batch_timeline_shows_the_kind_and_the_role_as_icons_with_a_legend() -> None:
+    from harness.console.tui.screens.worker_observation import timeline_legend, timeline_table
 
     rows = [
         ("13:01:04", "decision", "-", "политика auto: dispatch"),
@@ -330,23 +330,22 @@ def test_the_batch_timeline_shows_a_role_as_its_icon_with_a_legend() -> None:
         ("13:04:00", "dispatch", "developer", "developer: dispatch-c1"),
     ]
     assert _plain(timeline_table(rows), 80) == [
-        "13:01:04 decision   политика auto: dispatch",
-        "13:01:04 dispatch ◈ architect: db7fb27f0, итог: reported",
-        "13:03:01 report   ◈ отчёт architect: completed",
-        "13:04:00 dispatch ✎ developer: dispatch-c1",
+        "13:01:04 ◊   политика auto: dispatch",
+        "13:01:04 ► ▲ architect: db7fb27f0, итог: reported",
+        "13:03:01 ● ▲ отчёт architect: completed",
+        "13:04:00 ► ■ developer: dispatch-c1",
     ]
-    assert role_legend(rows).plain == "◈ architect   ✎ developer"
+    assert timeline_legend(rows).plain == "◊ решение   ► dispatch   ● отчёт   ▲ architect   ■ developer"
+    assert timeline_legend(rows, "en").plain.startswith("◊ decision   ► dispatch   ● report")
 
 
-def test_an_events_row_shows_the_chip_the_kind_and_the_first_line() -> None:
+def test_an_events_row_shows_the_chip_and_the_first_line() -> None:
+    """The chip names the kind (its legend is under the tab), so no word repeats it."""
     from harness.console.tui.screens.worker_observation import event_row
 
     row = _plain(event_row({"kind": "tool", "text": "Bash pytest\nmore\nlines"}), 60)
-    assert row == [" ✣  инструмент  Bash pytest  +2"]
-    # The kind column is as wide as the longest label of the language: «stage result».
-    assert _plain(event_row({"kind": "error", "text": "boom"}, "en"), 60) == [
-        " ✖  error        boom"
-    ]
+    assert row == [" ♦  Bash pytest  +2"]
+    assert _plain(event_row({"kind": "error", "text": "boom"}, "en"), 60) == [" ■  boom"]
 
 
 def test_the_legend_names_every_chip_and_never_splits_a_pair() -> None:
@@ -378,8 +377,11 @@ def test_the_context_names_the_block_reason_first_and_fits_long_values() -> None
     shown = {label: value.plain for label, value in rows}
     assert rows[0][0] == "Причина" and shown["Причина"] == "permission denied"
     assert shown["Dispatch"] == "de98a4a72"
-    assert shown["Роль"] == "developer · Claude Code"
-    assert shown["Модель"] == "opus · high"
+    # One fact per line, so the panel stays narrow: role, runtime, model and effort apart.
+    assert shown["Роль"] == "developer"
+    assert shown["Runtime"] == "Claude Code"
+    assert shown["Модель"] == "opus"
+    assert shown["Усилие"] == "high"
     assert shown["Сессия"] == "не наблюдалась"
     assert shown["Worktree"] == "…/feature-issue-887-kpi"
 
@@ -401,7 +403,7 @@ def test_the_status_lines_word_the_process_ledger_stream_and_heartbeat() -> None
         == "► процесс работает · ledger ► Выполняется · поток подключён"
     )
     assert process_line(snapshot, "absent", "en").plain.startswith(
-        "※ process not found"
+        "○ process not found"
     )
     assert (
         heartbeat_line(snapshot, "ru").plain

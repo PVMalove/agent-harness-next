@@ -48,7 +48,7 @@ def session_card(
     card.append("\n")
     card.append(
         brand.shorten(brand.short_dispatch(dispatch_id), id_limit)
-        + ("\n" if stacked else "  ·  "),
+        + ("\n" if stacked else " · "),
         style=brand.PALETTE["muted"],
     )
     card.append_text(status_caption(session_status(state, outcome), language))
@@ -92,10 +92,10 @@ def session_row(
             for char in title
         ).split()
     )
-    description = dispatch_id
+    description = brand.short_dispatch(dispatch_id)
     if title and not narrow:
-        # A real dispatch UUID must leave room for the title in the home column.
-        description = f"{brand.shorten(dispatch_id, 16)} · {title}"
+        # A dispatch ID of another form must leave room for the title in the home column.
+        description = f"{brand.shorten(description, 16)} · {title}"
     row.add_row(
         identity,
         Text(description, style=brand.PALETTE["muted"]),

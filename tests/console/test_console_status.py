@@ -155,7 +155,7 @@ def test_session_card_carries_ticket_role_dispatch_and_caption() -> None:
     inline = card(stacked=False)
     assert inline.plain.splitlines() == [
         "#721  ·  developer",
-        "de98a4a72  ·  ► Выполняется",
+        "de98a4a72 · ► Выполняется",
     ]
     stacked = card(stacked=True)
     assert stacked.plain.splitlines() == [

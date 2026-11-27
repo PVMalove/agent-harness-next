@@ -2,53 +2,54 @@
 
 Every status and entity icon in `harness/console/tui/` comes from here, so the TUI reads in one
 symbol style while `kernel/` (`brand.STATUS_ICONS`, `status.KINDS`, `i18n_strings`) and the Web UI
-keep their shared contract unchanged. The symbols are the owner's set (2026-11-27); colour tells
-the kinds apart, the shape keeps them apart without colour.
+keep their shared contract unchanged. The icons are one geometric family: a filled shape is a state
+reached, a hollow one a state not reached yet, and colour only adds to the shape.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
+
+from rich.text import Text
 
 from ..kernel import brand, i18n
 from ..kernel.status import Status
 
-# The owner's symbol set. Every icon below is one of these single-codepoint, one-cell glyphs
-# (`rich.cells.cell_len(glyph) == 1`, no Variation Selector-16): a terminal advances the cursor by
-# the width Rich counts, so borders and the space after an icon stay where they are.
-GLYPHS = frozenset("※⁘⁖⁙⁕⁑›↬↫⌾∴∵◎◉☺✎✖✚✤✦⭓⭔⬢✣◈▿◃►")
-# Glyphs of the set no icon uses: a terminal font rarely has them, the fallback glyph is wider than
-# one cell, and the VS Code terminal squeezes it into the cell (`rescaleOverlappingGlyphs`), so a
-# circle reads as a tall oval and a hexagon as a sliver. Dingbats are not squeezed.
-SQUEEZED = frozenset("◎◉⬢⭓⭔⌾")
+# One geometric family that the usual terminal fonts all draw themselves (DejaVu Sans Mono,
+# Liberation Mono and Courier New, Consolas and Menlo carry these WGL4 shapes), so the icons share
+# one size and one baseline. A glyph missing from the terminal font comes from a fallback font of
+# another size, and the VS Code terminal squeezes one wider than its cell: that is why emoji and
+# dingbats read as icons of different sizes. Each glyph is one cell (`rich.cells.cell_len == 1`).
+# `↻` is the one exception: only an icon button shows it.
+GLYPHS = frozenset("●○■□▲►◐◊♦×◌◦▪▫›⌂≡↔•☺↻")
 
 # Health / check statuses (parallels `brand.STATUS_ICONS`).
 STATUS_ICONS: dict[str, str] = {
-    "ok": "✦",
-    "warn": "✤",
-    "fail": "✖",
-    "skipped": "⁘",
+    "ok": "●",
+    "warn": "▲",
+    "fail": "■",
+    "skipped": "○",
 }
 
 # Session, ledger and process status kinds (parallels `status.KINDS`).
 STATUS_KIND_ICONS: dict[str, str] = {
-    "accepted": "✦",
+    "accepted": "●",
     "running": "►",
-    "paused": "⁖",
-    "not_started": "⁘",
-    "error": "✖",
-    "warning": "✤",
+    "paused": "◐",
+    "not_started": "○",
+    "error": "■",
+    "warning": "▲",
 }
 
 # Action, navigation and section icons used across TUI screens.
-STOP = "◃"
-REFRESH = "↫"
-BRANCH = "↬"
-STAR = "⁕"
-LAUNCH_CONTEXT = "◈"
-DELETE = "▿"
-PLAIN_LOG = "∵"
-UNKNOWN = "※"
+STOP = "□"
+REFRESH = "↻"
+BRANCH = "◦"
+STAR = "◊"
+LAUNCH_CONTEXT = "♦"
+DELETE = "×"
+PLAIN_LOG = "◌"
+UNKNOWN = "▫"
 
 # The one "in progress" icon of every loading or running line: the running status kind's icon.
 LOADING = STATUS_KIND_ICONS["running"]
@@ -60,32 +61,61 @@ def loading(text: str) -> str:
 
 
 # Live source pulse.
-LIVE_ON = "✦"
-LIVE_OFF = "⁘"
+LIVE_ON = "●"
+LIVE_OFF = "○"
 
 # Context group icons on the Home screen.
 CONTEXT_ICONS: dict[str, str] = {
-    "card-project": "✎",
-    "card-harness": "✣",
-    "card-orchestration": "⁙",
-    "card-repo-map": "↬",
-    "card-memory": "∴",
+    "card-project": "⌂",
+    "card-harness": "≡",
+    "card-orchestration": "►",
+    "card-repo-map": "↔",
+    "card-memory": "◊",
 }
 CONTEXT_FALLBACK = "›"
 
 # A worker role as one icon in its `brand.ROLE_COLORS` colour (the batch timeline's role column).
 ROLE_ICONS: dict[str, str] = {
-    "architect": "◈",
-    "developer": "✎",
-    "code-review": "∴",
-    "review": "∴",
-    "qa": "✚",
-    "publish": "↬",
-    "verification": "▿",
-    "coordinator": "⁙",
+    "architect": "▲",
+    "developer": "■",
+    "code-review": "◊",
+    "review": "◊",
+    "qa": "●",
+    "publish": "►",
+    "verification": "♦",
+    "coordinator": "≡",
     "human": "☺",
 }
-ROLE_FALLBACK = "›"
+ROLE_FALLBACK = "•"
+
+# A batch timeline event kind as one icon, its Russian and English word and its colour: a state
+# change, a dispatch sent, a report returned, a decision (the flowchart diamond) and a risk.
+TIMELINE_KINDS: dict[str, tuple[str, str, str, str]] = {
+    "state": ("◐", "состояние", "state", brand.ROLE_COLORS["verification"]),
+    "dispatch": ("►", "dispatch", "dispatch", brand.PALETTE["primary"]),
+    "report": ("●", "отчёт", "report", brand.PALETTE["success"]),
+    "decision": ("◊", "решение", "decision", brand.PALETTE["warning"]),
+    "risk": ("▲", "риск", "risk", brand.PALETTE["error"]),
+}
+
+
+def timeline_icon(kind: str) -> tuple[str, str]:
+    """A timeline event `kind` as its icon and colour; an unknown kind is the muted fallback."""
+    glyph, _ru, _en, colour = TIMELINE_KINDS.get(kind, (ROLE_FALLBACK, "", "", brand.PALETTE["muted"]))
+    return glyph, colour
+
+
+def kinds_legend(kinds: Iterable[str], language: str = "ru") -> Text:
+    """The timeline event `kinds`, each once in the order given, as its icon and word."""
+    legend = Text()
+    for kind in dict.fromkeys(kinds):
+        glyph, colour = timeline_icon(kind)
+        _glyph, ru, en, _colour = TIMELINE_KINDS.get(kind, ("", kind, kind, ""))
+        if legend:
+            legend.append("   ")
+        legend.append(glyph, style=f"bold {colour}")
+        legend.append(f" {en if language == 'en' else ru}", style=brand.PALETTE["muted"])
+    return legend
 
 
 def role_icon(role: str) -> tuple[str, str]:
@@ -100,39 +130,35 @@ def role_icon(role: str) -> tuple[str, str]:
     return ROLE_ICONS.get(role, ROLE_FALLBACK), colour
 
 
-# Kernel glyphs and the TUI icons they read as. `✖` is the same in both.
+# Kernel glyphs and the TUI icons they read as. `○`, `◌` and `□` are the same in both.
 _TO_TUI: tuple[tuple[str, str], ...] = (
-    ("✔", "✦"),
-    ("✓", "✦"),
-    ("⚠️", "✤"),
-    ("⚠", "✤"),
-    ("○", "⁘"),
-    ("◌", PLAIN_LOG),
+    ("✔", "●"),
+    ("✓", "●"),
+    ("⚠️", "▲"),
+    ("⚠", "▲"),
+    ("✖", "■"),
     ("▶️", "►"),
     ("▶", "►"),
-    ("⏸️", "⁖"),
-    ("Ⅱ", "⁖"),
+    ("⏸️", "◐"),
+    ("Ⅱ", "◐"),
     ("🗑️", DELETE),
     ("⊘", DELETE),
     ("◉", LAUNCH_CONTEXT),
     ("⏹️", STOP),
-    ("□", STOP),
     ("★", STAR),
 )
 _TO_KERNEL: tuple[tuple[str, str], ...] = (
-    ("✦", "✔"),
-    ("✤", "⚠"),
-    ("⁘", "○"),
-    (PLAIN_LOG, "◌"),
+    ("●", "✔"),
+    ("▲", "⚠"),
+    ("■", "✖"),
     ("►", "▶"),
-    ("⁖", "Ⅱ"),
+    ("◐", "Ⅱ"),
     (DELETE, "⊘"),
     (LAUNCH_CONTEXT, "◉"),
-    (STOP, "□"),
     (STAR, "★"),
 )
-# A kernel glyph that is already a TUI icon: a line led by it is looked up without it too.
-_SHARED = ("✖",)
+# Kernel glyphs that are already TUI icons: a line led by one is looked up without it too.
+_SHARED = ("○", "◌", "□")
 
 
 def status_symbol(status: Status) -> str:

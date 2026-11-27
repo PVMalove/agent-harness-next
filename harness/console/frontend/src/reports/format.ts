@@ -6,6 +6,7 @@
    pins every text to the one the TUI shows for the same snapshot. */
 import { compactDuration, type I18n, type Language } from "../i18n";
 import type { BatchSummary, BatchTimeline, Figures, Ledger, ReportBody, ReportHead, StageHead } from "../ws/ledger";
+import { shortDispatch } from "../dispatchId";
 
 /** The `t` of `useI18n`: the report texts below are Russian keys of the translation catalog. */
 export type Translate = I18n["t"];
@@ -410,3 +411,9 @@ export function reportsKpiTiles(kpi: Figures, t: (text: string) => string, langu
 /** A dispatch or batch id without its common prefix, as the TUI lists it. */
 export const shortId = (value: string, prefix: string): string =>
   (value.startsWith(prefix) ? value.slice(prefix.length) : value).slice(0, 8);
+
+/** A dispatch id in a list row: a UUID as `d8e030c3f`, another id without its `dispatch-` prefix. */
+export const dispatchLabel = (id: string): string => {
+  const short = shortDispatch(id);
+  return short !== id ? short : shortId(id, "dispatch-");
+};
