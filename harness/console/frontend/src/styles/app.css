@@ -893,9 +893,13 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
     .work-analytics > .orch-legend, .orch-analytics-grid, .orch-analytics-rows, .work-observation-reason, .work-observation-title,
     .work-observation-facts, .work-observation-checkpoints, .route-select
   ) { padding-inline: 12px; }
-  /* A two-line list row keeps 6 px above and below, near a .ds-row's 4 px, not 12–16 px: the
-     attention list of Home, the report list and the dispatch list show more rows. */
-  .home-attn .it, .report-row, .orch-dispatch-row { padding-block: 6px; }
-  /* The facts line under the Home title takes the page width instead of wrapping at 68ch. */
-  .ds-main--legacy .home-title .home-facts { max-width: none; }
+  /* A two-line list row keeps a .ds-row's 4 px above and below, not 12–16 px: the attention
+     list of Home, the report list and the dispatch list show more rows. */
+  .home-attn .it, .report-row, .orch-dispatch-row { padding-block: 4px; }
+  /* The Home facts run under the title and the buttons across the page width, not in the column
+     beside the buttons where they wrapped: the title block's children join the title's grid. */
+  #home .home-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; row-gap: 0; }
+  #home .home-title > div:first-child { display: contents; }
+  #home .home-title > .actions { grid-column: 2; grid-row: 1; align-self: start; }
+  #home .home-title .home-facts { grid-column: 1 / -1; margin-top: 8px; }
 }
