@@ -235,9 +235,9 @@ INTEGRATION_PR_GITHUB = (
     "--label pr::integration --body-file <path>`"
 )
 INTEGRATION_PR_GITLAB = (
-    "`glab mr create -R <project-url> --source-branch <integration-branch> "
-    "--target-branch <target-branch> --title '<title>' --label pr::integration "
-    "--description-file <path> --yes`"
+    "`GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests -X POST "
+    "-f source_branch=<integration-branch> -f target_branch=<target-branch> -f title='<title>' "
+    "-f labels=pr::integration -F description=@<path>`"
 )
 
 
@@ -258,7 +258,7 @@ def test_integration_pr_carries_pr_integration_and_no_type() -> None:
     assert INTEGRATION_PR_GITLAB in confirm
     assert "it never carries a `type::*` label" in confirm
     for line in release.read_text(encoding="utf-8").splitlines():
-        if "pr create" in line or "mr create" in line:
+        if "pr create" in line or "merge_requests -X POST" in line:
             assert "type::" not in line, line
 
 
@@ -274,10 +274,11 @@ def test_integration_pr_footer_closes_the_epic_only_into_base_branch() -> None:
 
 
 def test_integration_pr_runs_the_release_gate_where_opted_in() -> None:
-    """#1027: an opt-in project also asks `integration next` after the full `/qa-gate`."""
+    """#1027: an opt-in project also records the pair and asks `integration next` after `/qa-gate`."""
     verify = _section(REFERENCES / "release.md", "3. Verify the integration branch")
-    assert 'integration status --ticket "#<epic>" --branch "<integration-branch>"' in verify
-    assert "`no integration record exists`" in verify
+    assert 'integration prepare --ticket "#<epic>" --branch "<integration-branch>"' in verify
+    assert "`--target <target-branch>`" in verify
+    assert "`git rev-parse origin/<target-branch>`" in verify
     assert "`confirm-pr`" in verify
     assert verify.index("/qa-gate") < verify.index("integration next")
 
