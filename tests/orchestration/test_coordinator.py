@@ -14372,6 +14372,93 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         with self.assertRaises(coordinator.CoordinatorError):
             self._dispatch(self.batch_id, "qa", candidate=candidate)
 
+    def _retried_rebaser_head(self) -> tuple[str, str, JsonObject, JsonObject]:
+        """A reviewed candidate rebased by the rebaser onto a moved base, the rebaser report blocked
+        on a failed check after the rebase, and the developer retry started (issue #1306).
+        Returns the upstream tip, the rebased HEAD, the retry decision and the retry brief."""
+        self._reviewed_candidate()
+        upstream = self._push_upstream()
+        self._decide(self.batch_id, "accept")
+        brief = self._dispatch(self.batch_id, "rebaser")["brief"]
+        self._start(brief["dispatch_id"])
+        head = self._rebased(brief, conflict=False)
+        self._submit(
+            brief["dispatch_id"],
+            self._rebaser_report(
+                brief,
+                head,
+                outcome="blocked",
+                checks_run=self._checks(brief, "fail"),
+                blockers={"status": "present", "details": "a check failed"},
+            ),
+        )
+        decided = self._decide(self.batch_id, "retry", reason_category="code")
+        retry = self._dispatch(self.batch_id, "developer")["brief"]
+        self._start(retry["dispatch_id"])
+        return upstream, head, decided, retry
+
+    def test_a_retry_of_a_rebaser_blocked_after_its_rebase_continues_the_rebased_head(
+        self,
+    ) -> None:
+        upstream, head, decided, retry = self._retried_rebaser_head()
+
+        self.assertEqual(decided["next_action"], "developer-retry")
+        self.assertNotEqual(self._routing(decided)["route"], "rebase-fix-forward")
+        self.assertEqual(retry["snapshot_commit"], head)
+        self.assertIsNone(retry["rebase_target_commit"])
+
+        candidate, _ = self._developer_commit("fix")
+        changed = git_utils._changed_files_between(self.repo, upstream, candidate)
+        self._submit(
+            retry["dispatch_id"], self._developer_report(retry, candidate, changed)
+        )
+        accepted = self._decide(self.batch_id, "accept")
+
+        self.assertEqual(accepted["next_action"], "risk-assessment")
+        self.assertEqual(accepted["integration_base_commit"], upstream)
+
+    def test_a_rebased_head_without_a_code_change_goes_to_verification_on_the_new_base(
+        self,
+    ) -> None:
+        upstream, head, _, retry = self._retried_rebaser_head()
+        changed = git_utils._changed_files_between(self.repo, upstream, head)
+        self._submit(
+            retry["dispatch_id"],
+            self._developer_report(
+                retry,
+                head,
+                [],
+                outcome="blocked",
+                commit_map=[],
+                blockers={
+                    "status": "present",
+                    "details": "no code change is needed; the failed check is environmental",
+                },
+            ),
+        )
+
+        decided = self._decide(
+            self.batch_id, "retry", reason_category="verification-infrastructure"
+        )
+        self.assertEqual(
+            (self._routing(decided)["route"], decided["next_action"]),
+            ("verification", "verification"),
+        )
+        verification = self._dispatch(self.batch_id, "verification", candidate=head)[
+            "brief"
+        ]
+        self._start(verification["dispatch_id"], checkout=self.worktree)
+        self._submit(
+            verification["dispatch_id"],
+            self._base_report(verification, "verification"),
+        )
+        accepted = self._decide(self.batch_id, "accept")
+        self._assess(self.batch_id, head, changed)
+
+        self.assertEqual(verification["snapshot_commit"], head)
+        self.assertEqual(accepted["next_action"], "risk-assessment")
+        self.assertEqual(accepted["integration_base_commit"], upstream)
+
     def test_a_transport_failure_of_the_rebaser_repeats_the_same_rebase(self) -> None:
         candidate = self._reviewed_candidate()
         upstream = self._push_upstream()
