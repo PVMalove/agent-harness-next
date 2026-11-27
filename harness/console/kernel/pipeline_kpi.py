@@ -13,6 +13,7 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Mapping, Sequence
 
+from .duration import compact_duration
 from .json_fields import text
 from ...orchestration.core.constants import BatchState
 from .reports import BatchSummary, LedgerView, ReportEntry, StageEntry, timestamp
@@ -213,20 +214,8 @@ def pipeline_kpi_from_payload(value: object) -> PipelineKpi:
 
 
 def duration_text(seconds: int | None, language: str = "ru") -> str:
-    """`3 ч 20 мин`, `2 дн 4 ч`; `—` without a figure."""
-    if seconds is None:
-        return "—"
-    days, rest = divmod(seconds, 86400)
-    hours, rest = divmod(rest, 3600)
-    minutes = rest // 60
-    day_unit, hour_unit, minute_unit = (
-        ("дн", "ч", "мин") if language == "ru" else ("d", "h", "min")
-    )
-    if days:
-        return f"{days} {day_unit} {hours} {hour_unit}"
-    if hours:
-        return f"{hours} {hour_unit} {minutes} {minute_unit}"
-    return f"{minutes} {minute_unit}"
+    """`3 ч 20 мин`, `2 дн 4 ч`, `42 с`; `—` without a figure (`compact_duration`)."""
+    return compact_duration(seconds, language)
 
 
 # -- Reports KPIs ------------------------------------------------------------------------------

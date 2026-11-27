@@ -712,9 +712,10 @@ def _lines_text(lines: list[console_reports.ReportLine], language: str) -> Text:
 
 
 def _utc_text(value: str) -> str:
-    """A recorded time as `2026-10-16 12:59 UTC`; `?` when it is missing or unreadable."""
+    """A recorded time as `16.10.2026 12:59 UTC`, as elsewhere in the console; `?` when it is
+    missing or unreadable."""
     moment = console_reports.timestamp(value)
-    return moment.strftime("%Y-%m-%d %H:%M UTC") if moment else "?"
+    return moment.strftime("%d.%m.%Y %H:%M UTC") if moment else "?"
 
 
 class ReportScreen(ConsoleShell):
@@ -767,10 +768,10 @@ class ReportScreen(ConsoleShell):
         entry = self.entry
         files = ", ".join(strings(entry.report.get("changed_files")))
         return [
-            ("dispatch", entry.dispatch_id),
-            ("batch", entry.batch_id or "?"),
-            ("commit", text(entry.report.get("commit_sha"), "—")),
-            ("файлы", files or "—"),
+            ("Dispatch", entry.dispatch_id),
+            ("Batch", entry.batch_id or "?"),
+            ("Commit", text(entry.report.get("commit_sha"), "—")),
+            ("Файлы", files or "—"),
         ]
 
     def compose_strip(self) -> ComposeResult:
@@ -793,7 +794,10 @@ class ReportScreen(ConsoleShell):
                     yield Button("e Экспорт в Markdown", id="export", compact=True)
             yield FieldGrid(self._fields(), id="report-fields")
             for title, lines in console_reports.report_section_lines(self.entry.report):
-                with SectionCard(title=title, id="card-" + _section_id(title)):
+                with SectionCard(
+                    title=console_reports.REPORT_SECTION_TITLES.get(title, title),
+                    id="card-" + _section_id(title),
+                ):
                     yield Static(
                         _lines_text(lines, language),
                         id=_section_id(title),
@@ -802,7 +806,10 @@ class ReportScreen(ConsoleShell):
                     )
             qa_log = console_reports.qa_log_text(self.view, self.entry.dispatch_id)
             if qa_log:
-                with SectionCard(title="QA log", id="card-section-qa-log"):
+                with SectionCard(
+                    title=console_reports.REPORT_SECTION_TITLES["QA log"],
+                    id="card-section-qa-log",
+                ):
                     yield Static(
                         qa_log,
                         id="section-qa-log",

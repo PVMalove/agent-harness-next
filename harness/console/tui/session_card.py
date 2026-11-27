@@ -13,6 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from ..kernel import brand
+from ..kernel.duration import compact_duration
 from ..kernel.status import Status, session_status
 from . import icons
 
@@ -54,17 +55,12 @@ def session_card(
 
 
 def elapsed_text(start: datetime | None, now: datetime, language: str) -> str:
-    """How long ago `start` was, in the largest whole unit: `2 мин`, `3 ч`, `2 д`; empty when the
-    start is unknown or later than `now`."""
+    """How long ago `start` was, in the largest unit of `compact_duration`: `2 мин`, `3 ч`,
+    `2 дн` — as the web console cuts an age; empty when the start is unknown or later than `now`."""
     if start is None or start > now:
         return ""
-    minutes = int((now - start).total_seconds()) // 60
-    units = ("min", "h", "d") if language == "en" else ("мин", "ч", "д")
-    if minutes < 60:
-        return f"{minutes} {units[0]}"
-    if minutes < 24 * 60:
-        return f"{minutes // 60} {units[1]}"
-    return f"{minutes // (24 * 60)} {units[2]}"
+    whole = compact_duration(int((now - start).total_seconds()), language)
+    return " ".join(whole.split()[:2])
 
 
 def session_row(

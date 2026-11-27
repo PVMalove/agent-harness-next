@@ -158,9 +158,10 @@ def test_batch_status_names_the_state_with_a_symbol_and_keeps_an_unknown_one() -
 
 
 def test_outcome_status_keeps_the_ledger_word_beside_its_symbol() -> None:
-    assert outcome_status("completed").render("ru") == "✔ completed"
-    assert outcome_status("blocked").render("ru") == "⚠ blocked"
-    assert outcome_status("failed").render("ru") == "✖ failed"
+    assert outcome_status("completed").render("ru") == "✔ завершено"
+    assert outcome_status("completed").render("en") == "✔ completed"
+    assert outcome_status("blocked").render("ru") == "⚠ заблокировано"
+    assert outcome_status("failed").render("ru") == "✖ ошибка"
     assert outcome_status("odd").render("ru") == "⚠ odd"
 
 
@@ -179,13 +180,13 @@ def test_report_review_axis_verdict_follows_the_recorded_severity_not_the_findin
         for status, text in lines
         if status is not None
     }
-    assert axes == {"standards": "✔ clean", "spec": "⚠ warning"}
+    assert axes == {"standards": "✔ чисто", "spec": "⚠ замечания"}
 
     for severity, shown in (
-        ("none", "✔ none"),
-        ("clean", "✔ clean"),
-        ("warning", "⚠ warning"),
-        ("blocker", "✖ blocker"),
+        ("none", "✔ нет замечаний"),
+        ("clean", "✔ чисто"),
+        ("warning", "⚠ замечания"),
+        ("blocker", "✖ блокер"),
     ):
         single: JsonObject = {"standards": {"severity": severity, "findings": []}}
         [(status, text)] = dict(report_section_lines({"review": single}))["Review"][1:]
@@ -357,3 +358,24 @@ def test_the_reports_screen_reads_the_ledger_and_bodies_through_the_client() -> 
     assert unavailable is not None and "нет сервера" in unavailable
     assert "нет сервера" in str(screen.read_report(client, view.reports[0]))
     assert "нет сервера" in str(screen.read_timeline(client, "b-1"))
+
+
+def test_a_check_result_is_worded_in_the_console_language() -> None:
+    report: JsonObject = {
+        "checks_run": [
+            {"command": "make lint", "result": "pass", "evidence": "ok"},
+            {"command": "pytest", "result": "fail", "evidence": "1 failed"},
+            {"command": "e2e", "result": "not_run", "evidence": ""},
+        ]
+    }
+    lines = dict(report_section_lines(report))["Checks"]
+    assert [status.render("ru") for status, _ in lines if status] == [
+        "✔ пройдена",
+        "✖ не пройдена",
+        "○ не запускалась",
+    ]
+    assert [status.render("en") for status, _ in lines if status] == [
+        "✔ passed",
+        "✖ failed",
+        "○ not run",
+    ]

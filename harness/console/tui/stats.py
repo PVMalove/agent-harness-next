@@ -54,9 +54,15 @@ def short_time(value: str) -> str:
     )
 
 
-def _counts(counts: dict[str, int]) -> str:
+# A report outcome in the statistics, in Russian; the English screen translates the phrase.
+OUTCOME_WORDS = {"completed": "завершено", "blocked": "заблокировано", "failed": "провалено"}
+
+
+def _counts(counts: dict[str, int], words: dict[str, str] | None = None) -> str:
+    names = words or {}
     return (
-        ", ".join(f"{name} {count}" for name, count in sorted(counts.items())) or "нет"
+        ", ".join(f"{names.get(name, name)} {count}" for name, count in sorted(counts.items()))
+        or "нет"
     )
 
 
@@ -73,7 +79,7 @@ def pipeline_stats_text(stats: PipelineStats) -> str:
             f"Запусков (batch): {stats.batches}, тикетов: {stats.tickets}",
             f"По состояниям: {states}",
             f"Dispatch по ролям: {_counts(stats.dispatches_by_role)}",
-            f"Отчёты по итогам: {_counts(stats.reports_by_outcome)}",
+            f"Отчёты по итогам: {_counts(stats.reports_by_outcome, OUTCOME_WORDS)}",
             f"QA-прогонов: {stats.qa_runs}, неудачных попыток qa-lane: {stats.qa_attempts_failed}",
             f"Период: {period}",
         )

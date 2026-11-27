@@ -376,7 +376,7 @@ def report_facts(payload: object, body: JsonObject, timeline: object) -> list[st
             console_reports.batch_timing_text(batch),
         ]
     for title, lines in console_reports.report_section_lines(body):
-        facts.append(title)
+        facts.append(console_reports.REPORT_SECTION_TITLES.get(title, title))
         for status, line in lines:
             if status is not None:
                 facts.append(status.render("ru"))

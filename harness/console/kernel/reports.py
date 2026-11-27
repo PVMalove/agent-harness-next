@@ -33,12 +33,24 @@ from ...orchestration.ledger.lifecycle import (
     LifecycleLedger,
     store_is_authority,
 )
+from .duration import compact_duration
 from .export import MarkdownDocument, MarkdownSection
 from .home_snapshot import _bool, _fields, _int, _list, _optional, _str
 from .json_fields import strings, text
 from .status import Status
 
 REPORT_SECTIONS = ("Output", "Checks", "Risks", "Blockers", "Next action")
+# The Russian title a screen shows for each section; the English name stays the section's key in
+# the ledger reader, the Markdown export and the web console.
+REPORT_SECTION_TITLES = {
+    "Output": "Вывод",
+    "Checks": "Проверки",
+    "Review": "Ревью",
+    "Risks": "Риски",
+    "Blockers": "Блокеры",
+    "Next action": "Следующее действие",
+    "QA log": "Лог QA",
+}
 QA_LOG_TAIL_LINES = 15
 _QA_SHA256 = re.compile(r"sha256:([0-9a-f]{64})")
 _ROLE_FLOW_SEPARATOR = " → "
@@ -419,17 +431,8 @@ def batch_timing_text(batch: BatchSummary, *, language: str = "ru") -> str:
     if start is None or end is None or end < start:
         return "to PR: unknown" if language == "en" else "до PR: неизвестно"
     seconds = int((end - start).total_seconds())
-    days, rest = divmod(seconds, 86400)
-    hours, rest = divmod(rest, 3600)
-    minutes = rest // 60
-    units = ("d", "h", "min", "s") if language == "en" else ("д", "ч", "мин", "с")
-    parts = [
-        f"{count} {unit}"
-        for count, unit in ((days, units[0]), (hours, units[1]), (minutes, units[2]))
-        if count
-    ]
-    return ("to PR: " if language == "en" else "до PR: ") + (
-        " ".join(parts) if parts else f"{seconds} {units[3]}"
+    return ("to PR: " if language == "en" else "до PR: ") + compact_duration(
+        seconds, language
     )
 
 
@@ -477,16 +480,17 @@ def batch_status(batch: BatchSummary) -> Status:
 
 
 def outcome_status(outcome: str) -> Status:
-    """A report outcome as a symbol and the ledger's own word: `✔ completed`."""
-    kind = _OUTCOMES.get(outcome, ("warning",))[0]
-    return Status(kind, outcome, outcome)
+    """A report outcome as a symbol and a word: `✔ завершено`; an unknown one as the ledger
+    wrote it."""
+    kind, ru, en = _OUTCOMES.get(outcome, ("warning", outcome, outcome))
+    return Status(kind, ru, en)
 
 
 def qa_run_status(run: QaRun) -> Status:
     """The verdict of a QA gate run: `passed` unless a command exited non-zero."""
     if any(code != 0 for _, code in run.commands):
-        return Status("error", "failed", "failed")
-    return Status("accepted", "passed", "passed")
+        return Status("error", "не пройден", "failed")
+    return Status("accepted", "пройден", "passed")
 
 
 ReportLine = tuple[Status | None, str]
@@ -501,6 +505,18 @@ _CHECK_RESULTS = {
     "fail": "error",
     "not_run": "not_started",
 }
+# The words of a check result and of a review axis severity: (Russian, English).
+_CHECK_WORDS = {
+    "pass": ("пройдена", "passed"),
+    "fail": ("не пройдена", "failed"),
+    "not_run": ("не запускалась", "not run"),
+}
+_SEVERITY_WORDS = {
+    "none": ("нет замечаний", "no findings"),
+    "clean": ("чисто", "clean"),
+    "warning": ("замечания", "warnings"),
+    "blocker": ("блокер", "blocker"),
+}
 
 
 def _check_lines(report: JsonObject) -> list[ReportLine]:
@@ -508,11 +524,12 @@ def _check_lines(report: JsonObject) -> list[ReportLine]:
     for check in _objects(report.get("checks_run")):
         result = text(check.get("result"), "?")
         kind = _CHECK_RESULTS.get(result, "warning")
+        ru, en = _CHECK_WORDS.get(result, (result, result))
         evidence = text(check.get("evidence"))
         command = text(check.get("command"), "?")
         lines.append(
             (
-                Status(kind, result, result),
+                Status(kind, ru, en),
                 f"{command} — {evidence}" if evidence else command,
             )
         )
@@ -529,7 +546,8 @@ def _review_lines(review: JsonObject) -> list[ReportLine]:
             continue
         findings = _objects(evidence.get("findings"))
         severity = text(evidence.get("severity"), "?")
-        status = Status(_REVIEW_SEVERITIES.get(severity, "warning"), severity, severity)
+        ru, en = _SEVERITY_WORDS.get(severity, (severity, severity))
+        status = Status(_REVIEW_SEVERITIES.get(severity, "warning"), ru, en)
         lines.append((status, f"{axis} · находок: {len(findings)}"))
         lines.extend(
             (

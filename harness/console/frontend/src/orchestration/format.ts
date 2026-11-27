@@ -83,10 +83,13 @@ export function pipelineStats(ledger: Ledger): PipelineStats {
   };
 }
 
-const counts = (values: Map<string, number>) =>
+/** `OUTCOME_WORDS`: a report outcome in the statistics, in Russian. */
+const OUTCOME_WORDS: Readonly<Record<string, string>> = { completed: "завершено", blocked: "заблокировано", failed: "провалено" };
+
+const counts = (values: Map<string, number>, words: Readonly<Record<string, string>> = {}) =>
   [...values.entries()]
     .sort(([a], [b]) => byText(a, b))
-    .map(([name, count]) => `${name} ${count}`)
+    .map(([name, count]) => `${words[name] ?? name} ${count}`)
     .join(", ") || "нет";
 
 /** Known lifecycle states in lifecycle order, then any unknown state the ledger holds. */
@@ -106,7 +109,7 @@ export function pipelineStatsFields(stats: PipelineStats): [string, string][] {
     ["Запусков (batch)", `${stats.batches}, тикетов: ${stats.tickets}`],
     ["По состояниям", states],
     ["Dispatch по ролям", counts(stats.dispatchesByRole)],
-    ["Отчёты по итогам", counts(stats.reportsByOutcome)],
+    ["Отчёты по итогам", counts(stats.reportsByOutcome, OUTCOME_WORDS)],
     ["QA-прогонов", `${stats.qaRuns}, неудачных попыток qa-lane: ${stats.qaAttemptsFailed}`],
     ["Период", period],
   ];

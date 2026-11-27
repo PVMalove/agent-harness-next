@@ -216,6 +216,9 @@ EN: dict[str, str] = {
     "Ledger не прочитан": "Ledger not read",
     "Batch ещё нет": "No batches yet",
     "dispatch ещё не было": "no dispatches yet",
+    "Ревью": "Review",
+    "Риски": "Risks",
+    "Лог QA": "QA log",
     "Стадий ещё нет: ни один dispatch не записан в ledger": "No stages yet: the ledger records no dispatch",
     "По фильтрам ничего не найдено": "Nothing matches the filters",
     "Доска не прочитана: r — повторить": "The board was not read: r retries",
@@ -847,6 +850,8 @@ RU_FROM_EN: dict[str, str] = {
 
 # Phrases inside longer dynamic text (statuses, summaries, plans); applied longest first.
 EN_PHRASES: dict[str, str] = {
+    "завершено": "completed",
+    "провалено": "failed",
     "r — повторить; если ошибка повторяется, откройте Диагностику.": "r retries; if the error repeats, open Diagnostics.",
     "Контекст исполнителя": "Executor context",
     "Контекст проекта": "Project context",

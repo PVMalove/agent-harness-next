@@ -11,7 +11,7 @@ import { useScreen } from "../screens/useScreen";
 import { roleIcon } from "../steps/ActivityViews";
 import { parseReport } from "../ws/ledger";
 import type { ReportHead, StageHead } from "../ws/ledger";
-import { KIND_TONE, kindTone, reportSectionLines, stageStatus, statusWords } from "./format";
+import { KIND_TONE, REPORT_SECTION_TITLES, kindTone, reportSectionLines, stageStatus, statusWords } from "./format";
 import type { StatusKind } from "./format";
 import { clockTime } from "./StageList";
 
@@ -83,7 +83,7 @@ function ReportBody({ dispatchId }: { dispatchId: string }) {
   return (
     <>
       <p className="report-summary">{summary}</p>
-      <div className="report-evidence-head">Evidence</div>
+      <div className="report-evidence-head">{t(REPORT_SECTION_TITLES.Checks)}</div>
       <div className="report-evidences">
         {checks.map(([status, line], index) => {
           const [name, ...rest] = line.split(" — ");
@@ -103,7 +103,7 @@ function ReportBody({ dispatchId }: { dispatchId: string }) {
       </div>
       {review && (
         <section className="report-section" data-section="Review">
-          <div className="report-evidence-head">Review</div>
+          <div className="report-evidence-head">{t(REPORT_SECTION_TITLES.Review)}</div>
           {review.map(([status, line], index) => (
             <p key={index} className="report-line">
               {status && <span className={`report-status ${kindTone(status.kind)}`}>{statusWords(status, language)}</span>}
@@ -119,7 +119,7 @@ function ReportBody({ dispatchId }: { dispatchId: string }) {
           {flags.map(([title, lines]) =>
             lines.map(([status, line], index) => (
               <p key={`${title}-${index}`} className="report-line" data-section={title}>
-                <span className="report-line-title">{title}</span>
+                <span className="report-line-title">{t(REPORT_SECTION_TITLES[title] ?? title)}</span>
                 {status && <span className={`report-status ${kindTone(status.kind)}`}>{statusWords(status, language)}</span>}
                 {line && <span className="report-line-text">{line}</span>}
               </p>

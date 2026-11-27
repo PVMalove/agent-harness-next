@@ -165,9 +165,11 @@ def test_elapsed_time_and_check_counts_read_naturally() -> None:
     from harness.console.tui.session_card import elapsed_text
 
     now = datetime(2026, 10, 17, 14, 40, tzinfo=UTC)
-    assert elapsed_text(now - timedelta(seconds=30), now, "ru") == "0 мин"
+    # The largest unit of the console's one duration wording, as the web console cuts an age.
+    assert elapsed_text(now - timedelta(seconds=30), now, "ru") == "30 с"
     assert elapsed_text(now - timedelta(minutes=14), now, "en") == "14 min"
     assert elapsed_text(now - timedelta(hours=3, minutes=5), now, "ru") == "3 ч"
+    assert elapsed_text(now - timedelta(days=2, hours=1), now, "ru") == "2 дн"
     assert elapsed_text(now - timedelta(days=2, hours=1), now, "en") == "2 d"
     assert elapsed_text(None, now, "ru") == ""
     assert elapsed_text(now + timedelta(minutes=1), now, "ru") == ""
