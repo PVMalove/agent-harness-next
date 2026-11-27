@@ -1621,7 +1621,6 @@
     "Экспорт": "Export",
     "Экспорт в JSON": "Export to JSON",
     "Экспорт в Markdown": "Export to Markdown",
-    "Экспорт — клавиша e": "Export — key e",
     "Элементы:": "Items:",
     "Эта консоль: сервер на localhost, токен сессии и WebSocket.": "This console: a localhost server, a session token and a WebSocket.",
     "Этап проекта: {current} из {total}": "Project stage: {current} of {total}",

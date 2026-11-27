@@ -219,7 +219,9 @@ def test_a_zero_counter_keeps_its_symbol_and_is_muted() -> None:
     from harness.console.tui.screens.diagnostics import _styled_report
 
     shown = _styled_report(_fake_report())
-    assert shown.plain.split("\n")[0] == "Итого: ✅ ok=1 🔶 warn=0 ❌ fail=1 ⚪ skipped=0"
+    assert (
+        shown.plain.split("\n")[0] == "Итого: ✅ ok=1 🔶 warn=0 ❌ fail=1 ⚪ skipped=0"
+    )
     muted = brand.PALETTE["muted"]
     styled = {
         shown.plain[span.start : span.end]: str(span.style) for span in shown.spans
@@ -454,3 +456,39 @@ def test_home_context_groups_carry_a_glyph_and_wrap_a_branch_at_its_separators()
     # Every line ends at a separator or the end: no word is cut in two.
     assert "".join(line[6:] for line in lines) == branch
     assert all(line[6:].endswith(("-", "/")) for line in lines[:-1])
+
+
+def test_diagnostics_runs_the_checks_with_the_keys_of_home() -> None:
+    from textual.binding import Binding
+
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
+
+    def keys(screen: type) -> dict[str, str]:
+        return {
+            binding.key: binding.description
+            for binding in screen.__dict__["BINDINGS"]
+            if isinstance(binding, Binding) and binding.key in ("r", "o")
+        }
+
+    assert (
+        keys(DiagnosticsScreen)
+        == keys(DashboardScreen)
+        == {"r": "Офлайн", "o": "Онлайн"}
+    )
+    assert callable(DiagnosticsScreen.action_checks_offline)
+    assert callable(DiagnosticsScreen.action_checks_online)
+
+
+def test_home_names_only_the_skipped_checks_beside_the_mode_switch() -> None:
+    from dataclasses import replace
+
+    from harness.console.tui import icons
+    from harness.console.tui.screens.dashboard import DashboardScreen
+
+    data = replace(_fake_dashboard_data(), skipped=11)
+    skipped = icons.STATUS_ICONS["skipped"]
+    assert DashboardScreen._attention_mode(data) == f"{skipped} пропущено: 11"
+    assert (
+        DashboardScreen._attention_mode(data, language="en") == f"{skipped} skipped: 11"
+    )

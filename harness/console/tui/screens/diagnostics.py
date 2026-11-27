@@ -196,7 +196,6 @@ class DiagnosticsScreen(ConsoleShell):
     DiagnosticsScreen #diagnostics-actions { height: 1; }
     DiagnosticsScreen #diagnostics-actions Button { width: auto; min-width: 10; height: 1; margin-right: 1; }
     DiagnosticsScreen #diagnostics-actions #apply-fixes { width: 21; }
-    DiagnosticsScreen #diagnostics-export-hint { width: auto; text-align: right; }
     DiagnosticsScreen .action-cli { height: auto; color: $text-muted; }
     DiagnosticsScreen #diagnostics-report { height: auto; }
     DiagnosticsScreen #diagnostics-confirmation { height: auto; color: $text-muted; }
@@ -216,7 +215,12 @@ class DiagnosticsScreen(ConsoleShell):
     DiagnosticsScreen.-narrow .context-strip { display: none; }
     """)
 
-    BINDINGS = [Binding(EXPORT_BINDING_KEY, "export", "Экспорт")]
+    # The same keys as Home: `r` runs the offline checks, `o` the online ones.
+    BINDINGS = [
+        Binding("r", "checks_offline", "Офлайн"),
+        Binding("o", "checks_online", "Онлайн"),
+        Binding(EXPORT_BINDING_KEY, "export", "Экспорт"),
+    ]
 
     def __init__(
         self,
@@ -244,7 +248,6 @@ class DiagnosticsScreen(ConsoleShell):
 
     def compose_strip(self) -> ComposeResult:
         yield WrappedValue(self._strip_text())
-        yield Static("Экспорт — клавиша e", id="diagnostics-export-hint")
 
     def compose_content(self) -> ComposeResult:
         """Summary, actions, attention cards and all checks in report order."""
@@ -330,13 +333,9 @@ class DiagnosticsScreen(ConsoleShell):
                 self.notify(i18n.tr(self._language, "Команда скопирована"))
             return
         if event.button.id == "offline-checks":
-            self._reset_apply()
-            self._run_health(lambda: self._client.diagnostics(force=True))
+            self.action_checks_offline()
         elif event.button.id == "online-checks":
-            self._reset_apply()
-            self._run_health(
-                lambda: self._client.diagnostics(online=True, force=True), online=True
-            )
+            self.action_checks_online()
         elif event.button.id == "apply-fixes":
             self._on_apply_fixes_pressed()
         elif event.button.id == "export":
@@ -355,6 +354,18 @@ class DiagnosticsScreen(ConsoleShell):
     async def action_back(self) -> None:
         self._reset_apply()
         await ConsoleShell.action_back(self)
+
+    def action_checks_offline(self) -> None:
+        """Re-run the offline checks, as the «Офлайн» button and Home's `r` do."""
+        self._reset_apply()
+        self._run_health(lambda: self._client.diagnostics(force=True))
+
+    def action_checks_online(self) -> None:
+        """Run the online checks, as the «Онлайн» button and Home's `o` do."""
+        self._reset_apply()
+        self._run_health(
+            lambda: self._client.diagnostics(online=True, force=True), online=True
+        )
 
     def action_export(self) -> None:
         """Выполняет экспорт текущего отчёта health в файл Markdown."""

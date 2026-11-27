@@ -142,10 +142,6 @@ def _color(status: str) -> str:
     return brand.STATUS_COLORS[status]
 
 
-def _mode(online: bool) -> str:
-    return "online" if online else "offline"
-
-
 def _tokens(language: str, count: int) -> str:
     """`38 400 токенов` / `38,400 tokens`: thousands grouped as each language writes them."""
     _count, noun = i18n.count_noun(
@@ -630,7 +626,7 @@ class DashboardScreen(ConsoleShell):
                         compact=True,
                     )
                 yield Static(
-                    self._attention_mode(data, online=False, language=self._language),
+                    self._attention_mode(data, language=self._language),
                     id="dashboard-attention-mode",
                     classes="no-i18n",
                 )
@@ -825,7 +821,7 @@ class DashboardScreen(ConsoleShell):
         language = self._language
         self._render_attention(data)
         self.query_one("#dashboard-attention-mode", Static).update(
-            self._attention_mode(data, online=self._online, language=language)
+            self._attention_mode(data, language=language)
         )
         self.query_one("#dashboard-offline", Button).set_class(not self._online, "-on")
         self.query_one("#dashboard-online", Button).set_class(self._online, "-on")
@@ -855,10 +851,10 @@ class DashboardScreen(ConsoleShell):
             button.refresh(layout=True)
 
     @staticmethod
-    def _attention_mode(
-        data: DashboardData, *, online: bool, language: str = "ru"
-    ) -> str:
-        return i18n.tr_text(language, f"{_mode(online)} · пропущено {data.skipped}")
+    def _attention_mode(data: DashboardData, *, language: str = "ru") -> str:
+        """The checks the report skipped; the mode itself is on the Офлайн/Онлайн switch beside."""
+        word = "skipped" if language == "en" else "пропущено"
+        return f"{icons.STATUS_ICONS['skipped']} {word}: {data.skipped}"
 
     def _publish_counts(self, data: DashboardData) -> None:
         """Share the counters with the top bar and the menu badges with every shell screen."""

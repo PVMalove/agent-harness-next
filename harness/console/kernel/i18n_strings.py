@@ -1381,7 +1381,6 @@ EN.update(
         "для «Онлайн»": "for Online",
         "для «Исправить» (два шага)": "for Fix (two steps)",
         "Отчёт harness health. Команды «Как исправить» консоль не выполняет — запустите их вручную.": "The harness health report. The console does not run the “How to fix” commands — run them manually.",
-        "Экспорт — клавиша e": "Export — key e",
         "Проект: {name} · режим: {mode} · отчёт построен {when}": "Project: {name} · mode: {mode} · report built {when}",
         "Проект: {name} · режим: {mode} · отчёт строится": "Project: {name} · mode: {mode} · report is building",
         "Проект: {name} · режим: {mode} · отчёт не построен": "Project: {name} · mode: {mode} · no report",
