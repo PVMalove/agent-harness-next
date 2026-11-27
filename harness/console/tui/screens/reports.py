@@ -200,7 +200,8 @@ class ReportsScreen(ConsoleShell):
     ReportsScreen #report-order Select { width: 1fr; margin-right: 1; }
     ReportsScreen #report-order Select > SelectCurrent { border: none; height: 1; padding: 0 1; background: transparent; }
     ReportsScreen #reports-kpi-card { margin-bottom: 1; }
-    ReportsScreen #reports-body { height: 1fr; min-height: 10; }
+    ReportsScreen #reports-body { height: 1fr; min-height: 18; }
+    ReportsScreen #report-detail-scroll { height: 1fr; }
     ReportsScreen #report-panel { width: 1fr; height: 100%; margin-bottom: 1; }
     ReportsScreen #report-detail-card { width: 44; height: 100%; margin: 0 0 1 1; }
     ReportsScreen.-narrow #report-detail-card { display: none; }
@@ -325,7 +326,8 @@ class ReportsScreen(ConsoleShell):
                         compact=True,
                     )
             with SectionCard(title="Показатели", id="reports-kpi-card"):
-                yield KpiGrid(self._kpi_tiles(), id="reports-kpi")
+                # One row of tiles on a wide terminal, so the stage list keeps the room.
+                yield KpiGrid(self._kpi_tiles(), columns=6, id="reports-kpi")
             with Horizontal(id="reports-body"):
                 with SectionCard(
                     title="Стадии и отчёты",
@@ -345,7 +347,10 @@ class ReportsScreen(ConsoleShell):
                         markup=False,
                     )
                 with SectionCard(title="Детали отчёта", id="report-detail-card"):
-                    yield Static("", id="report-detail", classes="no-i18n", markup=False)
+                    with VerticalScroll(id="report-detail-scroll"):
+                        yield Static(
+                            "", id="report-detail", classes="no-i18n", markup=False
+                        )
             with Fold(
                 title="Batch",
                 summary=self._batches_summary(),

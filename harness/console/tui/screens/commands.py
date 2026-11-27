@@ -334,7 +334,7 @@ class CommandMenuScreen(Translated, Screen[None]):
                     yield Static("", id="command-detail")
         with SectionCard(title="Вывод", id="command-output-card"):
             yield VerticalScroll(
-                Static("", id="command-output", markup=False),
+                Static("Вывода пока нет", id="command-output", markup=False),
                 id="command-output-scroll",
             )
 
