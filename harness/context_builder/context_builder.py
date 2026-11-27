@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import cast
 
 from ..errors import HarnessError
+from ..fmea.ids import FmeaId
 from ..memory.search import select_pointers
 from ..repo_map.contract import validation_error as repo_map_validation_error
 from ..repo_map.policy import RepoMapPolicy, load_policy
@@ -120,7 +121,7 @@ def _run_git(repository: Path, *args: str) -> str:
     except subprocess.TimeoutExpired as exc:
         raise ContextPackageError(
             f"git {' '.join(args)} did not finish within {GIT_TIMEOUT_SECONDS} seconds",
-            remedy="check the repository for a held Git lock or an overloaded disk, then retry",
+            fmea=FmeaId.GIT_TIMEOUT,
         ) from exc
     except OSError as exc:
         raise ContextPackageError(

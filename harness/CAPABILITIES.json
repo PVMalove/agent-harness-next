@@ -78,6 +78,7 @@
       "project/instructions/project-memory.md",
       "token_estimator.py",
       "errors.py",
+      "fmea",
       "json_types.py",
       "health",
       "memory"

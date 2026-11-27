@@ -6,3 +6,5 @@ from enum import StrEnum
 
 class FmeaId(StrEnum):
     """Член - режим отказа из каталога; значение - его постоянный GUID."""
+
+    GIT_TIMEOUT = "869778d3-80c0-4702-97eb-88068b2baab1"
