@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from functools import partial
 from pathlib import Path
 from threading import Lock
-from typing import Iterable, Mapping, Sequence, cast
+from typing import Iterable, Iterator, Mapping, Sequence, cast
 
 from textual.app import App, SystemCommand
 from textual.binding import Binding
@@ -28,7 +27,6 @@ from .client import ConsoleClientError, HomeClient, ScreenClient
 from ..launcher import restart_console
 from ..kernel.runner import CommandRunner, capturing_runner
 from .screens.dashboard import DashboardScreen
-from .shell import SECTION_KEYS, SECTIONS, ConsoleShell
 from .style import ThinScrollBarRender
 
 HARNESS_THEME = Theme(
@@ -58,19 +56,15 @@ HARNESS_THEME = Theme(
 )
 
 
-def section_commands(screen: object, language: str) -> Iterable[SystemCommand]:
-    """A palette entry per menu section, named by its key so the sections head the list in menu
-    order (`0 · Главная` … `p · Публикация`); choosing one opens the section as its key does. A
-    screen outside the console shell has no sections."""
-    if not isinstance(screen, ConsoleShell):
-        return
-    hint = "Раздел меню" if language != "en" else "Menu section"
-    for index, name in enumerate(SECTIONS):
-        yield SystemCommand(
-            f"{SECTION_KEYS[name]} · {i18n.section_label(language, name)}",
-            hint,
-            partial(screen.action_section, index),
-        )
+# The palette's commands, by their Textual title: the keys help, widget maximize and its restore,
+# a screenshot and quit; the console adds its restart. Sections open by their keys, the language by
+# F2, and Textual's theme switch would leave the brand colours on a foreign background.
+PALETTE_COMMANDS = frozenset({"Keys", "Maximize", "Minimize", "Screenshot", "Quit"})
+
+
+def palette_commands(commands: Iterable[SystemCommand]) -> Iterator[SystemCommand]:
+    """The commands of `commands` the console palette offers (`PALETTE_COMMANDS`)."""
+    return (command for command in commands if command.title in PALETTE_COMMANDS)
 
 
 class HarnessConsoleApp(App[None]):
@@ -322,19 +316,7 @@ class HarnessConsoleApp(App[None]):
             yield command._replace(title=title, help=f"{help_text}\n")
 
     def _console_commands(self, screen: Screen[object]) -> Iterable[SystemCommand]:
-        yield from section_commands(screen, self.language)
-        # The console draws with its own brand palette, so Textual's theme switch would leave
-        # those colours on a foreign background; the palette does not offer it.
-        yield from (
-            command
-            for command in super().get_system_commands(screen)
-            if command.callback != self.action_change_theme
-        )
-        yield SystemCommand(
-            "Language / Язык",
-            "Switch the menu language between Russian and English (F2)",
-            self.action_toggle_language,
-        )
+        yield from palette_commands(super().get_system_commands(screen))
         yield SystemCommand(
             "Restart console",
             "Reload console code and keep the selected project",
