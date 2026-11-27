@@ -32,13 +32,21 @@ from textual.widgets import (
 )
 
 from ...kernel import brand, i18n
+from .. import icons
 from .. import ledger_lock
 from ...kernel import reports as console_reports
 from .. import stats as console_stats
 from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand, process_argv
 from ...kernel.runner import CommandRunner, capturing_runner
 from ..client import ConsoleClientError, LockUnavailable, OrchestrationView, ScreenClient
-from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, SectionCard
+from ..shell import (
+    SHELL_CSS,
+    ConsoleShell,
+    ElidedPath,
+    FieldGrid,
+    SectionCard,
+    SeparatorWrap,
+)
 from ..widgets import CheckBox, KpiGrid
 from .commands import (
     CommandForm,
@@ -129,7 +137,7 @@ class CoordinatorCommandFormScreen(CommandForm):
 
 
 SERVER_UNAVAILABLE = "Сервер консоли не отдал данные оркестрации"
-LOADING = "Загрузка данных оркестрации…"
+LOADING = icons.loading("Загрузка данных оркестрации…")
 
 
 def _analytics_table(rows: Sequence[tuple[str, str]]) -> Table:
@@ -138,7 +146,7 @@ def _analytics_table(rows: Sequence[tuple[str, str]]) -> Table:
     table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(ratio=1, overflow="fold")
     for label, value in rows:
-        table.add_row(label, value)
+        table.add_row(label, SeparatorWrap(value))
     return table
 
 
@@ -183,8 +191,19 @@ def first_lock(found: OrchestrationView) -> JsonObject:
     return found.lock
 
 
+def lock_panel(state: str, text: str) -> Text:
+    """The lock panel: its first line with the state's icon and colour (free, held, not read),
+    the details muted under it."""
+    head, _, rest = text.partition("\n")
+    panel = Text()
+    panel.append(f"{icons.STATUS_ICONS[state]} {head}", style=f"bold {brand.STATUS_COLORS[state]}")
+    if rest:
+        panel.append("\n" + rest, style=brand.PALETTE["foreground"])
+    return panel
+
+
 class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
-    """Экран раздела Orchestration на общей оболочке консоли: статистика пайплайна, живое состояние
+    """Экран раздела Orchestration на общей оболочке консоли: статистика конвейера, живое состояние
     lock ledger, история batch с фильтром по состоянию (выбор batch открывает его хронологию) и
     список команд координатора."""
 
@@ -203,20 +222,26 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     CSS = SHELL_CSS + brand.shell_css("""
     OrchestrationScreen #orchestration-page { height: 1fr; padding: 0 2; }
     OrchestrationScreen #orchestration-header { height: auto; margin-bottom: 1; overflow-x: auto; }
+    OrchestrationScreen.-wide #orchestration-header, OrchestrationScreen.-spacious #orchestration-header { margin-bottom: 0; }
     OrchestrationScreen #orchestration-title { width: auto; height: 1; text-style: bold; padding-right: 2; }
     OrchestrationScreen #orchestration-subtitle { width: 1fr; height: 1; color: $text-muted; }
+    OrchestrationScreen #orchestration-header Button { margin-left: 2; color: $primary; text-style: underline; }
+    OrchestrationScreen #orchestration-header Button:hover, OrchestrationScreen #orchestration-header Button:focus { text-style: bold underline; }
     OrchestrationScreen .overview { height: auto; margin: 0; padding: 0; border: none; }
-    OrchestrationScreen #pipeline-stats { layout: horizontal; }
-    OrchestrationScreen #pipeline-stats .field-column { width: 1fr; padding-right: 2; }
+    OrchestrationScreen FieldGrid#pipeline-stats { layout: horizontal; }
+    OrchestrationScreen FieldGrid#pipeline-stats .field-column { width: 1fr; padding-right: 2; }
     OrchestrationScreen #ledger-lock { height: auto; }
     OrchestrationScreen #pipeline-analytics-card, OrchestrationScreen #pipeline-analytics TabPane { height: auto; }
     OrchestrationScreen #pipeline-analytics { height: auto; }
     OrchestrationScreen #pipeline-analytics-card, OrchestrationScreen #pipeline-kpi-card, OrchestrationScreen #pipeline-stats-card, OrchestrationScreen #ledger-lock-card { margin: 0 0 1 0; }
+    OrchestrationScreen.-wide #pipeline-analytics-card, OrchestrationScreen.-spacious #pipeline-analytics-card, OrchestrationScreen.-wide #pipeline-kpi-card, OrchestrationScreen.-spacious #pipeline-kpi-card, OrchestrationScreen.-wide #pipeline-stats-card, OrchestrationScreen.-spacious #pipeline-stats-card, OrchestrationScreen.-wide #ledger-lock-card, OrchestrationScreen.-spacious #ledger-lock-card { margin: 0; }
     OrchestrationScreen #pipeline-history { height: 13; margin: 0 0 1 0; }
+    OrchestrationScreen.-wide #pipeline-history, OrchestrationScreen.-spacious #pipeline-history { margin: 0; }
     OrchestrationScreen #state-filter-card { width: 32; height: 100%; }
     OrchestrationScreen #batch-history-card { width: 1fr; height: 100%; }
     OrchestrationScreen #state-filter, OrchestrationScreen #batch-history { height: 1fr; border: none; padding: 0; }
     OrchestrationScreen #command-body { height: 18; margin: 0 0 1 0; }
+    OrchestrationScreen.-wide #command-body, OrchestrationScreen.-spacious #command-body { margin: 0; }
     OrchestrationScreen #command-menu-card { height: 100%; }
     OrchestrationScreen.-wide #command-menu-card, OrchestrationScreen.-spacious #command-menu-card { width: 48; }
     OrchestrationScreen #command-detail-card { width: 1fr; height: 100%; }
@@ -264,7 +289,8 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         self._lock_refresh_seconds = lock_refresh_seconds
 
     def compose_strip(self) -> ComposeResult:
-        yield Static(str(self.repo), classes="no-i18n", markup=False)
+        # The repository as Board and Publish show it: cut from the left, the project kept.
+        yield ElidedPath(str(self.repo))
 
     def _sessions_label(self) -> str:
         active = sum(1 for stage in self._view.stages if not stage.finished)
@@ -276,7 +302,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             with Horizontal(id="orchestration-header"):
                 yield Static("Оркестрация", id="orchestration-title")
                 yield Static(
-                    "Пайплайн batch, рабочие сессии и команды координатора.",
+                    "Конвейер batch, рабочие сессии и команды координатора.",
                     id="orchestration-subtitle",
                 )
                 yield Button("Восстановление", id="open-recovery", compact=True)
@@ -287,75 +313,30 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     def overview(self) -> ComposeResult:
         yield OrchestrationOverview(self._overview_parts)
 
+    def compose_commands(self) -> ComposeResult:
+        # The analytics and the statistics are reference: they follow the commands and their
+        # output, so the batch history, the lock and the commands stay near the top.
+        yield from super().compose_commands()
+        yield OrchestrationOverview(self._reference_parts)
+
     def sync_language(self) -> None:
         ConsoleShell.sync_language(self)
         CommandMenuScreen.sync_language(self)
 
     def _overview_parts(self) -> ComposeResult:
-        """Статистика пайплайна и история batch: слева состояния с числом batch, справа batch
-        выбранного состояния."""
+        """What the operator works with, above the command menu: the KPI, the batch history (the
+        states with their counts on the left, the batches of the chosen state on the right) and
+        the ledger lock. Without a ledger the reason stands in their place."""
         view = self._view
-        panel: Widget
         if view.unavailable:
-            panel = Static(
-                view.unavailable, id="pipeline-stats", classes="overview", markup=False
-            )
-            panel.i18n_source = view.unavailable  # type: ignore[attr-defined]
-        else:
-            fields = console_stats.pipeline_stats_fields(
-                console_stats.pipeline_stats(view)
-            )
-            panel = (
-                FieldGrid(
-                    fields,
-                    translate_values=True,
-                    id="pipeline-stats",
-                    classes="field-grid overview",
-                )
-                if fields
-                else Static(
-                    console_stats.pipeline_stats_text(
-                        console_stats.pipeline_stats(view)
-                    ),
-                    id="pipeline-stats",
-                    classes="overview",
-                    markup=False,
-                )
-            )
-        if not view.unavailable:
-            with SectionCard(title="Показатели", id="pipeline-kpi-card"):
-                yield KpiGrid(
-                    console_stats.kpi_tiles(self._kpi, self._language), id="pipeline-kpi"
-                )
-        if not view.unavailable:
-            with SectionCard(title="Аналитика", id="pipeline-analytics-card"):
-                with TabbedContent(id="pipeline-analytics"):
-                    for section, title in _ANALYTICS_TABS:
-                        with TabPane(
-                            i18n.tr(self._language, title), id=f"analytics-{section}"
-                        ):
-                            yield Static(
-                                _analytics_table(
-                                    console_stats.analytics_rows(
-                                        section, self._analytics, self._language
-                                    )
-                                ),
-                                classes="analytics-table no-i18n",
-                            )
-        with SectionCard(title="Состояние и статистика", id="pipeline-stats-card"):
-            yield panel
-        lock = Static(
-            ledger_lock.current_lock_text(
-                self.repo, lambda repo: first_lock(self._first_lock), self._language
-            ),
-            id="ledger-lock",
-            classes="overview",
-            markup=False,
-        )
-        with SectionCard(title="Lock ledger", id="ledger-lock-card"):
-            yield lock
-        if view.unavailable:
+            with SectionCard(title="Состояние и статистика", id="pipeline-stats-card"):
+                yield self._stats_panel()
+            yield from self._lock_card()
             return
+        with SectionCard(title="Показатели", id="pipeline-kpi-card"):
+            yield KpiGrid(
+                console_stats.kpi_tiles(self._kpi, self._language), id="pipeline-kpi"
+            )
         with Horizontal(id="pipeline-history"):
             with SectionCard(title="Состояния", id="state-filter-card"):
                 yield ListView(
@@ -365,8 +346,73 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
                     ),
                     id="state-filter",
                 )
-            with SectionCard(title="История пайплайна", id="batch-history-card"):
+            with SectionCard(title="История конвейера", id="batch-history-card"):
                 yield ListView(id="batch-history")
+        yield from self._lock_card()
+
+    def _reference_parts(self) -> ComposeResult:
+        """The reference panels under the command output: the analytics tabs and the pipeline
+        statistics; none without a ledger."""
+        view = self._view
+        if view.unavailable:
+            return
+        with SectionCard(title="Аналитика", id="pipeline-analytics-card"):
+            with TabbedContent(id="pipeline-analytics"):
+                for section, title in _ANALYTICS_TABS:
+                    with TabPane(
+                        i18n.tr(self._language, title), id=f"analytics-{section}"
+                    ):
+                        yield Static(
+                            _analytics_table(
+                                console_stats.analytics_rows(
+                                    section, self._analytics, self._language
+                                )
+                            ),
+                            classes="analytics-table no-i18n",
+                        )
+        with SectionCard(title="Состояние и статистика", id="pipeline-stats-card"):
+            yield self._stats_panel()
+
+    def _stats_panel(self) -> Widget:
+        """The pipeline statistics as a field grid, or the reason the ledger gives none."""
+        view = self._view
+        if view.unavailable:
+            panel = Static(
+                view.unavailable, id="pipeline-stats", classes="overview", markup=False
+            )
+            panel.i18n_source = view.unavailable  # type: ignore[attr-defined]
+            return panel
+        stats = console_stats.pipeline_stats(view)
+        fields = console_stats.pipeline_stats_fields(stats)
+        if fields:
+            return FieldGrid(
+                fields,
+                translate_values=True,
+                id="pipeline-stats",
+                classes="field-grid overview",
+            )
+        return Static(
+            console_stats.pipeline_stats_text(stats),
+            id="pipeline-stats",
+            classes="overview",
+            markup=False,
+        )
+
+    def _lock_card(self) -> ComposeResult:
+        lock = Static(
+            icons.loading("Загрузка…")
+            if self._first_lock.lock_error == LOADING
+            else lock_panel(
+                *ledger_lock.current_lock_view(
+                    self.repo, lambda repo: first_lock(self._first_lock), self._language
+                )
+            ),
+            id="ledger-lock",
+            classes="overview",
+            markup=False,
+        )
+        with SectionCard(title="Lock ledger", id="ledger-lock-card"):
+            yield lock
 
     def on_mount(self) -> None:
         def load() -> None:
@@ -382,11 +428,17 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     async def _loaded(self, found: OrchestrationView) -> None:
         self._view, self._first_lock, self._kpi = found.ledger, found, found.kpi
         self._analytics = found.analytics
-        await self.query_one(OrchestrationOverview).recompose()
+        for overview in self.query(OrchestrationOverview):
+            await overview.recompose()
         self._repaint_overview(self._language)
         self.query_one("#worker-sessions", Button).label = self._sessions_label()
         if not self._view.unavailable:
             self._show_batches(console_stats.ALL_STATES)
+            # The command menu took focus on arrival, below the fold; the batch history is the
+            # screen's first list, so the arrow keys move a list the operator can see.
+            if self.focused is self.query_one("#command-menu"):
+                # After the recomposed overview is laid out, so the focus scrolls it into view.
+                self.call_after_refresh(self.query_one("#batch-history", ListView).focus)
 
     def _refresh_lock(self) -> None:
         """Перечитать состояние lock ledger без его захвата и обновить панель.
@@ -396,15 +448,15 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         language = self._language
 
         def work() -> None:
-            text = ledger_lock.current_lock_text(
+            state, text = ledger_lock.current_lock_view(
                 self.repo, lambda repo: self._client.ledger_lock(), language
             )
-            call_from_worker(self, lambda: self._show_lock(text))
+            call_from_worker(self, lambda: self._show_lock(lock_panel(state, text)))
 
         self.run_worker(work, thread=True, exclusive=True, group="ledger-lock")
 
-    def _show_lock(self, text: str) -> None:
-        self.query_one("#ledger-lock", Static).update(text)
+    def _show_lock(self, panel: Text) -> None:
+        self.query_one("#ledger-lock", Static).update(panel)
 
     def _show_batches(self, state: str) -> None:
         history = self.query_one("#batch-history", ListView)
@@ -432,7 +484,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             self._show_batches(event.item.name)
 
     def menu_items(self) -> Sequence[tuple[str, str]]:
-        """Команды координатора по группам; необратимые отмечены ⚠."""
+        """Команды координатора по группам; необратимые отмечены ▲."""
         ordered = sorted(
             self._entries.values(),
             key=lambda entry: _GROUP_ORDER.index(_group_title(entry.group)),
@@ -440,7 +492,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         return [
             (
                 entry.key,
-                ("⚠ " if entry.needs_confirmation else "  ")
+                (f"{icons.STATUS_ICONS['warn']} " if entry.needs_confirmation else "   ")
                 + i18n.tr(self._language, entry.title),
             )
             for entry in ordered

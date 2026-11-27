@@ -107,9 +107,11 @@ def test_the_payload_round_trips_and_rejects_foreign_shapes() -> None:
 
 def test_duration_text_names_the_two_largest_units() -> None:
     assert duration_text(None) == "—"
-    assert duration_text(59) == "0 мин"
+    assert duration_text(59) == "59 с"
     assert duration_text(3 * 3600 + 20 * 60) == "3 ч 20 мин"
+    assert duration_text(3 * 3600) == "3 ч"
     assert duration_text(2 * 86400 + 4 * 3600, "en") == "2 d 4 h"
+    assert duration_text(2 * 86400 + 59, "ru") == "2 дн"
 
 
 def _report(dispatch: str, body: JsonObject, at: str) -> ReportEntry:

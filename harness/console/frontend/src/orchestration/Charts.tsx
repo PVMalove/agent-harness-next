@@ -153,7 +153,7 @@ export function FlowTab({ data }: { data: OrchestrationSnapshot }) {
   const prs = Array.isArray(flow.pr_per_day) ? flow.pr_per_day.reduce<number>((sum, value) => sum + (value ?? 0), 0) : 0;
   return (
     <Panel tab="flow" title={t("Поток")} note={t("срез, не тренд")}>
-      <Card title={t("В работе по состояниям")} note={t("{count} батчей", { count: total(counts(flow.by_state)) })} wide>
+      <Card title={t("В работе по состояниям")} note={t("{count} batch", { count: total(counts(flow.by_state)) })} wide>
         <Stack values={counts(flow.by_state)} name={state} />
       </Card>
       <Card title={t("Старение работы")} note={t("незавершённые batch")}>
@@ -391,17 +391,17 @@ export function PipelineMap({ data }: { data: OrchestrationSnapshot }) {
       </span>
   );
   return (
-    <DsPanel title={t("Пайплайн")} meta={status} id="orch-scheme" className="orch-map-panel orch-scheme">
+    <DsPanel title={t("Конвейер")} meta={status} id="orch-scheme" className="orch-map-panel orch-scheme">
       {/* A phone scrolls the map sideways inside this focusable region, so the keyboard reaches it (WCAG 2.1.1). */}
-      <div className="orch-map-scroll" role="region" tabIndex={0} aria-label={t("Пайплайн")}>
+      <div className="orch-map-scroll" role="region" tabIndex={0} aria-label={t("Конвейер")}>
         <svg className="orch-map" viewBox="0 0 1200 270" role="img" aria-label={t("Схема ролей оркестрации")}>
           <defs>
             {(
               [
-                ["aqua", "#a9dcc0"],
-                ["sky", "#a6d5e8"], // matches `.orch-map-edge.sky` in app.css
-                ["rose", "#cbb8f0"], // matches `.orch-map-edge.rose` in app.css
-                ["orange", "#a9c4f5"],
+                ["aqua", "var(--ok)"],
+                ["sky", "var(--sky)"], // matches `.orch-map-edge.sky` in app.css
+                ["rose", "var(--lavender)"], // matches `.orch-map-edge.rose` in app.css
+                ["orange", "var(--primary)"],
               ] as const
             ).map(([id, fill]) => (
               <marker key={id} id={`om-${id}`} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import cast, get_args
 
@@ -23,11 +24,13 @@ STRUCTURE_LABELS = {
 }
 # The text of each orchestration event (`ws/steps.ts`, `EVENT_LABELS`).
 EVENT_LABELS = {
-    "batch.transition": "Пакет {batch}: {from} → {to}",
+    "batch.transition": "Batch {batch}: {from} → {to}",
     "dispatch.transition": "Dispatch {dispatch}: {from} → {to}",
     "gate.decision": "Гейт {dispatch}: {decision}",
     "qa.run": "Прогон QA {dispatch}: {outcome}",
     "qa.attempt": "Попытка QA {dispatch} не прошла этап {stage}",
+    "auto.decision": "Политика auto: {decision} {dispatch}",
+    "auto.stop": "Автоматический путь остановлен: {category}",
 }
 # The page strings of the "Ход работы" route.
 PAGE_LABELS = (
@@ -35,7 +38,7 @@ PAGE_LABELS = (
     "Источники шагов",
     "наблюдаемые данные",
     "Шаги, роли и инструменты приходят структурированными.",
-    "Только plain-хвост лога. Не выдаём его за шаги и не показываем thinking.",
+    "Только хвост обычного лога: его строки не выдаются за шаги, рассуждения модели не показываются.",
     "Сессии",
     "Все сессии",
     "{shown} из {total}",
@@ -52,6 +55,9 @@ PAGE_LABELS = (
 
 
 def _english(text: str) -> str:
+    # A label that names project entities only (`Batch {batch}: …`) is already English.
+    if not re.search("[А-Яа-яЁё]", text):
+        return text
     catalog = cast(dict[str, dict[str, str]], json.loads(web_catalog.render()))
     english = catalog["en"].get(text, "")
     assert english and english != text, text
@@ -88,7 +94,7 @@ def test_every_event_type_and_page_string_has_its_english_text() -> None:
     assert set(EVENT_LABELS) == set(get_args(event))
     for template in EVENT_LABELS.values():
         english = _english(template)
-        for name in ("batch", "dispatch", "from", "to", "decision", "outcome", "stage"):
+        for name in ("batch", "dispatch", "from", "to", "decision", "outcome", "stage", "category"):
             assert (f"{{{name}}}" in template) == (f"{{{name}}}" in english), template
     for label in PAGE_LABELS:
         _english(label)

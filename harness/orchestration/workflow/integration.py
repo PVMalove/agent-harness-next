@@ -17,7 +17,13 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
+import shutil
+import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from typing import NamedTuple
 
 from harness.errors import INTERNAL_INVARIANT_REMEDY
 from harness.health.project_tracker import resolve_project_tracker
@@ -33,6 +39,8 @@ from harness.orchestration.core.constants import (
     INTEGRATION_RECORD_ID_PATTERN,
     INTEGRATION_REFERENCE_MAX_CHARS,
     INTEGRATION_SHA_PATTERN,
+    INTEGRATION_SOURCE_BRANCH,
+    INTEGRATION_SOURCE_PUBLISH,
     EvidenceVerification,
     IntegrationCheckResult,
     IntegrationTargetState,
@@ -53,7 +61,10 @@ from harness.orchestration.core.utils import (
     _repo,
     _safe_id,
 )
-from harness.orchestration.core.workspace import _integration_ref
+from harness.orchestration.core.workspace import (
+    _integration_ref,
+    _required_base_branch,
+)
 from harness.orchestration.ledger.ledger_ops import (
     _ledger_lock,
     _load_batch,
@@ -70,6 +81,17 @@ from harness.orchestration.ledger.lifecycle import (
 from harness.orchestration.workflow import history, pr_refresh, release_gate
 
 INTEGRATION_RECORD_CONTRACT = 1
+INTEGRATION_BRANCH_PREFIX = "integration/"
+# The epic names its integration branch in its `## Integration Branch` section, on its `Branch:`
+# line when it has one (/publish-epic).
+_EPIC_SECTION = re.compile(r"^##\s+Integration Branch\s*$", re.MULTILINE)
+_EPIC_BRANCH = re.compile(r"integration/[A-Za-z0-9._/-]*[A-Za-z0-9_-]")
+# How the tracker CLI reads an issue body: executable, `-R` address and output arguments.
+_TRACKER_ISSUE_CLI = {
+    "github": ("gh", "{host}/{project}", ("--json", "body", "-q", ".body")),
+    "gitlab": ("glab", "https://{host}/{project}", ("-F", "json")),
+}
+_TRACKER_TIMEOUT_SECONDS = 60
 # A refreshed candidate is confirmed only by a passed CI or local-QA check of its own pair: resolver
 # evidence records a conflict resolution, never the verification of the result.
 _INTEGRATION_VERIFICATION_KINDS = ("ci", "local-qa")
@@ -145,6 +167,31 @@ def _qa_replacement(
 
 def _sha256(value: JsonObject) -> str:
     return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
+
+
+def source_kind(record: JsonObject) -> str:
+    """The source of ``record``: ``integration-branch`` or ``publish`` (a record without the
+    field). The one place that tells the two kinds apart."""
+    identity = record.get("identity") or {}
+    return str(identity.get("source_kind") or INTEGRATION_SOURCE_PUBLISH)
+
+
+def is_integration_branch(record: JsonObject) -> bool:
+    """Whether ``record`` links an ``integration/*`` branch rather than a published ticket batch."""
+    return source_kind(record) == INTEGRATION_SOURCE_BRANCH
+
+
+def require_ticket_branch(record: JsonObject, command: str) -> None:
+    """Refuse ``command``, which rewrites the branch of a published batch, for an integration-branch
+    record: the harness never rewrites an ``integration/*`` branch."""
+    if is_integration_branch(record):
+        branch = record["identity"]["branch"]
+        raise CoordinatorError(
+            f"integration {command} rewrites a ticket branch, and record "
+            f"{record['integration_record_id']} links the integration branch {branch!r}",
+            remedy=f"update {branch} through a fix ticket based on it, then run 'integration "
+            "prepare' for its new head: that records the new pair",
+        )
 
 
 def _text(args: argparse.Namespace, name: str) -> str:
@@ -235,6 +282,187 @@ def _select_source(
             remedy="pass --batch with the batch whose publish you are integrating",
         )
     return published[0]
+
+
+@dataclass(frozen=True)
+class _Request:
+    """What ``integration prepare`` was asked to link."""
+
+    ticket: str
+    branch: str
+    remote: str
+    candidate: str | None
+    batch: object
+    target: str
+
+
+class _Source(NamedTuple):
+    """The record a source yields: its identity, its source facts and the QA selection its pair
+    requires."""
+
+    identity: JsonObject
+    facts: JsonObject
+    selection: str
+
+
+def _ticket_branch_source(repo: Path, root: Path, request: _Request) -> _Source:
+    """The identity, source facts and pair selection of a published ticket branch."""
+    if request.target:
+        raise CoordinatorError(
+            "--target names the pull request target of an integration/* branch",
+            remedy="omit --target: a ticket branch targets the integration ref its batch recorded",
+        )
+    ticket, branch = request.ticket, request.branch
+    batch, publish = _select_source(
+        root, ticket, branch, request.batch, request.candidate
+    )
+    target = batch.get("integration_base_commit")
+    if not _non_empty(target):
+        raise CoordinatorError(
+            "the source batch recorded no integration base commit",
+            remedy="this batch predates integration-base tracking; re-plan it to record one",
+        )
+    identity: JsonObject = {
+        "ticket": ticket,
+        "branch": branch,
+        "source_batch_id": batch["batch_id"],
+        "candidate_sha": publish["candidate"],
+        "published_sha": publish["candidate"],
+        "integration_ref": _integration_ref(repo, batch),
+        "target_sha": target,
+        "remote": request.remote,
+    }
+    facts = _source_facts(root, batch, publish, target)
+    return _Source(identity, facts, release_gate.required_selection(repo, batch))
+
+
+def epic_integration_branch(body: str) -> str | None:
+    """The branch an epic body names in its `## Integration Branch` section: its `Branch:` line,
+    else the first ``integration/*`` name of the section; ``None`` without one."""
+    found = _EPIC_SECTION.search(body)
+    if found is None:
+        return None
+    lines = body[found.end() :].split("\n## ", 1)[0].splitlines()
+    named = [line for line in lines if line.strip(" -*").lower().startswith("branch:")]
+    for line in (*named, *lines):
+        match = _EPIC_BRANCH.search(line)
+        if match:
+            return match.group(0)
+    return None
+
+
+def tracker_issue_body(repo: Path, ticket: str) -> str:
+    """The body of issue ``ticket`` (``#<n>``) through the project's GitHub or GitLab CLI."""
+    tracker = resolve_project_tracker(repo).effective
+    number = ticket.removeprefix("#")
+    cli = _TRACKER_ISSUE_CLI.get(tracker.type or "")
+    if cli is None or not tracker.host or not tracker.project or not number.isdigit():
+        raise CoordinatorError(
+            f"integration prepare reads epic {ticket!r} from a GitHub or GitLab tracker",
+            remedy='pass --ticket "#<epic>" of the project\'s GitHub or GitLab tracker; a local '
+            "markdown tracker opens no pull request",
+        )
+    tool, address, output = cli
+    executable = shutil.which(tool)
+    if executable is None:
+        raise CoordinatorError(
+            f"{tool} is not on PATH, so epic {ticket} cannot be read",
+            remedy=f"install and authenticate {tool}, then repeat integration prepare",
+        )
+    argv = [executable, "issue", "view", number, "-R"]
+    argv += [address.format(host=tracker.host, project=tracker.project), *output]
+    try:
+        done = subprocess.run(
+            argv,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=_TRACKER_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise CoordinatorError(
+            f"{tool} did not answer within {_TRACKER_TIMEOUT_SECONDS} s for epic {ticket}",
+            remedy="repeat integration prepare when the tracker answers",
+        ) from exc
+    if done.returncode != 0:
+        raise CoordinatorError(
+            f"{tool} cannot read epic {ticket}: {done.stderr.strip()[:300]}",
+            remedy=f"check {tool} auth status and the ticket number, then repeat",
+        )
+    if tool == "glab":
+        description = json.loads(done.stdout).get("description")
+        return description if isinstance(description, str) else ""
+    return done.stdout
+
+
+def _integration_branch_source(
+    repo: Path, request: _Request, epic_body: Callable[[Path, str], str]
+) -> _Source:
+    """The identity, source facts and pair selection of an epic's integration branch (#1278).
+
+    The epic, read through ``epic_body``, must name the branch in its `## Integration Branch`
+    section. The candidate is the remote head of the branch and the target the remote head of
+    the pull request target: ``--target``, ``base_branch`` by default, or another
+    ``integration/*``. All of it is read from the tracker and Git, so a moved head or target is a
+    new pair with a new record. No batch QA covers the pair, so it requires ``full``: CI that
+    ``integration collect-ci`` accepts, or local QA."""
+    branch, remote, candidate = request.branch, request.remote, request.candidate
+    if request.batch is not None:
+        raise CoordinatorError(
+            f"{branch!r} is an integration branch: no batch published it",
+            remedy="omit --batch; the record links the remote head of the branch and its target",
+        )
+    named = epic_integration_branch(epic_body(repo, request.ticket))
+    if named != branch:
+        raise CoordinatorError(
+            f"epic {request.ticket} names integration branch {named!r} in its "
+            f"## Integration Branch section, not {branch!r}",
+            remedy="pass the epic whose ## Integration Branch section names this branch",
+        )
+    base = _required_base_branch(repo)
+    target_ref = request.target or base
+    if target_ref == branch or not (
+        target_ref == base or target_ref.startswith(INTEGRATION_BRANCH_PREFIX)
+    ):
+        raise CoordinatorError(
+            f"the pull request of {branch!r} cannot target {target_ref!r}",
+            remedy=f"pass --target {base} (base_branch, the default) or another integration/* "
+            "branch",
+        )
+    head = _remote_branch_tip(repo, remote, branch)
+    if head is None:
+        raise CoordinatorError(
+            f"{branch!r} is not a branch of remote {remote!r}",
+            remedy=f"push {branch} to {remote}, or pass the --remote that holds it",
+        )
+    if candidate is not None and candidate != head:
+        raise CoordinatorError(
+            f"candidate {candidate} is not the remote head {head} of {branch!r}",
+            remedy="pass the current remote head as --candidate-commit, or omit it",
+        )
+    target = _remote_branch_tip(repo, remote, target_ref)
+    if target is None:
+        raise CoordinatorError(
+            f"the target {target_ref!r} is not a branch of remote {remote!r}",
+            remedy="pass a --target that exists on the remote",
+        )
+    identity: JsonObject = {
+        "ticket": request.ticket,
+        "branch": branch,
+        "source_batch_id": None,
+        "source_kind": INTEGRATION_SOURCE_BRANCH,
+        "candidate_sha": head,
+        "published_sha": head,
+        "integration_ref": target_ref,
+        "target_sha": target,
+        "remote": remote,
+    }
+    facts: JsonObject = {
+        "epic": {"ticket": request.ticket, "integration_branch": branch},
+        "pair": {"candidate_sha": head, "target_sha": target},
+    }
+    return _Source(identity, facts, release_gate.SELECTION_FULL)
 
 
 def _evidence_reference(entry: JsonObject) -> JsonObject:
@@ -377,6 +605,7 @@ def _prepared(
         "ticket": identity["ticket"],
         "branch": identity["branch"],
         "source_batch_id": identity["source_batch_id"],
+        "source_kind": source_kind(record),
         "candidate_sha": identity["candidate_sha"],
         "published_sha": identity["published_sha"],
         "target_sha": identity["target_sha"],
@@ -389,7 +618,8 @@ def _prepared(
 
 
 def integration_prepare(args: argparse.Namespace) -> JsonObject:
-    """Record the integration link of one published ticket branch; idempotent."""
+    """Record the integration link of one published ticket branch, or of an epic's
+    ``integration/*`` branch and its pull request target (#1278); idempotent."""
     repo = _repo(args)
     root = _state_root(args, repo)
     ticket, branch = _text(args, "ticket"), _text(args, "branch")
@@ -402,28 +632,22 @@ def integration_prepare(args: argparse.Namespace) -> JsonObject:
     requested = _text(args, "candidate_commit")
     candidate = _candidate_commit(repo, requested) if requested else None
     _require_remote(repo, remote)
+    request = _Request(
+        ticket,
+        branch,
+        remote,
+        candidate,
+        getattr(args, "batch", None),
+        _text(args, "target"),
+    )
+    epic_body = getattr(args, "epic_source", None) or tracker_issue_body
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
-        batch, publish = _select_source(
-            root, ticket, branch, getattr(args, "batch", None), candidate
+        identity, facts, selection = (
+            _integration_branch_source(repo, request, epic_body)
+            if branch.startswith(INTEGRATION_BRANCH_PREFIX)
+            else _ticket_branch_source(repo, root, request)
         )
-        target = batch.get("integration_base_commit")
-        if not _non_empty(target):
-            raise CoordinatorError(
-                "the source batch recorded no integration base commit",
-                remedy="this batch predates integration-base tracking; re-plan it to record one",
-            )
-        facts = _source_facts(root, batch, publish, target)
-        identity: JsonObject = {
-            "ticket": ticket,
-            "branch": branch,
-            "source_batch_id": batch["batch_id"],
-            "candidate_sha": publish["candidate"],
-            "published_sha": publish["candidate"],
-            "integration_ref": _integration_ref(repo, batch),
-            "target_sha": target,
-            "remote": remote,
-        }
         record_id = IntegrationRecord.derive_id(identity)
         path = _record_path(root, record_id)
         if state_view.is_file(path):
@@ -451,11 +675,7 @@ def integration_prepare(args: argparse.Namespace) -> JsonObject:
             links, created = [], True
         # A record prepared before the pair record existed gets its pair here as well.
         pair = release_gate.record_pair(
-            ledger,
-            repo,
-            publish["candidate"],
-            target,
-            release_gate.required_selection(repo, batch),
+            ledger, repo, identity["candidate_sha"], identity["target_sha"], selection
         )
     state = (
         {
@@ -652,7 +872,10 @@ def _resolve_record(root: Path, args: argparse.Namespace) -> JsonObject:
 
 
 def _check_history_unchanged(root: Path, record: JsonObject) -> None:
-    """The batch history the record links is still what it was when the record was written."""
+    """The batch history the record links is still what it was when the record was written; an
+    integration-branch record links no batch history."""
+    if is_integration_branch(record):
+        return
     batch = _load_batch(root, record["identity"]["source_batch_id"])
     for key in ("publish", "qa"):
         recorded = record["source"][key]
@@ -797,7 +1020,10 @@ def integration_status(args: argparse.Namespace) -> JsonObject:
     from harness.orchestration.workflow.local_qa import verified_evidence
 
     local_pair_current = _local_pair_current(repo, identity, links, pair, state)
-    verified = not refreshes or any(
+    # No batch QA covers an integration-branch pair: like a refreshed pair, it needs its own check.
+    kind = source_kind(record)
+    branch_record = kind == INTEGRATION_SOURCE_BRANCH
+    verified = (not refreshes and not branch_record) or any(
         _satisfies(link, pair)
         and (
             link["kind"] != "local-qa"
@@ -820,12 +1046,14 @@ def integration_status(args: argparse.Namespace) -> JsonObject:
         "state": state,
         "integration_tip": tip,
         "refresh_required": state != IntegrationTargetState.CURRENT,
+        "source_kind": kind,
         "source_evidence": {
             "pair": record["source"]["pair"],
             "applies_to_current_pair": state == IntegrationTargetState.CURRENT
-            and not refreshes,
-            "qa": record["source"]["qa"],
-            "publish": record["source"]["publish"],
+            and not refreshes
+            and not branch_record,
+            "qa": None if branch_record else record["source"]["qa"],
+            "publish": None if branch_record else record["source"]["publish"],
         },
         "refreshes": [
             {
@@ -840,7 +1068,7 @@ def integration_status(args: argparse.Namespace) -> JsonObject:
             for item in refreshes
         ],
         "verification": {
-            "required": bool(refreshes),
+            "required": bool(refreshes) or branch_record,
             "satisfied": verified,
             "accepted_kinds": list(_INTEGRATION_VERIFICATION_KINDS),
             "re_review_required": False,
@@ -1035,8 +1263,9 @@ def _failed_pair_checks(links: list[JsonObject], pair: JsonObject) -> list[str]:
 
 def _verified_source(status: JsonObject) -> tuple[str, JsonObject]:
     """Where the verification of the current pair comes from: the original QA of an unrefreshed
-    pair, else the accepted CI, else the generated and verified local QA."""
-    if not status["refreshes"]:
+    pair, else the accepted CI, else the generated and verified local QA. An integration-branch
+    pair has no original QA."""
+    if not status["refreshes"] and status["source_kind"] == INTEGRATION_SOURCE_PUBLISH:
         return "original-qa", status["source_evidence"]["qa"]
     replacement = status["qa_replacement"]
     if replacement["applies"]:
@@ -1106,7 +1335,21 @@ def _route_failure(
     refreshed or resolver-produced candidate failed because of its combination with the target:
     the same resolver continues, inside the budget that is derived from its append-only events (a
     human answer or a CI wait never resets it).  A failure of the original, never-refreshed pair
-    is the task's own defect: the ordinary developer with review and QA takes it."""
+    is the task's own defect: the ordinary developer with review and QA takes it. A failed check of
+    an integration-branch pair is fixed by an ordinary fix ticket based on that branch."""
+    if status["source_kind"] == INTEGRATION_SOURCE_BRANCH:
+        return {
+            "step": "route-failure",
+            "route": "fix-ticket",
+            "failed_evidence": failed,
+            "next": [
+                f"file a fix ticket whose base is {status['branch']} and run it through the "
+                "ordinary /implement route; the harness never writes the integration branch",
+                f"after its merge: integration prepare --ticket {status['ticket']} --branch "
+                f"{status['branch']} --target {status['integration_ref']}, then integration next "
+                "--record <new record> (the failed evidence of this record stays history)",
+            ],
+        }
     if not refreshed:
         return {
             "step": "route-failure",
@@ -1217,11 +1460,20 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
                 "the coordinator workflow continues the open resolver batch; wait"
             ],
         }
+    branch_record = status["source_kind"] == INTEGRATION_SOURCE_BRANCH
     if status["state"] != IntegrationTargetState.CURRENT:
         return {
             **result,
             "step": "refresh",
             "next": [
+                f"{status['integration_ref']} moved past {status['target_sha']}: bring it into "
+                f"{status['branch']} through a fix ticket based on {status['branch']}; the "
+                "harness never rewrites an integration branch",
+                f"then integration prepare --ticket {status['ticket']} --branch "
+                f"{status['branch']} --target {status['integration_ref']} records the new pair",
+            ]
+            if branch_record
+            else [
                 "integration refresh --record <id>; a 'conflict' result continues with 'integration resolve'"
             ],
         }
@@ -1233,7 +1485,7 @@ def integration_next(args: argparse.Namespace) -> JsonObject:
             **_route_failure(repo, root, record_id, status, failed, refreshed),
         }
     if number is None:
-        pending = refreshed and not satisfied
+        pending = (refreshed or branch_record) and not satisfied
         return {
             **result,
             "step": "confirm-pr",

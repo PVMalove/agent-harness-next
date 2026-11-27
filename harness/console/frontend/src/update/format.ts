@@ -103,7 +103,7 @@ export function renderVersions(facts: UpdateHarnessFacts, t: Translate): Version
     verdict: current ? { tone: "ok", text: t("Версия актуальна") } : { tone: "warn", text: t("Доступно обновление") },
     rows: [
       [t("Состав"), state.capabilities.join(", ") || t("нет")],
-      [t("Скилов"), String(state.skills)],
+      [t("Скиллов"), String(state.skills)],
       [t("Управляемых файлов"), String(state.managed_files)],
       [t("Lock обновлён"), state.updated_at],
     ],

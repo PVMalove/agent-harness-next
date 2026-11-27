@@ -46,7 +46,7 @@ describe("connection views", () => {
     act(() => FakeSocket.last.open());
     reply();
     expect(chip().className).toBe("ds-conn ds-conn-connected");
-    expect(chip().textContent).toBe("online");
+    expect(chip().textContent).toBe("в сети");
     expect(banner()).toBeNull();
     expect(page()).toBeNull();
     expect(document.getElementById("home")).not.toBeNull();

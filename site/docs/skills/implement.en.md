@@ -95,7 +95,9 @@ gap is a blocker: the coordinator stops, reports it to the developer, and does n
 step.
 
 Start these steps only after the ticket pre-flight in "The coordinator contract" (blockers,
-`status::in-progress`).
+`status::in-progress`). Read `approval_policy` from `.harness/orchestration.json` first. Under
+`approval_policy: auto`, read `references/auto-path.md` before step 5: it decides who runs
+`batch approve` and every later approval.
 
 1. **Integration ref.** Use the ticket's `## Integration Branch` value (the `**Integration branch:**`
    line on the local tracker). If the ticket has no such
@@ -118,6 +120,16 @@ Start these steps only after the ticket pre-flight in "The coordinator contract"
    `--prohibited-change`, each item of the parent epic's `## Non-Goals & Rejected Alternatives` →
    `--prohibited-change` when the ticket names `## Parent: #<epic>`, and the paths of `## Contract touchpoints` and
    `## Relevant Files (Discovery Context)` → `--allowed-path` and `--expected-file`.
+
+   **Pipeline cost.** After a passing `batch preflight` and before `batch create`, compare the
+   `pipeline::full` label with the ticket's actual size. Show the developer the estimate: the
+   preflight's `expected_files` and `expected_changed_lines`, the ticket's `## Story Points`, and
+   `story_points.fast_threshold` from `.harness/project.json`. If every expected file is
+   documentation or skill text (`*.md`, `docs/**`, `site/**`, `skills/**`), or the Story Points are at
+   or below `fast_threshold`, offer to relabel the ticket `pipeline::fast` on the tracker and run
+   `/fast-implement` instead. The developer decides; wait for the answer under every
+   `approval_policy`. Continue with step 4 unless the developer chooses `/fast-implement`; then stop
+   before `batch create`. Never relabel the ticket yourself.
 4. **Create the batch.** Repeat the list flags once for each value.
 
    ```bash
@@ -133,9 +145,13 @@ Start these steps only after the ticket pre-flight in "The coordinator contract"
    one `--allowed-path` are mandatory. `--branch` must match `branch_pattern`. `--expected-file`,
    `--expected-service`, and `--expected-changed-lines` are mandatory when the project policy
    requires estimates. The CLI refuses an oversized ticket and prints a `remedy`.
-5. **Approve the batch.** `batch approve --batch <id> --approved-by <operator> --approved-at <UTC time>`
-   moves the batch from `planned` to `awaiting-approval`. This needs the operator's explicit
-   approval: show the command, as for `batch abandon`, and do not run it for the operator.
+5. **Approve the batch.** `batch approve` moves the batch from `planned` to `awaiting-approval`.
+   The step depends on `approval_policy`:
+   - `auto`: run `batch approve --batch <id>` yourself, without `--approved-by` and
+     `--approved-at`; the policy records the approval (`references/auto-path.md`).
+   - Every other policy: the step needs the operator's explicit approval. Show
+     `batch approve --batch <id> --approved-by <operator> --approved-at <UTC time>`, as for
+     `batch abandon`, and do not run it for the operator.
 
 **Commit plan.** The architect puts its plan in the report field `commit_plan`. `report submit`
 refuses a plan that breaks the rules below or names a path outside the batch `allowed_paths`; an
@@ -292,7 +308,11 @@ Under `approval_policy: auto`, the coordinator makes each path decision by polic
 `--approved-by` or `--approved-at`: run `batch approve`, `dispatch create`, and a planned
 `dispatch resume --trigger` without them. For every pending report that the `report submit` or
 `qa run` chain did not accept, including the publish report, run `batch auto-decide --batch <id>`.
-Pass only:
+Before `batch auto-decide` on a developer report with a failed check, run the check in "A failed
+check the diff may not cause" below. This is the one exception: when the evidence shows that the
+diff does not cause the failure, do not run `batch auto-decide` and wait for the developer's
+decision, a human approval under `auto`. The pipeline-cost question comes before `batch create`, so
+it precedes the automatic path, which starts at `batch approve`. Pass only:
 
 - `--commit-plan-file` with an exact copy of the architect's plan, only when the report carries no
   `commit_plan`;
@@ -340,6 +360,42 @@ trigger: retry with the developer category that the evidence confirms. The
 `tooling-retry-repeated` attention, raised by a third consecutive tooling retry on one candidate, is cleared only
 after the tool is fixed.
 
+**A failed check the diff may not cause.** When a developer report has a check with
+`checks_run[].result: fail`, find out whether the diff causes the failure. Do it before
+`batch auto-decide` under `approval_policy: auto`, and before you propose `retry` under any other
+policy:
+
+1. Name the failed tests from the check's evidence or its log.
+2. List the candidate's diff: `git -C <abs issue worktree> diff --name-only <batch base>..<candidate>`.
+   The failure is related when the diff changes a failed test file, a module that test imports, or
+   the test configuration (`conftest.py`, `pyproject.toml`, `uv.lock`).
+3. Run only the failed tests at the candidate from the coordinator session, without moving the
+   session: use the command's own working-directory option, for example
+   `env -C <abs issue worktree> <test command> <failed test ids>`. If they fail again, run them at the
+   batch base in the same way.
+
+Write the evidence in English as a findings file under `.harness/.sandboxes/scratch/inbox/`, in the
+`--findings-file` format `{"findings": [{"summary", "files", "expected_evidence"}]}`: the failed
+tests, the diff files, each run with its commit, result and duration, and the known differences of
+the worker environment (for example, its sandbox). If the evidence shows that the diff causes the
+failure, continue with `batch auto-decide` or the usual `retry`.
+
+If the diff touches none of the failed tests and they pass alone or fail at the base too, a
+developer retry cannot fix the code. No decision accepts that report: a failed check is a
+`code_test` failure, so `accept-conditional` and `override-warning` refuse it, and every `retry` of
+it is a developer-retry. Do not run `batch auto-decide` and do not propose `retry`: show the evidence
+to the developer and wait for their choice:
+
+- Fix the environment first (or the checks the brief carries), then
+  `batch decide --decision retry --note <findings file and cause>`. The developer-retry reruns the
+  checks without a code change and reports `outcome: blocked` with an empty `commit_map` and no
+  failed check. For that report, propose `batch decide --decision retry --reason-category
+  verification-infrastructure`: the route `verification` reruns the checks read-only on the same
+  candidate. Or the developer decides `accept-conditional --infrastructure-failure --note <cause>`
+  (above); after that accept, `batch carry-over --batch <id> --findings-file <path>` hands the
+  evidence to code-review as a carried item.
+- Or `block` the batch.
+
 A defect found in a clean developer report whose DoD is met inside its allowed paths is no reason for a retry:
 accept the report through `batch decide --findings-file <path>`, or after a policy auto-accept run
 `batch carry-over --batch <id> --findings-file <path>` while the code-review dispatch is not created. The
@@ -358,7 +414,12 @@ exception to that budget.
 
 Run `dispatch wait` between send and report. `stale`, a model or worktree mismatch, a changed harness
 snapshot, and a failed deterministic gate are blockers for the coordinator, not prompts for a broad
-LLM recovery. Silence or a timeout does not prove that the worker stopped. `batch resume-stop`
+LLM recovery. Silence or a timeout does not prove that the worker stopped. Judge whether a worker is
+alive only from `dispatch status --dispatch <id>`: `startup.worker_state`, `execution.state` for a
+supervised worker, `heartbeat_at` and `stale`. Never use `ps`, `pgrep` or `kill -0` from the
+coordinator session as evidence: the Claude Code sandbox runs each command in its own PID
+namespace, so `ps -g <pgid>` is empty even for a live worker whose heartbeat still arrives.
+`batch resume-stop`
 refuses a worker whose `startup` state is `live` or `unknown`: stop it through its runtime and repeat
 the command with `--runtime-stopped`. The `in-process` and external transports keep the same brief
 and evidence contract.

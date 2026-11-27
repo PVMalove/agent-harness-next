@@ -10,7 +10,11 @@ A developer-retry is a fix-forward: it continues from the brief's `snapshot_comm
 commits on top of it. Never amend, squash, reset, rebase or force-push `snapshot_commit` or a commit
 below it. `report submit` refuses a report whose `commit_sha` does not descend from
 `snapshot_commit`; its remedy is to recover the rewritten commits from `git reflog`, re-apply the fix
-as new commits without amend or squash, and report the new HEAD. Only a retry under a rebase
+as new commits without amend or squash, and report the new HEAD.
+
+A retry that needs no code change creates no commit. It reports `outcome: blocked` with an empty
+`commit_map`, its `commit_sha` at `snapshot_commit`, and in `blockers` why no change is needed;
+`report submit` refuses the same report as `completed`. Only a retry under a rebase
 target is measured from that target instead. Two sources share the name `rebase_target_commit`: the
 brief's field, non-null only on a `rebase-fix-forward` brief or on a superseding batch's
 developer-retry brief (below), and, on a legacy stale-base record (`base_rebase_required`, written

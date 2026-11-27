@@ -20,6 +20,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widget import Widget
 from textual.widgets import Button, Footer, ListItem, ListView, Static
 
+from .. import icons
 from ..chrome import TopBar
 from ..shell import SectionCard
 from ..translate import Translated
@@ -112,7 +113,10 @@ def describe_command(
     if reversibility is Reversibility.REVERSIBLE:
         text.append(t("Обратимо: да") + "\n", style=brand.STATUS_COLORS["ok"])
     else:
-        text.append(f"⚠ {t(CONFIRMATION_REASONS[reversibility])}\n", style=warn)
+        text.append(
+            f"{icons.STATUS_ICONS['warn']} {t(CONFIRMATION_REASONS[reversibility])}\n",
+            style=warn,
+        )
         if confirmation_word:
             text.append(f"{t('Потребуется ввести')} {confirmation_word}\n", style=warn)
     text.append(f"\n$ {cli_line}\n", style=brand.PALETTE["foreground"])
@@ -279,8 +283,10 @@ class CommandMenuScreen(Translated, Screen[None]):
     @staticmethod
     def _label_text(label: str) -> Text:
         text = Text(label)
-        if label.startswith("⚠"):
-            text.stylize(brand.STATUS_COLORS["warn"], 0, 1)
+        for prefix in (icons.STATUS_ICONS["warn"], "⚠"):
+            if label.startswith(prefix):
+                text.stylize(brand.STATUS_COLORS["warn"], 0, len(prefix))
+                break
         return text
 
     def _menu_children(self) -> list[ListItem]:
@@ -328,7 +334,7 @@ class CommandMenuScreen(Translated, Screen[None]):
                     yield Static("", id="command-detail")
         with SectionCard(title="Вывод", id="command-output-card"):
             yield VerticalScroll(
-                Static("", id="command-output", markup=False),
+                Static("Вывода пока нет", id="command-output", markup=False),
                 id="command-output-scroll",
             )
 

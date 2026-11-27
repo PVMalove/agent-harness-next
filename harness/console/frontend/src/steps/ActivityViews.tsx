@@ -1,6 +1,7 @@
 /* The mockup's Agent activity blocks over the live roster and the ledger snapshot: the summary,
    the KPI row, the session route, the timeline and the statistics. Counts come from the roster
    or the server's analytics; a figure without a source shows an explicit no-data state. */
+import type { ReactNode } from "react";
 import { Icon } from "../icons";
 import { compactDuration, useI18n } from "../i18n";
 import type { Language } from "../i18n";
@@ -81,6 +82,7 @@ export function Bar({ value, max, tone = "cyan" }: { value: number; max: number;
   );
 }
 
+/** The one no-data token: a muted caption-size word, the reason in its tooltip. */
 export function NoData({ why }: { why?: string }) {
   const { t } = useI18n();
   return (
@@ -174,32 +176,47 @@ const ROUTE: [string, string[], string][] = [
   ["Developer", ["developer"], "developer"],
   ["Review", ["review", "code-review"], "review"],
   ["QA", ["qa"], "qa"],
+  ["Publish", ["developer"], "branch"],
 ];
 
-/** The route of the selected session's batch: Architect -> Developer -> Review -> QA -> PR. */
+/** A roster dispatch belongs to a route stage by role; publish is a developer dispatch with
+    purpose `publish`, and the Developer stage never counts it. */
+function onStage(name: string, roles: string[], entry: RosterDispatch): boolean {
+  if (!roles.includes(entry.role)) return false;
+  if (name === "Publish") return entry.purpose === "publish";
+  return entry.purpose !== "publish";
+}
+
+/** The route of the selected session's batch: Architect -> Developer -> Review -> QA -> Publish -> PR. */
 export function SessionRoute({
   session,
   dispatches,
   prState,
   now,
+  children,
 }: {
   session: RosterDispatch | null;
   dispatches: readonly RosterDispatch[];
   prState: string | null;
   now: number;
+  /** The session's own observation (in-process ledger facts, the runtime's execution), shown
+      under the route inside its scrolling panel. */
+  children?: ReactNode;
 }) {
   const { t, language, section, state: stateText } = useI18n();
   if (!session) {
     return (
       <section className="panel work-route-panel" id="work-route">
-        <div className="work-empty">{t("Выберите сессию слева.")}</div>
+        <div className="work-empty">
+          {dispatches.length ? t("Выберите сессию слева.") : t("Сессий пока нет: маршрут появится, когда batch отправит первый worker.")}
+        </div>
       </section>
     );
   }
   const batch = dispatches.filter((entry) => entry.batch_id === session.batch_id);
   const tone = STATUS_TONE[sessionStatus(session)];
   const steps = ROUTE.map(([name, roles, icon]) => {
-    const entry = batch.filter((item) => roles.includes(item.role)).at(-1);
+    const entry = batch.filter((item) => onStage(name, roles, item)).at(-1);
     const state = !entry ? "pending" : sessionStatus(entry) === "running" ? "current" : "done";
     return { name, state, icon, label: entry ? stateText(entry.state) : t("Не начат") };
   });
@@ -265,6 +282,7 @@ export function SessionRoute({
             {section("Orchestration")} <Icon name="chevron" />
           </a>
         </div>
+        {children}
       </div>
     </section>
   );

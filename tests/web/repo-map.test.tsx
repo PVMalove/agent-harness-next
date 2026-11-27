@@ -201,7 +201,9 @@ test("the file tree is a hierarchy: indented folder rows that fold, file rows wi
     ["ds-tree-file", "README.md", "0px"],
   ]);
   expect(rows()[0].querySelector("svg[data-icon='folder']")).not.toBeNull();
-  expect(rows()[1].querySelector(".ds-tree-status")?.textContent).toBeTruthy();
+  // A parser status is shown in words, never as the recorded enum.
+  expect(rows()[1].querySelector(".ds-tree-status")?.textContent).toBe("разобран");
+  expect(rows()[3].querySelector(".ds-tree-status")?.textContent).toBe("ошибка синтаксиса");
   act(() => fireEvent.click(rows()[0]));
   expect(rows()[0].getAttribute("aria-expanded")).toBe("false");
   expect(shape().map(([, label]) => label)).toEqual(["pkg/", "README.md"]);

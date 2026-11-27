@@ -21,7 +21,15 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Button, Input, ListItem, ListView, Select, Static
 
-from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard, WrappedValue
+from ..shell import (
+    SHELL_CSS,
+    ConsoleShell,
+    FieldGrid,
+    Fold,
+    SectionCard,
+    SeparatorWrap,
+    WrappedValue,
+)
 from ...kernel.status import Status
 from ..translate import translate_bindings
 from ..stats import reports_kpi_tiles
@@ -32,6 +40,7 @@ from ...kernel.reports import BatchTimeline, LedgerView, ReportEntry, StageEntry
 from ...kernel import brand
 from ...kernel import i18n
 from ...kernel.json_fields import strings, text
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from .export import EXPORT_BINDING_KEY, export_document
 from .commands import call_from_worker
@@ -39,8 +48,8 @@ from .commands import call_from_worker
 _FILTERS = (
     ("filter-ticket", "тикет", "ticket"),
     ("filter-role", "роль", "role"),
-    ("filter-outcome", "outcome", "outcome"),
-    ("filter-date", "дата (2026-09-27)", "date"),
+    ("filter-outcome", "итог", "outcome"),
+    ("filter-date", "дата ГГГГ-ММ-ДД", "date"),
     ("filter-state", "статус стадии", "state"),
 )
 
@@ -58,12 +67,21 @@ _SELECT_OPTIONS = {
     ],
     "sort-direction": [("По убыванию", "desc"), ("По возрастанию", "asc")],
 }
-_REFRESH_LABELS = ("r Обновить", "↻")
+_REFRESH_LABELS = ("r Обновить", icons.REFRESH)
 _QA_LABELS = ("F3 QA-логи", "QA")
 
 
 def _short_id(identifier: str, prefix: str) -> str:
-    return identifier.removeprefix(prefix)[:8]
+    """The id without its prefix: whole up to 12 cells, else its first 8 cells and an ellipsis,
+    so a cut id never reads as another id."""
+    rest = identifier.removeprefix(prefix)
+    return rest if len(rest) <= 12 else rest[:8] + "…"
+
+
+def _dispatch_label(dispatch_id: str) -> str:
+    """A dispatch in a list row: a UUID as `d8e030c3f`, another ID without its `dispatch-`."""
+    short = brand.short_dispatch(dispatch_id)
+    return short if short != dispatch_id else _short_id(dispatch_id, "dispatch-")
 
 
 def _report_label(
@@ -72,13 +90,13 @@ def _report_label(
     """One row: date, ticket, role badge and short id, then the stage status (symbol and label).
     A `Text`, never markup: the fields come from untrusted role output. The row wraps, never cuts."""
     at = console_reports.timestamp(entry.at)
-    date = at.strftime("%m-%d %H:%M") if at else "?"
+    date = at.strftime("%d.%m %H:%M") if at else "?"
     colour = brand.ROLE_COLORS.get(entry.role, brand.PALETTE["muted"])
     label = Text(f"{date:<11} {entry.ticket:<6} ")
     label.append(f"[{entry.role}]", style=f"bold {colour}")
-    label.append(f" {_short_id(entry.dispatch_id, 'dispatch-')}\n")
+    label.append(f" {_dispatch_label(entry.dispatch_id)}\n")
     status = console_reports.stage_status(entry, narrow=narrow)
-    label.append(status.render(language), style=status.color)
+    label.append(icons.render_status(status, language), style=status.color)
     return label
 
 
@@ -87,7 +105,7 @@ def _batch_label(batch: console_reports.BatchSummary, language: str = "ru") -> T
     status = console_reports.batch_status(batch)
     start = i18n.tr_text(language, console_reports.batch_start_text(batch))
     label = Text(f"{start} · {batch.ticket} {_short_id(batch.batch_id, 'batch-')}\n")
-    label.append(status.render(language), style=status.color)
+    label.append(icons.render_status(status, language), style=status.color)
     label.append(
         f" · {console_reports.batch_timing_text(batch, language=language)}",
         style=brand.PALETTE["muted"],
@@ -111,9 +129,9 @@ async def _replace_items(listing: ListView, items: list[ListItem]) -> None:
     )
 
 
-SERVER_UNAVAILABLE = "Сервер консоли не отдал данные леджера"
+SERVER_UNAVAILABLE = "Сервер консоли не отдал данные ledger"
 REPORT_MISSING = "Сервер консоли не нашёл тело этого отчёта"
-TIMELINE_MISSING = "Хронология батча недоступна"
+TIMELINE_MISSING = "Хронология batch недоступна"
 
 
 def read_view(client: ScreenClient, *, online: bool = False) -> LedgerView:
@@ -172,25 +190,32 @@ class ReportsScreen(ConsoleShell):
     CSS = SHELL_CSS + brand.shell_css("""
     ReportsScreen #reports-page { height: 1fr; padding: 0 2; }
     ReportsScreen #report-header { height: auto; margin-bottom: 1; }
-    ReportsScreen #report-heading { width: 1fr; height: auto; }
+    ReportsScreen.-wide #report-header, ReportsScreen.-spacious #report-header { margin-bottom: 0; }
+    ReportsScreen #report-heading { width: 1fr; min-width: 30; height: auto; }
     ReportsScreen #reports-title { height: 1; text-style: bold; }
     ReportsScreen #reports-subtitle { height: 1; color: $text-muted; }
-    ReportsScreen #reports-status { width: auto; height: 1; margin-right: 2; }
+    ReportsScreen #reports-status { width: auto; max-width: 70; height: 1; margin-right: 2; text-wrap: nowrap; text-overflow: ellipsis; }
     ReportsScreen #report-toolbar { width: auto; height: 1; }
     ReportsScreen #report-toolbar Button { margin-left: 1; }
     ReportsScreen #report-filter-fold { margin-bottom: 1; }
+    ReportsScreen.-wide #report-filter-fold, ReportsScreen.-spacious #report-filter-fold { margin-bottom: 0; }
     ReportsScreen.-wide #report-filter-fold > CollapsibleTitle, ReportsScreen.-spacious #report-filter-fold > CollapsibleTitle { display: none; }
     ReportsScreen.-wide #report-filter-fold > Contents, ReportsScreen.-spacious #report-filter-fold > Contents { padding: 0; }
     ReportsScreen #report-filters { height: 1; }
     ReportsScreen #report-filters Input { width: 1fr; height: 1; margin-right: 1; border: none; padding: 0 1; background: transparent; }
     ReportsScreen #report-filters Input:focus { border: none; background: transparent; text-style: bold; }
     ReportsScreen #report-order { height: 1; margin-top: 1; }
+    ReportsScreen.-wide #report-order, ReportsScreen.-spacious #report-order { margin-top: 0; }
     ReportsScreen #report-order Select { width: 1fr; margin-right: 1; }
     ReportsScreen #report-order Select > SelectCurrent { border: none; height: 1; padding: 0 1; background: transparent; }
     ReportsScreen #reports-kpi-card { margin-bottom: 1; }
-    ReportsScreen #reports-body { height: 1fr; min-height: 10; }
+    ReportsScreen.-wide #reports-kpi-card, ReportsScreen.-spacious #reports-kpi-card { margin-bottom: 0; }
+    ReportsScreen #reports-body { height: 1fr; min-height: 18; }
+    ReportsScreen #report-detail-scroll { height: 1fr; }
     ReportsScreen #report-panel { width: 1fr; height: 100%; margin-bottom: 1; }
+    ReportsScreen.-wide #report-panel, ReportsScreen.-spacious #report-panel { margin-bottom: 0; }
     ReportsScreen #report-detail-card { width: 44; height: 100%; margin: 0 0 1 1; }
+    ReportsScreen.-wide #report-detail-card, ReportsScreen.-spacious #report-detail-card { margin: 0 0 0 1; }
     ReportsScreen.-narrow #report-detail-card { display: none; }
     ReportsScreen .card-hint { height: 1; color: $text-muted; }
     ReportsScreen .report-list { height: 1fr; margin: 0; padding: 0; border: none; background: transparent; }
@@ -313,7 +338,8 @@ class ReportsScreen(ConsoleShell):
                         compact=True,
                     )
             with SectionCard(title="Показатели", id="reports-kpi-card"):
-                yield KpiGrid(self._kpi_tiles(), id="reports-kpi")
+                # One row of tiles on a wide terminal, so the stage list keeps the room.
+                yield KpiGrid(self._kpi_tiles(), columns=6, id="reports-kpi")
             with Horizontal(id="reports-body"):
                 with SectionCard(
                     title="Стадии и отчёты",
@@ -333,9 +359,12 @@ class ReportsScreen(ConsoleShell):
                         markup=False,
                     )
                 with SectionCard(title="Детали отчёта", id="report-detail-card"):
-                    yield Static("", id="report-detail", classes="no-i18n", markup=False)
+                    with VerticalScroll(id="report-detail-scroll"):
+                        yield Static(
+                            "", id="report-detail", classes="no-i18n", markup=False
+                        )
             with Fold(
-                title="Батчи",
+                title="Batch",
                 summary=self._batches_summary(),
                 collapsed=narrow,
                 id="batch-fold",
@@ -357,33 +386,44 @@ class ReportsScreen(ConsoleShell):
         return f"хронология · {len(self.view.batches)}"
 
     def _empty_text(self) -> Text:
-        """The line under an empty list: why the ledger is unavailable, or that nothing matched."""
+        """The line under an empty list: still loading, why the ledger is unavailable, that the
+        ledger has no stage yet, or that the filters matched nothing."""
+        language = self._language()
+        if self.refreshing and not self.view.stages:
+            return Text(icons.loading(i18n.tr(language, "Загрузка…")), style=brand.PALETTE["muted"])
         if self.view.unavailable:
             return Text(
-                f"{brand.STATUS_ICONS['fail']} {self.view.unavailable}",
+                f"{icons.STATUS_ICONS['fail']} {self.view.unavailable}",
                 style=brand.STATUS_COLORS["fail"],
             )
+        if not self.view.stages:
+            return Text(
+                f"{icons.STATUS_ICONS['skipped']} "
+                + i18n.tr(language, "Стадий ещё нет: ни один dispatch не записан в ledger"),
+                style=brand.PALETTE["muted"],
+            )
         return Text(
-            f"{brand.STATUS_ICONS['skipped']} "
-            + i18n.tr(self._language(), "Ничего не найдено")
+            f"{icons.STATUS_ICONS['skipped']} "
+            + i18n.tr(language, "По фильтрам ничего не найдено"),
+            style=brand.PALETTE["muted"],
         )
 
     def _status(self) -> Text | str:
         language = self._language()
         if self.refresh_error:
             return Text(
-                f"{brand.STATUS_ICONS['fail']} "
+                f"{icons.STATUS_ICONS['fail']} "
                 + i18n.tr_text(language, self.refresh_error),
                 style=brand.STATUS_COLORS["fail"],
             )
         if self.view.unavailable:
             return Text(
-                f"{brand.STATUS_ICONS['fail']} {self.view.unavailable}",
+                f"{icons.STATUS_ICONS['fail']} {self.view.unavailable}",
                 style=brand.STATUS_COLORS["fail"],
             )
         if self.refreshing:
             running = Status("running", "Обновление…", "Refreshing…")
-            return Text(running.render(language), style=running.color)
+            return Text(icons.render_status(running, language), style=running.color)
         shown, total = len(self.shown), len(self.view.reports)
         if any(entry.report is None for entry in self.view.stages):
             stages = len(self.view.stages)
@@ -495,21 +535,23 @@ class ReportsScreen(ConsoleShell):
         table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
         table.add_column(ratio=1, overflow="fold")
         if entry is not None:
-            outcome = (
-                entry.report.outcome
-                if entry.report
-                else i18n.tr(language, "отчёт ещё не получен")
-            )
+            status = console_reports.stage_status(entry)
+            at = console_reports.timestamp(entry.at)
+            colour = brand.ROLE_COLORS.get(entry.role, brand.PALETTE["foreground"])
             for label, value in (
-                ("Тикет", entry.ticket),
-                ("Роль", entry.role),
-                ("Состояние", entry.state),
-                ("Итог", outcome),
-                ("Время", entry.at or i18n.tr(language, "время неизвестно")),
-                ("Batch", entry.batch_id),
-                ("Dispatch", entry.dispatch_id),
+                ("Тикет", Text(entry.ticket, style=f"bold {brand.PALETTE['primary']}")),
+                ("Роль", Text(entry.role, style=f"bold {colour}")),
+                ("Статус", Text(icons.render_status(status, language), style=status.color)),
+                (
+                    "Время",
+                    Text(at.strftime("%d.%m.%Y %H:%M UTC"))
+                    if at
+                    else Text(i18n.tr(language, "время неизвестно"), style=brand.PALETTE["muted"]),
+                ),
+                ("Batch", Text(entry.batch_id)),
+                ("Dispatch", Text(brand.short_dispatch(entry.dispatch_id))),
             ):
-                table.add_row(i18n.tr(language, label), value)
+                table.add_row(i18n.tr(language, label), SeparatorWrap(value))
         detail = self.query_one("#report-detail", Static)
         detail.update(
             Group(
@@ -623,7 +665,7 @@ class ReportsScreen(ConsoleShell):
                     self._client,
                     self.repo,
                     entry.batch_id,
-                    notice=f"{entry.dispatch_id} · {entry.state}: отчёт ещё не получен",
+                    notice=f"{brand.short_dispatch(entry.dispatch_id)} · {entry.state}: отчёт ещё не получен",
                 )
         elif event.list_view.id == "batch-list":
             open_timeline(self, self._client, self.repo, name)
@@ -666,20 +708,11 @@ _DETAIL_CSS = brand.shell_css("""
 .report-detail.-narrow .page-actions { margin-top: 1; }
 .report-detail.-narrow .page-actions Button:first-child { margin-left: 0; }
 """)
-_KIND_COLOURS = {
-    "state": brand.ROLE_COLORS["verification"],
-    "dispatch": brand.PALETTE["primary"],
-    "report": brand.PALETTE["success"],
-    "decision": brand.PALETTE["warning"],
-    "risk": brand.PALETTE["error"],
-}
-
-
 def _status_text(status: Status | None, body: str, language: str) -> Text:
     """A line of a report: the status (symbol and label) in its colour, then the text."""
     line = Text()
     if status is not None:
-        line.append(status.render(language), style=status.color)
+        line.append(icons.render_status(status, language), style=status.color)
         if body:
             line.append("  ")
     line.append(body)
@@ -695,9 +728,10 @@ def _lines_text(lines: list[console_reports.ReportLine], language: str) -> Text:
 
 
 def _utc_text(value: str) -> str:
-    """A recorded time as `2026-10-16 12:59 UTC`; `?` when it is missing or unreadable."""
+    """A recorded time as `16.10.2026 12:59 UTC`, as elsewhere in the console; `?` when it is
+    missing or unreadable."""
     moment = console_reports.timestamp(value)
-    return moment.strftime("%Y-%m-%d %H:%M UTC") if moment else "?"
+    return moment.strftime("%d.%m.%Y %H:%M UTC") if moment else "?"
 
 
 class ReportScreen(ConsoleShell):
@@ -709,8 +743,9 @@ class ReportScreen(ConsoleShell):
     IS_SECTION_ROOT = False
     AUTO_FOCUS = "#report-body"
     CSS = SHELL_CSS + _DETAIL_CSS
+    # `b` opens the task board from every screen, so the timeline takes `t`.
     BINDINGS = [
-        Binding("b", "open_timeline", "Хронология"),
+        Binding("t", "open_timeline", "Хронология"),
         Binding(EXPORT_BINDING_KEY, "export", "Экспорт"),
     ]
 
@@ -736,7 +771,7 @@ class ReportScreen(ConsoleShell):
         language = self._language()
         status = console_reports.outcome_status(entry.outcome)
         line = Text(f"{entry.ticket} · {entry.role} · ")
-        line.append(status.render(language), style=status.color)
+        line.append(icons.render_status(status, language), style=status.color)
         when = (
             _utc_text(entry.reported_at)
             if entry.reported_at
@@ -749,14 +784,14 @@ class ReportScreen(ConsoleShell):
         entry = self.entry
         files = ", ".join(strings(entry.report.get("changed_files")))
         return [
-            ("dispatch", entry.dispatch_id),
-            ("batch", entry.batch_id or "?"),
-            ("commit", text(entry.report.get("commit_sha"), "—")),
-            ("файлы", files or "—"),
+            ("Dispatch", brand.short_dispatch(entry.dispatch_id)),
+            ("Batch", entry.batch_id or "?"),
+            ("Commit", text(entry.report.get("commit_sha"), "—")),
+            ("Файлы", files or "—"),
         ]
 
     def compose_strip(self) -> ComposeResult:
-        yield WrappedValue(self.entry.dispatch_id)
+        yield WrappedValue(brand.short_dispatch(self.entry.dispatch_id))
 
     def compose_content(self) -> ComposeResult:
         language = self._language()
@@ -771,11 +806,14 @@ class ReportScreen(ConsoleShell):
                         markup=False,
                     )
                 with Horizontal(classes="page-actions"):
-                    yield Button("b Хронология batch", id="open-timeline", compact=True)
+                    yield Button("t Хронология batch", id="open-timeline", compact=True)
                     yield Button("e Экспорт в Markdown", id="export", compact=True)
             yield FieldGrid(self._fields(), id="report-fields")
             for title, lines in console_reports.report_section_lines(self.entry.report):
-                with SectionCard(title=title, id="card-" + _section_id(title)):
+                with SectionCard(
+                    title=console_reports.REPORT_SECTION_TITLES.get(title, title),
+                    id="card-" + _section_id(title),
+                ):
                     yield Static(
                         _lines_text(lines, language),
                         id=_section_id(title),
@@ -784,7 +822,10 @@ class ReportScreen(ConsoleShell):
                     )
             qa_log = console_reports.qa_log_text(self.view, self.entry.dispatch_id)
             if qa_log:
-                with SectionCard(title="QA log", id="card-section-qa-log"):
+                with SectionCard(
+                    title=console_reports.REPORT_SECTION_TITLES["QA log"],
+                    id="card-section-qa-log",
+                ):
                     yield Static(
                         qa_log,
                         id="section-qa-log",
@@ -847,7 +888,7 @@ class BatchTimelineScreen(ConsoleShell):
         language = self._language()
         timing = console_reports.batch_timing_text(batch, language=language)
         return [
-            ("Состояние", console_reports.batch_status(batch).render(language)),
+            ("Состояние", icons.render_status(console_reports.batch_status(batch), language)),
             ("До PR", timing.removeprefix("до PR: ").removeprefix("to PR: ")),
             (
                 "Начало",
@@ -862,18 +903,26 @@ class BatchTimelineScreen(ConsoleShell):
             language, f"маршрут: {console_reports.role_flow_text(self.timeline)}"
         )
 
+    def _legend(self) -> Text:
+        """The kinds of the shown events as their icons and words, under the events."""
+        legend = Text("\n")
+        legend.append_text(
+            icons.kinds_legend((event.kind for event in self.timeline.events), self._language())
+        )
+        return legend
+
     def _event_row(self, event: console_reports.TimelineEvent) -> Text:
         language = self._language()
         when = event.at[:16].replace("T", " ") if event.at else "?"
         row = Text(f"{when}  ")
-        colour = _KIND_COLOURS.get(event.kind, brand.PALETTE["muted"])
-        row.append(f"{event.kind:<9}", style=f"bold {colour}")
-        row.append(f" {i18n.tr_text(language, event.text)}")
+        glyph, colour = icons.timeline_icon(event.kind)
+        row.append(glyph, style=f"bold {colour}")
+        row.append(f" {brand.short_dispatch(i18n.tr_text(language, event.text))}")
         return row
 
     def _notice_text(self) -> Text:
         return Text(
-            f"{brand.STATUS_ICONS['warn']} {i18n.tr_text(self._language(), self.notice)}",
+            f"{icons.STATUS_ICONS['warn']} {i18n.tr_text(self._language(), self.notice)}",
             style=brand.STATUS_COLORS["warn"],
         )
 
@@ -916,6 +965,7 @@ class BatchTimelineScreen(ConsoleShell):
                         classes="timeline-event no-i18n",
                         markup=False,
                     )
+                yield Static(self._legend(), id="timeline-legend", classes="no-i18n", markup=False)
 
     def sync_language(self) -> None:
         ConsoleShell.sync_language(self)
@@ -927,6 +977,8 @@ class BatchTimelineScreen(ConsoleShell):
             self.query(".timeline-event").results(Static), self.timeline.events
         ):
             row.update(self._event_row(event))
+        for legend in self.query("#timeline-legend").results(Static):
+            legend.update(self._legend())
         for scroll in self.query(ScrollingView):
             translate_bindings(scroll, self._language())
 
@@ -979,8 +1031,8 @@ class QaLogsScreen(ConsoleShell):
         unknown = "time ?" if language == "en" else "время ?"
         return Text("\n").join(
             Text(
-                f"{brand.STATUS_ICONS['warn']} {attempt.failed_at or unknown} · "
-                f"{attempt.dispatch_id} · {attempt.stage}: {attempt.message}",
+                f"{icons.STATUS_ICONS['warn']} {attempt.failed_at or unknown} · "
+                f"{brand.short_dispatch(attempt.dispatch_id)} · {attempt.stage}: {attempt.message}",
                 style=brand.STATUS_COLORS["warn"],
             )
             for attempt in attempts
@@ -990,7 +1042,7 @@ class QaLogsScreen(ConsoleShell):
         en = self._language() == "en"
         verdict = console_reports.qa_run_status(run)
         failed = [(command, code) for command, code in run.commands if code != 0]
-        dispatch = run.dispatch_id or ("no report" if en else "без отчёта")
+        dispatch = brand.short_dispatch(run.dispatch_id) if run.dispatch_id else ("no report" if en else "без отчёта")
         outcome = ("report: " if en else "отчёт: ") + run.outcome
         counts = (
             f"{len(run.commands)} commands, {len(failed)} failed"
@@ -1009,7 +1061,10 @@ class QaLogsScreen(ConsoleShell):
             else f"хвост лога (последние {len(run.tail)} из {run.total_lines} строк):"
         )
         text = Text()
-        text.append(verdict.render(self._language()), style=f"bold {verdict.color}")
+        text.append(
+            icons.render_status(verdict, self._language()),
+            style=f"bold {verdict.color}",
+        )
         text.append(f"  {run.artifact}\n")
         text.append(f"{dispatch} · {run.ticket} · {outcome}\n{counts}\n{tail}\n")
         text.append(
@@ -1034,7 +1089,7 @@ class QaLogsScreen(ConsoleShell):
             if view.unavailable:
                 yield Static(
                     Text(
-                        f"{brand.STATUS_ICONS['fail']} {view.unavailable}",
+                        f"{icons.STATUS_ICONS['fail']} {view.unavailable}",
                         style=brand.STATUS_COLORS["fail"],
                     ),
                     id="qa-unavailable",

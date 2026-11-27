@@ -447,12 +447,14 @@ class FixForwardHistory:
                     created = _commits_between(
                         repo, rebase_target or plan_base, resolved
                     )
-                    # A retry that only records carried items not_closed maps no commit (#1265).
-                    if not (
-                        rebase_target is None
-                        and plan_rules.is_developer_retry(dispatch)
-                        and carried_items.closes_without_commits(report, created)
+                    if rebase_target is None and plan_rules.is_commitless_retry(
+                        dispatch, report, created
                     ):
+                        # A retry that records carried items not_closed may complete without a
+                        # commit (#1265); any other one reports blocked or failed (#1290).
+                        if not carried_items.not_closed_reasons(report):
+                            plan_rules.require_commitless_outcome(report)
+                    else:
                         plan_rules.check_report(
                             report,
                             dispatch,

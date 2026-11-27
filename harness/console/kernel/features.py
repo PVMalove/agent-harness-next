@@ -219,7 +219,7 @@ def _execution(facts: Facts) -> list[_Feature]:
         "orchestration",
         "Оркестрация",
         "execution",
-        "Батчи, dispatch и роли: путь задачи от плана до PR.",
+        "Batch, dispatch и роли: путь задачи от плана до PR.",
         "Задачи нельзя запускать через batch и dispatch.",
         facts.orchestration,
         ("capability:backend-orchestration",),

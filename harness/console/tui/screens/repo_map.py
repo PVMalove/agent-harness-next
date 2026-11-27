@@ -38,6 +38,7 @@ from ...kernel.repo_map_snapshot import RepoMapFacts, shown_view
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel import brand, i18n
 from ...kernel import repo_map_settings
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..server_api import build_repo_map
 from .commands import call_from_worker
@@ -116,24 +117,29 @@ class RepoMapScreen(ConsoleShell):
 
     CRUMBS = "Главная › Repo Map"
     SECTION = "Repo Map"
-    NARROW_FOOTER_KEYS = ("escape", "b", "f2")
+    NARROW_FOOTER_KEYS = ("escape", "u", "f2")
     AUTO_FOCUS = "Tabs"
+    # `b` opens the task board from every screen, so the build takes `u`.
     BINDINGS = [
-        Binding("b", "build", "Собрать"),
+        Binding("u", "build", "Собрать"),
         Binding(EXPORT_BINDING_KEY, "export", "Markdown"),
         Binding(EXPORT_JSON_BINDING_KEY, "export_json", "JSON"),
     ]
     CSS = SHELL_CSS + brand.shell_css("""
     RepoMapScreen #repo-map-head { height: auto; padding: 0 2; margin-bottom: 1; }
+    RepoMapScreen.-wide #repo-map-head, RepoMapScreen.-spacious #repo-map-head { margin-bottom: 0; }
     RepoMapScreen #repo-map-title { height: 1; text-style: bold; }
     RepoMapScreen #repo-map-status { height: auto; }
     RepoMapScreen #repo-map-actions { height: 1; margin-top: 1; }
+    RepoMapScreen.-wide #repo-map-actions, RepoMapScreen.-spacious #repo-map-actions { margin-top: 0; }
     RepoMapScreen #repo-map-actions Button { margin-right: 1; }
     RepoMapScreen .strip-note { text-align: right; color: $text-muted; }
     RepoMapScreen #repo-map-tabs { height: 1fr; padding: 0 2; }
     RepoMapScreen TabPane { padding: 1 0 0 0; }
+    RepoMapScreen.-wide TabPane, RepoMapScreen.-spacious TabPane { padding: 0; }
     RepoMapScreen #tab-settings { padding: 0; }
     RepoMapScreen .section-card { margin-bottom: 1; }
+    RepoMapScreen.-wide .section-card, RepoMapScreen.-spacious .section-card { margin-bottom: 0; }
     RepoMapScreen .pair > .section-card, RepoMapScreen .settings-row > .section-card { margin-bottom: 0; }
     RepoMapScreen #file-search { height: auto; }
     RepoMapScreen #symbol-search { width: 1fr; }
@@ -148,6 +154,7 @@ class RepoMapScreen(ConsoleShell):
     RepoMapScreen.-wide #relations-fold > CollapsibleTitle, RepoMapScreen.-spacious #relations-fold > CollapsibleTitle { display: none; }
     RepoMapScreen #map-summary { margin-bottom: 0; }
     RepoMapScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    RepoMapScreen.-wide .pair, RepoMapScreen.-spacious .pair { margin-bottom: 0; }
     RepoMapScreen.-wide .pair, RepoMapScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     RepoMapScreen .pair > .section-card { height: 100%; }
     RepoMapScreen #map-summary-empty { height: auto; color: $text-muted; }
@@ -178,6 +185,8 @@ class RepoMapScreen(ConsoleShell):
         self._client = client
         self._command_runner = command_runner
         self.facts: RepoMapFacts | None = None
+        # Why the first snapshot was not read; empty while it is still being read.
+        self._load_error = ""
         self.head: str | None = None
         self.view: RepoMapView | None = None
         self._status_text, self._status_kind = "читаю снимок Repo Map…", "running"
@@ -209,7 +218,7 @@ class RepoMapScreen(ConsoleShell):
         """The status as a symbol and its text, coloured by kind."""
         text = i18n.tr_text(self._language, self._status_text)
         status = Status(self._status_kind, text, text)
-        return Text(status.render(self._language), style=status.color)
+        return Text(icons.render_status(status, self._language), style=status.color)
 
     def _context_text(self) -> str:
         line = f"Проект: {self.repo.name}"
@@ -375,7 +384,7 @@ class RepoMapScreen(ConsoleShell):
         """Read the `repo_map.snapshot` of the server in a worker, then show it; `force` asks
         for fresh facts instead of the server's short cache."""
         self.query_one("#map-checks", Static).update(
-            i18n.tr_text(self._language, "Проверяю…")
+            icons.tr_text(self._language, icons.loading("Проверяю…"))
         )
 
         self._check_serial += 1
@@ -400,6 +409,8 @@ class RepoMapScreen(ConsoleShell):
             )
             if self.facts is None:
                 self._set_status(failure, "error")
+                self._load_error = failure
+                self._render_map()
             return
         first = self.facts is None
         self.facts, self.head = facts, facts.head
@@ -430,7 +441,7 @@ class RepoMapScreen(ConsoleShell):
             color = brand.STATUS_COLORS.get(check.level, brand.PALETTE["muted"])
             text.append(
                 ("\n" if index else "")
-                + brand.STATUS_ICONS.get(check.level, "·")
+                + icons.STATUS_ICONS.get(check.level, "·")
                 + " ",
                 style=color,
             )
@@ -446,6 +457,12 @@ class RepoMapScreen(ConsoleShell):
 
     # -- the map -------------------------------------------------------------------------------
 
+    def _no_map_text(self) -> str:
+        """What stands in for a missing map: still loading, not read, or really no map."""
+        if self.facts is None:
+            return "снимок Repo Map не прочитан" if self._load_error else icons.loading("Загрузка…")
+        return _NO_MAP
+
     def _render_map(self) -> None:
         view = self.view
         language = self._language
@@ -454,10 +471,12 @@ class RepoMapScreen(ConsoleShell):
         self.query_one("#provenance-card").display = view is not None
         self.query_one("#map-index-row").display = view is not None
         if view is None:
+            placeholder = i18n.tr(language, self._no_map_text())
             summary.set_fields([])
             empty.display = True
-            self.query_one("#map-hubs", Static).update(_NO_MAP)
-            self.query_one("#map-diagnostics", Static).update(_NO_MAP)
+            empty.update(placeholder)
+            self.query_one("#map-hubs", Static).update(placeholder)
+            self.query_one("#map-diagnostics", Static).update(placeholder)
         else:
             empty.display = False
             fields = console_repo_map.summary_fields(view)
@@ -499,12 +518,12 @@ class RepoMapScreen(ConsoleShell):
         rows = console_repo_map.diagnostic_rows(view)
         if not rows:
             ok = Status("accepted", "диагностик нет", "no diagnostics")
-            return Text(ok.render(language), style=ok.color)
+            return Text(icons.render_status(ok, language), style=ok.color)
         shown = Text()
         for index, (status, _, path) in enumerate(rows):
             if index:
                 shown.append("\n")
-            shown.append(status.render(language), style=status.color)
+            shown.append(icons.render_status(status, language), style=status.color)
             shown.append(f": {path}")
         return shown
 
@@ -515,7 +534,7 @@ class RepoMapScreen(ConsoleShell):
         view = self.view
         language = self._language
         if view is None:
-            tree.root.set_label(i18n.tr(language, _NO_MAP))
+            tree.root.set_label(i18n.tr(language, self._no_map_text()))
             counter.update("")
             return
         tree.root.set_label(Text(f"{view.commit[:12]} · {view.tier}"))
@@ -559,7 +578,7 @@ class RepoMapScreen(ConsoleShell):
                 label.append(f" [{item.parser_status}]", style=status.color)
             return label
         label = Text(f"{name} ")
-        label.append(f"{status.symbol} [{item.parser_status}]", style=status.color)
+        label.append(f"{icons.status_symbol(status)} [{item.parser_status}]", style=status.color)
         return label
 
     def _directory_node(

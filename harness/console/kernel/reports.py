@@ -1,14 +1,14 @@
 """Данные для раздела Reports консоли средствами только стандартной библиотеки: отчёты о завершении
-из выбранного поколения леджера жизненного цикла, их фильтры и секции, а также хронология батча.
+из выбранного поколения ledger жизненного цикла, их фильтры и секции, а также хронология batch.
 
 Все операции представляют собой нестрогое чтение данных с диска (`LifecycleLedger.records_root_lenient`
 и `read_record_lenient` — те же вызовы только для чтения, которые используют проверки health
 `orchestration.*` и `delivery_stats`): отсутствующая, неполная или повреждённая запись приводит к отсутствию
-значения вместо сбоя экрана. Модуль ничего не записывает, не мигрирует и не блокирует леджер.
+значения вместо сбоя экрана. Модуль ничего не записывает, не мигрирует и не блокирует ledger.
 
 Отчёт о завершении не содержит собственной метки времени (см. `_persist_report` в
 harness/orchestration/workflow/reports.py), поэтому его датой служит запись журнала аудита для
-`reports/<dispatch_id>.json`; изменения состояния батча считываются из записей `transition` того же аудита.
+`reports/<dispatch_id>.json`; изменения состояния batch считываются из записей `transition` того же аудита.
 Логи QA gate (`qa-artifacts/<sha256>.log`) связываются с отчётом QA через `sha256:<digest>` в поле Output;
 неудачные попытки qa-lane (`qa-lane/attempts/*.json`) — по `dispatch_id`.
 """
@@ -33,12 +33,24 @@ from ...orchestration.ledger.lifecycle import (
     LifecycleLedger,
     store_is_authority,
 )
+from .duration import compact_duration
 from .export import MarkdownDocument, MarkdownSection
 from .home_snapshot import _bool, _fields, _int, _list, _optional, _str
 from .json_fields import strings, text
 from .status import Status
 
 REPORT_SECTIONS = ("Output", "Checks", "Risks", "Blockers", "Next action")
+# The Russian title a screen shows for each section; the English name stays the section's key in
+# the ledger reader, the Markdown export and the web console.
+REPORT_SECTION_TITLES = {
+    "Output": "Вывод",
+    "Checks": "Проверки",
+    "Review": "Ревью",
+    "Risks": "Риски",
+    "Blockers": "Блокеры",
+    "Next action": "Следующее действие",
+    "QA log": "Лог QA",
+}
 QA_LOG_TAIL_LINES = 15
 _QA_SHA256 = re.compile(r"sha256:([0-9a-f]{64})")
 _ROLE_FLOW_SEPARATOR = " → "
@@ -46,7 +58,7 @@ _ROLE_FLOW_SEPARATOR = " → "
 
 @dataclass(frozen=True)
 class ReportEntry:
-    """Отчёт о завершении задачи вместе с атрибутами леджера для фильтрации и отображения в списке."""
+    """Отчёт о завершении задачи вместе с атрибутами ledger для фильтрации и отображения в списке."""
 
     dispatch_id: str
     batch_id: str
@@ -84,7 +96,7 @@ class StageEntry:
 
 @dataclass(frozen=True)
 class BatchSummary:
-    """Краткая сводка по батчу (идентификатор, тикет, состояние, время создания)."""
+    """Краткая сводка по batch (идентификатор, тикет, состояние, время создания)."""
 
     batch_id: str
     ticket: str
@@ -98,7 +110,7 @@ class BatchSummary:
 
 @dataclass(frozen=True)
 class TimelineEvent:
-    """Событие хронологии выполнения батча (смена состояния, диспатч, отчёт, решение координатора, оценка риска)."""
+    """Событие хронологии выполнения batch (смена состояния, dispatch, отчёт, решение координатора, оценка риска)."""
 
     at: str
     kind: str
@@ -108,7 +120,7 @@ class TimelineEvent:
 
 @dataclass(frozen=True)
 class BatchTimeline:
-    """Полная хронология батча: сводка, последовательность ролей (role flow) и список событий."""
+    """Полная хронология batch: сводка, последовательность ролей (role flow) и список событий."""
 
     batch: BatchSummary
     role_flow: list[str]
@@ -141,7 +153,7 @@ class QaRun:
 
 @dataclass(frozen=True)
 class LedgerView:
-    """Полный снимок записей леджера оркестрации, считанный для раздела Reports.
+    """Полный снимок записей ledger оркестрации, считанный для раздела Reports.
 
     Поля не переназначаются: `load_ledger_view` только заполняет их контейнеры при чтении.
     """
@@ -160,7 +172,7 @@ class LedgerView:
     stages: list[StageEntry] = field(default_factory=list)
 
     def dispatch_records(self) -> list[JsonObject]:
-        """Все записи диспатчей леджера (для статистики по ролям)."""
+        """Все записи dispatch ledger (для статистики по ролям)."""
         return list(self._dispatches.values())
 
     def dispatches_by_id(self) -> Mapping[str, JsonObject]:
@@ -168,7 +180,7 @@ class LedgerView:
         return MappingProxyType(self._dispatches)
 
     def timeline(self, batch_id: str) -> BatchTimeline | None:
-        """Строит хронологию для указанного батча либо возвращает None, если батч не найден."""
+        """Строит хронологию для указанного batch либо возвращает None, если batch не найден."""
         batch = self._batch_records.get(batch_id)
         if batch is None:
             return None
@@ -183,7 +195,7 @@ def _objects(value: JsonValue | None) -> list[JsonObject]:
 
 
 def _read_directory(root: Path, directory: str) -> list[JsonObject]:
-    """Считывает все валидные JSON-записи из указанной поддиректории леджера."""
+    """Считывает все валидные JSON-записи из указанной поддиректории ledger."""
     records: list[JsonObject] = []
     for path in sorted((root / directory).glob("*.json")):
         record = LifecycleLedger.read_record_lenient(path)
@@ -295,7 +307,7 @@ def _file_qa_logs(root: Path) -> Iterable[QaLog]:
 
 
 def _audit_index(events: list[JsonObject]) -> dict[str, list[JsonObject]]:
-    """Строит индекс событий аудита леджера, сгруппированных по относительному пути файла."""
+    """Строит индекс событий аудита ledger, сгруппированных по относительному пути файла."""
     index: dict[str, list[JsonObject]] = {}
     for event in events:
         details = event.get("details")
@@ -323,7 +335,7 @@ def load_ledger_view(
     store_read: StoreRead | None = None,
     read_timeout: float = STORE_READ_TIMEOUT_SECONDS,
 ) -> LedgerView:
-    """Загружает полное представление данных леджера оркестрации для указанного репозитория.
+    """Загружает полное представление данных ledger оркестрации для указанного репозитория.
 
     In the runtime-store epoch the records come from the store (``store_read``, by default the
     project's runtime), never from the archived file generation; the store answers no QA gate log
@@ -339,7 +351,7 @@ def load_ledger_view(
     root = LifecycleLedger(state).records_root_lenient()
     if root is None:
         return LedgerView(
-            unavailable="леджер оркестрации не найден или не инициализирован"
+            unavailable="ledger оркестрации не найден или не инициализирован"
         )
     records = {directory: _read_directory(root, directory) for directory in _DIRECTORIES}
     return _build_view(records, _file_qa_logs(root))
@@ -419,17 +431,8 @@ def batch_timing_text(batch: BatchSummary, *, language: str = "ru") -> str:
     if start is None or end is None or end < start:
         return "to PR: unknown" if language == "en" else "до PR: неизвестно"
     seconds = int((end - start).total_seconds())
-    days, rest = divmod(seconds, 86400)
-    hours, rest = divmod(rest, 3600)
-    minutes = rest // 60
-    units = ("d", "h", "min", "s") if language == "en" else ("д", "ч", "мин", "с")
-    parts = [
-        f"{count} {unit}"
-        for count, unit in ((days, units[0]), (hours, units[1]), (minutes, units[2]))
-        if count
-    ]
-    return ("to PR: " if language == "en" else "до PR: ") + (
-        " ".join(parts) if parts else f"{seconds} {units[3]}"
+    return ("to PR: " if language == "en" else "до PR: ") + compact_duration(
+        seconds, language
     )
 
 
@@ -454,12 +457,14 @@ _BATCH_STATES = {
 
 def stage_status(entry: StageEntry, *, narrow: bool = False) -> Status:
     """A stage row's status, a symbol and a label: `✔ отчёт получен · завершено`, or
-    `⚠ в работе · отчёта ещё нет` while no report is recorded. A value the console does not know is
-    shown as the ledger wrote it. A narrow terminal drops `получен`."""
+    `▶ в работе · отчёта ещё нет` while a worker runs without a report. A value the console does
+    not know is shown as the ledger wrote it. A narrow terminal drops `получен`."""
     if entry.report is None:
-        known = {"working": ("в работе", "in progress")}.get(entry.state)
-        ru, en = known or (entry.state, entry.state)
-        return Status("warning", f"{ru} · отчёта ещё нет", f"{en} · no report yet")
+        if entry.state == "working":
+            return Status("running", "в работе · отчёта ещё нет", "in progress · no report yet")
+        return Status(
+            "warning", f"{entry.state} · отчёта ещё нет", f"{entry.state} · no report yet"
+        )
     outcome = entry.report.outcome
     kind, ru, en = _OUTCOMES.get(outcome, ("warning", outcome, outcome))
     word_ru, word_en = (
@@ -475,16 +480,17 @@ def batch_status(batch: BatchSummary) -> Status:
 
 
 def outcome_status(outcome: str) -> Status:
-    """A report outcome as a symbol and the ledger's own word: `✔ completed`."""
-    kind = _OUTCOMES.get(outcome, ("warning",))[0]
-    return Status(kind, outcome, outcome)
+    """A report outcome as a symbol and a word: `✔ завершено`; an unknown one as the ledger
+    wrote it."""
+    kind, ru, en = _OUTCOMES.get(outcome, ("warning", outcome, outcome))
+    return Status(kind, ru, en)
 
 
 def qa_run_status(run: QaRun) -> Status:
     """The verdict of a QA gate run: `passed` unless a command exited non-zero."""
     if any(code != 0 for _, code in run.commands):
-        return Status("error", "failed", "failed")
-    return Status("accepted", "passed", "passed")
+        return Status("error", "не пройден", "failed")
+    return Status("accepted", "пройден", "passed")
 
 
 ReportLine = tuple[Status | None, str]
@@ -499,6 +505,18 @@ _CHECK_RESULTS = {
     "fail": "error",
     "not_run": "not_started",
 }
+# The words of a check result and of a review axis severity: (Russian, English).
+_CHECK_WORDS = {
+    "pass": ("пройдена", "passed"),
+    "fail": ("не пройдена", "failed"),
+    "not_run": ("не запускалась", "not run"),
+}
+_SEVERITY_WORDS = {
+    "none": ("нет замечаний", "no findings"),
+    "clean": ("чисто", "clean"),
+    "warning": ("замечания", "warnings"),
+    "blocker": ("блокер", "blocker"),
+}
 
 
 def _check_lines(report: JsonObject) -> list[ReportLine]:
@@ -506,11 +524,12 @@ def _check_lines(report: JsonObject) -> list[ReportLine]:
     for check in _objects(report.get("checks_run")):
         result = text(check.get("result"), "?")
         kind = _CHECK_RESULTS.get(result, "warning")
+        ru, en = _CHECK_WORDS.get(result, (result, result))
         evidence = text(check.get("evidence"))
         command = text(check.get("command"), "?")
         lines.append(
             (
-                Status(kind, result, result),
+                Status(kind, ru, en),
                 f"{command} — {evidence}" if evidence else command,
             )
         )
@@ -527,7 +546,8 @@ def _review_lines(review: JsonObject) -> list[ReportLine]:
             continue
         findings = _objects(evidence.get("findings"))
         severity = text(evidence.get("severity"), "?")
-        status = Status(_REVIEW_SEVERITIES.get(severity, "warning"), severity, severity)
+        ru, en = _SEVERITY_WORDS.get(severity, (severity, severity))
+        status = Status(_REVIEW_SEVERITIES.get(severity, "warning"), ru, en)
         lines.append((status, f"{axis} · находок: {len(findings)}"))
         lines.extend(
             (
@@ -836,11 +856,11 @@ def report_header(entry: ReportEntry) -> str:
 
 
 def _build_timeline(view: LedgerView, batch: JsonObject) -> BatchTimeline:
-    """Собирает структурированную хронологию событий батча из записей леджера."""
+    """Собирает структурированную хронологию событий batch из записей ledger."""
     batch_id = cast(str, batch["batch_id"])
     summary = next(item for item in view.batches if item.batch_id == batch_id)
     events: list[TimelineEvent] = [
-        TimelineEvent(at=summary.created_at, kind="state", text="батч создан")
+        TimelineEvent(at=summary.created_at, kind="state", text="batch создан")
     ]
     for audit in view._audit.get(f"batches/{batch_id}.json", []):
         details = audit.get("details")
@@ -906,6 +926,44 @@ def _build_timeline(view: LedgerView, batch: JsonObject) -> BatchTimeline:
             )
         )
 
+    # The automatic path (#1296): each approval of the `auto` policy, its stop, and each
+    # recovery event (a pause, a resume, a restart) with who approved it.
+    for record in _objects(batch.get("auto_decisions")):
+        evidence = record.get("evidence")
+        decided = text(evidence.get("decision")) if isinstance(evidence, dict) else ""
+        dispatch_id = text(record.get("dispatch_id"))
+        rationale = text(record.get("rationale"))
+        events.append(
+            TimelineEvent(
+                at=text(record.get("approved_at")),
+                kind="decision",
+                text=f"политика auto: {decided or text(record.get('kind'), '?')}"
+                + (f" ({dispatch_id})" if dispatch_id else "")
+                + (f" — {rationale}" if rationale else ""),
+            )
+        )
+    stop = batch.get("auto_stop")
+    if isinstance(stop, dict):
+        events.append(
+            TimelineEvent(
+                at=text(stop.get("detected_at")),
+                kind="state",
+                text=f"автоматический путь остановлен: {text(stop.get('category'), '?')}"
+                f" — {text(stop.get('reason'), '?')}",
+            )
+        )
+    for recovery in _objects(batch.get("recovery_events")):
+        note = text(recovery.get("note"))
+        events.append(
+            TimelineEvent(
+                at=text(recovery.get("approved_at")),
+                kind="decision",
+                text=f"восстановление: {text(recovery.get('kind'), '?')} "
+                f"({text(recovery.get('approved_by'), '?')})"
+                + (f" — {note}" if note else ""),
+            )
+        )
+
     for assessment in _objects(batch.get("risk_assessments")):
         risk = view._risks.get(text(assessment.get("risk_assessment_id")), {})
         triggers = strings(assessment.get("matched_triggers"))
@@ -937,7 +995,7 @@ def _build_timeline(view: LedgerView, batch: JsonObject) -> BatchTimeline:
 
 def role_flow_text(timeline: BatchTimeline) -> str:
     """Формирует строку последовательности перехода между ролями через стрелки."""
-    return _ROLE_FLOW_SEPARATOR.join(timeline.role_flow) or "диспатчей ещё не было"
+    return _ROLE_FLOW_SEPARATOR.join(timeline.role_flow) or "dispatch ещё не было"
 
 
 def _cell(value: str) -> str:
@@ -980,7 +1038,7 @@ def report_document(view: LedgerView, entry: ReportEntry) -> MarkdownDocument:
 
 
 def timeline_document(timeline: BatchTimeline) -> MarkdownDocument:
-    """Формирует структурированный MarkdownDocument для экспорта хронологии батча."""
+    """Формирует структурированный MarkdownDocument для экспорта хронологии batch."""
     batch = timeline.batch
     rows = [
         "| Время | Тип | Роль | Событие |",
@@ -992,7 +1050,7 @@ def timeline_document(timeline: BatchTimeline) -> MarkdownDocument:
         ),
     ]
     return MarkdownDocument(
-        title=f"Хронология батча {batch.batch_id}",
+        title=f"Хронология batch {batch.batch_id}",
         slug=f"timeline-{batch.batch_id}",
         ticket=batch.ticket,
         meta=[

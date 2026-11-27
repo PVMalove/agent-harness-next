@@ -8,14 +8,14 @@
    sent nowhere. The only change the page can start is the installation into the served project,
    through the CommandPanel of the job section `setup`, and every run opens the confirmation first.
    Every step is a TabPanel (kept mounted) built of ds components; only the shared CommandPanel
-   still sits in `.ds-legacy-island`. The KPIs (Harness, Скиллов, Managed, Health) live in the
+   still sits in `.ds-legacy-island`. The KPIs (Harness, Скиллов, Управляемых файлов, Проверки) live in the
    summary only. */
 import { useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
-import { PageHeader, Panel, PipeTabs, StatusIcon, Summary } from "../ds";
+import { PageHeader, Panel, PipeTabs, ScreenState, StatusIcon, Summary } from "../ds";
 import type { PipeTab, Tone } from "../ds";
-import { NoData } from "../harness/HarnessOverview";
+import { NoData } from "../steps/ActivityViews";
 import { useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";
@@ -99,7 +99,7 @@ function flowNodes(facts: OpenProjectFacts, home: HomeSnapshot | null, chosen: s
       : { icon: "store", label: "Runtime", value: t("нет данных"), sub: t(store ? "в проекте нет состояния оркестрации" : "снимок Home ещё не получен"), tone: "pending" },
     {
       icon: "pulse",
-      label: "Health",
+      label: t("Проверки"),
       value: health && total ? t("{ok}/{total} пройдено", { ok: health.ok, total }) : t("после установки"),
       sub: t("проверки — на странице «Диагностика»"),
       tone: "after",
@@ -211,7 +211,7 @@ function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidat
         {
           label: "Skills snapshot",
           tone: drift === null || install === null ? "wait" : drift.total ? "warn" : "ok",
-          text: install && drift ? t("{skills} навыков · drift {drift}", { skills: install.skills, drift: drift.total }) : t("нет данных · дрейф не прочитан"),
+          text: install && drift ? t("{skills} скиллов · drift {drift}", { skills: install.skills, drift: drift.total }) : t("нет данных · дрейф не прочитан"),
         },
         {
           label: t("Локальные правки управляемых файлов"),
@@ -334,11 +334,12 @@ export function OpenProject() {
   const steps: PipeTab[] = STAGES.map((name, index) => ({
     id: String(index),
     label: t(name),
-    count: index < stage ? "✓" : index + 1,
+    // A finished stage gets a check beside its step number; the marker itself is the number.
+    badge: index < stage ? "✓" : undefined,
   }));
   const composition = (
     <dl className="ds-kv" id="open-project-composition-counts">
-      {[t("Файлов"), t("Навыков"), t("Хуков")].map((label) => (
+      {[t("Файлов"), t("Скиллов"), t("Хуков")].map((label) => (
         <div className="ds-kv-row" key={label}>
           <dt>{label}</dt>
           <dd>
@@ -361,11 +362,7 @@ export function OpenProject() {
         }
       />
 
-      {screen.error && !facts && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Данные не получены")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Состояние проекта не получено" />
 
       <Summary
         id="open-project-facts"
@@ -373,8 +370,8 @@ export function OpenProject() {
         stats={[
           { label: "Harness", value: home?.harness?.installed ? home.harness.installed_version : "—", caption: home?.harness_version ? t("доступно {version}", { version: home.harness_version }) : <NoData /> },
           { label: t("Скиллов"), value: home?.harness?.skills || "—" },
-          { label: "Managed", value: home?.harness?.managed_files || "—" },
-          { label: "Health", value: health && total ? `${health.ok}/${total}` : "—" },
+          { label: t("Управляемых файлов"), value: home?.harness?.managed_files || "—" },
+          { label: t("Проверки"), value: health && total ? `${health.ok}/${total}` : "—" },
         ]}
         facts={
           facts ? (
@@ -396,7 +393,7 @@ export function OpenProject() {
 
       <div className="ds-wizard" id="open-project-steps">
         <PipeTabs id="open-project-step" label={t("Шаги установки")} tabs={steps} value={step} onChange={(id) => setStep(id)} />
-        <span className="ds-note">{t("Шаг {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
+        <span className="ds-note">{t("Этап проекта: {current} из {total}", { current: stage + 1, total: STAGES.length })}</span>
       </div>
 
       {facts && (

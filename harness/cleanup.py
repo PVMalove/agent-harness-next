@@ -473,8 +473,12 @@ def _read_batches(root: Path) -> dict[str, JsonObject] | _Unread:
         return _Unread(LEDGER_UNAVAILABLE)
 
 
-def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
-    records = _read_batches(root)
+def _worktree_batches(
+    root: Path,
+    records: dict[str, JsonObject] | _Unread | None = None,
+) -> dict[Path, tuple[str, str]] | _Unread:
+    if records is None:
+        records = _read_batches(root)
     if isinstance(records, _Unread):
         return records
     batches: dict[Path, tuple[str, str]] = {}
@@ -497,8 +501,12 @@ def _worktree_batches(root: Path) -> dict[Path, tuple[str, str]] | _Unread:
     return batches
 
 
-def _pending_dispatches(root: Path) -> set[str] | _Unread:
-    records = _read_batches(root)
+def _pending_dispatches(
+    root: Path,
+    records: dict[str, JsonObject] | _Unread | None = None,
+) -> set[str] | _Unread:
+    if records is None:
+        records = _read_batches(root)
     if isinstance(records, _Unread):
         return records
     pending: set[str] = set()
@@ -578,6 +586,8 @@ def _plan_containers(
     root: Path,
     remove: list[CleanupItem],
     skipped: list[dict[str, str]],
+    *,
+    runtime_unavailable: str | None = None,
 ) -> None:
     """Добавить в план ресурсы контейнеров этого репозитория, у которых нет живого владельца.
 
@@ -585,6 +595,16 @@ def _plan_containers(
     собственной метке репозитория и знает состояние исполнения каждого объекта.
     """
     if not _docker_selected(root):
+        return
+    if runtime_unavailable is not None:
+        skipped.append(
+            {
+                "path": "container resources",
+                "reason": (
+                    f"harness-runtime did not list them: [runtime_unavailable] {runtime_unavailable}"
+                ),
+            }
+        )
         return
     try:
         reply = RuntimeClient(checkout).call(
@@ -766,7 +786,13 @@ def _stale_bundle_installs(bundle_root: Path, min_age_hours: float) -> list[Path
     ]
 
 
-def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> CleanupPlan:
+def plan_cleanup(
+    repo: Path,
+    mode: str,
+    *,
+    min_age_hours: float = 24,
+    runtime_unavailable: str | None = None,
+) -> CleanupPlan:
     """Сформировать точный план удаления и пропуска временных данных без изменения файловой системы."""
     if mode not in {"soft", "hard"} or min_age_hours < 0:
         raise ValueError(
@@ -780,12 +806,29 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
     remove: list[CleanupItem] = []
     skipped: list[dict[str, str]] = []
     registered = _registered_worktrees(checkout)
+    cached_records: dict[str, JsonObject] | _Unread | None = (
+        _Unread(RUNTIME_UNAVAILABLE) if runtime_unavailable is not None else None
+    )
+    runtime_down = runtime_unavailable
+
+    def batch_records() -> dict[str, JsonObject] | _Unread:
+        nonlocal cached_records, runtime_down
+        if cached_records is None:
+            cached_records = _read_batches(root)
+            if (
+                isinstance(cached_records, _Unread)
+                and cached_records.reason == RUNTIME_UNAVAILABLE
+                and runtime_down is None
+            ):
+                runtime_down = RUNTIME_UNAVAILABLE
+        return cached_records
+
     pending_dispatches: set[str] | _Unread | None = None
 
     def keep_dispatch_input(path: Path, dispatch_id: str, description: str) -> bool:
         nonlocal pending_dispatches
         if pending_dispatches is None:
-            pending_dispatches = _pending_dispatches(root)
+            pending_dispatches = _pending_dispatches(root, batch_records())
         if isinstance(pending_dispatches, _Unread):
             reason = pending_dispatches.reason
         elif dispatch_id in pending_dispatches:
@@ -952,7 +995,7 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
             worktree_roots.append(root / "worktrees")
         worktree_roots.append(checkout / AGENT_WORKTREES)
 
-        batches = _worktree_batches(root)
+        batches = _worktree_batches(root, batch_records())
         active = _active_paths(batches)
         for worktrees in worktree_roots:
             if not worktrees.is_dir() or worktrees.is_symlink():
@@ -1002,7 +1045,7 @@ def plan_cleanup(repo: Path, mode: str, *, min_age_hours: float = 24) -> Cleanup
                         skipped.append({"path": str(entry), "reason": SANDBOX_MOUNT})
                     else:
                         remove.append({"kind": "residue", "path": str(entry)})
-    _plan_containers(checkout, root, remove, skipped)
+    _plan_containers(checkout, root, remove, skipped, runtime_unavailable=runtime_down)
     return {
         "mode": mode,
         "root": str(root),

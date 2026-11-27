@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import cast
 
@@ -95,14 +96,14 @@ DIAGNOSTICS_LABELS = (
 )
 # The page strings of the Harness route.
 HARNESS_LABELS = (
-    "Установка, использование пайплайна и обслуживание. Команды выполняются как job сервера после подтверждения.",
+    "Установка, использование конвейера и обслуживание. Команды выполняются как job сервера после подтверждения.",
     "Команды",
     "Установка",
     "Установлено",
     "установлен",
     "не установлен",
     "Пакет",
-    "Скилов",
+    "Скиллов",
     "Управляемых файлов",
     "Lock обновлён",
     "Оркестрация",
@@ -112,16 +113,16 @@ HARNESS_LABELS = (
     "Харнесс не установлен: нет читаемого .harness/harness.lock.",
     "Состояние харнесса загружается…",
     "○ Состояние харнесса недоступно: ",
-    "{count} скилов",
+    "{count} скиллов",
     "{count} управляемых файлов",
     "{count} объектов",
-    "Пайплайн",
-    "Использование пайплайна",
+    "Конвейер",
+    "Использование конвейера",
     "Запусков (batch)",
     "Тикетов",
-    "Диспатчей",
+    "Dispatch",
     "Отчётов",
-    "тикетов {tickets} · диспатчей {dispatches} · отчётов {reports}",
+    "тикетов {tickets} · dispatch {dispatches} · отчётов {reports}",
     "недоступно",
     "Обслуживание",
     "Временные файлы",
@@ -232,6 +233,9 @@ def _catalog() -> dict[str, dict[str, object]]:
 
 
 def _english(text: str) -> str:
+    # A label that names project entities only (`Dispatch`) is already English.
+    if not re.search("[А-Яа-яЁё]", text):
+        return text
     english = cast(dict[str, str], _catalog()["en"]).get(text, "")
     assert english and english != text, text
     return english

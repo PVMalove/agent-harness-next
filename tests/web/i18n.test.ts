@@ -132,7 +132,7 @@ test("switching ru and en re-renders without a reload and is remembered", () => 
 
 describe("states, check titles and plurals", () => {
   test("a raw state is worded in both languages", () => {
-    expect(stateLabel("ru", "abandoned")).toBe("Брошен");
+    expect(stateLabel("ru", "abandoned")).toBe("Брошено");
     expect(stateLabel("ru", "working")).toBe("Выполняется");
     expect(stateLabel("ru", "awaiting_approval")).toBe("Ждёт решения");
     expect(stateLabel("en", "abandoned")).toBe("Abandoned");
@@ -140,7 +140,7 @@ describe("states, check titles and plurals", () => {
   });
 
   test("a check shows its title, not its id", () => {
-    expect(checkTitle("ru", "files.skill_snapshot")).toBe("Снимок навыков");
+    expect(checkTitle("ru", "files.skill_snapshot")).toBe("Снимок скиллов");
     expect(checkTitle("en", "files.skill_snapshot")).toBe("Skill snapshot");
     expect(checkTitle("ru", "memory.index")).not.toContain("memory.");
   });

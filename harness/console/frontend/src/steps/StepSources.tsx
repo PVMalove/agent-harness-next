@@ -14,9 +14,9 @@ const SOURCES = [
   {
     name: "Codex",
     kind: "plain",
-    tone: "violet",
+    tone: "blue",
     label: STRUCTURE_LABELS.unavailable,
-    detail: "Только plain-хвост лога. Не выдаём его за шаги и не показываем thinking.",
+    detail: "Только хвост обычного лога: его строки не выдаются за шаги, рассуждения модели не показываются.",
   },
 ] as const;
 
@@ -30,7 +30,7 @@ export function StepSources() {
       </div>
       <div className="work-source-grid">
         {SOURCES.map((source) => (
-          <div key={source.kind} className={`work-source ${source.kind}`} data-source={source.kind}>
+          <div key={source.kind} className={`work-source ${source.kind}`} data-source={source.kind} title={t(source.detail)}>
             <span>
               <Icon name={source.kind === "plain" ? "terminal" : "activity"} />
             </span>

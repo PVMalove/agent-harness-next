@@ -9,8 +9,8 @@ import { useConsole } from "./useConsole";
 type Translate = (text: string) => string;
 
 const CHIP: Record<ConnectionStatus, { css: string; label: (t: Translate) => string }> = {
-  connected: { css: "connected", label: () => "online" },
-  reconnecting: { css: "reconnecting", label: () => "reconnect" },
+  connected: { css: "connected", label: (t) => t("в сети") },
+  reconnecting: { css: "reconnecting", label: (t) => t("переподключение") },
   no_server: { css: "offline", label: (t) => t("нет сервера") },
   error: { css: "error", label: (t) => t("ошибка") },
   empty: { css: "empty", label: (t) => t("пусто") },
@@ -133,7 +133,7 @@ export function ConnectionPage() {
       title: t("Данных пока нет"),
       text: t("Соединение установлено, но снимок не содержит ни одной проверки. Это не ошибка загрузки."),
       facts: [
-        [t("соединение"), "online"],
+        [t("соединение"), t("в сети")],
         [t("Проверки"), "0"],
         [t("последний снимок"), last],
       ],

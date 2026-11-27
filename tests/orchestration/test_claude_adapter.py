@@ -240,15 +240,28 @@ def test_worker_context_probe_keeps_the_exact_filesystem_refusal(
 
 
 @posix_runtime
+@pytest.mark.parametrize(
+    "inside_worker", [False, True], ids=["coordinator", "inside-a-worker"]
+)
 @pytest.mark.parametrize("panel_open", [False, True], ids=["panel-closed", "panel-open"])
 def test_native_permission_uses_control_frames_without_extra_model_messages(
     adapter_worker: recovery_tests.RecoveryTests,
     reachable_endpoint: str,
     monkeypatch: pytest.MonkeyPatch,
     panel_open: bool,
+    inside_worker: bool,
 ) -> None:
+    """``inside-a-worker`` runs the test with the labels harness-runtime gives a worker it
+    launched, as the worker's own verification inherits them (issue #1291). Those labels name the
+    worker's dispatch, not the dispatch this test sends, so the adapter keeps the background
+    launch. Before the fix, ``HARNESS_OPERATION_ID`` alone kept the fake runtime in the
+    foreground, and ``dispatch send`` waited for a permission answer that this test sends only
+    after it returns: ``subprocess.TimeoutExpired`` after 30 s."""
     external_worker = adapter_worker
     monkeypatch.setenv("EXAMPLE_API_KEY", "native-secret-716")
+    if inside_worker:
+        monkeypatch.setenv("HARNESS_OPERATION_ID", "operation-of-the-worker")
+        monkeypatch.setenv("HARNESS_DISPATCH_ID", "dispatch-of-the-worker")
     from tests.orchestration.test_startup_lifecycle import cli
     from harness.orchestration.workflow.delivery import respond_native_permission
 

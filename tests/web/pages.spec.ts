@@ -1,6 +1,8 @@
 /* The page sweep of the real build: every menu section at 1440 and 390 px over the recorded
    fixtures has no horizontal overflow and no WCAG 2.1 AA violation found by axe-core, on every tab
-   of the page no panel leaves its frame, and under
+   of the page no panel leaves its frame, at 1440 px every tab is axe-clean in the light theme too,
+   the theme switch pins a theme over the system scheme, the legacy screens take the design
+   system's gutter, subtitle, buttons, filters and panel heads, and under
    prefers-reduced-motion nothing on the live pages animates. DOM assertions only; no screenshot
    comparison (ADR 0029). */
 import { readFileSync } from "node:fs";
@@ -135,6 +137,83 @@ for (const width of [1440, 390]) {
     });
   }
 }
+
+for (const route of ROUTES) {
+  test(`#/${route} at 1440 px in the light theme: every tab is axe-clean`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "light" });
+    await mockSocket(page);
+    await open(page, route, 1440);
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe("light dark");
+    expect(await page.locator(".ds-app").evaluate((app) => getComputedStyle(app).backgroundColor)).toBe("rgb(244, 245, 248)");
+    const tabs = page.locator("main [role=tablist]").first().getByRole("tab");
+    const count = await tabs.count();
+    for (let index = 0; index < Math.max(count, 1); index++) {
+      if (count > 0) await tabs.nth(index).click();
+      const label = count > 0 ? await tabs.nth(index).textContent() : "page";
+      expect(await axeViolations(page), `${route} · ${label}`).toEqual([]);
+    }
+  });
+}
+
+/** The look of a screen's chrome: the title gutter, the subtitle, a header button, a filter and the
+    side padding of a panel head (a page may compact a head's vertical padding). */
+const chrome = (page: Page) =>
+  page.evaluate(() => {
+    const style = (selector: string) => {
+      const element = document.querySelector(selector);
+      return element ? getComputedStyle(element) : null;
+    };
+    const button = style("main .page-title .btn, main .ds-head-actions .ds-btn");
+    const filter = style("main .chip, main .ds-filter button");
+    const head = style("main .panel > .panel-head, main .ds-panel-head");
+    return {
+      gutter: Math.round(document.querySelector("main#content h1")!.getBoundingClientRect().left),
+      subtitle: style("main .page-title p:not(.home-facts), main .ds-sub")?.fontSize,
+      button: button && [button.minHeight, button.borderRadius, button.fontSize, button.backgroundColor],
+      filter: filter && [filter.minHeight, filter.borderRadius, filter.fontSize],
+      head: head && [head.paddingLeft, head.paddingRight],
+    };
+  });
+
+test("at 1440 px the legacy screens take the design system's gutter, subtitle, buttons, filters and panel heads", async ({ page }) => {
+  await mockSocket(page);
+  await open(page, "orchestration", 1440);
+  const ds = await chrome(page);
+  for (const route of ["", "board", "agent-activity", "recovery", "container-route"]) {
+    await open(page, route, 1440);
+    const legacy = await chrome(page);
+    expect(legacy.gutter, route).toBe(ds.gutter);
+    expect(legacy.subtitle, route).toBe(ds.subtitle);
+    expect(legacy.button, route).toEqual(ds.button);
+    if (legacy.filter) expect(legacy.filter, route).toEqual(ds.filter);
+    if (legacy.head) expect(legacy.head, route).toEqual(ds.head);
+  }
+});
+
+test("the theme switch pins light, then dark, then hands the theme back to the system", async ({ page }) => {
+  await mockSocket(page);
+  await open(page, "", 1440);
+  const app = page.locator(".ds-app");
+  const toggle = page.locator("#theme-toggle");
+  const background = () => app.evaluate((element) => getComputedStyle(element).backgroundColor);
+  // The suite runs with a dark system scheme.
+  expect(await background()).toBe("rgb(31, 37, 46)");
+  await expect(toggle).toHaveAttribute("aria-label", "Тема: как в системе · сменить тему");
+  await toggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(await background()).toBe("rgb(244, 245, 248)");
+  await page.reload();
+  await expect(page.locator("#connection-state")).toHaveAttribute("data-status", "connected");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  await expect(toggle).toHaveAttribute("aria-label", "Тема: светлая · сменить тему");
+  await toggle.click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await page.emulateMedia({ colorScheme: "light" });
+  expect(await background()).toBe("rgb(31, 37, 46)");
+  await toggle.click();
+  await expect(page.locator("html")).not.toHaveAttribute("data-theme", /.+/);
+  expect(await background()).toBe("rgb(244, 245, 248)");
+});
 
 test("under prefers-reduced-motion no element of the live pages animates", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });

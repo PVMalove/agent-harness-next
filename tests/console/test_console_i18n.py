@@ -112,10 +112,12 @@ def _russian_fixed_texts(module: object) -> set[str]:
 def test_every_fixed_text_of_the_container_route_has_an_english_form(
     module: object,
 ) -> None:
+    from harness.console.tui import icons
+
     missing = sorted(
         text
         for text in _russian_fixed_texts(module)
-        if _CYRILLIC.search(i18n.tr_text("en", text))
+        if _CYRILLIC.search(icons.tr_text("en", text))
     )
     assert missing == []
 
@@ -150,11 +152,11 @@ def test_a_row_is_an_icon_plus_label_and_a_long_value_is_never_cut() -> None:
     row = route_model.Row("plan_digest", digest, route_model.State.OK)
     wide = route_screen.render_row(row, "ru", narrow=False)
     narrow = route_screen.render_row(row, "ru", narrow=True)
-    assert wide == f"✔ ок  plan_digest: {digest}"
-    assert narrow == f"✔ ок  plan_digest\n    {digest}"
+    assert wide == f"● ок  plan_digest: {digest}"
+    assert narrow == f"● ок  plan_digest\n    {digest}"
     assert "…" not in wide and "…" not in narrow
     assert route_screen.render_row(row, "en", narrow=False).startswith(
-        "✔ ok  plan_digest"
+        "● ok  plan_digest"
     )
     unknown = route_model.Row("Состояние", "", route_model.State.NOT_CHECKED)
     assert (
@@ -175,12 +177,12 @@ def test_the_pane_lists_blockers_first_and_every_unavailable_action_with_its_rea
     session, _ = make_session()
     view = session.view(route_model.Stage.PREFLIGHT)
     text = route_screen.render_view(view, "ru", narrow=True)
-    assert "✖ недоступно: Перепроверить — выберите batch и роль" in text
+    assert "■ недоступно: Перепроверить — выберите batch и роль" in text
     english = route_screen.render_view(view, "en", narrow=True)
-    assert "✖ unavailable: Re-check — choose a batch and a role" in english
+    assert "■ unavailable: Re-check — choose a batch and a role" in english
     blocked = route_model.StageView(route_model.Stage.PLAN, (), (), ("ERROR: x",))
     assert route_screen.render_view(blocked, "ru", False).startswith(
-        "✖ Блокирует маршрут\n  ERROR: x"
+        "■ Блокирует маршрут\n  ERROR: x"
     )
 
 
@@ -193,7 +195,7 @@ def test_tab_labels_pair_an_icon_with_the_title_and_bracket_the_current_one() ->
     ]
     assert labels[0] == "[· Setup]"
     assert labels[1].startswith("○ Preflight")
-    assert route_screen.tab_label(tabs[2], "ru", False).startswith("✖ ")
+    assert route_screen.tab_label(tabs[2], "ru", False).startswith("■ ")
 
 
 def test_the_screen_is_a_shell_view_inside_orchestration_with_a_narrow_layout() -> None:
@@ -295,7 +297,7 @@ def test_the_reason_precedes_every_action_and_unavailable_actions_carry_their_re
         view.rows, view.blockers, view.notes, view.actions, "ru", narrow=False
     )
     assert text.index("Причина") < text.index("недоступно")
-    assert "✖ недоступно: Resume — core reason for resume" in text
+    assert "■ недоступно: Resume — core reason for resume" in text
 
 
 def test_the_recovery_screen_is_a_shell_view_inside_orchestration_in_both_layouts() -> (

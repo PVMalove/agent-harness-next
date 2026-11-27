@@ -26,6 +26,7 @@ from textual.widgets.option_list import OptionDoesNotExist
 
 from ..kernel import brand, i18n
 from ..kernel.status import Status
+from . import icons
 
 CHECKED = "☑"
 UNCHECKED = "☐"
@@ -166,7 +167,10 @@ class LiveDot(Static):
 
     def __init__(self, *, id: str | None = None, classes: str = "") -> None:
         super().__init__(
-            "●", id=id, classes=f"live-dot no-i18n {classes}".strip(), markup=False
+            icons.LIVE_ON,
+            id=id,
+            classes=f"live-dot no-i18n {classes}".strip(),
+            markup=False,
         )
         self._on = True
         self._timer: object | None = None
@@ -181,11 +185,11 @@ class LiveDot(Static):
 
     def _toggle(self) -> None:
         self._on = not self._on
-        self.update("●" if self._on else "○")
+        self.update(icons.LIVE_ON if self._on else icons.LIVE_OFF)
 
 
 class StatusLine(Static):
-    """A status as a symbol and a text in the console language (`✔ актуален`), coloured; `relabel`
+    """A status as a symbol and a text in the console language (`● актуален`), coloured; `relabel`
     redraws it after a language switch."""
 
     DEFAULT_CLASSES = "status-line no-i18n"
@@ -206,7 +210,7 @@ class StatusLine(Static):
 
     def relabel(self) -> None:
         language = getattr(self.app, "language", "ru")
-        self.update(Text(self.status.render(language), style=self.status.color))
+        self.update(Text(icons.render_status(self.status, language), style=self.status.color))
 
 
 class KpiGrid(Grid):
@@ -215,7 +219,7 @@ class KpiGrid(Grid):
 
     DEFAULT_CLASSES = "kpi-grid"
     DEFAULT_CSS = """
-    KpiGrid { grid-size: 4; grid-gutter: 0 2; height: auto; }
+    KpiGrid { grid-size: 4; grid-gutter: 1 2; height: auto; }
     KpiGrid Static { height: auto; }
     """
 
@@ -245,5 +249,6 @@ class KpiGrid(Grid):
             text = Text()
             text.append(label + "\n", style=brand.PALETTE["muted"])
             text.append(figure + "\n", style=f"bold {brand.PALETTE.get(colour, brand.PALETTE['foreground'])}")
-            text.append(hint, style=brand.PALETTE["muted"])
+            # A tile without a hint keeps its line, so the tiles of a row stay one height.
+            text.append(hint or " ", style=brand.PALETTE["muted"])
             yield Static(text, classes="kpi-tile no-i18n", markup=False)

@@ -46,6 +46,18 @@ Evidence команда берёт из accepted green QA того же SHA. О�
 - remote недоступен;
 - история batch изменилась после записи.
 
+Интеграционный PR ветки `integration/*` эпика тоже получает запись, хотя batch его не публиковал:
+`integration prepare --ticket '#<epic>' --branch integration/<name> [--target <ref>]`. Команда
+сверяет `--branch` с секцией `## Integration Branch` эпика в трекере (GitHub или GitLab) и
+записывает пару из удалённой головы ветки и удалённой головы цели: `base_branch` по умолчанию или
+другой `integration/*`. В идентичность записи входит и сама цель, поэтому новая голова, новый SHA
+цели или другая цель дают новую запись. Исходного QA у такой пары нет: `integration next` отвечает
+`confirm-pr` с `qa_source: verification-pending-after-pr` и доходит до `handoff` только после CI,
+принятого `integration collect-ci`, или локального QA этой пары. `-light`-проверка её не
+подтверждает. Харнесс не переписывает ветку `integration/*`: `integration refresh` и
+`integration resolve` отклоняют такую запись, а при сдвиге цели или упавшей проверке ветку чинит
+дочерний тикет, после чего `integration prepare` запускают снова.
+
 Запись лежит в `reports/integration/`, evidence лежит в `reports/integration-evidence/`. Оба
 каталога находятся внутри `reports`, который coordinator уже проверяет, поэтому версия схемы ledger
 и `ledger migrate` не меняются.

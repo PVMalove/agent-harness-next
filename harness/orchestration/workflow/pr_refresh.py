@@ -383,6 +383,7 @@ def integration_refresh(args: argparse.Namespace) -> JsonObject:
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         record = integration._resolve_record(root, args)
+        integration.require_ticket_branch(record, "refresh")
         integration._check_history_unchanged(root, record)
         identity = record["identity"]
         pair = current_pair(root, record)

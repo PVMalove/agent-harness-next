@@ -41,7 +41,7 @@ from harness.console.kernel.screen_views import (
     recovery_view_payload,
     route_view_payload,
 )
-from harness.console.tui import stats
+from harness.console.tui import icons, stats
 from harness.console.tui.ledger_lock import lock_text
 from harness.json_types import JsonObject
 
@@ -364,7 +364,9 @@ def report_facts(payload: object, body: JsonObject, timeline: object) -> list[st
     for label, figure, hint, _ in stats.reports_kpi_tiles(
         reports_kpi_from_payload(view.reports_kpi), "ru"
     ):
-        facts += [label, figure] + ([hint] if hint else [])
+        facts += [label, icons.to_kernel_glyphs(figure)] + (
+            [icons.to_kernel_glyphs(hint)] if hint else []
+        )
     for stage in console_reports.select_stages(view.stages):
         facts.append(console_reports.stage_status(stage).render("ru"))
     for batch in view.batches:
@@ -374,7 +376,7 @@ def report_facts(payload: object, body: JsonObject, timeline: object) -> list[st
             console_reports.batch_timing_text(batch),
         ]
     for title, lines in console_reports.report_section_lines(body):
-        facts.append(title)
+        facts.append(console_reports.REPORT_SECTION_TITLES.get(title, title))
         for status, line in lines:
             if status is not None:
                 facts.append(status.render("ru"))
@@ -400,7 +402,9 @@ def orchestration_facts(payload: JsonObject) -> list[str]:
     for label, figure, hint, _ in stats.kpi_tiles(
         pipeline_kpi_from_payload(payload["kpi"]), "ru"
     ):
-        facts += [label, figure] + ([hint] if hint else [])
+        facts += [label, icons.to_kernel_glyphs(figure)] + (
+            [icons.to_kernel_glyphs(hint)] if hint else []
+        )
     analytics = pipeline_analytics_from_payload(payload["analytics"])
     for section in ("flow", "quality", "runtime", "gates"):
         for label, value in stats.analytics_rows(section, analytics, "ru"):

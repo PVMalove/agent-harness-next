@@ -10,6 +10,7 @@ import { Bar, NoData } from "../steps/ActivityViews";
 import type { EvidenceRow, OrchestrationSnapshot } from "../ws/ledger";
 import { pipelineStats, pipelineStatsFields } from "./format";
 import { LedgerLock } from "./LedgerLock";
+import { shortDispatch } from "../dispatchId";
 
 const withBatch = (route: string, batch: string | null) =>
   batch ? `${href(route)}?batch=${encodeURIComponent(batch)}` : href(route);
@@ -70,7 +71,7 @@ export function FlowExtras({ data }: { data: OrchestrationSnapshot }) {
             ))}
           </dl>
         ) : (
-          <p className="report-empty">{t("Пайплайн ещё не запускался: batch в леджере нет.")}</p>
+          <p className="report-empty">{t("Конвейер ещё не запускался: batch в ledger нет.")}</p>
         )}
       </section>
     </>
@@ -114,7 +115,7 @@ export function QualityExtras({ data }: { data: OrchestrationSnapshot }) {
         ) : (
           attempts.map((attempt) => (
             <div className="orch-attempt-row" key={`${attempt.dispatch_id}-${attempt.failed_at}`}>
-              <b>{attempt.dispatch_id}</b>
+              <b title={attempt.dispatch_id}>{shortDispatch(attempt.dispatch_id)}</b>
               <span>{attempt.stage}</span>
               <small>{attempt.message}</small>
             </div>

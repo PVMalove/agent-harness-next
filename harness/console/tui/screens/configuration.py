@@ -38,6 +38,7 @@ from harness.configuration import SECRET_MASK, mask_secrets
 from harness.configuration_store import StaleConfiguration, json_bytes
 from harness.runtime_adapters import AdapterStatus
 from ...kernel import brand, i18n
+from .. import icons
 from ..shell import SHELL_CSS, ConsoleShell, SectionCard, WrappedValue
 from ...kernel.status import Status
 from ..translate import Translated
@@ -190,7 +191,7 @@ class ConfigurationScreen(ConsoleShell):
     on every phase change, the frame itself (menu, breadcrumbs, footer) stays."""
 
     SECTION = "Configuration"
-    CRUMBS = "Главная › Настройка конфигурации"
+    CRUMBS = "Главная › Настройка"
     NARROW_FOOTER_KEYS = ("escape", "enter", "f2")
     AUTO_FOCUS = "#configure-project"
     # Textual's Screen binds Tab with no footer hint; the footer names it here.
@@ -200,7 +201,9 @@ class ConfigurationScreen(ConsoleShell):
     ConfigurationScreen #configuration-scroll { width: 100%; height: 1fr; overflow-x: hidden; }
     ConfigurationScreen #configuration-title { height: 1; text-style: bold; }
     ConfigurationScreen #configuration-subtitle { color: $text-muted; margin-bottom: 1; }
+    ConfigurationScreen.-wide #configuration-subtitle, ConfigurationScreen.-spacious #configuration-subtitle { margin-bottom: 0; }
     ConfigurationScreen #configuration-row { width: 100%; height: auto; grid-size: 1; margin-bottom: 1; }
+    ConfigurationScreen.-wide #configuration-row, ConfigurationScreen.-spacious #configuration-row { margin-bottom: 0; }
     ConfigurationScreen.-spacious #configuration-row { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     ConfigurationScreen #configuration-row > SectionCard { height: 100%; }
     ConfigurationScreen .store-path { color: $text-muted; }
@@ -396,7 +399,7 @@ class ConfigurationScreen(ConsoleShell):
         status = Status(
             self.message_kind, self.message, i18n.tr_text("en", self.message)
         )
-        return Text(status.render(self._language()), style=status.color)
+        return Text(icons.render_status(status, self._language()), style=status.color)
 
     def _set_message(self, text: str, kind: str = "error") -> None:
         """Show a message in the actions card, which the start screen otherwise hides."""
@@ -517,7 +520,7 @@ class ConfigurationScreen(ConsoleShell):
             yield WrappedValue(item["path"], classes="adapter-path wide-only")
             if item["problem"]:
                 yield Static(
-                    f"{brand.STATUS_ICONS['warn']} {item['problem']}",
+                    f"{icons.STATUS_ICONS['warn']} {item['problem']}",
                     classes="adapter-problem no-i18n",
                     markup=False,
                 )
@@ -594,7 +597,9 @@ class ConfigurationScreen(ConsoleShell):
         if isinstance(recommendation, (dict, list)) and recommendation:
             if recommendation != field.value(self.draft):
                 # A whole object is unreadable on one line; show it as indented JSON.
-                yield Static("Рекомендация (★):", classes="recommendation-title")
+                yield Static(
+                    f"Рекомендация ({icons.STAR}):", classes="recommendation-title"
+                )
                 with VerticalScroll(classes="recommendation-json"):
                     yield Static(
                         JSON.from_data(shown, indent=2, ensure_ascii=False),
@@ -603,7 +608,7 @@ class ConfigurationScreen(ConsoleShell):
             yield Static("Почему: " + why, markup=False)
         else:
             yield Static(
-                "Рекомендация (★): "
+                f"Рекомендация ({icons.STAR}): "
                 + json.dumps(shown, ensure_ascii=False)
                 + "\nПочему: "
                 + why,
@@ -635,7 +640,7 @@ class ConfigurationScreen(ConsoleShell):
             yield TextArea(self._editor_text(field), id="field-value", soft_wrap=True)
             if self._is_masked(field):
                 yield Static(
-                    "⚠ Секрет скрыт («"
+                    f"{icons.STATUS_ICONS['warn']} Секрет скрыт («"
                     + SECRET_MASK
                     + "»). Секреты нельзя хранить в конфигурации: удалите или замените скрытые части; без правок значение не изменится.",
                     classes="hint",
@@ -675,7 +680,7 @@ class ConfigurationScreen(ConsoleShell):
             if name in current:
                 rows.append(
                     (
-                        f"✓ {name} = {_short(mask_secrets(current[name], name))}",
+                        f"{icons.STATUS_ICONS['ok']} {name} = {_short(mask_secrets(current[name], name))}",
                         "row-ok",
                     )
                 )
@@ -873,7 +878,7 @@ class ConfigurationScreen(ConsoleShell):
         self, field: ConfigurationStep, value: object, recommended: object
     ) -> ComposeResult:
         def label(choice: object) -> Text:
-            mark = "★ " if choice == recommended else ""
+            mark = f"{icons.STAR} " if choice == recommended else ""
             return Text(mark + str(choice) + " — " + field.effect(choice))
 
         options = field.choice_page(self.choice_page)

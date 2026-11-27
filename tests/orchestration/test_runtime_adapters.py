@@ -1265,7 +1265,11 @@ def test_claude_code_runs_the_worker_in_the_foreground_under_the_runtime_supervi
             "--endpoint",
             claude_endpoint,
         ],
-        env={**os.environ, "HARNESS_OPERATION_ID": "operation-of-the-runtime"},
+        env={
+            **os.environ,
+            "HARNESS_OPERATION_ID": "operation-of-the-runtime",
+            "HARNESS_DISPATCH_ID": result["dispatch_id"],
+        },
         capture_output=True,
         text=True,
         timeout=15,

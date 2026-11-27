@@ -157,6 +157,9 @@ RULES = {
                 f"{KERNEL}.json_fields",
                 f"{KERNEL}.catalog",
                 f"{KERNEL}.i18n",
+                # The plain-data view of a runtime execution (#1296); reading it is
+                # `execution_facts`, outside the domain.
+                f"{KERNEL}.execution_view",
             }
         ),
     ),

@@ -247,6 +247,7 @@ def integration_resolve(args: argparse.Namespace) -> JsonObject:
     ledger = LifecycleLedger(root)
     with _ledger_lock(ledger):
         record = integration._resolve_record(root, args)
+        integration.require_ticket_branch(record, "resolve")
         integration._check_history_unchanged(root, record)
         identity = record["identity"]
         record_id = record["integration_record_id"]

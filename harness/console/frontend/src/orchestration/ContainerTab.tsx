@@ -10,6 +10,7 @@ import { href } from "../navigation";
 import { roleName } from "../steps/ActivityViews";
 import { CONTAINER_STATES } from "../ws/ledger";
 import type { ContainerSnapshot, ContainerState } from "../ws/ledger";
+import { shortDispatch } from "../dispatchId";
 
 const STATE_TONE: Readonly<Record<ContainerState, Tone>> = { running: "ok", "not-created": "warn", stopped: "info", unknown: "off" };
 const STATE_LABEL: Readonly<Record<ContainerState, string>> = {
@@ -60,7 +61,7 @@ export function ContainerTab({ containers }: { containers: ContainerSnapshot | n
           >
             <StatusIcon tone={STATE_TONE[item.state]} label={t(STATE_LABEL[item.state])} />
             <span className="ds-row-main">
-              <span className="ds-row-title">{`${item.dispatch_id} · ${item.ticket || item.batch_id}`}</span>
+              <span className="ds-row-title">{`${shortDispatch(item.dispatch_id)} · ${item.ticket || item.batch_id}`}</span>
               <span className="ds-row-sub">{`${roleName(item.role)} · ${item.kind === "qa" ? t("контейнерный QA") : t("worker под runtime")}`}</span>
             </span>
             <span className="ds-row-end">{t(STATE_LABEL[item.state])}</span>

@@ -1,10 +1,10 @@
-"""Раздел Harness: команды харнесса и обслуживания леджера из `harness.console.kernel.catalog.HARNESS_COMMANDS`,
+"""Раздел Harness: команды харнесса и обслуживания ledger из `harness.console.kernel.catalog.HARNESS_COMMANDS`,
 доступные для запуска в текущем репозитории, каждая с отображением эквивалента CLI. Обратимые команды
 без параметров запускаются немедленно; любые другие команды открывают модальный экран `CommandFormScreen`,
 запрашивающий параметры, поясняющий причины подтверждения для необратимых действий и требующий ввода
 контрольного слова (например, RESET). Отмена формы ничего не выполняет.
 
-Состояние, дрейф, использование пайплайна и факты обслуживания экран читает у сервера консоли
+Состояние, дрейф, использование конвейера и факты обслуживания экран читает у сервера консоли
 (`harness.snapshot`, `harness.maintenance`), а каждая команда выполняется job сервера
 (`ServerJobRunner`): локальный `process_argv` нужен только для строки CLI на экране.
 """
@@ -27,6 +27,7 @@ from textual.message import Message
 from textual.widgets import Button, Collapsible, Input, ListItem, ListView, Static
 
 from ...kernel import brand, i18n
+from .. import icons
 from .. import stats as console_stats
 from ...kernel.catalog import (
     HARNESS_COMMANDS,
@@ -364,7 +365,7 @@ class CommandFormScreen(CommandForm):
 
 class HarnessScreen(ConsoleShell, CommandMenuScreen):
     """Экран раздела Harness на общей оболочке консоли: меню доступных команд харнесса и
-    обслуживания леджера."""
+    обслуживания ledger."""
 
     CRUMB = "Harness"
     CANCEL_OWN_WORKERS_ONLY = True
@@ -487,6 +488,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             "down",
             "enter",
             "y",
+            "f1",
             "f2",
             self.app.COMMAND_PALETTE_BINDING,
         )
@@ -497,7 +499,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         return self.app.size.width < brand.NARROW_WIDTH
 
     def _t(self, text: str) -> str:
-        return i18n.tr_text(self._language, text)
+        return icons.tr_text(self._language, text)
 
     def compose_strip(self) -> ComposeResult:
         yield Static(f"Проект: {self.repo.name}", id="harness-project", markup=False)
@@ -534,7 +536,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                             compact=True,
                             disabled=True,
                         )
-                        yield Button("↻", id="maintenance-refresh", compact=True)
+                        yield Button(icons.REFRESH, id="maintenance-refresh", compact=True)
                     with Vertical(id="maintenance-worktrees"):
                         yield Static("Worktree: …", markup=False)
             with Grid(id="command-body"):
@@ -544,10 +546,14 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                             "Все", id="filter-all", compact=True, classes="-on"
                         )
                         yield Button(
-                            "✔ обратимые", id="filter-reversible", compact=True
+                            f"{icons.STATUS_ICONS['ok']} обратимые",
+                            id="filter-reversible",
+                            compact=True,
                         )
                         yield Button(
-                            "⚠ с подтверждением", id="filter-confirmation", compact=True
+                            f"{icons.STATUS_ICONS['warn']} с подтверждением",
+                            id="filter-confirmation",
+                            compact=True,
                         )
                     children = self._menu_children()
                     first = next((i for i, item in enumerate(children) if item.name), 0)
@@ -614,7 +620,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
 
     def _risk_label(self, entry: CatalogEntry) -> str:
         label = self._t(REVERSIBILITY_LABELS[entry.reversibility])
-        return label[0] if self.narrow else label
+        return label.split(" ", 1)[0] if self.narrow else label
 
     def _menu_children(self) -> list[ListItem]:
         entries = self._filtered_entries()
@@ -630,9 +636,12 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             self._headings[heading_id] = group
             opened = group in self._open_groups
             counts = Counter(
-                REVERSIBILITY_LABELS[entry.reversibility][0] for entry in members
+                icons.restyle_text(REVERSIBILITY_LABELS[entry.reversibility]).split(
+                    " ", 1
+                )[0]
+                for entry in members
             )
-            summary = " ".join(f"{symbol} {count}" for symbol, count in counts.items())
+            summary = "  ".join(f"{symbol} {count}" for symbol, count in counts.items())
             heading = f"{'▾' if opened else '▸'} {i18n.group_title(self._language, group)} · {len(members)}"
             if not opened:
                 heading += "   " + summary
@@ -728,18 +737,18 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             ru = self._language != "en"
             if self._facts_error:
                 line = (
-                    "○ Состояние харнесса недоступно: "
+                    f"{icons.STATUS_ICONS['fail']} Состояние харнесса недоступно: "
                     if ru
-                    else "○ Harness state unavailable: "
+                    else f"{icons.STATUS_ICONS['fail']} Harness state unavailable: "
                 ) + self._facts_error
             else:
                 line = (
-                    "○ Состояние харнесса загружается…"
+                    icons.loading("Состояние харнесса загружается…")
                     if ru
-                    else "○ Loading the Harness state…"
+                    else icons.loading("Loading the Harness state…")
                 )
             self.query_one("#harness-state", Static).update(
-                Text(line, style=brand.PALETTE["muted"])
+                Text(line, style=brand.PALETTE["error" if self._facts_error else "muted"])
             )
             self.query_one("#harness-state").tooltip = None
             self.query_one("#harness-usage", Static).update("")
@@ -755,7 +764,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                     if field[0] in ("Версия", "Состав", "Оркестрация")
                 ]
             else:
-                fields = [("", "○ Харнесс не установлен: нет читаемого lock")]
+                fields = [("", f"{icons.STATUS_ICONS['skipped']} Харнесс не установлен: нет читаемого lock")]
         for index, (label, value) in enumerate(fields):
             if index:
                 text.append(" · ")
@@ -764,12 +773,12 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             )
             text.append(self._t(value), style="bold")
         drift_labels = {
-            "loading": "○ дрейф: проверяется…",
-            "clean": "✔ дрейфа нет",
-            "drift": "⚠ дрейф есть",
-            "missing": "○ дрейф: нет lock",
+            "loading": icons.loading("дрейф: проверяется…"),
+            "clean": f"{icons.STATUS_ICONS['ok']} дрейфа нет",
+            "drift": f"{icons.STATUS_ICONS['warn']} дрейф есть",
+            "missing": f"{icons.STATUS_ICONS['skipped']} дрейф: нет lock",
         }
-        drift = drift_labels.get(facts.drift, "○ дрейф неизвестен")
+        drift = drift_labels.get(facts.drift, f"{icons.STATUS_ICONS['skipped']} дрейф неизвестен")
         text.append(
             " · " + self._t(drift),
             style=brand.STATUS_COLORS["ok" if facts.drift == "clean" else "warn"],
@@ -783,9 +792,11 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             (
                 self._t("Дрейф"),
                 self._t(
-                    {"clean": "✔ нет", "drift": "⚠ есть", "missing": "○ нет lock"}.get(
-                        facts.drift, "○ неизвестен"
-                    )
+                    {
+                        "clean": f"{icons.STATUS_ICONS['ok']} нет",
+                        "drift": f"{icons.STATUS_ICONS['warn']} есть",
+                        "missing": f"{icons.STATUS_ICONS['skipped']} нет lock",
+                    }.get(facts.drift, f"{icons.STATUS_ICONS['skipped']} неизвестен")
                 ),
                 "",
                 "" if facts.drift == "clean" else "warning",
@@ -803,14 +814,14 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         usage = console_stats.usage_text(view)
         if self.narrow:
             if view.unavailable:
-                usage = "○ Ledger: " + self._t(view.unavailable)
+                usage = f"{icons.STATUS_ICONS['skipped']} Ledger: " + self._t(view.unavailable)
             else:
                 stats = console_stats.pipeline_stats(view)
                 usage = self._t(
-                    f"Пайплайн: запусков {stats.batches} · тикетов {stats.tickets} · диспатчей {sum(stats.dispatches_by_role.values())} · отчётов {sum(stats.reports_by_outcome.values())}"
+                    f"Конвейер: запусков {stats.batches} · тикетов {stats.tickets} · dispatch {sum(stats.dispatches_by_role.values())} · отчётов {sum(stats.reports_by_outcome.values())}"
                 )
         elif view.unavailable:
-            usage = "○ " + usage
+            usage = f"{icons.STATUS_ICONS['skipped']} " + usage
         badges = Text(self._t(usage))
         if not view.unavailable:
             for match in re.finditer(r"\b\d+\b", badges.plain):
@@ -860,9 +871,9 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             ) + self._maintenance_error
         elif view is None:
             text = (
-                "Статистика считается…"
+                icons.loading("Статистика считается…")
                 if language == "ru"
-                else "Calculating statistics…"
+                else icons.loading("Calculating statistics…")
             )
         else:
             # Full paths and skip reasons stay in the confirmation and tooltip.
@@ -876,8 +887,8 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             text += (
                 "\nЖёсткий режим: +" if language == "ru" else "\nHard mode: +"
             ) + format_size(extra)
-            self.query_one("#maintenance-summary").tooltip = summary_text(
-                summary, language
+            self.query_one("#maintenance-summary").tooltip = icons.restyle_text(
+                summary_text(summary, language)
             )
         heading = "Временные файлы" if language == "ru" else "Temporary files"
         self.query_one("#maintenance-summary", Static).update(heading + "\n" + text)
@@ -981,8 +992,14 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
 
     def _paint_detail(self) -> None:
         key = self._selected_key
+        # Without a selected command the risk and CLI frames and the actions have nothing to show.
+        for widget_id in ("command-risk", "command-cli", "copy-hint", "command-actions"):
+            self.query_one(f"#{widget_id}").display = key is not None
         if key is None:
-            for widget_id in ("command-detail", "command-risk", "command-cli"):
+            self.query_one("#command-detail", Static).update(
+                self._t("Выберите команду в группе слева — Enter раскрывает группу.")
+            )
+            for widget_id in ("command-risk", "command-cli"):
                 self.query_one(f"#{widget_id}", Static).update("")
             self.query_one("#command-run", Button).disabled = True
             return
@@ -1010,7 +1027,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             )
         )
         self.query_one("#command-cli", Static).update("$ " + entry.cli_line(self.repo))
-        self.query_one("#detail-fold", Fold).set_summary(risk)
+        self.query_one("#detail-fold", Fold).set_summary(icons.restyle_text(risk))
         self._update_enter_hint()
 
     def _update_enter_hint(self) -> None:
@@ -1274,15 +1291,18 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
         )
         self._rendered_run = signature
         if run.phase in ("pending", "running"):
-            status = "▶ " + i18n.tr(self._language, "Выполняется…")
+            status = (
+                f"{icons.STATUS_KIND_ICONS['running']} "
+                + i18n.tr(self._language, "Выполняется…")
+            )
             output = f"$ {run.cli_line}\n{run.output}"
         elif run.phase == "cancelled":
             return
         else:
             status = (
-                ("✖ " + i18n.tr_text(self._language, run.error))
+                (f"{icons.STATUS_ICONS['fail']} " + i18n.tr_text(self._language, run.error))
                 if run.error
-                else f"{'✔' if run.returncode == 0 else '✖'} exit {run.returncode}"
+                else f"{icons.STATUS_ICONS['ok'] if run.returncode == 0 else icons.STATUS_ICONS['fail']} exit {run.returncode}"
             )
             output = (
                 f"$ {run.cli_line}\n{run.output}{run.error}"

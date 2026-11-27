@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from rich.cells import cell_len
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
 from rich.table import Table
 from rich.text import Text
 from textual import events
@@ -20,7 +22,8 @@ from textual.widget import Widget
 from textual.widgets import Button, Collapsible, Footer, ListItem, ListView, Static
 from typing_extensions import TypeVar
 
-from ..kernel import brand, i18n
+from ..kernel import brand, check_rationale, i18n
+from . import icons
 from .chrome import WorkspaceHeader
 from .crumbs import ELLIPSIS, Crumb, collapse_crumbs, split_path
 from ..kernel.data import DashboardData
@@ -45,6 +48,9 @@ SECTIONS = (
     "Agent activity",
     "Publish",
 )
+# From this terminal width the context panel takes 48 columns instead of 38.
+ROOMY_WIDTH = 180
+
 # Keys stay the familiar 0-9 for the original sections; the three Web views use b, w and p. The
 # menu shows the key in front of each name, in place of an icon.
 SECTION_KEYS = {
@@ -72,163 +78,93 @@ class CheckRoute:
     section: str
 
 
-# Every health check -> its readable title and the menu section that deals with it. Home's
-# "Requires attention", Diagnostics and Open project use it for jumps like `Update Harness 2 →`.
-CHECK_ROUTES: dict[str, CheckRoute] = {
-    "files.skill_snapshot": CheckRoute(
-        "Скиллы отличаются от установленной версии Harness", "Update Harness"
-    ),
-    "files.skill_registry": CheckRoute(
-        "Реестр скиллов не совпадает со скиллами", "Update Harness"
-    ),
-    "files.agents_md": CheckRoute(
-        "AGENTS.md отсутствует или устарел", "Update Harness"
-    ),
-    "files.discovery_links": CheckRoute(
-        "Ссылки обнаружения скиллов нарушены", "Update Harness"
-    ),
-    "files.overlay_locks": CheckRoute(
-        "Блокировки оверлеев не совпадают", "Update Harness"
-    ),
-    "files.lock": CheckRoute("Harness не установлен в проект", "Open project"),
-    "files.seed_baseline": CheckRoute(
-        "Нет или повреждён baseline seed-файлов", "Update Harness"
-    ),
-    "files.project_json": CheckRoute("Ошибка в .harness/project.json", "Configuration"),
-    "files.integrations": CheckRoute(
-        "Нужно проверить настройки интеграций", "Configuration"
-    ),
-    "files.verification_routing": CheckRoute(
-        "Маршрутизация проверок настроена неверно", "Configuration"
-    ),
-    "tracker.project": CheckRoute("Трекер задач не определён", "Configuration"),
-    "tracker.auth": CheckRoute("Нет доступа к трекеру задач", "Configuration"),
-    "tracker.reachability": CheckRoute("Трекер задач недоступен", "Configuration"),
-    "tracker.permissions": CheckRoute(
-        "Недостаточно прав в трекере задач", "Configuration"
-    ),
-    "tracker.labels": CheckRoute("В трекере не хватает меток", "Configuration"),
-    "tracker.git_base": CheckRoute(
-        "В тикете не указана ветка интеграции", "Configuration"
-    ),
-    "files.orchestration_config": CheckRoute(
-        "Ошибка в настройках оркестрации", "Orchestration"
-    ),
-    "directories.orchestration_state": CheckRoute(
-        "Каталог состояния оркестрации недоступен", "Orchestration"
-    ),
-    "orchestration.runtime": CheckRoute("Runtime не отвечает", "Orchestration"),
-    "orchestration.ledger_summary": CheckRoute(
-        "Ledger оркестрации требует внимания", "Orchestration"
-    ),
-    "orchestration.unfinished_batches": CheckRoute(
-        "Есть незавершённые batch", "Orchestration"
-    ),
-    "orchestration.blocked_batches": CheckRoute(
-        "Есть заблокированные batch", "Orchestration"
-    ),
-    "orchestration.stale_dispatches": CheckRoute(
-        "Есть зависшие dispatch", "Orchestration"
-    ),
-    "orchestration.orphaned_worktrees": CheckRoute(
-        "Есть worktree без batch", "Orchestration"
-    ),
-    "orchestration.disposable_data": CheckRoute(
-        "Накопились временные данные оркестрации", "Orchestration"
-    ),
-    "orchestration.adapters": CheckRoute(
-        "Адаптеры worker не совпадают с версией harness", "Orchestration"
-    ),
-    "orchestration.worker_binaries": CheckRoute(
-        "Runtime не находит claude или codex", "Orchestration"
-    ),
-    "orchestration.rebaser_route": CheckRoute("Маршрут rebase недоступен", "Orchestration"),
-    "repo_map.tier": CheckRoute("Repo Map работает в ограниченном режиме", "Repo Map"),
-    "memory.index": CheckRoute("Индекс памяти проекта требует внимания", "Repo Map"),
-    "memory.model": CheckRoute("Модель памяти недоступна", "Repo Map"),
-    "environment.os": CheckRoute(
-        "Операционная система не поддерживается", "Diagnostics"
-    ),
-    "environment.git": CheckRoute("Git недоступен", "Diagnostics"),
-    "environment.git_identity": CheckRoute(
-        "Не настроен автор коммитов Git", "Diagnostics"
-    ),
-    "environment.gitattributes": CheckRoute("Нет файла .gitattributes", "Diagnostics"),
-    "environment.line_endings": CheckRoute(
-        "Переводы строк не совпадают с .gitattributes", "Diagnostics"
-    ),
-    "environment.python": CheckRoute("Неподходящая версия Python", "Diagnostics"),
-    "environment.uv": CheckRoute("uv недоступен", "Diagnostics"),
-    "environment.glab": CheckRoute("Версия glab устарела", "Diagnostics"),
-    "environment.dev_env": CheckRoute(
-        "Окружение .harness/.venv не совпадает с uv.lock", "Diagnostics"
-    ),
-    "environment.qa_executables": CheckRoute(
-        "Исполняемые файлы QA-команд не найдены", "Diagnostics"
-    ),
-    "environment.c_linker": CheckRoute("Нет C-компоновщика cc", "Diagnostics"),
-    "environment.runtime_socket_path": CheckRoute(
-        "Путь сокета runtime слишком длинный", "Diagnostics"
-    ),
-    "environment.output_encoding": CheckRoute(
-        "Кодировка вывода не UTF-8", "Diagnostics"
-    ),
-    "environment.git_config": CheckRoute(
-        ".git/config закрыт на запись", "Diagnostics"
-    ),
-    "environment.codex_sandbox": CheckRoute(
-        "Песочница Codex настроена неверно", "Diagnostics"
-    ),
-    "environment.claude_sandbox": CheckRoute(
-        "Песочница Claude настроена неверно", "Diagnostics"
-    ),
-    "environment.codex_uv_cache": CheckRoute(
-        "Кэш uv недоступен в песочнице Codex", "Diagnostics"
-    ),
-    "environment.claude_uv_cache": CheckRoute(
-        "Кэш uv недоступен в песочнице Claude", "Diagnostics"
-    ),
-    "environment.long_paths": CheckRoute(
-        "Длинные пути Windows выключены", "Diagnostics"
-    ),
-    "environment.path_length": CheckRoute(
-        "Путь к проекту слишком длинный", "Diagnostics"
-    ),
-    "environment.pytest_temp": CheckRoute(
-        "Временный каталог pytest недоступен", "Diagnostics"
-    ),
-    "environment.symlinks": CheckRoute(
-        "Символические ссылки недоступны", "Diagnostics"
-    ),
-    "environment.hook_bash": CheckRoute("Bash для hooks не найден", "Diagnostics"),
-    # The advisory warn of the second runtime survives `harness update`, so the route points to the
-    # check details in Diagnostics instead of Update Harness.
-    "hooks.policy": CheckRoute(
-        "Политика hooks проекта требует внимания", "Diagnostics"
-    ),
-    "hooks.test_author": CheckRoute("Тест-автор недоступен", "Diagnostics"),
-    "hooks.test_author_config": CheckRoute("Нет блока test_author", "Diagnostics"),
-    "hooks.test_author_root": CheckRoute("Корень проекта не совпадает с Git", "Diagnostics"),
-    "hooks.test_author_trust": CheckRoute("Проект не доверен для тест-автора", "Diagnostics"),
-    "hooks.test_author_guard": CheckRoute("Guard тест-автора недоступен", "Diagnostics"),
-    "hooks.test_author_runner": CheckRoute("Runner тест-автора недоступен", "Diagnostics"),
-    "hooks.test_author_probe": CheckRoute("Изоляция runner недоступна", "Diagnostics"),
-    "files.sandboxes": CheckRoute("Каталог .sandboxes настроен неверно", "Diagnostics"),
-    "directories.harness": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.sandboxes": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.cache": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.logs": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.scratch": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.pr_body": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.runs": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.reports": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.worktrees": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
+# Every health check -> the menu section that deals with it; its title is
+# `check_rationale.TITLES`. Home's "Requires attention", Diagnostics and Open project use it for
+# jumps like `Update Harness 2 →`.
+CHECK_SECTIONS: dict[str, str] = {
+    "files.skill_snapshot": "Update Harness",
+    "files.skill_registry": "Update Harness",
+    "files.agents_md": "Update Harness",
+    "files.discovery_links": "Update Harness",
+    "files.overlay_locks": "Update Harness",
+    "files.lock": "Open project",
+    "files.seed_baseline": "Update Harness",
+    "files.project_json": "Configuration",
+    "files.integrations": "Configuration",
+    "files.verification_routing": "Configuration",
+    "tracker.project": "Configuration",
+    "tracker.auth": "Configuration",
+    "tracker.reachability": "Configuration",
+    "tracker.permissions": "Configuration",
+    "tracker.labels": "Configuration",
+    "tracker.git_base": "Configuration",
+    "files.orchestration_config": "Orchestration",
+    "directories.orchestration_state": "Orchestration",
+    "orchestration.runtime": "Orchestration",
+    "orchestration.ledger_summary": "Orchestration",
+    "orchestration.unfinished_batches": "Orchestration",
+    "orchestration.blocked_batches": "Orchestration",
+    "orchestration.stale_dispatches": "Orchestration",
+    "orchestration.orphaned_worktrees": "Orchestration",
+    "orchestration.disposable_data": "Orchestration",
+    "orchestration.adapters": "Orchestration",
+    "orchestration.worker_binaries": "Orchestration",
+    "orchestration.rebaser_route": "Orchestration",
+    "repo_map.tier": "Repo Map",
+    "memory.index": "Repo Map",
+    "memory.model": "Repo Map",
+    "environment.os": "Diagnostics",
+    "environment.git": "Diagnostics",
+    "environment.git_identity": "Diagnostics",
+    "environment.gitattributes": "Diagnostics",
+    "environment.line_endings": "Diagnostics",
+    "environment.python": "Diagnostics",
+    "environment.uv": "Diagnostics",
+    "environment.glab": "Diagnostics",
+    "environment.dev_env": "Diagnostics",
+    "environment.qa_executables": "Diagnostics",
+    "environment.c_linker": "Diagnostics",
+    "environment.runtime_socket_path": "Diagnostics",
+    "environment.output_encoding": "Diagnostics",
+    "environment.git_config": "Diagnostics",
+    "environment.codex_sandbox": "Diagnostics",
+    "environment.claude_sandbox": "Diagnostics",
+    "environment.codex_uv_cache": "Diagnostics",
+    "environment.claude_uv_cache": "Diagnostics",
+    "environment.long_paths": "Diagnostics",
+    "environment.path_length": "Diagnostics",
+    "environment.pytest_temp": "Diagnostics",
+    "environment.symlinks": "Diagnostics",
+    "environment.hook_bash": "Diagnostics",
+    "hooks.policy": "Diagnostics",
+    "hooks.test_author": "Diagnostics",
+    "hooks.test_author_config": "Diagnostics",
+    "hooks.test_author_root": "Diagnostics",
+    "hooks.test_author_trust": "Diagnostics",
+    "hooks.test_author_guard": "Diagnostics",
+    "hooks.test_author_runner": "Diagnostics",
+    "hooks.test_author_probe": "Diagnostics",
+    "files.sandboxes": "Diagnostics",
+    "directories.harness": "Diagnostics",
+    "directories.sandboxes": "Diagnostics",
+    "directories.cache": "Diagnostics",
+    "directories.logs": "Diagnostics",
+    "directories.scratch": "Diagnostics",
+    "directories.pr_body": "Diagnostics",
+    "directories.runs": "Diagnostics",
+    "directories.reports": "Diagnostics",
+    "directories.worktrees": "Diagnostics",
 }
 
 
-def check_route(check_id: str) -> CheckRoute:
-    """The route of `check_id`; a check outside the table keeps its id and opens Diagnostics."""
-    return CHECK_ROUTES.get(check_id) or CheckRoute(check_id, "Diagnostics")
+def check_route(check_id: str, language: str = "ru") -> CheckRoute:
+    """The route of `check_id`: its readable title in `language`, the same one Diagnostics and the
+    web console show, and its menu section; a check outside the table keeps its id and opens
+    Diagnostics."""
+    return CheckRoute(
+        check_rationale.check_title(check_id, language),
+        CHECK_SECTIONS.get(check_id, "Diagnostics"),
+    )
 
 
 class ShellSidebar(Vertical):
@@ -466,7 +402,7 @@ class SectionCard(Vertical):
     def relabel(self) -> None:
         language = getattr(self.app, "language", "ru")
         self.set_head(
-            i18n.tr(language, self._title), i18n.tr_text(language, self._note)
+            icons.tr(language, self._title), icons.tr_text(language, self._note)
         )
 
 
@@ -523,8 +459,8 @@ class Fold(Collapsible):
 
     def relabel(self) -> None:
         language = getattr(self.app, "language", "ru")
-        title = i18n.tr(language, self._source)
-        summary = i18n.tr_text(language, self._summary)
+        title = icons.tr(language, self._source)
+        summary = icons.tr_text(language, self._summary)
         if not summary:
             self.title = escape(title)
             return
@@ -652,7 +588,7 @@ Screen.shell { background: $background !important; }
 .shell .context-label { height: 2; color: $text-muted; margin-top: 1; }
 .shell .context-value { height: auto; margin-bottom: 1; }
 .shell .context-note { height: auto; background: transparent; border: round $component-border; padding: 0 1; margin-top: 1; color: $text-muted; }
-.shell ShellSidebar { width: 30; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1 0; }
+.shell ShellSidebar { width: 30; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 0; }
 .shell ShellSidebar ListView, .shell ShellSidebar ListView:focus { height: 1fr; border: none; padding: 0; margin: 0; background: transparent; }
 .shell ShellSidebar ListView > ListItem { height: 1; padding: 0 1; border-left: solid transparent; color: $text-muted; background: transparent; text-style: none; }
 .shell ShellSidebar ListView > ListItem.-highlight, .shell ShellSidebar ListView:focus > ListItem.-highlight {
@@ -660,6 +596,7 @@ Screen.shell { background: $background !important; }
 }
 .shell ShellSidebar ListView:focus > ListItem.-highlight { text-style: underline; }
 .shell Footer, .shell WorkspaceHeader { background: transparent; }
+.shell.-wide Footer, .shell.-spacious Footer { height: 2; border-top: solid $component-border; }
 .shell ListView, .shell ListView:focus { background-tint: transparent; }
 .shell ShellSidebar ListView > ListItem.-active { background: $selection-background; color: $selection-foreground; border-left: solid $selection-edge; }
 .shell .shell-frame { height: 1fr; }
@@ -671,7 +608,8 @@ Screen.shell { background: $background !important; }
 .shell .field-column { width: 1fr; height: auto; padding-right: 2; }
 .shell .field { height: auto; margin-bottom: 1; }
 .shell.-spacious .context-panel { width: 38; }
-.shell.-wide ShellSidebar { width: 27; }
+.shell.-spacious.-roomy .context-panel { width: 48; }
+.shell.-wide ShellSidebar, .shell.-spacious ShellSidebar { width: 25; }
 .shell.-narrow .menu-toggle { display: block; }
 .shell.-narrow ShellSidebar { display: none; }
 .shell.-narrow.-menu-open ShellSidebar { display: block; }
@@ -707,6 +645,9 @@ Screen.shell { background: $background !important; }
 .shell ListView.well, .shell .frame { background: transparent; }
 .shell Input.-textual-compact, .shell Input.-textual-compact:focus { border: none; height: 1; padding: 0 1; background: transparent; }
 .shell Select.-textual-compact > SelectCurrent, .shell Select.-textual-compact:focus > SelectCurrent { border: none; height: 1; padding: 0 1; background: transparent; }
+.shell Input.-textual-compact:focus, .shell Select.-textual-compact:focus > SelectCurrent { background: $selection-background; color: $selection-foreground; }
+.shell Checkbox > .toggle--button, .shell RadioButton > .toggle--button { color: $text-muted; }
+.shell Checkbox.-on > .toggle--button, .shell RadioButton.-on > .toggle--button { color: $success; }
 """)
 
 
@@ -718,20 +659,20 @@ def section_badges(data: DashboardData) -> dict[str, Badge]:
     """A short status per menu section from the home screen's health facts; a section without a
     status has no badge. Every shell screen shows them, so they are computed here once."""
     colors = brand.STATUS_COLORS
-    icons = brand.STATUS_ICONS
+    status_icons = icons.STATUS_ICONS
     badges: dict[str, Badge] = {}
     if data.fail:
-        badges["Diagnostics"] = (f"{icons['fail']} {data.fail}", colors["fail"])
+        badges["Diagnostics"] = (f"{status_icons['fail']} {data.fail}", colors["fail"])
     elif data.warn:
-        badges["Diagnostics"] = (f"{icons['warn']} {data.warn}", colors["warn"])
+        badges["Diagnostics"] = (f"{status_icons['warn']} {data.warn}", colors["warn"])
     else:
-        badges["Diagnostics"] = (icons["ok"], colors["ok"])
+        badges["Diagnostics"] = (status_icons["ok"], colors["ok"])
     if data.drift_state == "clean":
-        badges["Harness"] = (icons["ok"], colors["ok"])
+        badges["Harness"] = (status_icons["ok"], colors["ok"])
     elif data.drift_state == "drift":
         # The installed files drifted from the package: the update brings them back.
-        badges["Harness"] = (icons["warn"], colors["warn"])
-        badges["Update Harness"] = (icons["warn"], colors["warn"])
+        badges["Harness"] = (status_icons["warn"], colors["warn"])
+        badges["Update Harness"] = (status_icons["warn"], colors["warn"])
     if data.active_batches is not None:
         badges["Orchestration"] = (str(data.active_batches), brand.PALETTE["muted"])
     tier = repo_map_tier_name(data.repo_map_tier)
@@ -746,14 +687,43 @@ def repo_map_tier_name(message: str) -> str | None:
     return found.group(1) if found else None
 
 
+class SeparatorWrap:
+    """A value of a fact table - a path, an ID, a branch, a sentence - broken into lines at its
+    separators and spaces (`wrap_value`) for the width it is drawn at, never inside a name; its
+    styles are kept. A piece wider than the column still folds."""
+
+    def __init__(self, value: Text | str) -> None:
+        self.text = value if isinstance(value, Text) else Text(value)
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        plain = self.text.plain
+        wrapped = wrap_value(plain, options.max_width)
+        offsets: list[int] = []
+        index = 0
+        for char in wrapped:
+            if char == "\n" and (index >= len(plain) or plain[index] != "\n"):
+                offsets.append(index)
+                continue
+            index += 1
+        yield Text("\n").join(self.text.divide(offsets)) if offsets else self.text
+
+    def __rich_measure__(
+        self, console: Console, options: ConsoleOptions
+    ) -> Measurement:
+        return Measurement.get(console, options, self.text)
+
+
 def fact_table(rows: Sequence[tuple[str, Text | str]], language: str) -> Table:
-    """Facts of a context card: the label on the left (muted), the value on the right."""
+    """Facts of a context card: the label on the left (muted), the value on the right, broken at
+    its separators rather than inside a word."""
     table = Table.grid(expand=True, padding=(0, 1))
     # One label width for every card, so the values of neighbouring cards line up.
     table.add_column(min_width=12, no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(ratio=1, overflow="fold")
     for label, value in rows:
-        table.add_row(i18n.fact_label(language, label), value)
+        table.add_row(i18n.fact_label(language, label), SeparatorWrap(value))
     return table
 
 
@@ -786,6 +756,18 @@ async def _pop_to(app: App[None], target: Screen[None]) -> None:
 
 # What a shell screen hands back when it is dismissed; most return nothing.
 ShellResult = TypeVar("ShellResult", default=None)
+
+
+FooterEntry = TypeVar("FooterEntry")
+
+
+def footer_order(bindings: dict[str, FooterEntry], palette: str) -> dict[str, FooterEntry]:
+    """One footer order on every screen: `esc` first, then the keys of the focused widget and the
+    screen in their own order, then `f1`, `f2` and the command palette."""
+    first = [key for key in ("escape",) if key in bindings]
+    last = [key for key in ("f1", "f2", palette) if key in bindings]
+    middle = [key for key in bindings if key not in first and key not in last]
+    return {key: bindings[key] for key in (*first, *middle, *last)}
 
 
 class ConsoleShell(Translated, Screen[ShellResult]):
@@ -928,6 +910,8 @@ class ConsoleShell(Translated, Screen[ShellResult]):
 
     def on_resize(self, event: events.Resize) -> None:
         self._fold_context(event.size.width)
+        # A separate class, not a breakpoint: the `-spacious` rules still hold from 140 columns.
+        self.set_class(event.size.width >= ROOMY_WIDTH, "-roomy")
         self.call_after_refresh(self._ensure_visible_focus)
         for link in self.query(JumpLink):
             link.relabel()
@@ -945,7 +929,7 @@ class ConsoleShell(Translated, Screen[ShellResult]):
         bindings = super().active_bindings
         keys = self.NARROW_FOOTER_KEYS
         if keys is None or self.app.size.width >= brand.NARROW_WIDTH:
-            return bindings
+            return footer_order(bindings, self.app.COMMAND_PALETTE_BINDING)
         palette = self.app.COMMAND_PALETTE_BINDING
         return {
             key: active

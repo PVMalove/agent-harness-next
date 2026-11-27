@@ -152,7 +152,7 @@
     },
     "backend_zones": {
       "type": "object",
-      "description": "Устаревшее: именованные зоны доступа. Больше не нужны и не блокируют параллельные батчи; граница записи — явный allowed_paths батча в пределах write_paths роли. Существующая конфигурация с зонами остаётся валидной.",
+      "description": "Устаревшее: именованные зоны доступа. Больше не нужны и не блокируют параллельные batch; граница записи — явный allowed_paths batch в пределах write_paths роли. Существующая конфигурация с зонами остаётся валидной.",
       "additionalProperties": {
         "$ref": "#/definitions/backendZone"
       }
@@ -160,7 +160,7 @@
     "concurrency_budget": {
       "type": "integer",
       "minimum": 1,
-      "description": "Цель: ограничение параллелизма. За что отвечает: максимальное количество одновременно активных батчей (задач), обрабатываемых координатором. Варианты: целое число >= 1 (по умолчанию 1)."
+      "description": "Цель: ограничение параллелизма. За что отвечает: максимальное количество одновременно активных batch (задач), обрабатываемых координатором. Варианты: целое число >= 1 (по умолчанию 1)."
     },
     "verification_commands": {
       "type": "array",
@@ -279,7 +279,7 @@
         "ticket_diff_selection": {
           "type": "boolean",
           "default": false,
-          "description": "Выключатель выбора тестов по diff тикета (ADR 0023). При true и цели integration/* планы developer-retry, code-review и qa выбирают ровно тесты diff base..candidate (selection ticket-diff) и никогда не расширяются до full; при false или цели в ветку по умолчанию планы прежние. Замораживается в batch вместе с политикой."
+          "description": "Выключатель выбора тестов по diff тикета (ADR 0023). При true и цели integration/* планы developer-retry, code-review и qa выбирают ровно тесты diff base..candidate (selection ticket-diff) и никогда не расширяются до full. Первый developer получает такой же план по ожидаемому diff: base..snapshot плюс expected_files из batch preflight. Команды этих brief выводятся из плана; стадия pytest без тестов команды не получает, а not_run_stages называет причину no-tests-in-diff. При false или цели в ветку по умолчанию планы и команды прежние. Замораживается в batch вместе с политикой."
         },
         "stages": {
           "type": "array",
@@ -317,7 +317,7 @@
     "approval_policy": {
       "enum": ["manual_all", "milestone", "low_risk", "auto"],
       "default": "manual_all",
-      "description": "Цель: контроль безопасности изменений. За что отвечает: политика человеческого согласования шагов оркестрации. Варианты: 'manual_all' (ручной аппрув на КАЖДЫЙ шаг, по умолчанию), 'milestone' (ручной аппрув только на ключевых вехах: QA, публикации, рисках), 'low_risk' (авто-продолжение для батчей, чей allowed_paths целиком лежит в low_risk_paths), 'auto' (автоматический путь от batch approve до принятого publish: координатор сам согласует batch, каждый dispatch, включая publish, риск-триггеры, bypass-rerun и rebase target, плановое продолжение и решения batch auto-decide; каждое решение пишется как policy:auto с обоснованием и evidence в batch.auto_decisions; закрытый список остановок (budget-exhausted, integrity-failure, no-automatic-route) фиксируется явной командой batch auto-decide в batch.auto_stop и переводит batch в paused; batch auto-report только читает состояние; человеческие resume-stop и rewind записывают событие, сохраняют историю и включают manual_all для последующих шагов, включая 429; исторический итоговый отчёт сохраняется в batch.auto_report; PR открывает только человек, auto-merge запрещён; требует human_approval_gate 'trusted' и worker_attestation_required true)."
+      "description": "Цель: контроль безопасности изменений. За что отвечает: политика человеческого согласования шагов оркестрации. Варианты: 'manual_all' (ручной аппрув на КАЖДЫЙ шаг, по умолчанию), 'milestone' (ручной аппрув только на ключевых вехах: QA, публикации, рисках), 'low_risk' (авто-продолжение для batch, чей allowed_paths целиком лежит в low_risk_paths), 'auto' (автоматический путь от batch approve до принятого publish: координатор сам согласует batch, каждый dispatch, включая publish, риск-триггеры, bypass-rerun и rebase target, плановое продолжение и решения batch auto-decide; каждое решение пишется как policy:auto с обоснованием и evidence в batch.auto_decisions; закрытый список остановок (budget-exhausted, integrity-failure, no-automatic-route) фиксируется явной командой batch auto-decide в batch.auto_stop и переводит batch в paused; batch auto-report только читает состояние; человеческие resume-stop и rewind записывают событие, сохраняют историю и включают manual_all для последующих шагов, включая 429; исторический итоговый отчёт сохраняется в batch.auto_report; PR открывает только человек, auto-merge запрещён; требует human_approval_gate 'trusted' и worker_attestation_required true)."
     },
     "human_approval_gate": {
       "enum": ["trusted", "tty"],
@@ -328,12 +328,12 @@
       "type": "array",
       "minItems": 1,
       "items": {"type": "string", "minLength": 1},
-      "description": "Цель: авто-согласование безопасных правок. За что отвечает: glob-шаблоны путей с низким риском в форме 'dir/**', '**' или точного файла, без сегментов '.', '..' и пустых, без ведущего '/' (сравнение по сегментам пути); батч продолжается без ручного аппрува при approval_policy = 'low_risk', только если весь его allowed_paths лежит внутри этих шаблонов. Без шаблонов ничто не считается низкорисковым. Варианты: массив шаблонов путей."
+      "description": "Цель: авто-согласование безопасных правок. За что отвечает: glob-шаблоны путей с низким риском в форме 'dir/**', '**' или точного файла, без сегментов '.', '..' и пустых, без ведущего '/' (сравнение по сегментам пути); batch продолжается без ручного аппрува при approval_policy = 'low_risk', только если весь его allowed_paths лежит внутри этих шаблонов. Без шаблонов ничто не считается низкорисковым. Варианты: массив шаблонов путей."
     },
     "low_risk_zones": {
       "type": "array",
       "items": {"type": "string", "minLength": 1},
-      "description": "Устаревшее: имена зон из backend_zones. Отображается на их пути, как если бы они были перечислены в low_risk_paths; батч, запланированный до явных областей, по-прежнему определяется своей зоной."
+      "description": "Устаревшее: имена зон из backend_zones. Отображается на их пути, как если бы они были перечислены в low_risk_paths; batch, запланированный до явных областей, по-прежнему определяется своей зоной."
     },
     "worker_attestation_required": {
       "type": "boolean",
@@ -368,7 +368,7 @@
         "context_limit": {
           "type": "integer",
           "minimum": 1,
-          "description": "Порог токенов контекста для возобновления диспатча (целое число >= 1, по умолчанию 150000)."
+          "description": "Порог токенов контекста для возобновления dispatch (целое число >= 1, по умолчанию 150000)."
         },
         "tdd_cycle_count": {
           "type": "integer",
@@ -470,7 +470,7 @@
       "additionalProperties": false,
       "description": "Цель: предотвращение зацикливания. За что отвечает: лимиты на число возобновлений сессий воркеров.",
       "properties": {
-        "max_continuations": {"type": "integer", "minimum": 1, "default": 2, "description": "Максимальное число продолжений сессии воркера на один диспатч (целое число >= 1, по умолчанию 2)."},
+        "max_continuations": {"type": "integer", "minimum": 1, "default": 2, "description": "Максимальное число продолжений сессии воркера на один dispatch (целое число >= 1, по умолчанию 2)."},
         "max_rate_limit_resumes": {"type": "integer", "minimum": 1, "default": 1, "description": "Максимальное число возобновлений при исчерпании лимитов провайдера (rate limit) (целое число >= 1, по умолчанию 1)."}
       }
     },
@@ -509,7 +509,7 @@
       "properties": {
         "retry_queue_seconds": {"type": "integer", "minimum": 1, "default": 3600, "description": "Максимальное время ожидания в очереди повторов до привлечения человека (секунды, по умолчанию 3600)."},
         "max_infrastructure_retries": {"type": "integer", "minimum": 0, "default": 2, "description": "Максимальное число сбоев инфраструктуры до остановки (целое число >= 0, по умолчанию 2)."},
-        "stale_dispatch_seconds": {"type": "integer", "minimum": 1, "default": 3600, "description": "Максимальное время молчания воркера, после которого диспатч считается зависшим (секунды, по умолчанию 3600)."},
+        "stale_dispatch_seconds": {"type": "integer", "minimum": 1, "default": 3600, "description": "Максимальное время молчания воркера, после которого dispatch считается зависшим (секунды, по умолчанию 3600)."},
         "heartbeat_interval_seconds": {"type": "integer", "minimum": 1, "default": 300, "description": "Желаемый интервал heartbeat воркера в секундах; фактический интервал ограничен третью stale_dispatch_seconds."}
       }
     },
@@ -533,7 +533,7 @@
     "preflight_policy": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Цель: контроль сложности задач перед запуском. За что отвечает: префлайт-ограничения объёма задач до создания батча.",
+      "description": "Цель: контроль сложности задач перед запуском. За что отвечает: префлайт-ограничения объёма задач до создания batch.",
       "properties": {
         "require_estimates": {"type": "boolean", "default": true, "description": "Требовать ли наличие оценок трудоёмкости перед запуском. Варианты: true (по умолчанию), false."},
         "max_definition_of_done_items": {"type": "integer", "minimum": 1, "default": 5, "description": "Максимальное количество пунктов Definition of Done (целое число, по умолчанию 5)."},
@@ -729,7 +729,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Потолок записи роли: пути, шире которых allowed_paths батча быть не может. По умолчанию — весь репозиторий (или пути зоны устаревшего плана)."
+          "description": "Потолок записи роли: пути, шире которых allowed_paths batch быть не может. По умолчанию — весь репозиторий (или пути зоны устаревшего плана)."
         },
         "transport": {
           "enum": ["in-process", "external"],

@@ -113,8 +113,14 @@ developer-dispatch такого плана нет. Без политики де�
 **Выбор по diff тикета.** Если `ticket_diff_selection` включён и цель `integration/*`, планы
 retry, review **и QA** берут тесты из `base..candidate` (`ticket-diff`) и не расширяются до
 `full`. В выбор попадают добавленные и изменённые Python-тесты и соответствующие Rust test
-targets. Если тестов в diff нет, остаются статические стадии, а стадия тестов получает `not_run`.
-Команды этих brief coordinator выводит из плана. Это диагностика ветки тикета: для публикации
+targets. Первый developer своего diff ещё не имеет, поэтому его план строится по ожидаемому diff:
+коммиты `base..snapshot` плюс файлы `--expected-file` из `batch preflight`. Если тестов в diff нет,
+остаются статические стадии, а стадия тестов получает `not_run` с причиной `no-tests-in-diff`.
+Команды этих brief coordinator выводит из плана, поэтому тикет, который меняет только Markdown
+скилла, проходит `lint` без полного pytest. Дифф выбирает только тесты: все статические стадии
+политики остаются, поэтому обязательную проверку, например `scripts/verify.py`, задайте стадией
+`custom`. Batch без ожидаемых файлов оставляет первому developer список
+`developer_verification_commands`. Это диагностика ветки тикета: для публикации
 по-прежнему нужен полный gate на финальном SHA. При `false` или цели в ветку по умолчанию
 действует обычный план. Подробный контракт описан в
 [ADR 0023](https://github.com/PVMalove/agent-harness-next/blob/master/docs/adr/0023-incremental-verification.md).

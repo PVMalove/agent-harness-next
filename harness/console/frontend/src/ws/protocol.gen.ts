@@ -78,7 +78,7 @@ export type Kind = string;
 export type ObservedAt = string;
 export type Origin = "agent";
 export type Role = string;
-export type Source = "structured" | "plain";
+export type Source = "structured" | "plain" | "stages";
 export type Structure = "available" | "unavailable";
 export type Text = string;
 export type Available = boolean;
@@ -356,9 +356,10 @@ export type LastStepAgeSeconds = number | null;
 export type Message2 = string;
 export type More = boolean;
 export type Offset = number;
-export type Reason3 = ("no_log" | "log_missing" | "log_unreadable" | "log_outside_storage" | "log_unrecognised") | null;
+export type Reason3 =
+  ("no_log" | "log_missing" | "log_unreadable" | "log_outside_storage" | "log_unrecognised" | "qa_on_host") | null;
 export type Reset = boolean;
-export type Source2 = "structured" | "plain" | "none";
+export type Source2 = "structured" | "plain" | "stages" | "none";
 export type State3 = "connected" | "waiting" | "unavailable";
 export type Kind5 = string;
 export type Text5 = string;
@@ -370,6 +371,18 @@ export type BatchId1 = string;
 export type BatchState = string;
 export type Branch = string;
 export type DispatchId2 = string;
+export type ContainerId = string;
+export type Deadline = string;
+export type Engine1 = string;
+export type ExitCode = number | null;
+export type Image = string;
+export type Kind6 = string;
+export type ObservedAt1 = string;
+export type OomKilled = boolean | null;
+export type State4 = string;
+export type StderrTail = string[];
+export type StoppedBy = string;
+export type Teardown = string;
 export type LastEventAt = string;
 export type CheckpointCount = number;
 export type CheckpointId = string;
@@ -381,30 +394,40 @@ export type Match = boolean;
 export type ReportedAt = string;
 export type ReportedModel = string;
 export type StreamReason = "in_process";
+export type Purpose = string;
 export type Role1 = string;
 export type Silent = boolean;
 export type StartedAt = string;
-export type State4 = string;
+export type State5 = string;
 export type Ticket = string;
 export type Dispatches1 = RosterDispatch[];
 export type Id26 = string | number | null;
-export type Kind6 = "roster";
+export type Kind7 = "roster";
 export type Ok20 = true;
 export type Orchestration1 = "available" | "unavailable";
 export type Reset1 = boolean;
 export type Type24 = "steps.subscribe";
 export type V20 = 1;
 export type Id27 = string | number | null;
-export type Kind7 = "steps";
+export type Kind8 = "steps";
 export type Ok21 = true;
+export type ApprovedBy = string | null;
 export type BatchId2 = string | null;
+export type Category1 = string | null;
 export type Decision = string | null;
 export type DispatchId3 = string | null;
-export type Event = "batch.transition" | "dispatch.transition" | "gate.decision" | "qa.run" | "qa.attempt";
+export type Event =
+  | "batch.transition"
+  | "dispatch.transition"
+  | "gate.decision"
+  | "qa.run"
+  | "qa.attempt"
+  | "auto.decision"
+  | "auto.stop";
 export type FromState = string | null;
 export type Message3 = string;
 export type NextRole = string | null;
-export type ObservedAt1 = string;
+export type ObservedAt2 = string;
 export type Origin1 = "orchestration";
 export type Outcome2 = string | null;
 export type Role2 = string | null;
@@ -1258,7 +1281,7 @@ export interface WorkerStep {
 export interface StepsRosterReply {
   dispatches: Dispatches1;
   id: Id26;
-  kind: Kind6;
+  kind: Kind7;
   ok: Ok20;
   orchestration: Orchestration1;
   reset: Reset1;
@@ -1268,6 +1291,8 @@ export interface StepsRosterReply {
 /**
  * A dispatch of the journal view; the timing is read for a live dispatch only ("" and
  * false otherwise), and the observation for an in-process dispatch only (null otherwise).
+ * `purpose` is `work` or `publish` once its record was read; `execution` is set for a
+ * dispatch whose execution the runtime supervises.
  *
  * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
  * via the `definition` "RosterDispatch".
@@ -1277,13 +1302,36 @@ export interface RosterDispatch {
   batch_state: BatchState;
   branch: Branch;
   dispatch_id: DispatchId2;
+  execution: ExecutionSummary | null;
   last_event_at: LastEventAt;
   observation: InProcessObservation | null;
+  purpose: Purpose;
   role: Role1;
   silent: Silent;
   started_at: StartedAt;
-  state: State4;
+  state: State5;
   ticket: Ticket;
+}
+/**
+ * What the runtime observes of a supervised execution, a process or a container; a field
+ * the runtime did not report is "" or null. `stderr_tail` is redacted.
+ *
+ * This interface was referenced by `ConsoleWebSocketProtocol`'s JSON-Schema
+ * via the `definition` "ExecutionSummary".
+ */
+export interface ExecutionSummary {
+  container_id: ContainerId;
+  deadline: Deadline;
+  engine: Engine1;
+  exit_code: ExitCode;
+  image: Image;
+  kind: Kind6;
+  observed_at: ObservedAt1;
+  oom_killed: OomKilled;
+  state: State4;
+  stderr_tail: StderrTail;
+  stopped_by: StoppedBy;
+  teardown: Teardown;
 }
 /**
  * The ledger facts of an in-process worker, which has no step stream; `checkpoints` holds
@@ -1325,7 +1373,7 @@ export interface ObservedSelfReport {
  */
 export interface StepsReply {
   id: Id27;
-  kind: Kind7;
+  kind: Kind8;
   ok: Ok21;
   steps: Steps1;
   type: Type25;
@@ -1338,14 +1386,16 @@ export interface StepsReply {
  * via the `definition` "OrchestrationStep".
  */
 export interface OrchestrationStep {
+  approved_by: ApprovedBy;
   batch_id: BatchId2;
+  category: Category1;
   decision: Decision;
   dispatch_id: DispatchId3;
   event: Event;
   from_state: FromState;
   message: Message3;
   next_role: NextRole;
-  observed_at: ObservedAt1;
+  observed_at: ObservedAt2;
   origin: Origin1;
   outcome: Outcome2;
   role: Role2;

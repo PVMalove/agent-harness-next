@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, cast
 
+from rich.cells import cell_len
 from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
@@ -34,8 +35,8 @@ from ..shell import (
     Fold,
     JumpLink,
     SectionCard,
+    SeparatorWrap,
     check_route,
-    fact_table,
     section_badges,
 )
 from ...kernel import reports
@@ -45,6 +46,7 @@ from ...kernel.data import DashboardData
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.home_snapshot import HomeContext as HomeContext, HomeSnapshot
 from ....health.model import CheckResult, Status
+from .. import icons
 from .commands import call_from_worker
 
 DRIFT_LABELS = {"clean": "нет", "drift": "есть", "missing": "не установлен"}
@@ -52,14 +54,14 @@ DRIFT_LABELS_EN = {"clean": "none", "drift": "yes", "missing": "not installed"}
 
 
 def _status_label(status: str) -> str:
-    """A status as its symbol plus its word, so it never rests on colour alone: `✖ fail`."""
-    return f"{brand.STATUS_ICONS.get(status, '·')} {status}"
+    """A status as its symbol plus its word, so it never rests on colour alone: `■ fail`."""
+    return f"{icons.STATUS_ICONS.get(status, '·')} {status}"
 
 
 def _counter(name: str, value: int, color: str) -> str:
     """A health counter with its status symbol, coloured only when it is non-zero so a clean
     report stays calm."""
-    text = f"{brand.STATUS_ICONS.get(name, '·')} {name}={value}"
+    text = f"{icons.STATUS_ICONS.get(name, '·')} {name}={value}"
     return f"[{color}]{text}[/]" if value else f"[{brand.PALETTE['muted']}]{text}[/]"
 
 
@@ -127,19 +129,17 @@ def _render_summary_full(
         lines.append(_summary_label(t("ошибки и предупреждения")))
         colors = {"fail": brand.PALETTE["error"], "warn": brand.PALETTE["warning"]}
         lines.extend(
-            f"  [{colors.get(status, brand.PALETTE['muted'])}]{_status_label(status):<6}[/] "
+            f"  [{colors.get(status, brand.PALETTE['muted'])}]"
+            f"{label}{' ' * max(0, 6 - cell_len(label))}[/] "
             f"{escape(check_id)} — {escape(message)}"
             for status, check_id, message in data.problems
+            for label in (_status_label(status),)
         )
     return "\n".join(lines)
 
 
 def _color(status: str) -> str:
     return brand.STATUS_COLORS[status]
-
-
-def _mode(online: bool) -> str:
-    return "online" if online else "offline"
 
 
 def _tokens(language: str, count: int) -> str:
@@ -156,7 +156,7 @@ def _value(text: str, status: str | None = None, language: str = "ru") -> Text:
     text = i18n.tr_text(language, text)
     if status is None:
         return Text(text)
-    return Text(f"{brand.STATUS_ICONS[status]} {text}", style=_color(status))
+    return Text(f"{icons.STATUS_ICONS[status]} {text}", style=_color(status))
 
 
 def _dashboard_data(snapshot: HomeSnapshot) -> DashboardData:
@@ -200,15 +200,19 @@ def _snapshot_facts(
     def plain(text: str) -> Text:
         return _value(text, language=language)
 
-    missing = Text("—")
+    def tinted(text: str, colour: str, bold: bool = False) -> Text:
+        value = _value(text, language=language)
+        value.stylize(f"{'bold ' if bold else ''}{brand.PALETTE[colour]}")
+        return value
+
+    missing = Text("—", style=brand.PALETTE["muted"])
     if banner.installed_version or banner.installed_commit:
-        installed = plain(
-            " · ".join(
-                part
-                for part in (banner.installed_version, banner.installed_commit)
-                if part
-            )
+        installed = Text(
+            banner.installed_version or "", style=f"bold {brand.PALETTE['foreground']}"
         )
+        if banner.installed_version and banner.installed_commit:
+            installed.append(" · ", style=brand.PALETTE["muted"])
+        installed.append(banner.installed_commit or "", style=brand.PALETTE["muted"])
     elif data.drift_state == "missing":
         installed = plain("не установлен")
     else:
@@ -216,30 +220,32 @@ def _snapshot_facts(
     drift_status = {"clean": "ok", "drift": "warn"}.get(data.drift_state, "skipped")
     drift_labels = DRIFT_LABELS if language == "ru" else DRIFT_LABELS_EN
     drift = Text(
-        f"{brand.STATUS_ICONS[drift_status]} "
+        f"{icons.STATUS_ICONS[drift_status]} "
         f"{drift_labels.get(data.drift_state, i18n.tr_text(language, data.drift_state))}",
         style=_color(drift_status),
     )
     batches = (
-        plain(str(data.active_batches))
+        tinted(str(data.active_batches), "success", bold=True)
+        if data.active_batches
+        else tinted(str(data.active_batches), "muted")
         if data.active_batches is not None
-        else plain("не подключено")
+        else tinted("не подключено", "muted")
     )
     tier = snapshot.repo_map.tier
     head_map = snapshot.repo_map.head_map
     if head_map is None:
         repo_map = [
-            ("Уровень", plain(tier) if tier else plain("не установлен")),
+            ("Уровень", tinted(tier, "primary") if tier else tinted("не установлен", "muted")),
             ("Актуальность", _value("нет карты для HEAD", "skipped", language)),
         ]
     else:
         repo_map = [
-            ("Уровень", plain(tier or "")),
+            ("Уровень", tinted(tier or "", "primary")),
             ("Актуальность", _value("карта для HEAD", "ok", language)),
-            ("Файлов", plain(str(head_map.files))),
-            ("Связей", plain(str(head_map.edges))),
-            ("Источник", plain(head_map.origin)),
-            ("Объём", plain(f"≈{_tokens(language, head_map.estimated_tokens)}")),
+            ("Файлов", tinted(str(head_map.files), "foreground", bold=True)),
+            ("Связей", tinted(str(head_map.edges), "foreground", bold=True)),
+            ("Источник", tinted(head_map.origin, "muted")),
+            ("Объём", tinted(f"≈{_tokens(language, head_map.estimated_tokens)}", "muted")),
         ]
     memory = snapshot.memory.policy
     check = data.memory_index
@@ -271,7 +277,7 @@ def _snapshot_facts(
             ("Индекс", indexed),
             (
                 "Источники",
-                plain(" · ".join(memory.source_types))
+                tinted(" · ".join(memory.source_types), "primary")
                 if memory.source_types
                 else missing,
             ),
@@ -281,7 +287,15 @@ def _snapshot_facts(
         (
             "card-project",
             "Контекст проекта",
-            [("Проект", plain(project)), ("Ветка", Text(banner.branch or "—"))],
+            [
+                ("Проект", tinted(project, "foreground", bold=True)),
+                (
+                    "Ветка",
+                    Text(banner.branch, style=brand.PALETTE["primary"])
+                    if banner.branch
+                    else missing,
+                ),
+            ],
         ),
         (
             "card-harness",
@@ -290,7 +304,7 @@ def _snapshot_facts(
                 ("Установлен", installed),
                 (
                     "Модули",
-                    plain(" · ".join(banner.capabilities))
+                    tinted(" · ".join(banner.capabilities), "primary")
                     if banner.capabilities
                     else missing,
                 ),
@@ -301,6 +315,33 @@ def _snapshot_facts(
         ("card-repo-map", "Repo Map", repo_map),
         ("card-memory", "Память проекта", memory_rows),
     ]
+
+
+# The glyph in front of each context group's title on the home screen.
+CONTEXT_ICONS = icons.CONTEXT_ICONS
+
+
+def context_title(card_id: str, title: str, language: str) -> Text:
+    """A context group's title: its glyph in the accent colour, then the title in bold."""
+    head = Text(
+        f"{CONTEXT_ICONS.get(card_id, icons.CONTEXT_FALLBACK)} ",
+        style=f"bold {brand.PALETTE['primary']}",
+    )
+    head.append(i18n.tr(language, title), style=f"bold {brand.PALETTE['foreground']}")
+    return head
+
+
+def context_facts(rows: list[tuple[str, Text]], language: str) -> Table:
+    """A context group's facts: muted labels as wide as the group's longest one, coloured values
+    that wrap at their separators (`-`, `/`, `.`), never inside a word."""
+    labels = [i18n.fact_label(language, label) for label, _ in rows]
+    label_width = max((cell_len(label) for label in labels), default=0)
+    table = Table.grid(padding=(0, 1), expand=True)
+    table.add_column(width=label_width, no_wrap=True, style=brand.PALETTE["muted"])
+    table.add_column(ratio=1, overflow="fold")
+    for label, (_, value) in zip(labels, rows):
+        table.add_row(label, SeparatorWrap(value))
+    return table
 
 
 def _render_mark() -> Text:
@@ -354,19 +395,23 @@ class DashboardScreen(ConsoleShell):
     DashboardScreen #dashboard-overview { width: 1fr; height: 1fr; padding: 0 2; overflow-y: auto; }
     DashboardScreen #dashboard-title { height: 1; text-style: bold; }
     DashboardScreen #dashboard-subtitle { height: 1; color: $text-muted; margin-bottom: 1; }
+    DashboardScreen.-wide #dashboard-subtitle, DashboardScreen.-spacious #dashboard-subtitle { margin-bottom: 0; }
     DashboardScreen #dashboard-attention-card { margin-bottom: 1; }
+    DashboardScreen.-wide #dashboard-attention-card, DashboardScreen.-spacious #dashboard-attention-card { margin-bottom: 0; }
     DashboardScreen #dashboard-attention, DashboardScreen #dashboard-problems { height: auto; }
     DashboardScreen .problem-row { height: auto; border-bottom: solid $border-subtle; }
     DashboardScreen .problem-row:last-of-type { border-bottom: none; }
-    DashboardScreen .problem-symbol { width: 2; height: 1; }
+    DashboardScreen .problem-symbol { width: 2; height: 1; margin-right: 1; }
     DashboardScreen .problem-text { width: 1fr; height: auto; }
     DashboardScreen .problem-title { height: 1; color: $foreground; text-wrap: nowrap; text-overflow: ellipsis; }
     DashboardScreen .problem-caption { height: 1; color: $text-muted; text-wrap: nowrap; text-overflow: ellipsis; }
     DashboardScreen .problem-row JumpLink { margin-left: 2; }
     DashboardScreen #dashboard-check { height: 1; margin-bottom: 1; }
+    DashboardScreen.-wide #dashboard-check, DashboardScreen.-spacious #dashboard-check { margin-bottom: 0; }
     DashboardScreen #dashboard-check-label { width: auto; padding-right: 2; color: $text-muted; }
     DashboardScreen #dashboard-attention-mode { width: 1fr; color: $text-muted; padding-left: 2; }
     DashboardScreen #home-sessions-card { margin-bottom: 1; }
+    DashboardScreen.-wide #home-sessions-card, DashboardScreen.-spacious #home-sessions-card { margin-bottom: 0; }
     DashboardScreen #home-sessions { height: auto; border: none; }
     DashboardScreen #home-sessions > ListItem { height: 1; padding: 0 1 0 0; border-left: solid transparent; }
     DashboardScreen #home-sessions > ListItem.-highlight { background: $row-highlight; text-style: none; color: $foreground; border-left: solid $selection-edge; }
@@ -390,6 +435,8 @@ class DashboardScreen(ConsoleShell):
     # The shell's rules plus this screen's own, which must outrank the app's generic widget rules.
     CSS = SHELL_CSS + brand.shell_css("""
     .shell #dashboard-context { padding: 0 1; }
+    .shell .context-group { height: auto; margin-bottom: 1; }
+    .shell .context-group-title { height: 1; margin-bottom: 0; }
     .shell.-spacious #dashboard-context { width: 42; }
     .shell.-fold-context #dashboard-context { padding: 0 2; border-top: none; background: $background; scrollbar-gutter: auto; }
     .shell.-fold-context #dashboard-body > .shell-content { min-height: 0; height: auto; }
@@ -577,11 +624,17 @@ class DashboardScreen(ConsoleShell):
                         compact=True,
                     )
                 yield Static(
-                    self._attention_mode(data, online=False, language=self._language),
+                    self._attention_mode(data, language=self._language),
                     id="dashboard-attention-mode",
                     classes="no-i18n",
                 )
-            stages = self._home_sessions(interactive=True)
+            stages = (
+                []
+                if self._snapshot is not None
+                and self._snapshot.store is not None
+                and self._snapshot.store.reason
+                else self._home_sessions(interactive=True)
+            )
             with SectionCard(
                 title="Рабочие сессии", note=str(len(stages)), id="home-sessions-card"
             ):
@@ -626,14 +679,26 @@ class DashboardScreen(ConsoleShell):
 
     def compose_context(self) -> ComposeResult:
         for card_id, title, rows in self._facts():
-            yield SectionCard(
-                Static(
-                    fact_table(rows, self._language),
+            with Vertical(id=card_id, classes="context-group"):
+                yield Static(
+                    context_title(card_id, title, self._language),
+                    id=f"{card_id}-title",
+                    classes="context-group-title no-i18n",
+                )
+                yield Static(
+                    context_facts(rows, self._language),
                     id=f"{card_id}-facts",
                     classes="no-i18n",
-                ),
-                title=title,
-                id=card_id,
+                )
+
+    def _paint_context(self) -> None:
+        """The context groups in the current language."""
+        for card_id, title, rows in self._facts():
+            self.query_one(f"#{card_id}-title", Static).update(
+                context_title(card_id, title, self._language)
+            )
+            self.query_one(f"#{card_id}-facts", Static).update(
+                context_facts(rows, self._language)
             )
 
     def _facts(self) -> list[tuple[str, str, list[tuple[str, Text]]]]:
@@ -681,7 +746,7 @@ class DashboardScreen(ConsoleShell):
         if data.problems:
             return ""
         return (
-            f"[{_color('ok')}]{brand.STATUS_ICONS['ok']} "
+            f"[{_color('ok')}]{icons.STATUS_ICONS['ok']} "
             f"{i18n.tr_text(self._language, 'Проблем не найдено')}[/]"
         )
 
@@ -690,17 +755,13 @@ class DashboardScreen(ConsoleShell):
         to the section that deals with it. Only the symbol carries the status colour."""
         rows: list[Widget] = []
         for status, check_id, message in data.problems:
-            route = check_route(check_id)
-            title = Static(
-                i18n.tr(self._language, route.title),
-                classes="problem-title no-i18n",
-                markup=False,
-            )
-            title.tooltip = (
-                f"{i18n.tr(self._language, route.title)}\n{check_id} · {message}"
-            )
+            route = check_route(check_id, self._language)
+            title = Static(route.title, classes="problem-title no-i18n", markup=False)
+            title.tooltip = f"{route.title}\n{check_id} · {message}"
+            # A check without a readable title is titled by its id; its caption then names only
+            # what happened, not the id a second time.
             caption = Static(
-                f"{check_id} · {message}",
+                message if route.title == check_id else f"{check_id} · {message}",
                 classes="problem-caption no-i18n",
                 markup=False,
             )
@@ -708,7 +769,7 @@ class DashboardScreen(ConsoleShell):
             rows.append(
                 Horizontal(
                     Static(
-                        Text(brand.STATUS_ICONS.get(status, "·"), style=_color(status)),
+                        Text(icons.STATUS_ICONS.get(status, "·"), style=_color(status)),
                         classes="problem-symbol no-i18n",
                     ),
                     Vertical(
@@ -751,17 +812,14 @@ class DashboardScreen(ConsoleShell):
         language = self._language
         self._render_attention(data)
         self.query_one("#dashboard-attention-mode", Static).update(
-            self._attention_mode(data, online=self._online, language=language)
+            self._attention_mode(data, language=language)
         )
         self.query_one("#dashboard-offline", Button).set_class(not self._online, "-on")
         self.query_one("#dashboard-online", Button).set_class(self._online, "-on")
         self.query_one("#dashboard-details", Fold).set_summary(
             self._checks_summary(data)
         )
-        for card_id, _title, rows in self._facts():
-            self.query_one(f"#{card_id}-facts", Static).update(
-                fact_table(rows, language)
-            )
+        self._paint_context()
         self.query_one("#dashboard-summary", Static).update(
             _render_summary(data, online=self._online, language=language)
         )
@@ -784,10 +842,10 @@ class DashboardScreen(ConsoleShell):
             button.refresh(layout=True)
 
     @staticmethod
-    def _attention_mode(
-        data: DashboardData, *, online: bool, language: str = "ru"
-    ) -> str:
-        return i18n.tr_text(language, f"{_mode(online)} · пропущено {data.skipped}")
+    def _attention_mode(data: DashboardData, *, language: str = "ru") -> str:
+        """The checks the report skipped; the mode itself is on the Офлайн/Онлайн switch beside."""
+        word = "skipped" if language == "en" else "пропущено"
+        return f"{icons.STATUS_ICONS['skipped']} {word}: {data.skipped}"
 
     def _publish_counts(self, data: DashboardData) -> None:
         """Share the counters with the top bar and the menu badges with every shell screen."""
@@ -881,7 +939,7 @@ class DashboardScreen(ConsoleShell):
         running = (
             "онлайн-проверки выполняются…" if online else "офлайн-проверки выполняются…"
         )
-        attention.update(f"⏳ {running}")
+        attention.update(icons.loading(running))
         attention.display = True
         summary.update(running)
 

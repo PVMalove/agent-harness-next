@@ -22,20 +22,28 @@ from harness.repo_map.change_impact import (
     ImpactSet,
     TicketDiffSelection,
     compute_change_impact,
+    expected_diff_selection,
     ticket_diff_selection,
 )
 from harness.repo_map.git_source import blob_contents
 from harness.repo_map.policy import RepoMapPolicy
 
 from . import operational_guards
-from .core.constants import VERIFICATION_PLAN_SELECTIONS, VERIFICATION_STAGE_KINDS
+from .core.constants import (
+    EXPECTED_FILES_SOURCE,
+    VERIFICATION_PLAN_SELECTIONS,
+    VERIFICATION_STAGE_KINDS,
+)
 from .core.utils import CoordinatorError, JsonObject
 
-# Роли, для которых строится план: первый developer без diff плана не получает.
+# Роли, для которых строится план. Первый developer получает план только по ожидаемому diff
+# (``build_expected_plan``), остальные — по diff кандидата.
 PLAN_ROLES = ("developer", "code-review", "qa")
 PYTEST_KIND = "pytest"
 IMPACT_NOT_COVERED = "impact_not_covered"
 TICKET_DIFF = "ticket-diff"
+# Why a ticket-diff pytest stage has no command; the id QA evidence records for it as well.
+NO_TESTS_IN_DIFF = "no-tests-in-diff"
 # The target prefix under which the ticket-diff selection applies (ADR 0023, section 7).
 TICKET_DIFF_REF_PREFIX = "integration/"
 # Таймаут одной git-команды при чтении манифестов окружения.
@@ -322,13 +330,12 @@ def build_plan(
     fingerprint = environment_fingerprint(repo, candidate, runtime_images)
     if ticket_diff_active(policy, integration_ref):
         return _ticket_diff_plan(
-            repo,
             policy,
             impact,
+            ticket_diff_selection(repo, base, candidate, policy=repo_map_policy),
             base=base,
             candidate=candidate,
             role=role,
-            repo_map_policy=repo_map_policy,
             fingerprint=fingerprint,
         )
     widen = role == "qa" or bool(impact.unknown)
@@ -345,19 +352,59 @@ def build_plan(
     }
 
 
-def _ticket_diff_plan(
+def build_expected_plan(
     repo: Path,
     policy: Mapping[str, object],
+    *,
+    base: str,
+    snapshot: str,
+    expected_files: Sequence[str],
+    repo_map_policy: RepoMapPolicy | None = None,
+    runtime_images: Mapping[str, str | None] | None = None,
+) -> JsonObject:
+    """The ticket-diff plan of a first developer: the tests of the diff it is expected to make.
+
+    A first developer has no diff of its own yet, so the plan selects from ``base..snapshot`` plus
+    the batch's ``expected_files`` (issue #1292), with the same rules as a ticket-diff plan
+    (ADR 0023, section 7). The caller builds it only when ``ticket_diff_active`` holds.
+    """
+    threshold = cast(int, policy["max_related_tests"])
+    impact = compute_change_impact(
+        repo, base, snapshot, policy=repo_map_policy, max_related_tests=threshold
+    )
+    selection = expected_diff_selection(
+        repo, base, snapshot, expected_files, policy=repo_map_policy
+    )
+    plan = _ticket_diff_plan(
+        policy,
+        impact,
+        selection,
+        base=base,
+        candidate=snapshot,
+        role="developer",
+        fingerprint=environment_fingerprint(repo, snapshot, runtime_images),
+    )
+    plan["diff_source"] = {
+        "kind": EXPECTED_FILES_SOURCE,
+        "expected_files": sorted(set(expected_files)),
+    }
+    return plan
+
+
+def _ticket_diff_plan(
+    policy: Mapping[str, object],
     impact: ImpactSet,
+    selection: TicketDiffSelection,
     *,
     base: str,
     candidate: str,
     role: str,
-    repo_map_policy: RepoMapPolicy | None,
     fingerprint: str,
 ) -> JsonObject:
-    """The plan of the ticket's own diff: the template stages, then one cargo stage per target."""
-    selection = ticket_diff_selection(repo, base, candidate, policy=repo_map_policy)
+    """The plan of the ticket's own diff: the template stages, then one cargo stage per target.
+
+    A pytest stage that selects no test gets no command; ``not_run_stages`` names it with the
+    reason ``no-tests-in-diff``, so the brief says why the tests do not run."""
     templates = cast(Sequence[Mapping[str, object]], policy["stages"])
     stages: list[JsonObject] = [
         _ticket_diff_stage(template, selection, fingerprint=fingerprint)
@@ -374,7 +421,7 @@ def _ticket_diff_plan(
         _cargo_stage(target, timeout_seconds=pytest_timeout, fingerprint=fingerprint)
         for target in selection.cargo_targets
     ]
-    return {
+    plan: JsonObject = {
         "base_sha": base,
         "candidate_sha": candidate,
         "role": role,
@@ -389,3 +436,11 @@ def _ticket_diff_plan(
         },
         "stages": stages,
     }
+    not_run = [
+        {"stage_id": stage["stage_id"], "reason": NO_TESTS_IN_DIFF}
+        for stage in stages
+        if stage["kind"] == PYTEST_KIND and not stage["nodeids"]
+    ]
+    if not_run:
+        plan["not_run_stages"] = not_run
+    return plan

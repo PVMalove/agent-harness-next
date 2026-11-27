@@ -124,6 +124,7 @@ def test_dashboard_summary_shows_memory_health_without_interpreting_markup(
 
     from rich.text import Text
 
+    from harness.console.tui import icons
     from harness.console.tui.screens.dashboard import _render_summary
     from harness.health.model import Status
 
@@ -137,7 +138,7 @@ def test_dashboard_summary_shows_memory_health_without_interpreting_markup(
         ),
     )
     assert (
-        f"memory: {brand.STATUS_ICONS[status]} {status} — индекс [test]"
+        f"memory: {icons.STATUS_ICONS[status]} {status} — индекс [test]"
         in Text.from_markup(_render_summary(data)).plain
     )
 
@@ -164,9 +165,11 @@ def test_elapsed_time_and_check_counts_read_naturally() -> None:
     from harness.console.tui.session_card import elapsed_text
 
     now = datetime(2026, 10, 17, 14, 40, tzinfo=UTC)
-    assert elapsed_text(now - timedelta(seconds=30), now, "ru") == "0 мин"
+    # The largest unit of the console's one duration wording, as the web console cuts an age.
+    assert elapsed_text(now - timedelta(seconds=30), now, "ru") == "30 с"
     assert elapsed_text(now - timedelta(minutes=14), now, "en") == "14 min"
     assert elapsed_text(now - timedelta(hours=3, minutes=5), now, "ru") == "3 ч"
+    assert elapsed_text(now - timedelta(days=2, hours=1), now, "ru") == "2 дн"
     assert elapsed_text(now - timedelta(days=2, hours=1), now, "en") == "2 d"
     assert elapsed_text(None, now, "ru") == ""
     assert elapsed_text(now + timedelta(minutes=1), now, "ru") == ""
@@ -200,29 +203,31 @@ def test_report_statuses_and_counters_are_shown_as_symbol_plus_text() -> None:
     report = _mixed_report()
     before = render_report(report)
     shown = _styled_report(report).plain.split("\n")
-    assert shown[0] == "Итого: ✔ ok=1 ⚠ warn=1 ✖ fail=1 ○ skipped=1"
-    assert "✔ [OK] files.lock: lock ok" in shown
-    assert "⚠ [WARN] env.node: node old" in shown
-    assert "✖ [FAIL] env.uv: uv missing" in shown
+    assert shown[0] == "Итого: ● ok=1 ▲ warn=1 ■ fail=1 ○ skipped=1"
+    assert "● [OK] files.lock: lock ok" in shown
+    assert "▲ [WARN] env.node: node old" in shown
+    assert "■ [FAIL] env.uv: uv missing" in shown
     assert "○ - net.pypi: offline" in shown
     # Only the display changes: the report text and the export keep the plain markers.
     assert render_report(report) == before
-    assert "✔" not in before and "✖" not in before
+    assert "●" not in before and "■" not in before
     english = _styled_report(report, "en").plain.split("\n")
-    assert english[0].startswith("Total: ✔ ok=1") and "○ skipped=1" in english[0]
+    assert english[0].startswith("Total: ● ok=1") and "○ skipped=1" in english[0]
 
 
 def test_a_zero_counter_keeps_its_symbol_and_is_muted() -> None:
     from harness.console.tui.screens.diagnostics import _styled_report
 
     shown = _styled_report(_fake_report())
-    assert shown.plain.split("\n")[0] == "Итого: ✔ ok=1 ⚠ warn=0 ✖ fail=1 ○ skipped=0"
+    assert (
+        shown.plain.split("\n")[0] == "Итого: ● ok=1 ▲ warn=0 ■ fail=1 ○ skipped=0"
+    )
     muted = brand.PALETTE["muted"]
     styled = {
         shown.plain[span.start : span.end]: str(span.style) for span in shown.spans
     }
-    assert styled["⚠ "] == f"bold {muted}"
-    assert styled["✖ "] == f"bold {brand.STATUS_COLORS['fail']}"
+    assert styled["▲ "] == f"bold {muted}"
+    assert styled["■ "] == f"bold {brand.STATUS_COLORS['fail']}"
 
 
 def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> None:
@@ -249,9 +254,9 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
         ),
     )
     plain = Text.from_markup(_render_summary(data)).plain.split("\n")
-    assert plain[0] == "health (offline): ✔ ok=5 ⚠ warn=1 ✖ fail=1 ○ skipped=2"
-    assert "  ✖ fail env.git — git missing" in plain
-    assert "  ⚠ warn repo_map.tier — minimal" in plain
+    assert plain[0] == "health (offline): ● ok=5 ▲ warn=1 ■ fail=1 ○ skipped=2"
+    assert "  ■ fail env.git — git missing" in plain
+    assert "  ▲ warn repo_map.tier — minimal" in plain
     # A status is also never a colour alone on the cards.
     banner = brand.BannerInfo(
         version="1.0.0", capabilities=(), repo="~/app", branch=None
@@ -262,8 +267,8 @@ def test_dashboard_summary_shows_counters_and_problems_as_symbol_plus_text() -> 
             data, build_home_snapshot(data, HomeContext()), banner, "app"
         )
     }
-    assert cards["card-harness"]["Дрейф"].plain == "✔ нет"
-    assert cards["card-memory"]["Состояние"].plain == "✔ индекс готов"
+    assert cards["card-harness"]["Дрейф"].plain == "● нет"
+    assert cards["card-memory"]["Состояние"].plain == "● индекс готов"
 
 
 def test_a_long_path_is_cut_from_the_left_at_a_separator() -> None:
@@ -366,14 +371,14 @@ def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> 
     if language == "ru":
         assert shown["Repo Map"] == [
             ("Уровень", "full"),
-            ("Актуальность", "✔ карта для HEAD"),
+            ("Актуальность", "● карта для HEAD"),
             ("Файлов", "412"),
             ("Связей", "1860"),
             ("Источник", "кэш"),
             ("Объём", "≈38 400 токенов"),
         ]
         assert shown["Память проекта"] == [
-            ("Состояние", "✔ индекс валиден (FTS5)"),
+            ("Состояние", "● индекс валиден (FTS5)"),
             ("Индекс", "18 документов"),
             ("Источники", "adr · glossary"),
             ("Лимит поиска", "5 · 1 000 токенов"),
@@ -381,12 +386,12 @@ def test_home_context_cards_show_only_facts_the_console_reads(language: str) -> 
         assert shown["Harness"] == [
             ("Установлен", "1.4.6 · 85abd57a"),
             ("Модули", "backend-orchestration"),
-            ("Дрейф", "⚠ есть"),
+            ("Дрейф", "▲ есть"),
         ]
     else:
         assert [value for _label, value in shown["Repo Map"]] == [
             "full",
-            "✔ map for HEAD",
+            "● map for HEAD",
             "412",
             "1860",
             "cache",
@@ -428,3 +433,62 @@ def test_the_diagnostics_screen_is_a_console_server_client() -> None:
     assert parameters["client"].default is inspect.Parameter.empty
     assert parameters["client"].kind is inspect.Parameter.KEYWORD_ONLY
     assert not {"collect_diagnostics", "apply_local_fixes"} & set(parameters)
+
+
+def test_home_context_groups_carry_a_glyph_and_wrap_a_branch_at_its_separators() -> (
+    None
+):
+    from rich.console import Console
+    from rich.text import Text
+
+    from harness.console.tui.screens.dashboard import context_facts, context_title
+
+    assert context_title("card-harness", "Harness", "ru").plain == "≡ Harness"
+    assert context_title("card-project", "Контекст проекта", "en").plain.startswith(
+        "⌂ "
+    )
+
+    branch = "feature/issue-1290-orkestraciya-proverki-i-instrukcii"
+    console = Console(width=34, record=True, color_system=None)
+    console.print(context_facts([("Ветка", Text(branch))], "ru"))
+    lines = [line.rstrip() for line in console.export_text().splitlines()]
+    assert lines[0].startswith("Ветка ")
+    # Every line ends at a separator or the end: no word is cut in two.
+    assert "".join(line[6:] for line in lines) == branch
+    assert all(line[6:].endswith(("-", "/")) for line in lines[:-1])
+
+
+def test_diagnostics_runs_the_checks_with_the_keys_of_home() -> None:
+    from textual.binding import Binding
+
+    from harness.console.tui.screens.dashboard import DashboardScreen
+    from harness.console.tui.screens.diagnostics import DiagnosticsScreen
+
+    def keys(screen: type) -> dict[str, str]:
+        return {
+            binding.key: binding.description
+            for binding in screen.__dict__["BINDINGS"]
+            if isinstance(binding, Binding) and binding.key in ("r", "o")
+        }
+
+    assert (
+        keys(DiagnosticsScreen)
+        == keys(DashboardScreen)
+        == {"r": "Офлайн", "o": "Онлайн"}
+    )
+    assert callable(DiagnosticsScreen.action_checks_offline)
+    assert callable(DiagnosticsScreen.action_checks_online)
+
+
+def test_home_names_only_the_skipped_checks_beside_the_mode_switch() -> None:
+    from dataclasses import replace
+
+    from harness.console.tui import icons
+    from harness.console.tui.screens.dashboard import DashboardScreen
+
+    data = replace(_fake_dashboard_data(), skipped=11)
+    skipped = icons.STATUS_ICONS["skipped"]
+    assert DashboardScreen._attention_mode(data) == f"{skipped} пропущено: 11"
+    assert (
+        DashboardScreen._attention_mode(data, language="en") == f"{skipped} skipped: 11"
+    )

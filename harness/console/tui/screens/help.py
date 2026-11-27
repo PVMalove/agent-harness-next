@@ -8,11 +8,12 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import ListItem, ListView, Markdown, Static
 
 from ...kernel import brand, i18n
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from .commands import call_from_worker
 
-READING = "Читаю справку…"
+READING = icons.loading("Читаю справку…")
 
 
 def guide_parts(
@@ -27,7 +28,9 @@ def guide_parts(
         guide = client.help(language)
     except ConsoleClientError as exc:
         return f"{i18n.tr(language, 'Справка недоступна:')} {exc}", []
-    return guide.intro, list(guide.sections)
+    return icons.restyle_text(guide.intro), [
+        (title, icons.restyle_text(body)) for title, body in guide.sections
+    ]
 
 
 class HelpScreen(ConsoleShell):
@@ -42,6 +45,8 @@ class HelpScreen(ConsoleShell):
     HelpScreen #help-scroll { width: 1fr; height: 1fr; padding: 0 2; }
     HelpScreen Markdown { padding: 0; }
     HelpScreen MarkdownH1 { margin: 0 0 1 0; padding: 0; border: none; content-align: left middle; }
+    /* Wide: a heading sits on the line after the paragraph above it (Textual gives headers 2 0 1 0). */
+    HelpScreen.-wide MarkdownH1, HelpScreen.-spacious MarkdownH1, HelpScreen.-wide MarkdownH2, HelpScreen.-spacious MarkdownH2 { margin: 0; }
     HelpScreen.shell .help-section { border: none; margin: 0; padding: 0; background: transparent; }
     HelpScreen.shell .help-section > Contents { padding: 0; }
     HelpScreen.shell .help-section > CollapsibleTitle { display: none; }
@@ -69,7 +74,7 @@ class HelpScreen(ConsoleShell):
             with SectionCard(title="Содержание", id="help-toc-card"):
                 yield ListView(id="help-toc")
             with VerticalScroll(id="help-scroll"):
-                yield Markdown(i18n.tr(language, READING), id="help-text")
+                yield Markdown(icons.tr(language, READING), id="help-text")
 
     def on_mount(self) -> None:
         self._update_source()
@@ -136,7 +141,10 @@ class HelpScreen(ConsoleShell):
             label = i18n.section_label(language, source)
             text += f" · {i18n.tr(language, 'Вы пришли с экрана')}: {label}"
         if self._navigation_blocked:
-            text += " · ⚠ " + i18n.tr(language, "Сначала завершите или отмените диалог")
+            text += (
+                f" · {icons.STATUS_ICONS['warn']} "
+                + i18n.tr(language, "Сначала завершите или отмените диалог")
+            )
         self.query_one("#help-source", Static).update(text)
 
     def _adapt_sections(self, width: int) -> None:

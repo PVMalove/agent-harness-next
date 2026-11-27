@@ -36,11 +36,12 @@ from ..shell import (
     check_route,
 )
 from ..logtext import colorize_log
-from ...kernel import brand, i18n
+from ...kernel import brand, check_rationale, i18n
 from ...kernel import data as console_data
 from ....health.model import CheckResult, Report
 from ....health.render import GROUP_LABELS_RU
 from ...kernel.export import MarkdownDocument, MarkdownSection
+from .. import icons
 from ..client import ScreenClient
 from ..server_api import apply_health_fixes
 from .commands import call_from_worker, short_repo
@@ -51,7 +52,7 @@ _APPLY_LABEL = "Исправить"
 _CONFIRM_LABEL = "Подтвердить фиксы"
 _MANUAL_NOTE = "Команды «Как исправить» консоль не выполняет — запустите их вручную."
 _SUBTITLE = "Отчёт harness health. " + _MANUAL_NOTE
-_RUNNING = "health выполняется…"
+_RUNNING = icons.loading("health выполняется…")
 
 
 def _now() -> datetime:
@@ -108,7 +109,7 @@ _TOTALS = re.compile(r"(Итого|Total): ok=\d+ warn=\d+ fail=\d+ skipped=\d+"
 def _icon(status: str, *, muted: bool = False) -> Text:
     """The status symbol; a zero counter is muted, like its number."""
     color = brand.PALETTE["muted"] if muted else brand.STATUS_COLORS[status]
-    return Text(f"{brand.STATUS_ICONS[status]} ", style=f"bold {color}")
+    return Text(f"{icons.STATUS_ICONS[status]} ", style=f"bold {color}")
 
 
 def _summary_line(line: str) -> Text:
@@ -185,17 +186,17 @@ class DiagnosticsScreen(ConsoleShell):
     CRUMBS = "Главная › Диагностика"
     SECTION = "Diagnostics"
     NARROW_FOOTER_KEYS = ("escape", "e", "f2")
-    AUTO_FOCUS = "#diagnostics-scroll"
+    AUTO_FOCUS = "#check-list"
     CSS = SHELL_CSS + brand.shell_css("""
     DiagnosticsScreen #diagnostics-scroll { height: 1fr; padding: 0 2; }
     DiagnosticsScreen #diagnostics-heading { height: 1; text-style: bold; }
     DiagnosticsScreen #diagnostics-manual { height: auto; color: $text-muted; }
     DiagnosticsScreen #diagnostics-overview { height: auto; margin-bottom: 1; }
+    DiagnosticsScreen.-wide #diagnostics-overview, DiagnosticsScreen.-spacious #diagnostics-overview { margin-bottom: 0; }
     DiagnosticsScreen #diagnostics-summary { height: 1; }
     DiagnosticsScreen #diagnostics-actions { height: 1; }
     DiagnosticsScreen #diagnostics-actions Button { width: auto; min-width: 10; height: 1; margin-right: 1; }
     DiagnosticsScreen #diagnostics-actions #apply-fixes { width: 21; }
-    DiagnosticsScreen #diagnostics-export-hint { width: auto; text-align: right; }
     DiagnosticsScreen .action-cli { height: auto; color: $text-muted; }
     DiagnosticsScreen #diagnostics-report { height: auto; }
     DiagnosticsScreen #diagnostics-confirmation { height: auto; color: $text-muted; }
@@ -203,6 +204,7 @@ class DiagnosticsScreen(ConsoleShell):
     DiagnosticsScreen.-wide #diagnostics-pair, DiagnosticsScreen.-spacious #diagnostics-pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     DiagnosticsScreen #diagnostics-pair > .section-card { height: 100%; }
     DiagnosticsScreen #diagnostics-filters { height: 1; margin-bottom: 1; }
+    DiagnosticsScreen.-wide #diagnostics-filters, DiagnosticsScreen.-spacious #diagnostics-filters { margin-bottom: 0; }
     DiagnosticsScreen #diagnostics-filters Button { height: 1; min-width: 7; width: auto; margin-right: 1; }
     DiagnosticsScreen #check-list { height: auto; max-height: 22; border: none; padding: 0; background: transparent; }
     DiagnosticsScreen #check-list > ListItem { height: auto; padding: 0 1; border-left: solid transparent; border-bottom: solid $border-subtle; }
@@ -215,7 +217,12 @@ class DiagnosticsScreen(ConsoleShell):
     DiagnosticsScreen.-narrow .context-strip { display: none; }
     """)
 
-    BINDINGS = [Binding(EXPORT_BINDING_KEY, "export", "Экспорт")]
+    # The same keys as Home: `r` runs the offline checks, `o` the online ones.
+    BINDINGS = [
+        Binding("r", "checks_offline", "Офлайн"),
+        Binding("o", "checks_online", "Онлайн"),
+        Binding(EXPORT_BINDING_KEY, "export", "Экспорт"),
+    ]
 
     def __init__(
         self,
@@ -243,7 +250,6 @@ class DiagnosticsScreen(ConsoleShell):
 
     def compose_strip(self) -> ComposeResult:
         yield WrappedValue(self._strip_text())
-        yield Static("Экспорт — клавиша e", id="diagnostics-export-hint")
 
     def compose_content(self) -> ComposeResult:
         """Summary, actions, attention cards and all checks in report order."""
@@ -271,9 +277,9 @@ class DiagnosticsScreen(ConsoleShell):
                     with Horizontal(id="diagnostics-filters"):
                         for status, label in (
                             ("all", "Все"),
-                            ("fail", "✖"),
-                            ("warn", "⚠"),
-                            ("skipped", "○"),
+                            ("fail", icons.STATUS_ICONS["fail"]),
+                            ("warn", icons.STATUS_ICONS["warn"]),
+                            ("skipped", icons.STATUS_ICONS["skipped"]),
                         ):
                             yield Button(
                                 label,
@@ -329,13 +335,9 @@ class DiagnosticsScreen(ConsoleShell):
                 self.notify(i18n.tr(self._language, "Команда скопирована"))
             return
         if event.button.id == "offline-checks":
-            self._reset_apply()
-            self._run_health(lambda: self._client.diagnostics(force=True))
+            self.action_checks_offline()
         elif event.button.id == "online-checks":
-            self._reset_apply()
-            self._run_health(
-                lambda: self._client.diagnostics(online=True, force=True), online=True
-            )
+            self.action_checks_online()
         elif event.button.id == "apply-fixes":
             self._on_apply_fixes_pressed()
         elif event.button.id == "export":
@@ -354,6 +356,18 @@ class DiagnosticsScreen(ConsoleShell):
     async def action_back(self) -> None:
         self._reset_apply()
         await ConsoleShell.action_back(self)
+
+    def action_checks_offline(self) -> None:
+        """Re-run the offline checks, as the «Офлайн» button and Home's `r` do."""
+        self._reset_apply()
+        self._run_health(lambda: self._client.diagnostics(force=True))
+
+    def action_checks_online(self) -> None:
+        """Run the online checks, as the «Онлайн» button and Home's `o` do."""
+        self._reset_apply()
+        self._run_health(
+            lambda: self._client.diagnostics(online=True, force=True), online=True
+        )
 
     def action_export(self) -> None:
         """Выполняет экспорт текущего отчёта health в файл Markdown."""
@@ -490,7 +504,7 @@ class DiagnosticsScreen(ConsoleShell):
 
     def _render_state(self) -> None:
         def tr(text: str) -> str:
-            return i18n.tr(self._language, text)
+            return icons.tr(self._language, text)
 
         text = Text()
         if self._state == "running":
@@ -566,7 +580,7 @@ class DiagnosticsScreen(ConsoleShell):
         return (
             f"$ {short()} · --online {tr('для «Онлайн»')} · "
             f"{' '.join(fix)} {tr('для «Исправить» (два шага)')} · "
-            f"{tr('○ не проверено ≠ успешно')}"
+            f"{icons.tr(language, '○ не проверено ≠ успешно')}"
         )
 
     def _render_overview(self) -> None:
@@ -616,7 +630,7 @@ class DiagnosticsScreen(ConsoleShell):
             label = (
                 tr("Все")
                 if status == "all"
-                else f"{brand.STATUS_ICONS[status]} {report.summary()[status] if report else 0}"
+                else f"{icons.STATUS_ICONS[status]} {report.summary()[status] if report else 0}"
             )
             button = self.query_one(f"#filter-{status}", Button)
             button.label = label
@@ -632,12 +646,19 @@ class DiagnosticsScreen(ConsoleShell):
 
         self.run_worker(replace(), group=f"render-{selector}", exclusive=True)
 
+    def _check_title(self, check: CheckResult) -> str:
+        """The check's readable title in the console language; its id when it has none."""
+        return check_rationale.check_title(check.id, self._language)
+
     def _check_row(self, check: CheckResult) -> Text:
-        """A list row: the status symbol and id, then the muted message."""
+        """A list row: the status symbol and the check's readable title, the muted id and group,
+        then the muted message. A check without a title is titled by its id."""
+        title = self._check_title(check)
         text = _icon(check.status)
-        text.append(check.id, style=f"bold {brand.PALETTE['foreground']}")
-        group = GROUP_LABELS_RU.get(check.group, check.group)
-        text.append(f"  {i18n.tr(self._language, group)}", style=brand.PALETTE["muted"])
+        text.append(title, style=f"bold {brand.PALETTE['foreground']}")
+        group = i18n.tr(self._language, GROUP_LABELS_RU.get(check.group, check.group))
+        where = group if title == check.id else f"{check.id} · {group}"
+        text.append(f"  {where}", style=brand.PALETTE["muted"])
         text.append("\n" + check.message, style=brand.PALETTE["muted"])
         return text
 
@@ -689,10 +710,12 @@ class DiagnosticsScreen(ConsoleShell):
         remedy = Text()
         command = ""
         if check is not None:
+            title = self._check_title(check)
             detail.append_text(_icon(check.status))
-            detail.append(check.id + "\n", style=f"bold {brand.PALETTE['foreground']}")
-            group = GROUP_LABELS_RU.get(check.group, check.group)
-            detail.append(i18n.tr(language, group) + "\n", style=brand.PALETTE["muted"])
+            detail.append(title + "\n", style=f"bold {brand.PALETTE['foreground']}")
+            group = i18n.tr(language, GROUP_LABELS_RU.get(check.group, check.group))
+            where = group if title == check.id else f"{check.id} · {group}"
+            detail.append(where + "\n", style=brand.PALETTE["muted"])
             detail.append(check.message)
             fix = check.fix
             remedy = Text(

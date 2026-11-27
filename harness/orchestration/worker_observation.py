@@ -416,6 +416,185 @@ def supervised_log_path(
     return path, None
 
 
+def qa_commands_dir(
+    root: Path, dispatch: Mapping[str, object], status: Mapping[str, object] | None
+) -> tuple[Path | None, str | None]:
+    """Where the runtime writes the commands of the current attempt of a container QA run: one
+    ``NNN.json`` record per finished command and ``<stage_id>.stdout.log`` per started stage
+    (#1296). The path follows from the brief and the attempt of its status record."""
+    from harness.orchestration.workflow.delivery import execution_operation_id
+
+    if not dispatch.get("qa_execution"):
+        return None, "no_log"
+    attempt = (status or {}).get("attempt")
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+        attempt = 1
+    executions = (root / "executions").resolve()
+    path = (
+        executions / execution_operation_id(dict(dispatch), attempt) / "commands"
+    ).resolve()
+    if not path.is_relative_to(executions):
+        return None, "log_outside_storage"
+    return path, None
+
+
+# A QA stage page offset: the finished command records already shown, times this stride, plus
+# the read position in the running stage's stdout (0 before its start was shown, else bytes + 1).
+QA_STAGE_STRIDE = 1 << 40
+# The newest output lines shown of each stage: a tail, never the whole log of a test run.
+QA_TAIL_LINES = 20
+QA_OUTPUT_LINE_BYTES = 400
+# Only this much of a stage log is read per page; older output is not shown.
+QA_TAIL_READ_BYTES = 256 * 1024
+_ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+_RECORD_NAME = re.compile(r"[0-9]{3,}\.json")
+
+
+def _qa_records(directory: Path) -> list[JsonObject]:
+    """The finished command records in index order, up to the first one that is missing or not
+    readable yet."""
+    import json
+
+    found: dict[int, Path] = {}
+    for entry in directory.iterdir():
+        if _RECORD_NAME.fullmatch(entry.name):
+            found[int(entry.name.split(".", 1)[0])] = entry
+    records: list[JsonObject] = []
+    for index in sorted(found):
+        if index != len(records):
+            break
+        try:
+            value = json.loads(found[index].read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            break
+        if not isinstance(value, dict):
+            break
+        records.append(value)
+    return records
+
+
+def _stage_result(record: Mapping[str, object]) -> str:
+    """One line of a finished command: stage, result, exit code, duration, failure domain."""
+    stage = str(record.get("stage_id") or "?")
+    code = record.get("exit_code")
+    domain = record.get("domain")
+    if record.get("result") != "ran":
+        word = "not_run"
+    elif code == 0 and domain is None:
+        word = "pass"
+    else:
+        word = "fail"
+    parts = [f"{stage}: {word}"]
+    if isinstance(code, int) and not isinstance(code, bool):
+        parts.append(f"exit {code}")
+    duration = record.get("duration_ms")
+    if isinstance(duration, int) and not isinstance(duration, bool):
+        parts.append(f"{duration / 1000:.1f} s")
+    if isinstance(domain, str) and domain:
+        parts.append(domain)
+    stopped = record.get("stopped_by")
+    if isinstance(stopped, str) and stopped:
+        parts.append(f"stopped by {stopped}")
+    return " · ".join(parts)
+
+
+def _stage_tail(path: Path, start: int) -> tuple[list[str], int]:
+    """The newest complete output lines of a stage log after byte ``start``, redacted, and the
+    position after the last complete line; a missing log has none."""
+    try:
+        with path.open("rb") as stream:
+            size = stream.seek(0, 2)
+            begin = max(start, size - QA_TAIL_READ_BYTES)
+            stream.seek(begin)
+            data = stream.read(size - begin)
+    except OSError:
+        return [], start
+    end = data.rfind(b"\n")
+    if end < 0:
+        return [], start
+    chunk = data[: end + 1]
+    if begin > start:
+        chunk = chunk[chunk.find(b"\n") + 1 :]  # the first line was cut by the read window
+    lines = [
+        redact_visible(_ANSI.sub("", line))[:QA_OUTPUT_LINE_BYTES]
+        for line in chunk.decode("utf-8", "replace").splitlines()
+        if line.strip()
+    ]
+    return lines[-QA_TAIL_LINES:], begin + end + 1
+
+
+def _running_stage(directory: Path, finished: set[str]) -> str | None:
+    """The stage whose stdout log exists but whose command has no record yet; the newest."""
+    running: list[tuple[float, str]] = []
+    for entry in directory.glob("*.stdout.log"):
+        stage = entry.name[: -len(".stdout.log")]
+        if stage not in finished:
+            try:
+                running.append((entry.stat().st_mtime, stage))
+            except OSError:
+                continue
+    return max(running)[1] if running else None
+
+
+def read_qa_stage_steps(path: Path, offset: int, budget: int) -> JsonObject:
+    """One page of a container QA run while it runs (#1296): a ``stage`` step when a stage
+    starts, the tail of its output as ``output`` steps and a ``stage-result`` step when its
+    command finishes. ``budget`` bounds the page's encoded size; the next page continues."""
+    directory = path
+    shown, position = divmod(max(0, offset), QA_STAGE_STRIDE)
+    if not directory.is_dir():
+        return _step_page(
+            "stages", state="waiting", reason=None, steps=[], offset=0,
+            reset=offset > 0, more=False, age=None,
+        )  # fmt: skip
+    try:
+        records = _qa_records(directory)
+    except OSError:
+        return unavailable_page("stages", "log_unreadable", offset)
+    reset = shown > len(records)
+    if reset:
+        shown, position = 0, 0
+    steps: list[JsonObject] = []
+    used = 0
+    more = False
+    for index in range(shown, len(records)):
+        record = records[index]
+        stage = str(record.get("stage_id") or "")
+        found: list[JsonObject] = [] if position else [{"kind": "stage", "text": stage}]
+        lines, _ = _stage_tail(directory / f"{stage}.stdout.log", max(0, position - 1))
+        found += [{"kind": "output", "text": line} for line in lines]
+        found.append({"kind": "stage-result", "text": _stage_result(record)})
+        cost = sum(_step_cost(step) for step in found)
+        if steps and used + cost > budget:
+            more = True
+            break
+        steps.extend(found)
+        used += cost
+        shown, position = index + 1, 0
+    if not more:
+        finished = {str(record.get("stage_id") or "") for record in records}
+        running = _running_stage(directory, finished)
+        if running is not None:
+            if not position:
+                steps.append({"kind": "stage", "text": running})
+                position = 1
+            lines, end = _stage_tail(directory / f"{running}.stdout.log", position - 1)
+            steps.extend({"kind": "output", "text": line} for line in lines)
+            position = end + 1
+    times = [entry.stat().st_mtime for entry in directory.iterdir() if entry.is_file()]
+    age = max(0, int(time.time() - max(times))) if times else None
+    return _step_page(
+        "stages",
+        state="connected" if records or position else "waiting",
+        reason=None,
+        steps=steps,
+        offset=shown * QA_STAGE_STRIDE + position,
+        reset=reset,
+        more=more,
+        age=age,
+    )
+
+
 def external_log_path(
     repo: Path, dispatch: Mapping[str, object]
 ) -> tuple[Path | None, str | None]:

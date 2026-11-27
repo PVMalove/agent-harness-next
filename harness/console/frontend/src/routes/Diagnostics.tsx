@@ -163,7 +163,7 @@ export function Diagnostics() {
     <div className="ds-page ds-fit" data-section="Diagnostics">
       <PageHeader
         title={section("Diagnostics")}
-        subtitle={t("Состояние функций Harness и отчёт harness health. Команды «Как исправить» консоль не выполняет — запустите их вручную.")}
+        subtitle={t("Состояние функций Harness и отчёт harness health. Консоль не выполняет команды из «Как исправить»: запустите их вручную.")}
         actions={
           <>
             <button id="diag-refresh" className="ds-btn" type="button" onClick={refresh}>

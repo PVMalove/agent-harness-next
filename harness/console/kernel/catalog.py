@@ -4,7 +4,7 @@
 
 Консоль не реализует логику команд заново: она запускает аргументы CLI записи как подпроцесс (см.
 `process_argv`), благодаря чему функция CLI, указанная в `function`, выполняет работу со всеми
-существующими проверками (блокировки леджера, `--confirm RESET`, отказ при дрейфе файлов).
+существующими проверками (блокировки ledger, `--confirm RESET`, отказ при дрейфе файлов).
 Тест tests/console/test_console_catalog.py проверяет, что каждый набор аргументов действительно передаётся в эту функцию.
 """
 
@@ -53,7 +53,7 @@ CONFIRMATION_REASONS = {
 # Short presentation labels; the confirmation classes and their reasons remain authoritative.
 REVERSIBILITY_LABELS = {
     Reversibility.REVERSIBLE: "✔ обратимо",
-    Reversibility.DELETES_LOCAL_DATA: "✖ удаление",
+    Reversibility.DELETES_LOCAL_DATA: "⊘ удаление",
     Reversibility.TERMINAL_COORDINATOR_ACTION: "⚠ решение",
     Reversibility.EXTERNAL_CHANGE: "⚠ внешнее",
     Reversibility.OVERWRITES_MANAGED_FILES: "⚠ перезапись",

@@ -27,13 +27,13 @@ export const ACTION_WORDS: Readonly<Record<SetupAction, string>> = {
 export const CAPABILITY_TEXT: Readonly<Record<string, readonly [string, string, string]>> = {
   "project-foundation": [
     "Основа",
-    "Небольшой набор инструкций и навыков",
-    "Добавляет инструкции и базовые навыки. Не создаёт project.json и orchestration.json; подходит, когда нужен только общий каркас.",
+    "Небольшой набор инструкций и скиллов",
+    "Добавляет инструкции и базовые скиллы. Не создаёт project.json и orchestration.json; подходит, когда нужен только общий каркас.",
   ],
   "mattpocock-suite": [
     "Upstream",
-    "Полный закреплённый набор навыков",
-    "Полный закреплённый upstream-набор навыков. Не содержит workflow project.json; подходит, когда нужны только навыки.",
+    "Полный закреплённый набор скиллов",
+    "Полный закреплённый upstream-набор скиллов. Не содержит workflow project.json; подходит, когда нужны только скиллы.",
   ],
   "engineering-suite": [
     "Workflow",

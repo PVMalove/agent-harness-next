@@ -9,9 +9,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
-import { PageHeader, Panel, PipeTabs, StatusIcon, Summary, Switch } from "../ds";
+import { PageHeader, Panel, PipeTabs, ScreenState, StatusIcon, Summary, Switch } from "../ds";
 import type { Tone as DsTone } from "../ds";
-import { NoData } from "../harness/HarnessOverview";
+import { NoData } from "../steps/ActivityViews";
 import { plural, useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";
@@ -213,8 +213,9 @@ export function UpdateHarness() {
   const [consequence, tone] = MODE_CONSEQUENCES[mode];
   const modeName = MODES.find(([key]) => key === mode)?.[1] ?? "";
   const versions = facts ? renderVersions(facts, t) : null;
-  const changes = renderDrift(drift, t);
-  const unavailable = t("Недоступно в текущем снимке");
+  // Before the snapshot arrives nothing is known about the drift: no failure line yet.
+  const changes = facts ? renderDrift(drift, t) : { rows: [], line: null };
+  const unavailable = facts ? t("Недоступно в текущем снимке") : "—";
   const state = facts?.state;
 
   const run = () => {
@@ -266,11 +267,7 @@ export function UpdateHarness() {
         }
       />
 
-      {screen.error && !facts && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Данные не получены")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Состояние обновления не получено" />
 
       <Summary
         id="update-versions"
@@ -301,7 +298,7 @@ export function UpdateHarness() {
           facts && state?.installed ? (
             <>
               <span>{`${state.installed_version} → ${facts.package_version}`}</span>
-              <span>{plural(language, state.skills, ["навык", "навыка", "навыков"], ["skill", "skills"])}</span>
+              <span>{plural(language, state.skills, ["скилл", "скилла", "скиллов"], ["skill", "skills"])}</span>
               {versions?.rows.map(([label, value]) => (
                 <span key={label}>
                   {label}: {value}

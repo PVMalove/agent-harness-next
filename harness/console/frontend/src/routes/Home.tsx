@@ -347,7 +347,7 @@ export function HealthStrip({ health }: { health: HealthCounters }) {
     ["ok", "var(--ok)", "bar-ok"],
     ["warn", "var(--warn)", "bar-warn"],
     ["fail", "var(--err)", "bar-fail"],
-    ["skipped", "#6b7686", "bar-muted"],
+    ["skipped", "var(--edge)", "bar-muted"],
   ];
   let x = 0;
   const label = `${t("пройдено")}: ${health.ok}; ${t("внимание")}: ${health.warn}; ${t("ошибки")}: ${health.fail}; ${t("пропущено")}: ${health.skipped}`;
@@ -401,7 +401,7 @@ function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activi
           <svg className="contour-svg" viewBox="0 0 1000 400" role="img" aria-label={t("Схема контура Harness")}>
             <defs>
               <marker id="ct-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto">
-                <path d="M0 0 8 4 0 8z" fill="#6b7787" />
+                <path d="M0 0 8 4 0 8z" fill="var(--edge)" />
               </marker>
             </defs>
             <rect className="ct-lane" x="12" y="10" width="976" height="105" rx="6" />
@@ -438,7 +438,7 @@ function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activi
             </g>
             <g className="ct-node">
               <rect x="342" y="292" width="250" height="54" rx="7" />
-              <text className="ct-title" x="355" y="311">Audit chain</text>
+              <text className="ct-title" x="355" y="311">{t("Цепочка аудита")}</text>
               <text className="ct-sub" x="355" y="327">{t("{count} записей", { count: fact(store?.audit_records) })}</text>
             </g>
             <g className="ct-node">
@@ -507,7 +507,7 @@ function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activi
 }
 
 export function Home() {
-  const { t, section, fact, language, state: stateText, plural } = useI18n();
+  const { t, section, fact, language, state: stateText, plural, duration } = useI18n();
   const { state, client, replies, events, recentEvents, snapshotAt, repliedAt: checkedAt } = useConsole();
   const [online, setOnline] = useState(false);
   const [filter, setFilter] = useState<"all" | "problem" | "skipped">("all");
@@ -562,7 +562,7 @@ export function Home() {
       <div className="page-title home-title">
         <div>
           <h1>{t("Состояние харнесса")}</h1>
-          <p>{t("Здоровье, runtime-store, навыки и контекст проекта.")}</p>
+          <p>{t("Здоровье, runtime-store, скиллы и контекст проекта.")}</p>
           <div className="home-facts" id="home-chips">
             {snapshot ? (
               <>
@@ -575,10 +575,10 @@ export function Home() {
                 <span id="home-facts">
                   {health ? `${health.ok} ${t("пройдено")} · ${health.warn} ${t("внимание")} · ${health.fail} ${t("ошибки")} · ${health.skipped} ${t("пропущено")}` : unavailable}
                 </span>
-                {install ? <span>{t("{count} навыков", { count: install.skills })}</span> : null}
+                {install ? <span>{t("{count} скиллов", { count: install.skills })}</span> : null}
                 {snapshot.repo_map.tier ? <span>Repo Map {snapshot.repo_map.tier}</span> : null}
                 <span id="snapshot-status">
-                  {state.cached ? t("Кэш") : t("Новый снимок")} · {state.ageSeconds ?? 0} s
+                  {state.cached ? t("Кэш") : t("Новый снимок")} · {duration(state.ageSeconds ?? 0)}
                 </span>
               </>
             ) : (
@@ -628,7 +628,7 @@ export function Home() {
             <h2>{t("Контекст")}</h2>
             <span className="small muted">{project?.name ?? t("нет данных")}</span>
           </div>
-          <div className="context-grid">
+          <div className="context-grid" tabIndex={0} role="region" aria-label={t("Контекст")}>
             <div className="context-section">
               <h3>
                 <Icon name={HOSTING_ICON[project?.tracker ?? ""] ?? "folder"} /> {t("Проект")}

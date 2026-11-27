@@ -181,7 +181,7 @@ export function Help() {
     <div className="ds-page ds-fit" data-section="Help">
       <PageHeader
         title={section("Help")}
-        subtitle={t("Как устроена консоль: разделы, клавиши, статусы и правила безопасности")}
+        subtitle={t("Как устроена консоль: разделы, клавиши, статусы и правила безопасности.")}
         actions={<>
           <button className="ds-btn" type="button" title={t("Документация консоли")} onClick={() => { setQuery(""); setTab("docs"); }}>
             <Icon name="reports" className="ds-ic-sm" /> README

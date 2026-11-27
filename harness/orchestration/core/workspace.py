@@ -39,7 +39,11 @@ MODULE_ROOT = Path(__file__).resolve().parents[1]
 RUNTIMES_DIR = "runtimes"
 # ``state-snapshots`` is the copy of the state directory that the cutover to the runtime store
 # takes (ADR 0020, section 5): state, like ``state``, so it never changes a pinned runtime hash.
-RUNTIME_VOLATILE_PARTS = frozenset({"state", "state-snapshots", "__pycache__"})
+# Never part of the runtime: ledger state, bytecode, and the console frontend's local npm install,
+# which a developer checkout holds and an installed project does not.
+RUNTIME_VOLATILE_PARTS = frozenset(
+    {"state", "state-snapshots", "__pycache__", "node_modules"}
+)
 
 
 def _agent_inbox(repo: Path) -> Path:

@@ -18,9 +18,19 @@ import {
   statusCounts,
 } from "./ActivityViews";
 import type { SessionStatus } from "./ActivityViews";
+import { shortDispatch } from "../dispatchId";
 
 const tone = (state: string): string =>
   state === "dispatched" || state === "working" ? "ok" : state === "failed" || state === "blocked" ? "err" : "";
+
+/** Sessions by their newest activity first; equal times keep the roster order. The list and the
+    session the route shows by default use the same order. */
+export function newestFirst(dispatches: readonly RosterDispatch[]): RosterDispatch[] {
+  return dispatches
+    .map((entry, index) => ({ entry, index, at: entry.last_event_at || entry.started_at }))
+    .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at < b.at ? 1 : -1))
+    .map(({ entry }) => entry);
+}
 
 export function StepFilters({
   dispatches,
@@ -49,12 +59,9 @@ export function StepFilters({
   const { t, language, state: stateText } = useI18n();
   const counts = statusCounts(dispatches);
   const [all, setAll] = useState(false);
-  const matching = dispatches
-    .filter((entry) => (filter.role === null || entry.role === filter.role) && (status === "all" || sessionStatus(entry) === status))
-    .map((entry, index) => ({ entry, index, at: entry.last_event_at || entry.started_at }))
-    // Newest activity first; equal times keep the roster order.
-    .sort((a, b) => (a.at === b.at ? a.index - b.index : a.at < b.at ? 1 : -1))
-    .map(({ entry }) => entry);
+  const matching = newestFirst(
+    dispatches.filter((entry) => (filter.role === null || entry.role === filter.role) && (status === "all" || sessionStatus(entry) === status)),
+  );
   const shown = all ? matching : matching.slice(0, SESSION_LIMIT);
   const chips: ["all" | SessionStatus, string][] = [
     ["all", t("Все")],
@@ -137,7 +144,7 @@ export function StepFilters({
               <span className="work-row-main">
                 <b>
                   {entry.ticket ? `${entry.ticket} · ` : ""}
-                  {entry.dispatch_id}
+                  {shortDispatch(entry.dispatch_id)}
                 </b>
                 <small>
                   {roleName(entry.role)} · {entry.branch || entry.batch_id}

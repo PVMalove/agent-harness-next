@@ -35,6 +35,19 @@ published; several published batches without `--batch` (one batch is never subst
 green QA; the integration ref has already moved forward and there is no record yet; the remote is unavailable; the batch history
 was changed after the record.
 
+The integration PR of an epic's `integration/*` branch gets a record too, although no batch
+published it: `integration prepare --ticket '#<epic>' --branch integration/<name> [--target <ref>]`.
+The command checks `--branch` against the epic's `## Integration Branch` section in the tracker
+(GitHub or GitLab) and records the pair of the remote branch head and the remote target head:
+`base_branch` by default, or another `integration/*` branch. The target itself is part of the
+record identity, so a new head, a new target SHA or another target is a new record. Such a pair has
+no original QA: `integration next` answers `confirm-pr` with
+`qa_source: verification-pending-after-pr` and reaches `handoff` only after CI that
+`integration collect-ci` accepts, or local QA of that pair. A `-light` check never confirms it. The
+harness never rewrites an `integration/*` branch: `integration refresh` and `integration resolve`
+refuse such a record, and when the target moves or a check fails, a child ticket fixes the branch
+and `integration prepare` runs again.
+
 The record lies in `reports/integration/`, and the evidence lies in `reports/integration-evidence/` inside the
 already verified `reports` directory: the ledger schema version and `ledger migrate` do not change.
 

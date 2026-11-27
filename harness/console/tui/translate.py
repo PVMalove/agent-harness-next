@@ -22,7 +22,8 @@ from textual.widgets import (
 )
 from textual.widgets._toggle_button import ToggleButton
 
-from ..kernel import brand, i18n
+from ..kernel import brand
+from . import icons
 from .chrome import TopBar
 
 
@@ -42,7 +43,7 @@ def _translated(
         source = current  # the screen set a new text since: it is the new source
     if strip:
         source = source.strip()
-    text = i18n.tr_text(language, source) if phrases else i18n.tr(language, source)
+    text = icons.tr_text(language, source) if phrases else icons.tr(language, source)
     text = wrap(text) if wrap else text
     memory[attr] = (source, text)
     return text
@@ -110,7 +111,7 @@ def translate_bindings(node: DOMNode, language: str) -> None:
                 rewritten.append(binding)
                 continue
             source = memory.setdefault((key, binding.action), binding.description)
-            rewritten.append(replace(binding, description=i18n.tr(language, source)))
+            rewritten.append(replace(binding, description=icons.tr(language, source)))
         table[key] = rewritten
 
 

@@ -57,6 +57,8 @@ def _observation(
             continue
         entries = record.get("dispatches")
         decisions = record.get("coordinator_decisions")
+        auto = record.get("auto_decisions")
+        stop = record.get("auto_stop")
         facts[batch_id] = BatchFacts(
             ticket=text(record.get("ticket")),
             state=text(record.get("state")),
@@ -75,6 +77,12 @@ def _observation(
                 for entry in (decisions if isinstance(decisions, list) else [])
                 if isinstance(entry, dict)
             ),
+            auto_decisions=tuple(
+                entry
+                for entry in (auto if isinstance(auto, list) else [])
+                if isinstance(entry, dict)
+            ),
+            auto_stop=stop if isinstance(stop, dict) else None,
         )
     dispatch_states = {
         text(record.get("dispatch_id")): text(record.get("state"))

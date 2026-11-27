@@ -67,12 +67,11 @@ const TUI_ONLY = new Set([
   "08.11.2026 08:00 UTC",
   "✔ завершён",
   "01.11.2026 08:00 UTC",
-  "до PR: 1 д 2 ч 30 мин",
-  "Output",
-  "Checks",
-  "Next action",
+  "до PR: 1 дн 2 ч",
+  "Вывод",
+  "Следующее действие",
   "developer → review → qa → developer",
-  "батч создан",
+  "batch создан",
   "developer: d-dev, итог: reported",
   "отчёт developer: completed",
   "review: d-rev, итог: reported",
@@ -143,7 +142,7 @@ describe("the Reports route", () => {
     expect(document.querySelectorAll("#reports-tabs .ds-pipe-tab")).toHaveLength(4);
     expect(document.querySelector("main .orch-pill")).toBeNull();
     const kpi = [...document.querySelectorAll("#reports-kpi > div > span")].map((item) => item.textContent);
-    expect(kpi).toEqual(["Evidence полно", "Stale evidence", "Задержка отчёта", "QA с первого раза"]);
+    expect(kpi).toEqual(["Evidence полно", "Evidence устарела", "Задержка отчёта", "QA с первого раза"]);
     expect(document.querySelector("#reports-kpi")!.textContent).not.toContain("С рисками");
     const row = document.querySelector("#report-filter-row")!;
     expect(row.querySelector("select#report-status")).not.toBeNull();
@@ -371,7 +370,7 @@ describe("the report body, QA log and route follow the language", () => {
     expect(review(en)).toBe("candidate: c0ffee1\nstandards: warning, findings: 1\n  [warning] s: e\nspec: clean, findings: 0");
     const timeline = parseTimeline(TIMELINE)!;
     expect(roleFlowText(timeline, en)).toBe("developer → review → qa → developer");
-    expect(roleFlowText({ ...timeline, role_flow: [] }, ru)).toBe("диспатчей ещё не было");
+    expect(roleFlowText({ ...timeline, role_flow: [] }, ru)).toBe("dispatch ещё не было");
     expect(roleFlowText({ ...timeline, role_flow: [] }, en)).toBe("no dispatches yet");
   });
 

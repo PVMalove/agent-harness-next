@@ -16,6 +16,7 @@ from ...kernel.configuration_snapshot import config_digest
 from ..configuration_gateway import ConfigurationGateway, LocalConfiguration
 from .commands import call_from_worker
 from ...kernel import brand, i18n
+from .. import icons
 from ..crumbs import Crumb
 from ..shell import SHELL_CSS, ConsoleShell, SectionCard
 from ..logtext import colorize_diff
@@ -261,7 +262,7 @@ class ConfigurationVersionsScreen(ConsoleShell):
 
 def _label(version: ConfigurationVersion) -> str:
     if version.problem:
-        return f"⚠ {version.id} · повреждена: {version.problem}"
+        return f"{icons.STATUS_ICONS['warn']} {version.id} · повреждена: {version.problem}"
     return (
         f"{version.created_at} · {version.description or version.id} · "
         f"Harness {version.package_version} · {', '.join(version.files) or 'без файлов'}"

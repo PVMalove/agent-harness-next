@@ -104,7 +104,7 @@ const PAGES: PageSpec[] = [
     route: "help",
     title: "Справка",
     blocks: ["#help-kpis", ".ds-toolbar", "#help-tabs", "#help-intro", "#help-next"],
-    tabs: ["1Начало", "13Разделы", "4Клавиши", "6Статусы", "12Безопасность", "4Вопросы", "3Документация"],
+    tabs: ["1Начало", "2Разделы13", "3Клавиши4", "4Статусы6", "5Безопасность12", "6Вопросы4", "7Документация3"],
   },
   {
     route: "agent-activity",
@@ -116,7 +116,7 @@ const PAGES: PageSpec[] = [
     route: "orchestration",
     title: "Оркестрация",
     blocks: ["#orch-summary", "#orch-mockup-kpis", "#orch-tabs", "#orch-stage-strip", "#orch-dispatch", "#orch-tickets", "#orch-batch-cards"],
-    tabs: ["1Конвейер", "2Поток", "3Качество", "4Runtime", "5Контейнер", "0Решения"],
+    tabs: ["1Конвейер", "2Поток", "3Качество", "4Runtime", "5Контейнер", "6Решения0"],
   },
   {
     route: "reports",
@@ -181,8 +181,8 @@ test("a mockup tab without a source shows an explicit no-data state", async ({ p
   await open(page, "harness", 1440);
   await page.getByRole("tab", { name: /Контейнеры/ }).click();
   // Running and Disk have no source; the fixture's volume probe failed with its reason.
-  await expect(page.locator("#harness-containers #harness-container-summary .ds-nodata")).toHaveCount(3);
-  await expect(page.locator("[data-fact='images-volumes'] .ds-nodata")).toHaveAttribute("title", /docker volume ls/);
+  await expect(page.locator("#harness-containers #harness-container-summary .no-data")).toHaveCount(3);
+  await expect(page.locator("[data-fact='images-volumes'] .no-data")).toHaveAttribute("title", /docker volume ls/);
   await page.getByRole("tab", { name: /Runtime/ }).click();
   await expect(page.locator("#harness-tab-runtime")).toContainText("нет данных");
 });

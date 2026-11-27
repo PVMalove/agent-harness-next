@@ -9,7 +9,7 @@
    the TUI's command menu is not reproduced: decisions cover the human gate. */
 import { useState } from "react";
 import { DecisionPanel } from "../decisions/DecisionPanel";
-import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
+import { LedgerAbsent, PageHeader, Panel, PipeTabs, ScreenState, Summary } from "../ds";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -49,7 +49,7 @@ export function Orchestration() {
     <div className="ds-page ds-fit orch-page" data-section="Orchestration">
       <PageHeader
         title={section("Orchestration")}
-        subtitle={t("Состояние пайплайна, история batch и решения человека.")}
+        subtitle={t("Состояние конвейера, история batch и решения человека.")}
         actions={
           <>
             <button id="orch-refresh" className="ds-btn ds-btn-icon" type="button" aria-label={t("Обновить")} title={t("Обновить")} onClick={() => screen.refresh(true)}>
@@ -62,22 +62,14 @@ export function Orchestration() {
         }
       />
 
-      {screen.error && !data && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
-      {data?.ledger.unavailable && (
-        <p className="ds-alert ds-alert-err" role="alert">
-          {data.ledger.unavailable}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Снимок оркестрации не получен" />
+      <LedgerAbsent reason={data?.ledger.unavailable} />
 
       <Summary
         id="orch-summary"
         label={t("Сводка оркестрации")}
         stats={[
-          { label: t("Батчи"), value: counts?.batches ?? "—", caption: t("в конвейере") },
+          { label: t("Batch"), value: counts?.batches ?? "—", caption: t("в конвейере") },
           { label: "Dispatch", value: counts?.dispatches ?? "—", caption: t("назначено") },
           { label: t("Активные"), value: counts?.active ?? "—", caption: t("работают или ждут") },
           { label: t("Требует внимания"), value: counts?.attention ?? "—", caption: t("dispatch требует решения") },

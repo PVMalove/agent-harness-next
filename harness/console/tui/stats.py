@@ -10,7 +10,8 @@ from collections import Counter
 
 from ..kernel.harness_facts import HarnessState as HarnessState
 from ..kernel.harness_facts import harness_state as harness_state
-from ..kernel import brand, i18n
+from ..kernel import i18n
+from . import icons
 from ..kernel.pipeline_kpi import (
     AGING_BUCKETS,
     PipelineAnalytics,
@@ -20,7 +21,7 @@ from ..kernel.pipeline_kpi import (
 )
 from ..kernel.pipeline_stats import PipelineStats as PipelineStats
 from ..kernel.pipeline_stats import pipeline_stats as pipeline_stats
-from ..kernel.reports import BatchSummary, LedgerView
+from ..kernel.reports import BatchSummary, LedgerView, timestamp
 
 # The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state.
 BATCH_STATES = (
@@ -47,21 +48,27 @@ ALL_STATES = "all"
 
 
 def short_time(value: str) -> str:
-    """An ISO timestamp as `YYYY-MM-DD HH:MM`; anything else is returned unchanged."""
-    return (
-        value[:16].replace("T", " ") if len(value) >= 16 and value[10] == "T" else value
-    )
+    """A recorded, timezone-aware time as `DD.MM.YYYY HH:MM UTC`, as elsewhere in the console;
+    anything else is returned unchanged."""
+    moment = timestamp(value)
+    return moment.strftime("%d.%m.%Y %H:%M UTC") if moment else value
 
 
-def _counts(counts: dict[str, int]) -> str:
+# A report outcome in the statistics, in Russian; the English screen translates the phrase.
+OUTCOME_WORDS = {"completed": "завершено", "blocked": "заблокировано", "failed": "провалено"}
+
+
+def _counts(counts: dict[str, int], words: dict[str, str] | None = None) -> str:
+    names = words or {}
     return (
-        ", ".join(f"{name} {count}" for name, count in sorted(counts.items())) or "нет"
+        ", ".join(f"{names.get(name, name)} {count}" for name, count in sorted(counts.items()))
+        or "нет"
     )
 
 
 def pipeline_stats_text(stats: PipelineStats) -> str:
     if not stats.batches:
-        return "Пайплайн ещё не запускался: batch в леджере нет."
+        return "Конвейер ещё не запускался: batch в ledger нет."
     states = ", ".join(
         f"{STATE_LABELS.get(state, state)} {stats.by_state[state]}"
         for state in state_order(stats.by_state)
@@ -71,8 +78,8 @@ def pipeline_stats_text(stats: PipelineStats) -> str:
         (
             f"Запусков (batch): {stats.batches}, тикетов: {stats.tickets}",
             f"По состояниям: {states}",
-            f"Диспатчи по ролям: {_counts(stats.dispatches_by_role)}",
-            f"Отчёты по итогам: {_counts(stats.reports_by_outcome)}",
+            f"Dispatch по ролям: {_counts(stats.dispatches_by_role)}",
+            f"Отчёты по итогам: {_counts(stats.reports_by_outcome, OUTCOME_WORDS)}",
             f"QA-прогонов: {stats.qa_runs}, неудачных попыток qa-lane: {stats.qa_attempts_failed}",
             f"Период: {period}",
         )
@@ -132,7 +139,7 @@ def harness_state_text(state: HarnessState, harness_version: str) -> str:
         (
             f"Установлена версия: {version}",
             f"Capability: {', '.join(state.capabilities) or 'нет'}",
-            f"Скилов: {state.skills}, управляемых файлов: {state.managed_files}",
+            f"Скиллов: {state.skills}, управляемых файлов: {state.managed_files}",
             f"Lock обновлён: {state.updated_at}",
             f"Оркестрация: {'подключена' if state.orchestration else 'не подключена'}",
         )
@@ -142,11 +149,11 @@ def harness_state_text(state: HarnessState, harness_version: str) -> str:
 def usage_text(view: LedgerView) -> str:
     """Pipeline usage for the Harness section: a one-line summary of the ledger."""
     if view.unavailable:
-        return f"Использование пайплайна: {view.unavailable}"
+        return f"Использование конвейера: {view.unavailable}"
     stats = pipeline_stats(view)
     return (
-        f"Использование пайплайна: запусков {stats.batches}, тикетов {stats.tickets}, "
-        f"диспатчей {sum(stats.dispatches_by_role.values())}, отчётов "
+        f"Использование конвейера: запусков {stats.batches}, тикетов {stats.tickets}, "
+        f"dispatch {sum(stats.dispatches_by_role.values())}, отчётов "
         f"{sum(stats.reports_by_outcome.values())}"
     )
 
@@ -163,13 +170,23 @@ def harness_summary_fields(
     return [
         (
             "Версия",
-            state.installed_version + (f" ⚠ ({package_version})" if mismatch else " ✔"),
+            state.installed_version
+            + (
+                f" {icons.STATUS_ICONS['warn']} ({package_version})"
+                if mismatch
+                else f" {icons.STATUS_ICONS['ok']}"
+            ),
         ),
         ("Состав", ", ".join(state.capabilities) or "нет"),
-        ("Скилов", str(state.skills)),
-        ("файлов", str(state.managed_files)),
+        ("Скиллов", str(state.skills)),
+        ("Управляемых файлов", str(state.managed_files)),
         ("Lock", state.updated_at),
-        ("Оркестрация", "✔ подключена" if state.orchestration else "○ не подключена"),
+        (
+            "Оркестрация",
+            f"{icons.STATUS_ICONS['ok']} подключена"
+            if state.orchestration
+            else f"{icons.STATUS_ICONS['skipped']} не подключена",
+        ),
     ]
 
 
@@ -183,7 +200,7 @@ def kpi_tiles(kpi: PipelineKpi, language: str) -> list[tuple[str, str, str, str]
     def flagged(count: int, level: str) -> tuple[str, str]:
         if not count:
             return str(count), ""
-        return f"{brand.STATUS_ICONS[level]} {count}", {"warn": "warning", "fail": "error"}[level]
+        return f"{icons.STATUS_ICONS[level]} {count}", {"warn": "warning", "fail": "error"}[level]
 
     def duration(seconds: int | None) -> str:
         return duration_text(seconds, language)
@@ -206,7 +223,7 @@ def kpi_tiles(kpi: PipelineKpi, language: str) -> list[tuple[str, str, str, str]
         (tr("Заблокировано"), blocked, "", blocked_colour),
         (tr("Без движения"), stale, tr("активные > 6 ч"), stale_colour),
         (tr("QA с первого раза"), first_pass, tr("по тикетам"), ""),
-        (tr("Доработки"), str(kpi.rework), tr("повторные диспатчи"), ""),
+        (tr("Доработки"), str(kpi.rework), tr("повторные dispatch"), ""),
         (
             tr("Цикл до PR"),
             f"{duration(kpi.cycle_p50_seconds)} / {duration(kpi.cycle_p95_seconds)}",
@@ -216,7 +233,7 @@ def kpi_tiles(kpi: PipelineKpi, language: str) -> list[tuple[str, str, str, str]
         (
             tr("PR за 7 дней"),
             str(kpi.throughput_7d),
-            f"{brand.STATUS_ICONS['fail']} {tr('провалено')} {kpi.failed}" if kpi.failed else "",
+            f"{icons.STATUS_ICONS['fail']} {tr('провалено')} {kpi.failed}" if kpi.failed else "",
             "",
         ),
     ]
@@ -235,7 +252,7 @@ def reports_kpi_tiles(kpi: ReportsKpi, language: str) -> list[tuple[str, str, st
     def flagged(count: int) -> tuple[str, str]:
         if not count:
             return str(count), ""
-        return f"{brand.STATUS_ICONS['warn']} {count}", "warning"
+        return f"{icons.STATUS_ICONS['warn']} {count}", "warning"
 
     risks, risks_colour = flagged(kpi.attention)
     blockers, blockers_colour = flagged(kpi.blocked)
@@ -295,7 +312,7 @@ def analytics_rows(
     if section == "flow":
         buckets = figures.get("aging", {})
         return [
-            (tr("Батчи по состояниям"), _count_text(figures.get("by_state"), {k: tr(v) for k, v in STATE_LABELS.items()})),
+            (tr("Batch по состояниям"), _count_text(figures.get("by_state"), {k: tr(v) for k, v in STATE_LABELS.items()})),
             (
                 tr("Возраст незавершённых"),
                 " · ".join(f"{aging[name]} {buckets.get(name, 0)}" for name in AGING_BUCKETS) if isinstance(buckets, dict) else "—",

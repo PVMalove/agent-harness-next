@@ -106,6 +106,17 @@ def shorten(text: str, limit: int) -> str:
     return text if len(text) <= limit else text[: max(limit - 1, 0)] + "…"
 
 
+_DISPATCH_UUID = re.compile(
+    r"\bdispatch-([0-9a-f]{8})-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b"
+)
+
+
+def short_dispatch(text: str) -> str:
+    """Every dispatch UUID in `text` as `d` and its first eight hex digits, `d8e030c3f`; an ID
+    of another form is kept."""
+    return _DISPATCH_UUID.sub(lambda match: "d" + match.group(1), text)
+
+
 def elide_path(path: str, width: int) -> str:
     """`path` cut from the left to `width` cells at a separator, `…/Code/project`, so its end
     (the project) stays readable; a path that fits is kept whole."""

@@ -1704,15 +1704,28 @@ class TicketDiffVerificationCommandsTests(unittest.TestCase):
             self._accepted("code-review", {}), [["make review"]]
         )
 
-    def test_a_first_developer_brief_never_accepts_the_derived_list(self) -> None:
+    def test_a_first_developer_brief_accepts_only_its_expected_diff_plan(
+        self,
+    ) -> None:
+        """Issue #1292: a first developer derives its list only from a plan over its expected
+        diff; any other plan in its brief adds nothing."""
         plan = _diff_plan(["tests/a b.py"])
+        expected = {
+            **plan,
+            "diff_source": {"kind": "expected_files", "expected_files": ["tests/a b.py"]},
+        }
 
         accepted = self._accepted(
+            "developer",
+            {"transition": {"next_action": "developer"}, "verification_plan": expected},
+        )
+        refused = self._accepted(
             "developer",
             {"transition": {"next_action": "developer"}, "verification_plan": plan},
         )
 
-        self.assertNotIn(self.DERIVED, accepted)
+        self.assertIn(self.DERIVED, accepted)
+        self.assertNotIn(self.DERIVED, refused)
 
 
 if __name__ == "__main__":

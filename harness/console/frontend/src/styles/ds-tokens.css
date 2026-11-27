@@ -1,34 +1,35 @@
 /* Design system v3 (RFC docs/rfc/web-console-v3.md): tokens and base rules. Every class and custom
    property carries the ds- prefix, so the stylesheet of the not yet moved screens
-   (/execution-console.css, loaded first) keeps its meaning. Dark theme only: the not yet moved
-   screens and their sheet are dark, so a light or system theme waits until they move.
+   (/execution-console.css, loaded first) keeps its meaning. Every colour is light-dark(light,
+   dark): the system scheme picks the theme, data-theme on <html> pins it (execution-console.css).
    Sizes are rem, so the type follows the browser and OS text scale.
    Palette «Сланец» in pastels (owner request 2026-11-16): the mid slate ground stays neutral, the
    accent is a pastel blue, ready is a pastel mint, attention a pastel butter and a blocker a pastel
-   rose; the status shape (StatusIcon) and its word still carry the meaning. */
+   rose; the light theme keeps the hues at 4.5:1 on white. The status shape (StatusIcon) and its
+   word still carry the meaning. */
 :root {
-  --ds-bg: #1f252e;
-  --ds-rail: #252c36;
-  --ds-surface: #2a313c;
-  --ds-raised: #323a46;
-  --ds-hover: #3a4350;
-  --ds-line: #434c59;
-  --ds-line-strong: #5f6a7a;
+  --ds-bg: light-dark(#f4f5f8, #1f252e);
+  --ds-rail: light-dark(#eceef4, #252c36);
+  --ds-surface: light-dark(#ffffff, #2a313c);
+  --ds-raised: light-dark(#f7f8fb, #323a46);
+  --ds-hover: light-dark(#eef0f6, #3a4350);
+  --ds-line: light-dark(#e1e4ec, #434c59);
+  --ds-line-strong: light-dark(#c9cedb, #5f6a7a);
   /* The edge of a field or a switch track: 3:1 on every surface (WCAG 1.4.11). */
-  --ds-control: #7a8596;
-  --ds-fg: #f1f4f8;
-  --ds-muted: #b4bcc9;
+  --ds-control: light-dark(#858e9e, #7a8596);
+  --ds-fg: light-dark(#151922, #f1f4f8);
+  --ds-muted: light-dark(#4f5a70, #b4bcc9);
   /* 4.5:1 on a selected (--ds-accent-bg) and a hovered row too. */
-  --ds-faint: #a7b0be;
-  --ds-accent: #a9c4f5;
-  --ds-accent-bg: #33435e;
-  --ds-on-accent: #0f1c33;
-  --ds-ok: #a9dcc0;
-  --ds-ok-bg: #2e4239;
-  --ds-warn: #f2d6a2;
-  --ds-warn-bg: #443c2c;
-  --ds-err: #f7a8a8;
-  --ds-err-bg: #4a2f34;
+  --ds-faint: light-dark(#5a657b, #a7b0be);
+  --ds-accent: light-dark(#2f5fa3, #a9c4f5);
+  --ds-accent-bg: light-dark(#dfe9f6, #33435e);
+  --ds-on-accent: light-dark(#ffffff, #0f1c33);
+  --ds-ok: light-dark(#2d6b2f, #a9dcc0);
+  --ds-ok-bg: light-dark(#dff1dc, #2e4239);
+  --ds-warn: light-dark(#7a5a10, #f2d6a2);
+  --ds-warn-bg: light-dark(#f7ecd0, #443c2c);
+  --ds-err: light-dark(#b3372f, #f7a8a8);
+  --ds-err-bg: light-dark(#fbe3e1, #4a2f34);
   --ds-sans: "Segoe UI", system-ui, -apple-system, "Noto Sans", "Helvetica Neue", Arial, sans-serif;
   --ds-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --ds-radius: 8px;

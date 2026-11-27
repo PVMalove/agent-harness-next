@@ -204,6 +204,7 @@ _STEP_REASONS = frozenset(
         "log_unreadable",
         "log_outside_storage",
         "log_unrecognised",
+        "qa_on_host",
     }
 )
 
@@ -243,7 +244,7 @@ def _worker_steps(value: object) -> WorkerSteps:
         page["last_step_age_seconds"],
     )
     if (
-        page["source"] not in {"structured", "plain", "none"}
+        page["source"] not in {"structured", "plain", "stages", "none"}
         or page["structure"] not in {"available", "unavailable"}
         or page["state"] not in {"connected", "waiting", "unavailable"}
         or not (reason is None or reason in _STEP_REASONS)
@@ -446,7 +447,7 @@ class ConsoleClient:
         payload = self._paged(
             {"type": REPORTS_REQUEST, "force": force, "online": online}
         )
-        return self._decoded(ledger_from_payload, payload, "леджер")
+        return self._decoded(ledger_from_payload, payload, "ledger")
 
     def report(self, dispatch_id: str) -> JsonObject | None:
         """The whole body of one completion report; None when the ledger has none."""
@@ -506,7 +507,7 @@ class ConsoleClient:
         if set(found) != {"ledger", "lock", "kpi", "analytics"}:
             raise MalformedReply("снимок оркестрации сервера консоли не по схеме")
         lock, error = _lock_of(found["lock"])
-        ledger = self._decoded(ledger_from_payload, found["ledger"], "леджер")
+        ledger = self._decoded(ledger_from_payload, found["ledger"], "ledger")
         kpi = self._decoded(pipeline_kpi_from_payload, found["kpi"], "KPI")
         analytics = self._decoded(
             pipeline_analytics_from_payload, found["analytics"], "аналитика"
@@ -597,7 +598,7 @@ class ConsoleClient:
             self._decoded(HarnessState.from_payload, found["state"], "состояние"),
             version,
             drift,
-            self._decoded(ledger_from_payload, found["ledger"], "леджер"),
+            self._decoded(ledger_from_payload, found["ledger"], "ledger"),
         )
 
     def harness_maintenance(

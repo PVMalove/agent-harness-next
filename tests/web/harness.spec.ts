@@ -5,10 +5,10 @@
    Manual mockup-conformance checklist (docs/design/web-console-mockups, route #harness):
    - [x] Title: h1, subtitle, facts (installed version, skills, drift, lock time), actions
          «Проверить», «Диагностика», «Обновление».
-   - [x] KPI row of four tiles (Установлено, Skills, Пайплайн, Временные файлы).
+   - [x] KPI row of four tiles (Установлено, Skills, Конвейер, Временные файлы).
    - [x] Tab bar «Обзор» / «Команды»; both panels mounted, the inactive one hidden.
    - [x] «Обзор»: «Установка» (version pair, capability, components, actions) beside
-         «Использование пайплайна»; below it «Обслуживание» with the server's sizes, categories,
+         «Использование конвейера»; below it «Обслуживание» with the server's sizes, categories,
          skips, hard-mode extra, plan details and worktrees with «Удалить…».
    - [x] «Команды»: the section's catalog commands as server jobs, the server's confirmation dialog.
    - Deviations: the Runtime store and Audit chain KPIs are replaced by pipeline usage and

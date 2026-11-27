@@ -8,17 +8,8 @@ import type { Tone } from "../ds";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
+import { NoData } from "../steps/ActivityViews";
 import type { HarnessOverview, MaintenanceView } from "../ws/screens";
-
-/** The explicit no-data value of a fact the console has no source for. */
-export function NoData({ why }: { why?: string }) {
-  const { t } = useI18n();
-  return (
-    <span className="ds-muted ds-nodata" title={why ?? t("Недоступно в текущем снимке")}>
-      {t("нет данных")}
-    </span>
-  );
-}
 
 type Translate = (text: string, values?: Record<string, string | number>) => string;
 
@@ -36,7 +27,7 @@ export function installRows(
     ["Harness package", state.installed_version, t("доступно {version}", { version: overview.package_version }), word(current ? "current" : "outdated"), current ? "ok" : "warn"],
     ["Skills snapshot", String(state.skills), `drift ${overview.drift_files ?? "—"} · ${t("{count} управляемых файлов", { count: state.managed_files })}`, word(overview.drift === "clean" ? "clean" : "drift"), overview.drift === "clean" ? "ok" : "warn"],
     ["Managed files", String(state.managed_files), ".harness/harness.lock", word("ok"), "ok"],
-    ["Hook policy", t("нет данных"), t("политику hook снимок harness.overview не читает"), t("нет данных"), "info"],
+    ["Hook policy", t("нет данных"), t("Снимок не содержит политику хуков"), t("нет данных"), "info"],
     ["Runtime store", store?.schema != null ? `schema ${store.schema}` : t("нет данных"), store ? `generation ${store.generation ?? "—"} · audit ${store.audit_records ?? "—"}` : "—", store ? store.authority : t("нет данных"), store ? "ok" : "info"],
     ["harness.lock", state.updated_at || "—", t("Lock обновлён"), word(state.updated_at ? "ok" : "missing"), state.updated_at ? "ok" : "err"],
   ];
@@ -48,7 +39,7 @@ export function InstallPanel({ overview }: { overview: HarnessOverview | null })
   const installed = state?.installed ?? false;
   const components = overview && state ? installRows(overview, t, word) : [];
   return (
-    <Panel id="harness-install" fill className="ds-install" title={t("Установка")} meta={installed ? t("установлен") : t("не установлен")}
+    <Panel id="harness-install" fill className="ds-install" title={t("Установка")} meta={!overview ? undefined : installed ? t("установлен") : t("не установлен")}
       actions={<>
         <a className="ds-btn ds-btn-primary ds-btn-sm" href={href("update-harness")}>{section("Update Harness")}</a>
         <a className="ds-btn ds-btn-sm" href={href("diagnostics")}><Icon name="pulse" className="ds-ic-sm" /> {section("Diagnostics")}</a>
@@ -78,7 +69,7 @@ export function AttentionPanel({ overview }: { overview: HarnessOverview | null 
   const { t, state: word } = useI18n();
   const items: [string, string, string, Tone, string][] = [];
   if (overview) {
-    if (overview.drift !== "clean") items.push(["drift", t("Расхождение навыков · {count}", { count: overview.drift_files ?? "—" }), t("Файлы пакета отличаются от установленных."), "warn", href("update-harness")]);
+    if (overview.drift !== "clean") items.push(["drift", t("Расхождение скиллов · {count}", { count: overview.drift_files ?? "—" }), t("Файлы пакета отличаются от установленных."), "warn", href("update-harness")]);
     if (overview.state.installed_version !== overview.package_version) items.push(["version", `${overview.state.installed_version} → ${overview.package_version}`, t("Доступна другая версия пакета."), "warn", href("update-harness")]);
     for (const item of overview.integrations ?? []) {
       if (item.status !== "current") items.push([item.name, item.name, `${word(item.status)} · ${item.detail || "—"}`, item.status === "missing" ? "err" : "warn", href("diagnostics")]);

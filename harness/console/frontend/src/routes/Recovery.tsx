@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
+import { ScreenState } from "../ds";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
 import { useScreen } from "../screens/useScreen";
@@ -71,6 +72,17 @@ export function Recovery() {
   const isOpen = batch !== "" && batch === opened;
   const view = isOpen ? data?.view : null;
   const actions = view ? [...view.actions, ...(fixed === batch ? [FIX_APPLY] : [])] : [];
+  // The kernel opens the rows with the reason, the last confirmed boundary and the verdict; the
+  // summary keeps one line of them, the full list below shows every row.
+  const [reason, , verdict] = view?.rows ?? [];
+  const entry = data?.entry;
+  const openWhy = isOpen
+    ? t("Уже открыт")
+    : !entry || entry.batch_id !== batch
+      ? t("Выберите batch в истории")
+      : entry.enabled
+        ? ""
+        : t(entry.reason);
 
   const choose = (next: string) => {
     setChoice(next === opened ? null : next);
@@ -132,11 +144,7 @@ export function Recovery() {
         </div>
       </div>
 
-      {screen.error && !data && (
-        <p className="command-refusal err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Состояние восстановления не получено" />
 
       <div className="note" id="recovery-note">
         {t("Неизвестный исход не считается успехом. Действия восстановления выполняются только после подтверждения.")}
@@ -146,19 +154,21 @@ export function Recovery() {
           <div className="panel-head">
             <h2>{t("Состояние")}</h2>
           </div>
-          {view ? (
-            view.rows.slice(0, 3).map((row, index) => (
-              <div className="row" key={index}>
-                <div>
-                  <b>{t(row.label)}</b>
-                  <small>{t(row.value).split("\n")[0]}</small>
-                </div>
-                <span className={`status ${row.state === "ok" ? "active" : "warn"}`}>{row.mark ? t(row.mark) : "—"}</span>
+          {verdict && reason ? (
+            <div className="row" id="recovery-verdict">
+              <div>
+                <b>
+                  {t(verdict.label)}: {t(verdict.value)}
+                </b>
+                <small>{t(reason.value).split("\n")[0]}</small>
               </div>
-            ))
+              <span className={`status ${verdict.state === "ok" ? "active" : "warn"}`}>{verdict.mark ? t(verdict.mark) : "—"}</span>
+            </div>
           ) : (
             <div className="body">
-              <p className="muted">{t("Откройте recovery выбранного batch, чтобы увидеть его состояние.")}</p>
+              <p className="muted">
+                {screen.loading || screen.error ? "—" : t("Откройте recovery выбранного batch, чтобы увидеть его состояние.")}
+              </p>
             </div>
           )}
         </section>
@@ -201,15 +211,16 @@ export function Recovery() {
           </div>
           <div className="recovery-entry">
             <span id="recovery-entry">{data.entry ? `${t(data.entry.mark)}  ${t(data.entry.reason)}` : ""}</span>
-            <button
-              id="recovery-open"
-              className="btn primary"
-              type="button"
-              disabled={!(data.entry?.enabled && data.entry.batch_id === batch) || isOpen}
-              onClick={open}
-            >
-              {t("Открыть recovery")}
-            </button>
+            <span className="recovery-open">
+              {(isOpen || !entry || entry.batch_id !== batch) && (
+                <small className="muted" id="recovery-open-why">
+                  {openWhy}
+                </small>
+              )}
+              <button id="recovery-open" className="btn primary" type="button" disabled={!(entry?.enabled && entry.batch_id === batch) || isOpen} title={openWhy || undefined} onClick={open}>
+                {t("Открыть recovery")}
+              </button>
+            </span>
           </div>
         </section>
       )}
@@ -223,8 +234,13 @@ export function Recovery() {
           <RowList rows={view.rows} blockers={view.blockers} notes={view.notes} actions={actions} />
           <ActionBar actions={actions} busy={false} onAction={onAction} />
           <div className="recovery-inputs" id="recovery-inputs">
-            <input aria-label="approved-by" placeholder="approved-by" value={approver} onChange={(event) => setApprover(event.target.value)} />
-            <input aria-label="note" placeholder="note" value={note} onChange={(event) => setNote(event.target.value)} />
+            <input
+              aria-label={t("Кто подтверждает (approved-by)")}
+              placeholder={t("Кто подтверждает (approved-by)")}
+              value={approver}
+              onChange={(event) => setApprover(event.target.value)}
+            />
+            <input aria-label={t("Заметка (note)")} placeholder={t("Заметка (note)")} value={note} onChange={(event) => setNote(event.target.value)} />
             <input
               aria-label={t("ID диагностики")}
               placeholder={t("ID диагностики")}

@@ -4,6 +4,15 @@ Read this file only when the project has a valid `backend-orchestration` opt-in 
 labeled `pipeline::fast`. Every command below is `python .harness/orchestration/coordinator.py --repo . <command>`,
 and `<ticket-branch>` stands for `--ticket "#<ID>" --branch "<current-issue-branch>"`.
 
+A record of an epic's `integration/*` branch (`source_kind: integration-branch`, the release PR of
+`references/release.md`) follows the same steps with `--record <id>` in place of `<ticket-branch>`,
+with three differences. No batch QA covers its pair, so `qa evidence` does not apply and
+`confirm-pr` answers `qa_source: verification-pending-after-pr` until CI or local QA of exactly that
+pair passes. The harness never rewrites an integration branch: on `refresh`, and on
+`route-failure` with `route: fix-ticket`, stop; a child ticket based on that branch fixes it, then
+`integration prepare` runs again for its new head. `integration refresh` and `integration resolve`
+refuse such a record.
+
 ## A. Before the PR (skill step 3)
 
 Resolve the full current SHA with `git rev-parse HEAD` after the step 2 synchronization and validate it

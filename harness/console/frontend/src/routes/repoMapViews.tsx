@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { Panel } from "../ds";
 import { useI18n } from "../i18n";
 import { Icon } from "../icons";
-import { SYMBOL_KINDS } from "../ws/repoMap";
+import { PARSER_WORDS, SYMBOL_KINDS } from "../ws/repoMap";
 import type { MapFile, RepoMap as MapData, SymbolKind } from "../ws/repoMap";
 
 export function Fields({ rows }: { rows: [string, ReactNode][] }) {
@@ -24,7 +24,15 @@ export function Fields({ rows }: { rows: [string, ReactNode][] }) {
 
 /** One row per folder and file, indented 16px per level; a folder row folds
     its subtree, a file row carries its parser status. */
+/** A file's parser status in words of `language`; an unknown status as recorded, none as `—`. */
+function parserWord(status: string | undefined, language: string): string {
+  if (status === undefined) return "—";
+  const words = PARSER_WORDS[status];
+  return words ? words[language === "en" ? 1 : 0] : status;
+}
+
 function FileTree({ files, selected, select }: { files: MapFile[]; selected: string | null; select: (path: string) => void }) {
+  const { language } = useI18n();
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const toggle = (path: string) => {
     const next = new Set(folded);
@@ -61,7 +69,7 @@ function FileTree({ files, selected, select }: { files: MapFile[]; selected: str
           {/* The accessible name is the whole path; the row shows the file name. */}
           <span className="ds-sr">{f.path}</span>
           <span className="ds-tree-name" aria-hidden="true">{rest}</span>
-          <em className="ds-tree-status" aria-hidden="true">{f.parser_status ?? "—"}</em>
+          <em className="ds-tree-status" aria-hidden="true">{parserWord(f.parser_status, language)}</em>
         </button>,
       ];
     });
@@ -99,7 +107,7 @@ function Relations({ map, path }: { map: MapData; path: string }) {
 const moduleOf = (path: string) => (path.includes("/") ? path.slice(0, path.indexOf("/") + 1) : "./");
 
 export function Files({ map }: { map: MapData }) {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [selected, setSelected] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [module, setModule] = useState("");
@@ -124,7 +132,7 @@ export function Files({ map }: { map: MapData }) {
         <Panel title={t("Модули")} count={modules.length} meta={t("Файлы в снимке")} fill className="ds-files-tree" id="repo-files">
           {shown.length ? <FileTree files={shown} selected={file?.path ?? null} select={setSelected} /> : <p className="ds-empty">{t("Файлов нет")}</p>}
         </Panel>
-        <Panel title={file ? (file.path.split("/").pop() ?? file.path) : t("Файл")} meta={file ? <span className="ds-tag">{file.parser_status ?? "—"}</span> : undefined} fill className="ds-files-detail">
+        <Panel title={file ? (file.path.split("/").pop() ?? file.path) : t("Файл")} meta={file ? <span className="ds-tag">{parserWord(file.parser_status, language)}</span> : undefined} fill className="ds-files-detail">
           {file ? (
             <>
               <div className="ds-file-path"><code>{file.path}</code></div>

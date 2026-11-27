@@ -4,8 +4,9 @@
    (`Status`) and harness/console/tui/stats.py (`reports_kpi_tiles`). The figures are the
    server's; these functions only word, filter and order them. tests/web/fixtures/reports-facts.json
    pins every text to the one the TUI shows for the same snapshot. */
-import type { I18n, Language } from "../i18n";
+import { compactDuration, type I18n, type Language } from "../i18n";
 import type { BatchSummary, BatchTimeline, Figures, Ledger, ReportBody, ReportHead, StageHead } from "../ws/ledger";
+import { shortDispatch } from "../dispatchId";
 
 /** The `t` of `useI18n`: the report texts below are Russian keys of the translation catalog. */
 export type Translate = I18n["t"];
@@ -69,11 +70,12 @@ const BATCH_STATES: Readonly<Record<string, [StatusKind, string, string]>> = {
 export const reportsById = (ledger: Ledger): Map<string, ReportHead> =>
   new Map(ledger.reports.map((report) => [report.dispatch_id, report]));
 
-/** A stage row's status: `✔ отчёт получен · завершено`, or `⚠ в работе · отчёта ещё нет`. */
+/** A stage row's status: `✔ отчёт получен · завершено`, or `▶ в работе · отчёта ещё нет` while a
+    worker runs without a report. */
 export function stageStatus(stage: StageHead, report: ReportHead | undefined, narrow = false): Status {
   if (report === undefined) {
-    const [ru, en] = stage.state === "working" ? ["в работе", "in progress"] : [stage.state, stage.state];
-    return { kind: "warning", ru: `${ru} · отчёта ещё нет`, en: `${en} · no report yet` };
+    if (stage.state === "working") return { kind: "running", ru: "в работе · отчёта ещё нет", en: "in progress · no report yet" };
+    return { kind: "warning", ru: `${stage.state} · отчёта ещё нет`, en: `${stage.state} · no report yet` };
   }
   const [kind, ru, en] = OUTCOMES[report.outcome] ?? ["warning", report.outcome, report.outcome];
   const [wordRu, wordEn] = narrow ? ["отчёт", "report"] : ["отчёт получен", "report received"];
@@ -117,18 +119,7 @@ export function batchTimingText(batch: BatchSummary, language: Language): string
   const end = timestamp(batch.pr_created_at);
   if (!start || !end || end < start) return unknown;
   const seconds = Math.floor((end.getTime() - start.getTime()) / 1000);
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const units = en ? ["d", "h", "min", "s"] : ["д", "ч", "мин", "с"];
-  const parts = [
-    [days, units[0]],
-    [hours, units[1]],
-    [minutes, units[2]],
-  ]
-    .filter(([count]) => count)
-    .map(([count, unit]) => `${count} ${unit}`);
-  return (en ? "to PR: " : "до PR: ") + (parts.length ? parts.join(" ") : `${seconds} ${units[3]}`);
+  return (en ? "to PR: " : "до PR: ") + compactDuration(seconds, language);
 }
 
 export interface StageFilters {
@@ -221,6 +212,28 @@ const REVIEW_SEVERITIES: Readonly<Record<string, StatusKind>> = {
   blocker: "error",
 };
 const CHECK_RESULTS: Readonly<Record<string, StatusKind>> = { pass: "accepted", fail: "error", not_run: "not_started" };
+/** The words of a check result and of a review axis severity, as `_CHECK_WORDS`/`_SEVERITY_WORDS`. */
+const CHECK_WORDS: Readonly<Record<string, [string, string]>> = {
+  pass: ["пройдена", "passed"],
+  fail: ["не пройдена", "failed"],
+  not_run: ["не запускалась", "not run"],
+};
+const SEVERITY_WORDS: Readonly<Record<string, [string, string]>> = {
+  none: ["нет замечаний", "no findings"],
+  clean: ["чисто", "clean"],
+  warning: ["замечания", "warnings"],
+  blocker: ["блокер", "blocker"],
+};
+/** `REPORT_SECTION_TITLES`: the Russian title of each report section; the English name stays its key. */
+export const REPORT_SECTION_TITLES: Readonly<Record<string, string>> = {
+  Output: "Вывод",
+  Checks: "Проверки",
+  Review: "Ревью",
+  Risks: "Риски",
+  Blockers: "Блокеры",
+  "Next action": "Следующее действие",
+  "QA log": "Лог QA",
+};
 
 function checksText(report: ReportBody, t: Translate): string {
   const checks = objects(report.checks_run);
@@ -273,8 +286,9 @@ function checkLines(report: ReportBody, t: Translate): ReportLine[] {
     const result = text(check.result, "?");
     const evidence = text(check.evidence);
     const command = text(check.command, "?");
+    const [ru, en] = CHECK_WORDS[result] ?? [result, result];
     return [
-      { kind: CHECK_RESULTS[result] ?? "warning", ru: result, en: result },
+      { kind: CHECK_RESULTS[result] ?? "warning", ru, en },
       evidence ? `${command} — ${evidence}` : command,
     ];
   });
@@ -288,8 +302,9 @@ function reviewLines(review: Record<string, unknown>, t: Translate): ReportLine[
     if (!isRecord(evidence)) continue;
     const findings = objects(evidence.findings);
     const severity = text(evidence.severity, "?");
+    const [ru, en] = SEVERITY_WORDS[severity] ?? [severity, severity];
     lines.push([
-      { kind: REVIEW_SEVERITIES[severity] ?? "warning", ru: severity, en: severity },
+      { kind: REVIEW_SEVERITIES[severity] ?? "warning", ru, en },
       t("{axis} · находок: {count}", { axis, count: findings.length }),
     ]);
     for (const item of findings) {
@@ -349,20 +364,13 @@ export function qaLogText(ledger: Ledger, dispatchId: string, t: Translate): str
 }
 
 export const roleFlowText = (timeline: BatchTimeline, t: Translate): string =>
-  timeline.role_flow.join(" → ") || t("диспатчей ещё не было");
+  timeline.role_flow.join(" → ") || t("dispatch ещё не было");
 
 /* -- KPI tiles -------------------------------------------------------------------------------- */
 
-/** `duration_text`: `3 ч 20 мин`, `2 дн 4 ч`; `—` without a figure. */
+/** `duration_text`: `3 ч 20 мин`, `2 дн 4 ч`, `42 с`; `—` without a figure (`compactDuration`). */
 export function durationText(seconds: number | null | undefined, language: Language): string {
-  if (seconds === null || seconds === undefined) return "—";
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const [day, hour, minute] = language === "ru" ? ["дн", "ч", "мин"] : ["d", "h", "min"];
-  if (days) return `${days} ${day} ${hours} ${hour}`;
-  if (hours) return `${hours} ${hour} ${minutes} ${minute}`;
-  return `${minutes} ${minute}`;
+  return compactDuration(seconds, language);
 }
 
 /** Python's `round`: halves go to the even neighbour, so `round(2.5)` is 2. */
@@ -403,3 +411,9 @@ export function reportsKpiTiles(kpi: Figures, t: (text: string) => string, langu
 /** A dispatch or batch id without its common prefix, as the TUI lists it. */
 export const shortId = (value: string, prefix: string): string =>
   (value.startsWith(prefix) ? value.slice(prefix.length) : value).slice(0, 8);
+
+/** A dispatch id in a list row: a UUID as `d8e030c3f`, another id without its `dispatch-` prefix. */
+export const dispatchLabel = (id: string): string => {
+  const short = shortDispatch(id);
+  return short !== id ? short : shortId(id, "dispatch-");
+};

@@ -324,11 +324,11 @@ describe("the board card (#1092)", () => {
   const meta = (id: string) => card(id).querySelector(".board-card-meta")!.textContent;
   const chips = (id: string) => [...card(id).querySelectorAll(".board-chip")].map((chip) => chip.textContent);
 
-  test("shows the priority and story points, or no data when the ticket has none", () => {
+  test("shows the priority and story points; a ticket without them shows no badge", () => {
     renderBoard();
     expect(meta("#511")).toBe("#511P13 SP");
     expect(meta("#512")).toBe("#512P05 SP");
-    expect(meta("#516")).toBe("#516нет данных");
+    expect(meta("#516")).toBe("#516");
   });
 
   test("names the implementation type from the command: full, fast, with a human", () => {

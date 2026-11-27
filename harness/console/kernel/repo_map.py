@@ -354,9 +354,9 @@ def diagnostics_text(view: RepoMapView) -> str:
 def summary_fields(view: RepoMapView) -> list[tuple[str, str]]:
     """The summary as label/value fields, with the labels of the mockup."""
     return [
-        ("tier", f"{view.tier} (parser: {view.parser})"),
+        ("Уровень", f"{view.tier} · парсер {view.parser}"),
         ("Деградация", view.degradation_reason),
-        ("commit", view.commit),
+        ("Commit", view.commit),
         ("Файлов", str(len(view.files))),
         ("Рёбер", str(len(view.edges))),
         ("Токенов (оценка)", str(view.estimated_tokens)),
@@ -370,15 +370,23 @@ _PARSER_KINDS = {
     "syntax_error": "error",
     "invalid_encoding": "error",
 }
+# A parser status in words: (Russian, English).
+PARSER_WORDS = {
+    "ok": ("разобран", "parsed"),
+    "too_large": ("слишком большой", "too large"),
+    "syntax_error": ("ошибка синтаксиса", "syntax error"),
+    "invalid_encoding": ("неверная кодировка", "invalid encoding"),
+}
 
 
 def file_status(item: MapFile) -> Status | None:
-    """A file's parser status as a symbol and the parser's own word; None in tier=minimal. A
-    status the console does not know is a warning, shown as recorded."""
+    """A file's parser status as a symbol and words; None in tier=minimal. A status the console
+    does not know is a warning, shown as recorded."""
     if item.parser_status is None:
         return None
     word = item.parser_status
-    return Status(_PARSER_KINDS.get(word, "warning"), word, word)
+    ru, en = PARSER_WORDS.get(word, (word, word))
+    return Status(_PARSER_KINDS.get(word, "warning"), ru, en)
 
 
 def relation_counts(view: RepoMapView, path: str) -> tuple[int, int]:

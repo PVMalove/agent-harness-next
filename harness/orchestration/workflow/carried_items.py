@@ -717,14 +717,6 @@ def not_closed_reasons(report: JsonObject) -> dict[str, str]:
     }
 
 
-def closes_without_commits(report: JsonObject, created: list[str]) -> bool:
-    """Whether a developer-retry report created no commit only to record carried items not_closed
-    (issue #1265): its empty commit_map is valid, and the not_closed gap keeps it unclean."""
-    return (
-        not created and not report.get("commit_map") and bool(not_closed_reasons(report))
-    )
-
-
 def owes_closure(dispatch: JsonObject) -> bool:
     """Whether a brief is a developer-retry that carried items, so its report maps their closure."""
     return (

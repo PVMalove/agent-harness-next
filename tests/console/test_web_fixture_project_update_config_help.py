@@ -30,6 +30,7 @@ from harness.console.kernel.update_harness_snapshot import (
     UpdateHarnessFacts,
     diff_paths,
 )
+from harness.console.tui import icons
 from harness.console.tui.screens import project_setup, update_harness
 from harness.console.tui.screens.configuration import _ADAPTER_STATUS
 from harness.json_types import JsonObject
@@ -165,7 +166,9 @@ def open_project_facts(payload: JsonObject) -> list[str]:
     )
     for item in facts.candidates:
         facts_list += _cells(
-            project_setup.ProjectSetupScreen._candidate_row(item, "ru").plain
+            icons.to_kernel_glyphs(
+                project_setup.ProjectSetupScreen._candidate_row(item, "ru").plain
+            )
         )
         facts_list.append(item.command)
     return list(dict.fromkeys(facts_list))
@@ -175,10 +178,16 @@ def update_facts(payload: JsonObject) -> list[str]:
     """What the TUI «Обновить Harness» shows: the versions, the drift counters, the modes, the
     stop warning of the normal mode and every listed file with its tag."""
     facts = UpdateHarnessFacts.from_payload(payload)
-    found = _cells(update_harness.render_versions(facts.state, facts.package_version).plain)
-    found += _cells(update_harness.render_drift(facts.drift).plain)
+    found = _cells(
+        icons.to_kernel_glyphs(
+            update_harness.render_versions(facts.state, facts.package_version).plain
+        )
+    )
+    found += _cells(
+        icons.to_kernel_glyphs(update_harness.render_drift(facts.drift).plain)
+    )
     found += [label for _, label in update_harness.MODES]
-    found.append(update_harness._MODE_CONSEQUENCES["update"][0])
+    found.append(icons.to_kernel_glyphs(update_harness._MODE_CONSEQUENCES["update"][0]))
     conflicts = update_harness._count((facts.drift or {}).get("conflict"))
     found.append(
         f"⚠ Обычное обновление остановится: {update_harness._conflicts(conflicts, 'ru')}"

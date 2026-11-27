@@ -9,7 +9,7 @@ import subprocess
 import sys
 from pathlib import Path
 from threading import Lock
-from typing import Iterable, Mapping, Sequence, cast
+from typing import Iterable, Iterator, Mapping, Sequence, cast
 
 from textual.app import App, SystemCommand
 from textual.binding import Binding
@@ -54,6 +54,17 @@ HARNESS_THEME = Theme(
         "row-highlight": brand.SHELL_TOKENS["row-highlight"],
     },
 )
+
+
+# The palette's commands, by their Textual title: the keys help, widget maximize and its restore,
+# a screenshot and quit; the console adds its restart. Sections open by their keys, the language by
+# F2, and Textual's theme switch would leave the brand colours on a foreign background.
+PALETTE_COMMANDS = frozenset({"Keys", "Maximize", "Minimize", "Screenshot", "Quit"})
+
+
+def palette_commands(commands: Iterable[SystemCommand]) -> Iterator[SystemCommand]:
+    """The commands of `commands` the console palette offers (`PALETTE_COMMANDS`)."""
+    return (command for command in commands if command.title in PALETTE_COMMANDS)
 
 
 class HarnessConsoleApp(App[None]):
@@ -115,7 +126,7 @@ class HarnessConsoleApp(App[None]):
     }
     CommandPalette #--results { overlay: none; height: auto; }
     CommandPalette CommandList {
-        height: auto; max-height: 16; border: none; padding: 0; background: transparent;
+        height: auto; max-height: 24; border: none; padding: 0; background: transparent;
     }
     CommandPalette CommandList > .option-list--option { padding: 0 1; }
     CommandPalette CommandList > .option-list--option-highlighted,
@@ -300,15 +311,12 @@ class HarnessConsoleApp(App[None]):
             title, help_text = i18n.palette_command(
                 self.language, command.title, command.help
             )
-            yield command._replace(title=title, help=help_text)
+            # The trailing line break leaves a blank line after each entry, so the entries do not
+            # run together.
+            yield command._replace(title=title, help=f"{help_text}\n")
 
     def _console_commands(self, screen: Screen[object]) -> Iterable[SystemCommand]:
-        yield from super().get_system_commands(screen)
-        yield SystemCommand(
-            "Language / Язык",
-            "Switch the menu language between Russian and English (F2)",
-            self.action_toggle_language,
-        )
+        yield from palette_commands(super().get_system_commands(screen))
         yield SystemCommand(
             "Restart console",
             "Reload console code and keep the selected project",

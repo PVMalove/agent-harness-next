@@ -13,9 +13,12 @@ from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 
+from ...kernel.execution_view import ExecutionSummary, execution_summary
 from ...kernel.json_fields import text
 from ...kernel.protocol import ID_BYTES, MESSAGE_BYTES, _clip
 from .worker_steps import StepsPage
+
+__all__ = ["ExecutionSummary", "execution_summary"]
 
 ORCHESTRATION_EVENTS = (
     "batch.transition",
@@ -23,6 +26,8 @@ ORCHESTRATION_EVENTS = (
     "gate.decision",
     "qa.run",
     "qa.attempt",
+    "auto.decision",
+    "auto.stop",
 )
 # Step items in one reply: with the envelope the reply stays below `MESSAGE_LIMIT`.
 REPLY_BUDGET_BYTES = 48 * 1024
@@ -115,6 +120,10 @@ class RosterDispatch:
     # An in-process dispatch only, in any state: the ledger facts shown instead of its absent
     # step stream.
     observation: InProcessObservation | None = None
+    # `work` or `publish` from the dispatch record; "" until it is read.
+    purpose: str = ""
+    # A dispatch whose execution the runtime supervises: what the runtime observes of it.
+    execution: ExecutionSummary | None = None
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -131,15 +140,19 @@ class RosterDispatch:
             "observation": None
             if self.observation is None
             else self.observation.to_wire(),
+            "purpose": self.purpose,
+            "execution": None if self.execution is None else self.execution.to_wire(),
         }
 
 
 @dataclass(frozen=True)
 class DispatchTiming:
-    """When a dispatch was created and its latest heartbeat or state change; "" when unknown."""
+    """When a dispatch was created and its latest heartbeat or state change; "" when unknown.
+    ``purpose`` comes from the same dispatch record."""
 
     started_at: str
     last_event_at: str
+    purpose: str = ""
 
 
 def _moment(value: str) -> datetime | None:
@@ -163,6 +176,7 @@ def dispatch_timing(
     return DispatchTiming(
         started_at=_clip(text(dispatch.get("created_at")), ID_BYTES),
         last_event_at=_clip(max(moments)[1], ID_BYTES) if moments else "",
+        purpose=_clip(text(dispatch.get("purpose")), ID_BYTES),
     )
 
 
@@ -182,6 +196,7 @@ def timed(entry: RosterDispatch, timing: DispatchTiming | None, now: str) -> Ros
         started_at=timing.started_at,
         last_event_at=timing.last_event_at,
         silent=silent,
+        purpose=timing.purpose or entry.purpose,
     )
 
 
@@ -272,6 +287,10 @@ class OrchestrationStep:
     outcome: str | None
     stage: str | None
     message: str
+    # Who approved a decision (a person or `policy:auto`) and the category of a stop of the
+    # automatic path; None for the other events.
+    approved_by: str | None = None
+    category: str | None = None
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -290,6 +309,8 @@ class OrchestrationStep:
             "outcome": self.outcome,
             "stage": self.stage,
             "message": self.message,
+            "approved_by": self.approved_by,
+            "category": self.category,
         }
 
 
@@ -326,6 +347,8 @@ def orchestration_step(
         outcome=_id(event.get("outcome")),
         stage=_id(event.get("stage")),
         message=_clip(text(event.get("message")), MESSAGE_BYTES),
+        approved_by=_id(event.get("approved_by")),
+        category=_id(event.get("category")),
     )
 
 
@@ -333,7 +356,7 @@ def agent_steps(
     page: StepsPage, entry: RosterDispatch, observed_at: str
 ) -> tuple[AgentStep, ...]:
     """The visible steps of one worker log page; a page without a log has none."""
-    if page.source not in ("structured", "plain"):
+    if page.source not in ("structured", "plain", "stages"):
         return ()
     return tuple(
         AgentStep(

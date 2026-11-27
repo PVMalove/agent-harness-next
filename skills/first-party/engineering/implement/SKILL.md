@@ -81,6 +81,9 @@ The coordinator must not copy conventions from another batch and must not read l
 blocker: the coordinator must stop and report it to the developer, and must not reconstruct the step.
 
 Start these steps only after the ticket pre-flight above (blockers, `status::in-progress`).
+The coordinator reads `approval_policy` from `.harness/orchestration.json` first. Under
+`approval_policy: auto`, the coordinator reads `references/auto-path.md` before step 5, because that
+reference governs `batch approve` and every later decision.
 
 1. **Integration ref.** Use the ticket's `## Integration Branch` value (the `**Integration branch:**`
    line on the local tracker). If the ticket has no such section, use its `## Git base` value. If it has neither, use the same section of the parent epic.
@@ -102,6 +105,16 @@ Start these steps only after the ticket pre-flight above (blockers, `status::in-
    `--prohibited-change`, each item of the parent epic's `## Non-Goals & Rejected Alternatives` →
    `--prohibited-change` when the ticket names `## Parent: #<epic>`, and the paths of `## Contract touchpoints` and
    `## Relevant Files (Discovery Context)` → `--allowed-path` and `--expected-file`.
+
+   **Pipeline cost.** After a passing `batch preflight` and before `batch create`, compare the
+   `pipeline::full` label with the ticket's actual size. Show the developer the estimate: the
+   preflight's `expected_files` and `expected_changed_lines`, the ticket's `## Story Points`, and
+   `story_points.fast_threshold` from `.harness/project.json`. If every expected file is
+   documentation or skill text (`*.md`, `docs/**`, `site/**`, `skills/**`), or the Story Points are at
+   or below `fast_threshold`, offer to relabel the ticket `pipeline::fast` on the tracker and run
+   `/fast-implement` instead. The developer decides; wait for the answer under every
+   `approval_policy`. Continue with step 4 unless the developer chooses `/fast-implement`; then stop
+   before `batch create`. Never relabel the ticket yourself.
 4. **Create the batch.** Repeat the list flags once for each value.
 
    ```bash
@@ -117,9 +130,13 @@ Start these steps only after the ticket pre-flight above (blockers, `status::in-
    one `--allowed-path` are mandatory. `--branch` must match `branch_pattern`. `--expected-file`,
    `--expected-service` and `--expected-changed-lines` are mandatory when the project policy
    requires estimates. The CLI refuses an oversized ticket and prints a `remedy`.
-5. **Approve the batch.** `batch approve --batch <id> --approved-by <operator> --approved-at <UTC time>`
-   moves the batch from `planned` to `awaiting-approval`. This needs the operator's explicit
-   approval: present the command, as for `batch abandon`, and do not run it for them.
+5. **Approve the batch.** `batch approve` moves the batch from `planned` to `awaiting-approval`.
+   The step depends on `approval_policy`:
+   - `auto`: run `batch approve --batch <id>` yourself, without `--approved-by` and
+     `--approved-at`; the policy records the approval (`references/auto-path.md`).
+   - Every other policy: the step needs the operator's explicit approval. Present
+     `batch approve --batch <id> --approved-by <operator> --approved-at <UTC time>`, as for
+     `batch abandon`, and do not run it for them.
 
 ## Dispatch handoffs
 
@@ -182,7 +199,9 @@ to QA, never to a new code-review. Report each startup failure under its own cla
 or refused self-report, capacity, rate-limit, service-unavailable) together with its recovery
 route.
 
-Under `approval_policy: auto`, read `references/auto-path.md` before the first decision.
+Before a decision on a developer report with a failed check (`checks_run[].result: fail`), read
+`references/recovery.md` → "A failed check the diff may not cause": a retry cannot fix a failure the
+diff does not cause.
 
 Each worker records a model self-report and is observed by the event-driven watchdog; those facts
 are evidence, never a reason to edit an immutable brief.
@@ -194,7 +213,8 @@ role-specific duplicate. Continuations and retries stop at the project budget; a
 exception to that budget.
 
 Run `dispatch wait` between send and report. Silence or a timeout does not prove that a worker
-stopped. Read `references/workers.md` for waiting, a busy ledger or QA lease, the runtime service,
+stopped, and neither does `ps` from this session: only `dispatch status` shows whether a worker is
+alive. Read `references/workers.md` for waiting, a busy ledger or QA lease, the runtime service,
 and external launch and observation. Never remove the ledger lock or a state file by hand, and never
 start `harness-runtime serve` from your own shell.
 
@@ -206,8 +226,8 @@ assessment before proposing waiting, launch repair, human-approved `batch resume
 `--runtime-stopped` once the worker is stopped through its runtime), `batch rewind`, or cancelling an
 unsent dispatch. `dispatch runtime-probe` diagnoses an app-server runtime without a worker. Read
 `references/recovery.md` for the matching case: a batch blocking the ticket, a runtime-store hold, an
-infrastructure-only failure, a block bypass or tooling blocker, and a defect in a clean developer
-report. Never accept or warning-override a report whose worker worked around a hook or tool block.
+infrastructure-only failure, a failed check the diff may not cause, a block bypass or tooling
+blocker, and a defect in a clean developer report. Never accept or warning-override a report whose worker worked around a hook or tool block.
 
 ## Worker prompt
 

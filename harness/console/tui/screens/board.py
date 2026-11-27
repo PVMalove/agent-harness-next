@@ -26,6 +26,7 @@ from textual.widgets import (
 
 from ...kernel import brand, i18n
 from ...kernel.task_board import BoardCard, BoardSnapshot, BoardSpecs
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..shell import SHELL_CSS, ConsoleShell, ElidedPath, SectionCard, ShellIds
 from ..widgets import LiveDot
@@ -76,10 +77,10 @@ def _card_text(card: BoardCard, language: str) -> Text:
     meta: list[str] = []
     if card.open_blockers:
         meta.append(
-            f"{brand.STATUS_ICONS['warn']} {i18n.tr(language, 'Блокеры').lower()} {card.open_blockers}"
+            f"{icons.STATUS_ICONS['warn']} {i18n.tr(language, 'Блокеры').lower()} {card.open_blockers}"
         )
     else:
-        meta.append(f"{brand.STATUS_ICONS['ok']} {i18n.tr(language, 'без блокеров')}")
+        meta.append(f"{icons.STATUS_ICONS['ok']} {i18n.tr(language, 'без блокеров')}")
     if card.command:
         meta.append(card.command)
     if card.batch:
@@ -107,13 +108,16 @@ def _detail_text(card: BoardCard, language: str) -> Text:
         text.append(_short(card.what, 400) + "\n")
     if card.blockers:
         text.append("\n" + i18n.tr(language, "Блокеры") + "\n", style=f"bold {primary}")
-        icons = {
-            "open": brand.STATUS_ICONS["fail"],
-            "closed": brand.STATUS_ICONS["ok"],
-            "unknown": brand.STATUS_ICONS["warn"],
+        blocker_icons = {
+            "open": icons.STATUS_ICONS["fail"],
+            "closed": icons.STATUS_ICONS["ok"],
+            "unknown": icons.STATUS_ICONS["warn"],
         }
         for blocker in card.blockers:
-            text.append(f"{icons[blocker.state]} {blocker.id} {blocker.why}".rstrip() + "\n")
+            text.append(
+                f"{blocker_icons[blocker.state]} {blocker.id} {blocker.why}".rstrip()
+                + "\n"
+            )
     if card.criteria:
         text.append("\n" + i18n.tr(language, "Критерии") + "\n", style=f"bold {primary}")
         for item in card.criteria[:8]:
@@ -184,9 +188,9 @@ class BoardCardModal(Translated, ModalScreen[None]):
                     )
                     for blocker in card.blockers:
                         state = {
-                            "open": brand.STATUS_ICONS["fail"],
-                            "closed": brand.STATUS_ICONS["ok"],
-                            "unknown": brand.STATUS_ICONS["warn"],
+                            "open": icons.STATUS_ICONS["fail"],
+                            "closed": icons.STATUS_ICONS["ok"],
+                            "unknown": icons.STATUS_ICONS["warn"],
                         }[blocker.state]
                         yield Static(
                             f"{state} {blocker.id} · {blocker.why}".rstrip(" ·"),
@@ -257,7 +261,9 @@ class BoardScreen(ConsoleShell):
     CSS = SHELL_CSS + brand.shell_css("""
     BoardScreen #board-page { height: 1fr; padding: 0 2; }
     BoardScreen #board-controls { margin-bottom: 1; }
+    BoardScreen.-wide #board-controls, BoardScreen.-spacious #board-controls { margin-bottom: 0; }
     BoardScreen #board-control-row { height: 1; margin-bottom: 1; }
+    BoardScreen.-wide #board-control-row, BoardScreen.-spacious #board-control-row { margin-bottom: 0; }
     BoardScreen #board-spec { width: 1fr; margin-right: 1; }
     BoardScreen #board-refresh { width: auto; }
     BoardScreen #board-filter-fields { height: 1; }
@@ -266,9 +272,11 @@ class BoardScreen(ConsoleShell):
     BoardScreen #board-priority { width: 24; margin-right: 1; }
     BoardScreen #board-free { width: auto; }
     BoardScreen #board-status-line { height: 1; margin-bottom: 1; }
-    BoardScreen #board-live { width: 2; height: 1; color: $primary; }
+    BoardScreen.-wide #board-status-line, BoardScreen.-spacious #board-status-line { margin-bottom: 0; }
+    BoardScreen #board-live { width: 2; height: 1; margin-right: 1; color: $primary; }
     BoardScreen #board-status { width: 1fr; height: 1; color: $text-muted; }
     BoardScreen #board-segment { height: 1; margin-bottom: 1; overflow: hidden hidden; }
+    BoardScreen.-wide #board-segment, BoardScreen.-spacious #board-segment { margin-bottom: 0; }
     BoardScreen #board-segment Button { height: 1; min-width: 0; border: none; padding: 0 1; color: $text-muted; }
     BoardScreen #board-segment Button.-on { background: $selection-background; color: $selection-foreground; text-style: bold; }
     BoardScreen #board-body { height: 1fr; }
@@ -413,7 +421,7 @@ class BoardScreen(ConsoleShell):
         self._busy = True
         self._epoch += 1
         epoch = self._epoch
-        self._set_status("Читаю спеки…")
+        self._set_status(icons.loading("Читаю спеки…"))
         client = self._client
 
         def work() -> None:
@@ -449,7 +457,7 @@ class BoardScreen(ConsoleShell):
         self._epoch += 1
         epoch = self._epoch
         self._busy = True
-        self._set_status("Читаю доску…")
+        self._set_status(icons.loading("Читаю доску…"))
         client = self._client
 
         def work() -> None:
@@ -515,11 +523,18 @@ class BoardScreen(ConsoleShell):
         """The shown cards in board order, a muted heading before each status when all are shown."""
         list_view.clear()
         if not self._shown:
+            # A failed read is not an empty board: the list says the board was not read.
+            if self._error:
+                empty = "Доска не прочитана: r — повторить"
+            elif self._board is not None and self._board.tickets:
+                empty = "По фильтрам ничего не найдено"
+            else:
+                empty = "Карточек нет"
             list_view.extend(
                 [
                     ListItem(
                         Static(
-                            i18n.tr(language, "Карточек нет"),
+                            i18n.tr(language, empty),
                             classes="board-empty",
                             markup=False,
                         ),

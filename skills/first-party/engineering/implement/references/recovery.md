@@ -59,6 +59,45 @@ with the developer reason category its evidence supports. Resolve the `tooling-r
 attention, raised by the third consecutive tooling retry on one candidate, only once the tool is
 fixed.
 
+## A failed check the diff may not cause
+
+When a developer report has a check with `checks_run[].result: fail`, find out whether the diff
+causes the failure before `batch auto-decide` under `approval_policy: auto`, or before you propose
+`retry` under any other policy:
+
+1. Name the failed tests from the check's evidence or its log.
+2. List the candidate's diff: `git -C <abs issue worktree> diff --name-only <batch base>..<candidate>`.
+   The failure is related when the diff changes a failed test file, a module that test imports, or
+   the test configuration (`conftest.py`, `pyproject.toml`, `uv.lock`).
+3. Run only the failed tests at the candidate from the coordinator session, without moving the
+   session: use the command's own working-directory option, for example
+   `env -C <abs issue worktree> <test command> <failed test ids>`. If they fail again, run them at the
+   batch base in the same way.
+
+Write the evidence in English as a findings file under `.harness/.sandboxes/scratch/inbox/`, in the
+`--findings-file` format `{"findings": [{"summary", "files", "expected_evidence"}]}`: the failed
+tests, the diff files, each run with its commit, result and duration, and the known differences of
+the worker environment (for example, its sandbox). If the evidence shows that the diff causes the
+failure, continue with `batch auto-decide` or the usual `retry`.
+
+If the diff touches none of the failed tests and they pass alone or fail at the base too, a
+developer retry cannot fix the code. No decision accepts that report: a failed check is a
+`code_test` failure, so `accept-conditional` and `override-warning` refuse it, and every `retry` of
+it is a developer-retry. Do not run `batch auto-decide` and do not propose `retry`: show the evidence
+to the developer and wait for their choice:
+
+- Fix the environment first (or the checks the brief carries), then run
+  `batch decide --decision retry --note <findings file and cause>`. The developer-retry reruns the
+  checks without a code change. It then reports `outcome: blocked` with an empty `commit_map` and
+  no failed check (`.harness/orchestration/roles/references/developer-retry.md`). For that report,
+  propose `batch decide --decision retry --reason-category verification-infrastructure`: the route
+  `verification` reruns the checks read-only on the same candidate. Or the developer decides
+  `batch decide --decision accept-conditional --infrastructure-failure --note <cause>` (section
+  "Infrastructure-only failure"); after that accept,
+  `batch carry-over --batch <id> --findings-file <path>` hands the evidence to code-review as a
+  carried item.
+- Or `block` the batch.
+
 ## Defect in a clean developer report
 
 When you find a defect in a clean developer report whose DoD is met inside its allowed paths, do not retry

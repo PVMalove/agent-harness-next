@@ -5,7 +5,7 @@
    count the served ledger lists, as the TUI does. tests/web/fixtures/orch-snapshot-facts.json
    pins every text to the one the TUI shows for the same snapshot. */
 import type { Language } from "../i18n";
-import { durationText } from "../reports/format";
+import { dateTimeText, durationText } from "../reports/format";
 import type { BatchSummary, Figure, Ledger, StageHead } from "../ws/ledger";
 
 /** The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state. */
@@ -33,9 +33,8 @@ export const ALL_STATES = "all";
 
 const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** An ISO timestamp as `YYYY-MM-DD HH:MM`; anything else unchanged. */
-export const shortTime = (value: string): string =>
-  value.length >= 16 && value[10] === "T" ? value.slice(0, 16).replace("T", " ") : value;
+/** `short_time`: a recorded, timezone-aware time as `DD.MM.YYYY HH:MM UTC`; anything else unchanged. */
+export const shortTime = (value: string): string => dateTimeText(value) ?? value;
 
 /* -- analytics -------------------------------------------------------------------------------- */
 
@@ -83,10 +82,13 @@ export function pipelineStats(ledger: Ledger): PipelineStats {
   };
 }
 
-const counts = (values: Map<string, number>) =>
+/** `OUTCOME_WORDS`: a report outcome in the statistics, in Russian. */
+const OUTCOME_WORDS: Readonly<Record<string, string>> = { completed: "завершено", blocked: "заблокировано", failed: "провалено" };
+
+const counts = (values: Map<string, number>, words: Readonly<Record<string, string>> = {}) =>
   [...values.entries()]
     .sort(([a], [b]) => byText(a, b))
-    .map(([name, count]) => `${name} ${count}`)
+    .map(([name, count]) => `${words[name] ?? name} ${count}`)
     .join(", ") || "нет";
 
 /** Known lifecycle states in lifecycle order, then any unknown state the ledger holds. */
@@ -105,8 +107,8 @@ export function pipelineStatsFields(stats: PipelineStats): [string, string][] {
   return [
     ["Запусков (batch)", `${stats.batches}, тикетов: ${stats.tickets}`],
     ["По состояниям", states],
-    ["Диспатчи по ролям", counts(stats.dispatchesByRole)],
-    ["Отчёты по итогам", counts(stats.reportsByOutcome)],
+    ["Dispatch по ролям", counts(stats.dispatchesByRole)],
+    ["Отчёты по итогам", counts(stats.reportsByOutcome, OUTCOME_WORDS)],
     ["QA-прогонов", `${stats.qaRuns}, неудачных попыток qa-lane: ${stats.qaAttemptsFailed}`],
     ["Период", period],
   ];
@@ -167,7 +169,7 @@ const LOCK_WORDS: Readonly<Record<Language, LockWords>> = {
     ownerUnreadable: "Владелец: запись не читается",
     age: "Держится: {held} · до снятия по таймауту: {timeout}",
     available: "доступно",
-    aliveTimeout: "{remaining} (таймаут не снимает живого владельца)",
+    aliveTimeout: "не применяется (владелец жив)",
     hostTimeout: "не применяется (владелец на другом хосте)",
     verdict: "Вердикт: {verdict}, {meaning}",
     unknownVerdict: "неизвестный вердикт",
@@ -180,7 +182,7 @@ const LOCK_WORDS: Readonly<Record<Language, LockWords>> = {
     leaseStale: " · heartbeat пропущен",
     leaseUnavailable: "Lease QA-lane: состояние недоступно: {error}",
     verdicts: {
-      "owner-alive": "владелец жив; живой владелец не снимается",
+      "owner-alive": "живой владелец не снимается",
       "owner-dead": "владелец завершился; ledger release-lock снимет lock",
       "owner-in-other-environment":
         "владелец из другого PID-пространства или загрузки; pid не проверить, снятие по таймауту",
@@ -199,7 +201,7 @@ const LOCK_WORDS: Readonly<Record<Language, LockWords>> = {
     ownerUnreadable: "Owner: record cannot be read",
     age: "Held for: {held} · until the timeout release: {timeout}",
     available: "available",
-    aliveTimeout: "{remaining} (the timeout never releases a live owner)",
+    aliveTimeout: "not applicable (the owner is alive)",
     hostTimeout: "not applicable (owner on another host)",
     verdict: "Verdict: {verdict}, {meaning}",
     unknownVerdict: "unknown verdict",
@@ -212,7 +214,7 @@ const LOCK_WORDS: Readonly<Record<Language, LockWords>> = {
     leaseStale: " · heartbeat missed",
     leaseUnavailable: "QA lease: state unavailable: {error}",
     verdicts: {
-      "owner-alive": "the owner is alive; a live owner is never released",
+      "owner-alive": "a live owner is never released",
       "owner-dead": "the owner has exited; ledger release-lock releases the lock",
       "owner-in-other-environment":
         "the owner is in another PID namespace or boot; its pid cannot be checked, released by the timeout",
@@ -266,6 +268,12 @@ function leaseLines(lease: unknown, words: LockWords): string[] {
 
 /** `lock_text`: who holds the ledger lock, for how long, when and how it may be released; the
     error of a lock that could not be read. */
+/** `current_lock_view`'s state of the panel: `ok` free, `warn` held, `fail` not read. */
+export function lockState(lock: Record<string, unknown> | null): "ok" | "warn" | "fail" {
+  if (lock === null) return "fail";
+  return lock.locked ? "warn" : "ok";
+}
+
 export function lockLines(lock: Record<string, unknown> | null, error: string | null, language: Language): string[] {
   const words = LOCK_WORDS[language];
   if (lock === null) return [fill(words.unavailable, { error: error ?? "состояние не сообщается" })];
@@ -277,7 +285,7 @@ export function lockLines(lock: Record<string, unknown> | null, error: string | 
   const timeout = lock.release_available
     ? words.available
     : verdict === "owner-alive"
-      ? fill(words.aliveTimeout, { remaining: lockDuration(remaining, language) })
+      ? words.aliveTimeout
       : verdict === "owner-on-another-host"
         ? words.hostTimeout
         : lockDuration(remaining, language);

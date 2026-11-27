@@ -139,13 +139,18 @@
 .orch-overview-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; margin-bottom: 20px; }
 .orch-history-grid { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 20px; margin-bottom: 20px; }
 .orch-analytics-rows { margin: 0; padding: 8px 16px 12px; font-size: var(--fs-1); }
-.orch-analytics-rows > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; padding: 4px 0; border-top: 1px solid #363f4b; }
+.orch-analytics-rows > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 8px; padding: 4px 0; border-top: 1px solid light-dark(var(--lt-line-soft), #363f4b); }
 .orch-analytics-rows > div:first-child { border-top: 0; }
 .orch-analytics-rows dt { color: var(--muted); }
 .orch-analytics-rows dd { margin: 0; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .orch-analytics-head { flex-wrap: wrap; gap: 8px; }
 .orch-lock-body { padding: 8px 16px 12px; font-size: var(--fs-1); }
 .orch-lock-body p { margin: 0 0 4px; overflow-wrap: anywhere; }
+/* The first line names the lock's state with its icon and colour: free, held, not read. */
+.orch-lock-body .orch-lock-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.orch-lock-head.ok b { color: var(--ds-ok); }
+.orch-lock-head.warn b { color: var(--ds-warn); }
+.orch-lock-head.err b { color: var(--ds-err); }
 .orch-history .panel-head select { max-width: 50%; }
 .orch-section-title { margin: 8px 0 12px; font-size: var(--fs-2); }
 .orch-title .actions { flex-wrap: wrap; }
@@ -167,7 +172,7 @@
 .view-blockers p { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .view-group { margin-bottom: 12px; }
 .view-group dl { margin: 0; }
-.view-row { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 8px; padding: 4px 0; border-top: 1px solid #363f4b; }
+.view-row { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 8px; padding: 4px 0; border-top: 1px solid light-dark(var(--lt-line-soft), #363f4b); }
 .view-row dt { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
 .view-row dd { margin: 0; font-family: var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .view-mark { flex: none; }
@@ -178,6 +183,7 @@
 .view-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
 .view-action { display: inline-flex; flex-direction: column; gap: 2px; max-width: 100%; }
 .view-action-reason { max-width: 260px; color: var(--muted); font-size: var(--fs-1); overflow-wrap: anywhere; }
+.recovery-open { display: inline-flex; align-items: center; gap: 8px; }
 .recovery-inputs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
 .recovery-inputs input { flex: 1 1 160px; min-width: 0; }
 .command-confirm .board-confirm-note { white-space: pre-line; overflow-wrap: anywhere; }
@@ -235,7 +241,7 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .board-confirm-diff { flex-wrap: wrap; }
 .board-modal-links select { max-width: 100%; }
 /* Mockup parity: a field without a data source shows an explicit no-data state in its place. */
-.no-data { font-style: normal; color: var(--muted); }
+.no-data { font-style: normal; font-weight: 400; font-size: min(1em, var(--ds-fs-2)); color: var(--muted); }
 /* A multi-line kernel value renders as lines, not as a string with line breaks. */
 .view-line { display: block; overflow-wrap: anywhere; }
 /* The gate latency trend of Orchestration → Гейты: a lone hour of the mockup's line chart is a dot. */
@@ -243,8 +249,8 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .orch-line-avg-dot { fill: var(--orch-cyan); }
 .orch-line-p95-dot { fill: var(--orch-lav); }
 /* Task Board: the accent "Agent prompt" button and the updating overlay over a kept board (#1045). */
-.board-modal-tabs .btn.board-agent-prompt { display: inline-flex; align-items: center; gap: 4px; border-color: var(--primary); background: var(--primary); color: #0b1a2e; font-weight: 600; }
-.board-modal-tabs .btn.board-agent-prompt:hover { background: #c4d6f8; }
+.board-modal-tabs .btn.board-agent-prompt { display: inline-flex; align-items: center; gap: 4px; border-color: var(--primary); background: var(--primary); color: light-dark(var(--lt-on-accent), #0b1a2e); font-weight: 600; }
+.board-modal-tabs .btn.board-agent-prompt:hover { background: light-dark(var(--lt-primary-hover), #c4d6f8); }
 .board-agent-prompt .hi { width: 14px; height: 14px; }
 .board-page { position: relative; }
 .board-updating { position: absolute; inset: 0; z-index: 5; display: flex; justify-content: center; align-items: flex-start; pointer-events: none; animation: board-updating-in 0.18s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both; }
@@ -252,11 +258,11 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
    of a kept board. The overlay appears 150 ms late, so a quick answer never flashes it. */
 /* Sticky inside the page-tall overlay: the mascot stays in the visible part of a board that scrolls
    (a short or narrow window), a little above the middle of the view. */
-.board-updating-body { position: sticky; top: 35%; margin-top: 96px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px 64px; background: radial-gradient(closest-side, rgb(31 37 46 / 0.94) 55%, rgb(31 37 46 / 0)); color: var(--fg); font: var(--fs-2) var(--text); text-align: center; }
+.board-updating-body { position: sticky; top: 35%; margin-top: 96px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 32px 64px; background: radial-gradient(closest-side, color-mix(in srgb, var(--bg) 94%, transparent) 55%, transparent); color: var(--fg); font: var(--fs-2) var(--text); text-align: center; }
 .board-mascot-stage { position: relative; display: block; width: 48px; height: 72px; }
 /* The drawing carries its own floor shadow; it is cut off, and the shadow below stays on the floor. */
 .board-mascot { position: absolute; left: 0; bottom: 4px; width: 48px; height: 62px; clip-path: inset(0 0 6% 0); transform-origin: 50% 94%; animation: board-mascot-jump 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
-.board-mascot-shadow { position: absolute; left: 8px; bottom: 2px; width: 32px; height: 6px; border-radius: 50%; background: #0b0e13; opacity: 0.55; animation: board-mascot-shadow 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
+.board-mascot-shadow { position: absolute; left: 8px; bottom: 2px; width: 32px; height: 6px; border-radius: 50%; background: light-dark(var(--lt-shadow), #0b0e13); opacity: 0.55; animation: board-mascot-shadow 1.3s cubic-bezier(0.45, 0, 0.55, 1) infinite; }
 /* One hop: a squat before the push, a stretch on the way up, a squash on landing, then a rest. */
 @keyframes board-mascot-jump {
   0%, 100% { transform: translateY(0) scale(1, 1); }
@@ -369,7 +375,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* Orchestration: the live step of a coordinator or human gate pulses like a live role (the
    mockup's global reduced-motion rule stops it), the statusbar names the live step, and long
    dispatch lists scroll inside their panel. */
-.orch-map-node.live .orch-map-bg { stroke: #a9c4f5; stroke-width: 1.5; animation: orchMapPulse 2s ease-in-out infinite; }
+.orch-map-node.live .orch-map-bg { stroke: var(--primary); stroke-width: 1.5; animation: orchMapPulse 2s ease-in-out infinite; }
 .orch-map-statusbar .orch-live { margin-left: auto; color: var(--primary); }
 .orch-dispatch-scroll { max-height: 448px; overflow-y: auto; }
 .orch-ticket-table .orch-pill { justify-self: start; white-space: nowrap; }
@@ -438,7 +444,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .ct-edge.flow.live { stroke: var(--primary); stroke-dasharray: 5 4; animation: ctflow 2.2s linear infinite; }
 @media (prefers-reduced-motion: reduce) { .ct-edge.flow.live { animation: none; } }
 .contour-links { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
-.contour-links li { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 6px; background: #282f3a; }
+.contour-links li { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 8px 12px; border: 1px solid var(--rule); border-radius: 6px; background: light-dark(var(--lt-card), #282f3a); }
 .contour-links li.live { border-color: var(--primary); }
 .contour-links span { color: var(--muted); font-size: var(--fs-1); }
 .contour-links b { font: var(--fs-1)/1.35 var(--mono); overflow-wrap: anywhere; }
@@ -495,6 +501,10 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   #home .context-section { padding: 8px 12px; }
   #home .context-section h3 { margin-bottom: 4px; }
   #home .context-section .kv > div { padding: 2px 0; }
+  /* A long value starts on its own line under its label instead of breaking mid-word. */
+  #home .context-section .kv > div { flex-wrap: wrap; column-gap: 12px; }
+  #home .context-section .kv dd { overflow-wrap: break-word; flex: 1 1 auto; min-width: 0; }
+  #home .contour-svg text { font-size: 15px; }
   #home-health > .body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; padding: 12px 16px; overflow: hidden; }
   #home-health > .panel-head { flex-wrap: wrap; gap: 4px 12px; padding: 8px 16px; }
   #home .health-mode { flex-wrap: wrap; gap: 4px 12px; }
@@ -523,11 +533,11 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* Task Board card (#1092): priority and story points on one side, the implementation type and the
    blockers as chips; the ticket drawer is the board dialog docked to the right edge. */
 .board-card-badges { display: inline-flex; align-items: center; gap: 4px; }
-.board-sp { padding: 2px 4px; border: 1px solid #5a6b80; border-radius: 2px; color: var(--orch-mint); font: var(--fs-1) var(--mono); font-style: normal; }
-.board-chip.kind.fast { color: var(--orch-mint); border-color: #5a6b80; }
-.board-chip.kind.full { color: var(--orch-blue); border-color: #4a6a94; }
-.board-chip.kind.guide { color: var(--orch-lav); border-color: #7a4448; }
-.board-chip.blocker-id { color: var(--orch-lav); border-color: #7a4448; border-style: dashed; }
+.board-sp { padding: 2px 4px; border: 1px solid light-dark(var(--lt-slate-edge), #5a6b80); border-radius: 2px; color: var(--orch-mint); font: var(--fs-1) var(--mono); font-style: normal; }
+.board-chip.kind.fast { color: var(--orch-mint); border-color: light-dark(var(--lt-slate-edge), #5a6b80); }
+.board-chip.kind.full { color: var(--orch-blue); border-color: light-dark(var(--lt-accent-edge), #4a6a94); }
+.board-chip.kind.guide { color: var(--orch-lav); border-color: light-dark(var(--lt-err-edge), #7a4448); }
+.board-chip.blocker-id { color: var(--orch-lav); border-color: light-dark(var(--lt-err-edge), #7a4448); border-style: dashed; }
 .board-card-chips { flex-wrap: wrap; }
 .board-dialog { margin: 0 0 0 auto; width: min(640px, 100vw); height: 100dvh; max-height: 100dvh; border-radius: 9px 0 0 9px; border-right: 0; }
 .board-dialog .board-modal { height: 100%; max-height: 100%; }
@@ -621,14 +631,22 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .work-fit .work-grid { display: grid; gap: 12px; align-items: stretch; margin: 0; }
   .work-fit .work-grid > .panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
   .work-fit .work-sessions .work-list { flex: 1 1 auto; min-height: 120px; max-height: none; overflow-y: auto; }
-  .work-fit .work-grid > .work-sessions { overflow-y: auto; }
-  .work-fit .work-route-panel { overflow-y: auto; }
+  /* Only the session list scrolls in the sessions panel; the route panel scrolls as a whole, so
+     its actions and the session's observation stay reachable (UX review of #1296). */
+  .work-fit .work-grid > .work-route-panel { overflow-y: auto; }
+  .work-fit .work-sources .work-source small { display: none; }
+  .work-fit .work-sources .work-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .work-fit .work-events-panel { display: flex; flex-direction: column; overflow: hidden; }
   .work-fit .work-events-panel .work-events { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
   .work-fit > .work-panel > .decision-panel { grid-column: 1 / -1; max-height: 160px; overflow-y: auto; }
   /* Timeline and Statistics hold the panel; their long parts scroll inside. */
   .work-fit > .work-panel > .work-analytics { grid-column: 1 / -1; grid-row: 1 / -1; display: flex; flex-direction: column; overflow-y: auto; }
-  .work-fit .work-analytics .work-gantt { flex: 1 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
+  .work-fit .work-analytics .work-gantt { flex: 0 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
+  /* A tab panel the user is not on stays hidden: `display: grid` above would override the hidden
+     attribute and leave an empty panel above the timeline and the statistics. */
+  .work-fit > .work-panel[hidden] { display: none; }
+  /* The timeline and the statistics panel are as tall as their rows, not the free height. */
+  .work-fit > .work-panel > .work-analytics { align-self: start; max-height: 100%; }
 }
 
 /* Orchestration on the v3 shell (#1095): the KPI facts of the summary, the stage strip, the
@@ -693,9 +711,9 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .orch-page .orch-state { grid-column: 2; }
   .orch-page .orch-heartbeat { grid-column: 3; text-align: right; }
 }
-.orch-map-edge.sky { stroke: #a6d5e8; }
-.orch-map-edge.rose { stroke: #cbb8f0; }
-.orch-stack > i.blue, .orch-legend i.blue { background: #cbb8f0; }
+.orch-map-edge.sky { stroke: var(--sky); }
+.orch-map-edge.rose { stroke: var(--lavender); }
+.orch-stack > i.blue, .orch-legend i.blue { background: var(--lavender); }
 @media (max-width: 900px) {
   .orch-page .ds-split { flex: none; }
   .orch-page .orch-extras { grid-template-columns: minmax(0, 1fr); }
@@ -816,3 +834,81 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 .publish-page h3,
 #candidate-drawer b { font-weight: 600; }
 #candidate-readiness dd { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+/* Live activity (#1296): a supervised execution's facts, stage results of a container QA run. */
+.orch-pill.ok { color: var(--ok); border-color: currentColor; }
+.orch-pill.err { color: var(--err); border-color: currentColor; }
+.work-execution-facts code { font: var(--fs-1) var(--mono); }
+.work-execution-stderr {
+  margin: 0 16px 12px; padding: 8px; max-height: 160px; overflow: auto;
+  font: var(--fs-1)/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere;
+  border: 1px solid var(--rule); border-radius: 4px;
+}
+.work-event[data-kind="output"] .work-event-main b { font: var(--fs-1) var(--mono); font-weight: 400; white-space: pre-wrap; }
+/* The session's observation inside the route panel: no second panel frame (#1296). */
+.work-route-panel .work-observation, .work-route-panel .work-execution { border: none; border-top: 1px solid var(--rule); border-radius: 0; box-shadow: none; margin: 12px 0 0; background: transparent; }
+.work-source.plain { border-color: var(--rule); }
+.work-source.plain > span { color: var(--orch-cyan); }
+/* UX review of #1296 (wide): a row's focus ring stays inside its scrolling list; the preflight
+   reads name first, status on the right, in one aligned column; Publish gives the candidates
+   less width than the detail. */
+:is(.ds-panel-body, .panel) :is(.ds-row, .report-row, .orch-dispatch-row, .work-row, .task-row):focus-visible { outline-offset: -2px; }
+.publish-preflight .publish-check { grid-template-columns: minmax(0, 1fr) max-content; }
+.publish-preflight .publish-check > :last-child { justify-self: end; }
+@media (min-width: 1200px) {
+  .publish-page .ds-split { grid-template-columns: minmax(320px, 2fr) minmax(0, 3fr); }
+}
+/* Container route (UX review of #1296): each field has a visible label; a dl keeps its pairs
+   in div rows, as the definition-list rules of axe require. */
+.route-select { align-items: flex-end; }
+.route-select .route-field { display: inline-flex; flex: 1 1 140px; flex-direction: column; gap: 2px; min-width: 0; font-size: var(--fs-1); color: var(--muted); }
+/* The label is the flex item of the row; inside its column the input keeps its own height. */
+.route-select .route-field input { flex: none; }
+#route-env .route-env-row { display: contents; }
+/* UX review of #1296, item 18 (wide): the screens not yet moved to the design system keep their
+   markup and take its sizes. The page starts at the DS gutter, the subtitle is the DS sub line,
+   a button is a .ds-btn (a primary one filled), and every filter row looks like .ds-filter.
+   :where() keeps the base rules at the old specificity, so a screen's own compact rule still wins. */
+@media (min-width: 901px) {
+  .ds-main--legacy .page-title { margin-bottom: 12px; }
+  .ds-main--legacy .page-title h1 { line-height: 1.25; }
+  .ds-main--legacy .page-title p:not(.home-facts) { margin-top: 0; color: var(--ds-muted); font-size: var(--ds-fs-2); line-height: 1.5; }
+  .ds-main--legacy :where(.btn) {
+    min-height: 32px; padding: 4px 12px; border-color: var(--ds-line-strong); border-radius: var(--ds-radius);
+    background: var(--ds-surface); color: var(--ds-fg); font-size: var(--ds-fs-2); font-weight: 500;
+  }
+  .ds-main--legacy :where(.btn):hover { background: var(--ds-hover); border-color: var(--ds-line-strong); }
+  .ds-main--legacy .btn:where(.primary) { background: var(--ds-accent); border-color: var(--ds-accent); color: var(--ds-on-accent); font-weight: 600; }
+  .ds-main--legacy .btn:where(.primary):hover { background: var(--ds-accent); color: var(--ds-on-accent); filter: brightness(1.08); }
+  .ds-main--legacy .btn:where(.small) { min-height: 28px; padding: 2px 8px; }
+  .chips { gap: 4px; }
+  div.seg { gap: 4px; border: 0; border-radius: 0; overflow: visible; }
+  .chip, .ds-app .seg button {
+    min-height: 28px; padding: 2px 12px; border: 1px solid var(--ds-line); border-radius: 8px;
+    background: none; color: var(--ds-muted); font-size: var(--ds-fs-2);
+  }
+  .chip:hover, .ds-app .seg button:hover { border-color: var(--ds-accent); color: var(--ds-fg); }
+  .chip.on, .ds-app .seg button[aria-pressed="true"] { background: var(--ds-accent-bg); border-color: var(--ds-accent); color: var(--ds-fg); }
+  /* A panel head is a .ds-panel-head (8/12 px), and the panel content starts at the same 12 px, as a
+     .ds-row does. A page that compacts its heads keeps its own vertical padding. */
+  .ds-main--legacy .panel-head { padding: 8px 12px; }
+  #content.ds-main--legacy .panel > .panel-head,
+  #content.ds-main--legacy :is(
+    .home-attn .it, .health-panel > .body, .contour-panel > .body, .context-section, .task-head, .task-row, .active-route,
+    .work-source-grid, .work-filters, .work-row, .work-more, .work-note, .work-route-body, .work-event, .work-empty, .work-gantt,
+    .work-analytics > .orch-legend, .orch-analytics-grid, .orch-analytics-rows, .work-observation-reason, .work-observation-title,
+    .work-observation-facts, .work-observation-checkpoints, .route-select
+  ) { padding-inline: 12px; }
+  /* A two-line list row keeps a .ds-row's 4 px above and below, not 12–16 px: the lists of Home,
+     the reports, the dispatches, the checks and the sessions show more rows. */
+  .home-attn .it, .report-row, .orch-dispatch-row, .diag-row, .work-row, .task-row { padding-block: 4px; }
+  /* Chart groups of an analytics tab sit 12 px apart, as the charts inside a group, not 32 px
+     (the grid's bottom padding plus the block's margin). */
+  .orch-analytics { margin-bottom: 12px; }
+  .orch-analytics-grid { padding-bottom: 0; }
+  /* The Home facts run under the title and the buttons across the page width, not in the column
+     beside the buttons where they wrapped: the title block's children join the title's grid. */
+  #home .home-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; row-gap: 0; }
+  #home .home-title > div:first-child { display: contents; }
+  #home .home-title > .actions { grid-column: 2; grid-row: 1; align-self: start; }
+  #home .home-title .home-facts { grid-column: 1 / -1; margin-top: 8px; }
+}

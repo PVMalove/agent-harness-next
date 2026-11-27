@@ -6,7 +6,7 @@ import os
 import shlex
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Mapping
 
@@ -53,6 +53,8 @@ class HealthContext:
     # hooks. Их передаёт только канонический CLI `harness health`: установленный пакет и консоль
     # шаблонов не имеют и оставляют None, тогда `hooks.policy` сообщает «дрейф не проверен».
     hook_templates: Mapping[str, bytes] | None = None
+    # Per-run memoization shared by checks in one `registry.run` call (e.g. one runtime probe).
+    _cache: dict[str, object] = field(default_factory=dict, repr=False, compare=False)
 
     def no_lock_message(self) -> str:
         """Причина пропуска проверки, зависящей от lock-файла: lock отсутствует либо повреждён."""

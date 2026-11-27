@@ -9,7 +9,7 @@
    stays disabled, merge is the human's. */
 import { useState } from "react";
 import { DecisionPanel } from "../decisions/DecisionPanel";
-import { PageHeader, Panel, PipeTabs, Summary } from "../ds";
+import { LedgerAbsent, PageHeader, Panel, PipeTabs, ScreenState, Summary } from "../ds";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
@@ -40,11 +40,11 @@ function Preflight({ entry }: { entry: PublishEntry }) {
     <div className="publish-preflight">
       {rows.map((row) => (
         <div className="publish-check" key={row.label}>
-          <StatusWord tone={row.tone} word={state(row.status)} />
           <div>
             <b>{row.label}</b>
             <small>{row.detail}</small>
           </div>
+          <StatusWord tone={row.tone} word={state(row.status)} />
         </div>
       ))}
     </div>
@@ -95,11 +95,8 @@ export function Publish() {
         }
       />
 
-      {screen.error && !ledger && (
-        <p className="ds-alert ds-alert-err" role="alert" data-code={screen.error.code}>
-          {t("Отчёт не построен")}: {screen.error.message || screen.error.code}
-        </p>
-      )}
+      <ScreenState screen={screen} noun="Снимок публикации не получен" />
+      <LedgerAbsent reason={ledger?.unavailable} />
 
       <Summary
         id="publish-kpis"

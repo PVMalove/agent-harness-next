@@ -527,6 +527,14 @@ the inputs that need judgement:
 | `--bug-ticket <ticket>` | A `tooling-retry`. Before the command, the session creates or reuses a bug ticket for the blocking tool through the tracker CLI. Without it, the command refuses and records nothing. |
 | `--block-bypass --note <text>` | The role worked around a hook or tool block. The note names the violation. |
 
+The coordinator session withholds `batch auto-decide` in one case: a developer report with a
+failed check that, by the evidence the session collected (`/implement` → `references/recovery.md`,
+"A failed check the diff may not cause"), the diff does not cause. A retry cannot fix that failure,
+so the session shows the evidence and waits. The developer's decision is a human approval
+(`--approved-by`), like any explicit approval under `auto`, and records no `auto_stop`. A question a
+skill asks before `batch create`, such as the pipeline-cost question of `/implement`, precedes the
+automatic path, which starts at `batch approve`.
+
 Review reports may include `review.recommendation: accept|retry`. The project setting
 `auto_retry_min_severity` defaults to `info` and is frozen into each batch; a human can override it
 for one batch with `batch create --auto-retry-min-severity warning` (or `error` / `blocker`). At
@@ -1386,8 +1394,8 @@ It must contain, at minimum:
   timeout_seconds}`, at least one of kind `pytest`) and the ChangeImpact of `base..candidate`
   (ADR 0023, sections 1, 2 and 6). `batch create` freezes the project's `repo_map_policy` beside
   the policy, because it shapes the import graph. It is present only on a developer-retry, code-review or QA brief of a batch that configured the
-  policy; a first developer has no diff, and a batch without the policy keeps the brief it always
-  had. Each stage adds `selection` (`full`, `focused` or `failed-only`), `nodeids` and
+  policy, and on a first developer brief under the ticket-diff selection described below; any other
+  first developer has no diff, and a batch without the policy keeps the brief it always had. Each stage adds `selection` (`full`, `focused` or `failed-only`), `nodeids` and
   `environment_fingerprint`. The pytest stage is `focused` over every related test of the import
   graph, without a first-N cutoff, and widens to `full` instead of failing when the impact is
   unknown: a changed `conftest.py`, `pyproject.toml`, `uv.lock`, `Makefile`, `.github/**`, verify
@@ -1399,7 +1407,12 @@ It must contain, at minimum:
   policy flag (off by default, frozen with the policy), which a batch whose `integration_ref` starts with
   `integration/` turns into a plan of exactly the tests of its own `base..candidate` diff (selection
   `ticket-diff`, a `ticket_diff` section, one `custom` cargo stage per Rust test target; never widened
-  to `full`; ADR 0023, section 7). The plan's digest is bound into the transition as
+  to `full`; ADR 0023, section 7). Under that flag a first developer, which has no diff yet, gets the
+  same kind of plan over `base..snapshot_commit` plus the batch's `scope_preflight.expected_files`,
+  each counted as modified, and the plan records them as `diff_source` (issue #1292); a batch
+  without expected files keeps the fixed developer commands. A ticket-diff plan derives the brief's
+  `verification_commands` from its stages, and a pytest stage that selects no test gets no command
+  and a `not_run_stages` record with reason `no-tests-in-diff`. The plan's digest is bound into the transition as
   `verification_plan_sha256`; `verification_commands` stays the list a role reports in `checks_run`.
   `dispatch propose` and `dispatch create` for code-review and QA refuse with `impact_not_covered`
   (exit code 2, the uncovered tests listed) when the plan's pytest stage is not `full` and does not
@@ -1556,7 +1569,10 @@ The report must include:
   and only `override-warning` with a note other than `none` (recorded as `carried_items_gap`) or
   `retry` decides it. A developer-retry that creates no commit and records at least one item
   `not_closed` reports an empty `commit_map`; every other item names commits of its retry chain.
-  Without a `not_closed` item, a retry with no new commit is refused as before. Without a rebase target (the brief's non-null `rebase_target_commit`, or the
+  Without a `not_closed` item, a `blocked` or `failed` retry with no new commit reports an empty
+  or absent `commit_map` and waits for a decision (`retry`, `block`, `accept-conditional
+  --infrastructure-failure`); a `completed` one is refused, and its remedy names that blocked
+  report or a new fix commit, never a commit to map that does not exist. Without a rebase target (the brief's non-null `rebase_target_commit`, or the
   batch's target on a legacy stale-base record with `base_rebase_required`), the report's
   `commit_sha` must descend from `snapshot_commit`. A retry that rewrote that history (amend, squash or reset) is
   refused; its remedy is to recover the commits from `git reflog` and re-apply the fix as new
@@ -1698,6 +1714,21 @@ dispatch or report, or changes Git:
   idempotent: repeating it neither loses nor duplicates the record. Every refusal states a remedy,
   including an unpublished result, a different ticket or branch, a candidate that is not the
   published SHA, and an integration ref that already moved while no record exists.
+  For an epic's `integration/*` branch (issue #1278), `integration prepare --ticket "#<epic>" --branch
+  <integration-branch> [--target REF]` records the pull request of that branch instead. The epic's
+  `## Integration Branch` section, read through the GitHub or GitLab CLI, must name the branch. The
+  candidate is the remote head of the branch, the target the remote head of `--target`
+  (`base_branch` by default, or another `integration/*` branch); the identity adds
+  `source_kind: integration-branch` and the target ref, and `source_batch_id` is `null`. A ticket
+  branch refuses `--target`.
+  No batch QA covers this pair, so its pair record requires `full`: `integration next` answers
+  `confirm-pr` with `qa_source: verification-pending-after-pr`, then `verify` until CI that
+  `integration collect-ci` accepts or local QA (`integration local-qa`) confirms exactly that pair,
+  and `handoff`; a `-light` check never confirms it, and `--merge-commit` checks the merged tree as
+  for a ticket. A moved head or target is a new pair with a new record. The harness never rewrites
+  an integration branch: `integration refresh` and `integration resolve` refuse such a record, a
+  stale target asks for a fix ticket based on the branch and a new `integration prepare`, and a
+  failed check routes to a fix ticket (`route: fix-ticket`).
 - `integration status` is a read-only observation: `current`, `stale` (the integration ref moved;
   `refresh_required`) or `unavailable`. A stale record never lets the old QA stand in for a new
   candidate/target pair, and observing it never creates a dispatch. After a refresh it reports the

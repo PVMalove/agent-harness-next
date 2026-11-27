@@ -1194,6 +1194,7 @@ if (control / "member").exists():
 with open(control / "launches.log", "a", encoding="utf-8") as log:
     log.write(json.dumps({{"pid": os.getpid(), "ppid": os.getppid(), "pgid": os.getpgid(0),
                           "operation_id": os.environ.get("HARNESS_OPERATION_ID"),
+                          "dispatch_id": os.environ.get("HARNESS_DISPATCH_ID"),
                           "argv": sys.argv[1:]}}) + "\\n")
 while not (control / "release").exists():
     time.sleep(0.05)
@@ -1385,6 +1386,7 @@ class Launch:
     ppid: int
     pgid: int
     operation_id: str | None
+    dispatch_id: str | None = None
 
 
 class Supervised:
@@ -1548,7 +1550,11 @@ class Supervised:
             entry = json.loads(line)
             found.append(
                 Launch(
-                    entry["pid"], entry["ppid"], entry["pgid"], entry["operation_id"]
+                    entry["pid"],
+                    entry["ppid"],
+                    entry["pgid"],
+                    entry["operation_id"],
+                    entry.get("dispatch_id"),
                 )
             )
         return found

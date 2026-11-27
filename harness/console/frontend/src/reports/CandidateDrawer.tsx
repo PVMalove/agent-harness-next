@@ -12,6 +12,7 @@ import type { PublishEntry, ReportsSnapshot } from "../ws/ledger";
 import { preflightRows } from "./preflight";
 import { EVIDENCE_COLUMNS, StatusWord, VERDICT_TONE, reportState } from "./ReportViews";
 import { Timeline } from "./Timeline";
+import { shortDispatch } from "../dispatchId";
 
 type Tab = "evidence" | "quality" | "readiness";
 const STATE_TONE = { passed: "mint", attention: "lavender", blocked: "violet" } as const;
@@ -51,11 +52,11 @@ export function CandidateDrawer({ entry, ledger, onClose }: { entry: PublishEntr
           ))}
           <div className="ds-kv-row">
             <dt>Review</dt>
-            <dd>{entry.review ? `${entry.review.dispatch_id} · ${state(entry.review.outcome)}` : noData}</dd>
+            <dd>{entry.review ? `${shortDispatch(entry.review.dispatch_id)} · ${state(entry.review.outcome)}` : noData}</dd>
           </div>
           <div className="ds-kv-row">
             <dt>QA</dt>
-            <dd>{entry.qa ? `${entry.qa.dispatch_id} · ${state(entry.qa.outcome)}` : noData}</dd>
+            <dd>{entry.qa ? `${shortDispatch(entry.qa.dispatch_id)} · ${state(entry.qa.outcome)}` : noData}</dd>
           </div>
         </dl>
         <Timeline batchId={entry.batch_id} />
@@ -72,7 +73,7 @@ export function CandidateDrawer({ entry, ledger, onClose }: { entry: PublishEntr
                 <li className="ds-row" key={report.dispatch_id} data-dispatch={report.dispatch_id}>
                   <StatusWord tone={STATE_TONE[status]} word={t(status === "passed" ? "Пройдено" : status === "attention" ? "Внимание" : "Заблокировано")} />
                   <span className="ds-row-main">
-                    <span className="ds-row-title">{`${report.role} · ${report.dispatch_id}`}</span>
+                    <span className="ds-row-title">{`${report.role} · ${shortDispatch(report.dispatch_id)}`}</span>
                     <span className="ds-row-sub">{`${state(report.outcome)} · ${report.reported_at || noData}`}</span>
                   </span>
                 </li>
@@ -89,7 +90,7 @@ export function CandidateDrawer({ entry, ledger, onClose }: { entry: PublishEntr
               <li className="ds-row" key={`${attempt.dispatch_id}-${attempt.failed_at}`}>
                 <StatusWord tone="violet" word={attempt.stage} />
                 <span className="ds-row-main">
-                  <span className="ds-row-title">{attempt.dispatch_id}</span>
+                  <span className="ds-row-title" title={attempt.dispatch_id}>{shortDispatch(attempt.dispatch_id)}</span>
                   <span className="ds-row-sub">{attempt.message || noData}</span>
                 </span>
                 <span className="ds-row-end">{attempt.failed_at || noData}</span>

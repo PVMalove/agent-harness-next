@@ -3,11 +3,12 @@
    filled with allowlisted fields. Every value renders as text, never as markup. */
 import { useState } from "react";
 import { useI18n } from "../i18n";
-import { STRUCTURE_LABELS, eventText } from "../ws/steps";
+import { AUTO_APPROVER, STRUCTURE_LABELS, eventText } from "../ws/steps";
 import type { HeldStep, Step } from "../ws/steps";
 import { STEP_LIMIT } from "./ActivityViews";
 import { clusterSteps, durationText } from "./clusters";
 import type { StepCluster } from "./clusters";
+import { shortDispatch } from "../dispatchId";
 
 /** hh:mm:ss of an ISO 8601 time, as the server observed it. */
 const clock = (observedAt: string): string => observedAt.slice(11, 19);
@@ -37,11 +38,34 @@ function ClusterMark({
   );
 }
 
+/** The kinds of a container QA run's steps (#1296) and their short labels. */
+const STAGE_KINDS: Readonly<Record<string, string>> = {
+  stage: "стадия",
+  "stage-result": "итог стадии",
+  output: "вывод",
+};
+
+/** The result word a `stage-result` step starts with: `<stage>: pass|fail|not_run · ...`. */
+const stageResult = (text: string): string | undefined => /^[^:]*: (pass|fail|not_run)\b/.exec(text)?.[1];
+
+/** Who approved a decision: the auto policy or a person. */
+function Approver({ by }: { by: string | null }) {
+  const { t } = useI18n();
+  if (!by) return null;
+  return by === AUTO_APPROVER ? (
+    <em className="orch-pill blue" data-approver="auto">{t("политика auto")}</em>
+  ) : (
+    <em className="orch-pill" data-approver="human">{t("решил: {who}", { who: by })}</em>
+  );
+}
+
 function StepRow({ step, cluster, open, onToggle }: { step: Step; cluster: StepCluster; open: boolean; onToggle: () => void }) {
   const { t, section } = useI18n();
+  const stage = step.origin === "agent" && step.source === "stages" ? STAGE_KINDS[step.kind] : undefined;
+  const result = step.origin === "agent" && step.kind === "stage-result" ? stageResult(step.text) : undefined;
   const details =
     step.origin === "agent"
-      ? [`${step.kind} · ${step.dispatch_id}`]
+      ? [`${step.kind} · ${shortDispatch(step.dispatch_id)}`]
       : [step.ticket, step.batch_id, step.next_role ? t("дальше: {role}", { role: step.next_role }) : null, step.message].filter(
           (part): part is string => Boolean(part),
         );
@@ -50,12 +74,16 @@ function StepRow({ step, cluster, open, onToggle }: { step: Step; cluster: StepC
       className="work-event"
       data-origin={step.origin}
       data-source={step.origin === "agent" ? step.source : undefined}
+      data-kind={step.origin === "agent" ? step.kind : step.event}
+      data-result={result}
     >
       <span className="work-event-time">{clock(step.observed_at)}</span>
       <span className="work-event-role">{step.origin === "agent" ? step.role : (step.role ?? section("Orchestration"))}</span>
       <span className="work-event-main">
-        <b>{step.origin === "agent" ? step.text : eventText(step, t)}</b>
+        <b>{shortDispatch(step.origin === "agent" ? step.text : eventText(step, t))}</b>
         <small>{details.join(" · ")}</small>
+        {stage ? <em className={`orch-pill ${result === "fail" ? "err" : result === "pass" ? "ok" : "lavender"}`}>{t(stage)}</em> : null}
+        {step.origin === "orchestration" ? <Approver by={step.approved_by} /> : null}
         {step.origin === "agent" && step.structure === "unavailable" ? (
           <em className="orch-pill violet">{t(STRUCTURE_LABELS.unavailable)}</em>
         ) : null}
@@ -69,7 +97,7 @@ function StepRow({ step, cluster, open, onToggle }: { step: Step; cluster: StepC
           {cluster.members.map((member) => (
             <li key={member.key}>
               <span>{clock(member.step.observed_at)}</span>
-              {member.step.origin === "agent" ? member.step.text : eventText(member.step, t)}
+              {shortDispatch(member.step.origin === "agent" ? member.step.text : eventText(member.step, t))}
             </li>
           ))}
         </ul>

@@ -7,7 +7,12 @@ worker launches externally.
 
 Run `dispatch wait` between send and report. `stale`, model/worktree mismatch, changed harness
 snapshot, and a failed deterministic gate are blockers for the coordinator, not prompts for broad
-LLM recovery. Silence or a timeout does not prove that a worker stopped. `batch resume-stop`
+LLM recovery. Silence or a timeout does not prove that a worker stopped.
+
+Judge whether a worker is alive only from `dispatch status --dispatch <id>`: `startup.worker_state`,
+`execution.state` for a supervised worker, `heartbeat_at` and `stale`. Never use `ps`, `pgrep` or
+`kill -0` from the coordinator session as evidence. The Claude Code sandbox runs each command in its
+own PID namespace, so `ps -g <pgid>` is empty even for a live worker whose heartbeat still arrives. `batch resume-stop`
 refuses a worker whose `startup` state is `live` or `unknown`: stop it through its runtime and
 repeat the command with `--runtime-stopped`. In-process and external transports preserve the same
 brief and evidence contract.

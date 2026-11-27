@@ -268,9 +268,6 @@ def _artifact_path(ledger: LifecycleLedger, checksum: str) -> Path:
     return _records_root(ledger) / "qa-artifacts" / f"{checksum}.log"
 
 
-NO_TESTS_IN_DIFF = "no-tests-in-diff"
-
-
 def _plan_stages(
     plan: object,
 ) -> tuple[tuple[PlannedStage, ...], tuple[PlannedStage, ...]]:
@@ -291,7 +288,10 @@ def _plan_stages(
             suffix = f"-{len(unselected) + 1}" if unselected else ""
             unselected.append(
                 PlannedStage(
-                    f"{NO_TESTS_IN_DIFF}{suffix}", stage["kind"], stage["selection"], ()
+                    f"{verification_plan.NO_TESTS_IN_DIFF}{suffix}",
+                    stage["kind"],
+                    stage["selection"],
+                    (),
                 )
             )
             continue

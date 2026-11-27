@@ -15,7 +15,7 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Static
 
-from ...kernel import brand, i18n
+from ...kernel import brand
 from ...kernel.container_route import (
     Action,
     Authored,
@@ -29,6 +29,7 @@ from ...kernel.container_route import (
 )
 from ...kernel.coordinator_api import ArgvError, CoordinatorApi
 from ...kernel.runner import CommandRunner, capturing_runner
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..server_api import ServerCoordinatorApi
 from ..shell import SHELL_CSS, ConsoleShell, ShellIds
@@ -37,11 +38,11 @@ from .commands import call_from_worker
 
 
 def _t(language: str, text: str) -> str:
-    return i18n.tr_text(language, text)
+    return icons.tr_text(language, text)
 
 
 def render_row(row: Row, language: str, narrow: bool) -> str:
-    """`✔ ок  Label: value`; a multi-line value continues indented. On a narrow terminal the value
+    """`● ок  Label: value`; a multi-line value continues indented. On a narrow terminal the value
     starts on its own line, so a long ID, path or digest wraps instead of being cut."""
     status = _t(language, mark(row.state)) if row.state is not None else ""
     label = _t(language, row.label)
@@ -59,10 +60,28 @@ def render_row(row: Row, language: str, narrow: bool) -> str:
 def render_actions(actions: Sequence[Action], language: str) -> list[str]:
     """Every action that cannot run, with its reason: nothing is silently greyed out."""
     return [
-        f"{_t(language, '✖ недоступно')}: {_t(language, action.label)} — {_t(language, action.reason)}"
+        f"{_t(language, '■ недоступно')}: {_t(language, action.label)} — {_t(language, action.reason)}"
         for action in actions
         if not action.enabled and action.reason
     ]
+
+
+def group_title(group: str, language: str) -> str:
+    """A readable title of a fact group: `access_policy.roles.developer` reads «Доступ роли
+    developer»; any other group is its own title, translated."""
+    parts = group.split(".")
+    if parts == ["access_policy", "defaults"]:
+        return _t(language, "Доступ по умолчанию")
+    if len(parts) == 3 and parts[0] == "access_policy" and parts[1] in _GROUP_TEMPLATES:
+        return _t(language, _GROUP_TEMPLATES[parts[1]]).format(name=parts[2])
+    return _t(language, group)
+
+
+# The title of an `access_policy.<section>.<name>` group; `{name}` is the role or the operation.
+_GROUP_TEMPLATES = {
+    "roles": "Доступ роли {name}",
+    "operations": "Доступ операции {name}",
+}
 
 
 def render_body(
@@ -77,7 +96,7 @@ def render_body(
     Values are never shortened; the pane scrolls."""
     parts: list[str] = []
     if blockers:
-        parts.append(_t(language, "✖ Блокирует маршрут"))
+        parts.append(_t(language, "■ Блокирует маршрут"))
         parts.extend(
             f"  {line}"
             for blocker in blockers
@@ -88,9 +107,15 @@ def render_body(
     for row in rows:
         if row.group != group:
             group = row.group
+            # A blank line and a readable title open each group; its rows are indented.
+            if parts and parts[-1]:
+                parts.append("")
             if group:
-                parts.append(_t(language, group).upper())
-        parts.append(render_row(row, language, narrow))
+                parts.append(group_title(group, language))
+        line = render_row(row, language, narrow)
+        if group:
+            line = "\n".join(f"  {part}" for part in line.split("\n"))
+        parts.append(line)
     unavailable = render_actions(actions, language)
     if unavailable:
         parts.append("")
@@ -108,8 +133,8 @@ def render_view(view: StageView, language: str, narrow: bool) -> str:
 
 
 def tab_label(tab: Tab, language: str, current: bool) -> str:
-    """`✔ Preflight`: the state icon and the title; the current tab is bracketed."""
-    icon = mark(tab.state).split(" ")[0]
+    """`● Preflight`: the state icon and the title; the current tab is bracketed."""
+    icon = icons.restyle_text(mark(tab.state)).split(" ", 1)[0]
     title = _t(language, tab.title)
     return f"[{icon} {title}]" if current else f"{icon} {title}"
 
@@ -177,6 +202,7 @@ class ContainerRouteScreen(ConsoleShell):
     SECTION = "Orchestration"
     IS_SECTION_ROOT = False
     CRUMBS = "Главная › Оркестрация › Контейнерный маршрут"
+    AUTO_FOCUS = "#route-batch"
     NARROW_FOOTER_KEYS = ("escape", "enter", "f2")
     IDS = ShellIds(
         navigation="route-navigation",
@@ -191,7 +217,10 @@ class ContainerRouteScreen(ConsoleShell):
     ContainerRouteScreen #route-page { height: 1fr; padding: 0 2; }
     ContainerRouteScreen #route-title { height: 1; text-style: bold; margin-bottom: 1; }
     ContainerRouteScreen #route-select { height: auto; margin-bottom: 1; }
-    ContainerRouteScreen #route-select Input { width: 1fr; margin-right: 1; }
+    ContainerRouteScreen #route-select .route-field { width: 1fr; height: auto; margin-right: 1; }
+    ContainerRouteScreen #route-select .route-field-label { height: 1; color: $text-muted; }
+    ContainerRouteScreen #route-select Input { width: 100%; }
+    ContainerRouteScreen #route-choose { margin-top: 1; }
     ContainerRouteScreen #route-tabs { height: auto; margin-bottom: 1; }
     ContainerRouteScreen #route-tabs Button { margin-right: 1; }
     ContainerRouteScreen #route-tab-reason { height: auto; color: $text-muted; margin-bottom: 1; }
@@ -201,7 +230,7 @@ class ContainerRouteScreen(ConsoleShell):
     ContainerRouteScreen #route-approver { margin-top: 1; }
     ContainerRouteScreen #route-status { height: auto; margin-top: 1; }
     ContainerRouteScreen.-narrow #route-select { layout: vertical; }
-    ContainerRouteScreen.-narrow #route-select Input { width: 100%; margin-right: 0; }
+    ContainerRouteScreen.-narrow #route-select .route-field { width: 100%; margin-right: 0; }
     ContainerRouteScreen.-narrow #route-tabs { layout: vertical; }
     ContainerRouteScreen.-narrow #route-actions { layout: vertical; }
     """)
@@ -250,11 +279,16 @@ class ContainerRouteScreen(ConsoleShell):
         with VerticalScroll(id="route-page"):
             yield Static("Контейнерный маршрут", id="route-title")
             with Horizontal(id="route-select"):
-                yield Input(selection.batch, placeholder="batch", id="route-batch")
-                yield Input(selection.role, placeholder="role", id="route-role")
-                yield Input(
-                    selection.runtime, placeholder="runtime", id="route-runtime"
+                # Each field keeps its name above it once filled, as on the web route.
+                fields = (
+                    ("Batch", selection.batch, "batch", "route-batch"),
+                    ("Роль", selection.role, "role", "route-role"),
+                    ("Runtime, необязательно", selection.runtime, "runtime", "route-runtime"),
                 )
+                for label, value, placeholder, field_id in fields:
+                    with Vertical(classes="route-field"):
+                        yield Static(label, classes="route-field-label")
+                        yield Input(value, placeholder=placeholder, id=field_id)
                 yield Button("Выбрать", id="route-choose")
             with Horizontal(id="route-tabs"):
                 for stage in Stage:
@@ -265,7 +299,7 @@ class ContainerRouteScreen(ConsoleShell):
                 # A fixed pool: a stage shows at most MAX_ACTIONS buttons, the rest stay hidden.
                 for slot in range(MAX_ACTIONS):
                     yield Button("", id=f"act-{slot}", classes="no-i18n")
-            yield Input(placeholder="approved-by", id="route-approver")
+            yield Input(placeholder="Кто подтверждает (approved-by)", id="route-approver")
             yield Static("", id="route-status", classes="no-i18n", markup=False)
 
     def on_mount(self) -> None:
@@ -292,7 +326,10 @@ class ContainerRouteScreen(ConsoleShell):
             button = self.query_one(f"#tab-{tab.stage.value}", Button)
             button.label = tab_label(tab, language, tab.stage is self.stage)
         reason = self._current_tab().reason
-        self.query_one("#route-tab-reason", Static).update(_t(language, reason))
+        tab_reason = self.query_one("#route-tab-reason", Static)
+        tab_reason.update(_t(language, reason))
+        # No reason, no line: an empty one left a blank band under the stage tabs.
+        tab_reason.display = bool(reason)
         self.query_one("#route-body", Static).update(
             render_view(view, language, narrow)
         )
@@ -353,7 +390,7 @@ class ContainerRouteScreen(ConsoleShell):
             return
         language = self._language
         if not action.enabled:
-            self._status = f"✖ {_t(language, action.reason)}"
+            self._status = f"{icons.STATUS_ICONS['fail']} {_t(language, action.reason)}"
             self._refresh()
             return
         if action.needs_confirmation:
@@ -416,7 +453,7 @@ class ContainerRouteScreen(ConsoleShell):
             try:
                 call()
             except (PermissionError, ValueError, ArgvError) as exc:
-                status = f"✖ {exc}"
+                status = f"{icons.STATUS_ICONS['fail']} {exc}"
 
             def done() -> None:
                 self._busy = False

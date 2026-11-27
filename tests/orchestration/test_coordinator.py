@@ -2153,6 +2153,7 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         *,
         definition_of_done: list[str] | None = None,
         integration_ref: str | None = None,
+        expected_files: list[str] | None = None,
     ) -> JsonObject:
         _git(
             self.repo,
@@ -2166,6 +2167,8 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         plan = self._batch_plan()
         if integration_ref is not None:
             plan["integration_ref"] = integration_ref
+        if expected_files is not None:
+            plan["expected_file"] = expected_files
         if definition_of_done is not None:
             plan["definition_of_done"] = definition_of_done
         batch = coordinator.create_batch(self._args(**plan))
@@ -12906,9 +12909,10 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         with self.assertRaisesRegex(coordinator.CoordinatorError, "are not closed"):
             self._decide(self.batch_id, "accept")
 
-    def test_a_retry_without_commits_or_not_closed_items_still_needs_a_commit_map(
+    def test_a_completed_retry_without_commits_names_a_feasible_remedy(
         self,
     ) -> None:
+        """Issue #1290: the refusal never asks to map commits the retry did not create."""
         fix, brief = self._second_retry_brief()
         closure: list[JsonObject] = [
             {"item_id": item_id, "commits": [fix]} for item_id in self.RETRY_ITEMS
@@ -12917,11 +12921,134 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
         with self.assertRaises(coordinator.CoordinatorError) as refused:
             self._submit(brief["dispatch_id"], self._no_commit_report(brief, closure))
 
-        self.assertIn("requires commit_map", refused.exception.message)
         self.assertEqual(
-            refused.exception.remedy,
-            "map every commit created after snapshot_commit to one distinct commit_plan entry",
+            refused.exception.message,
+            "completed developer-retry report created no commit after snapshot_commit",
         )
+        self.assertEqual(refused.exception.remedy, commit_plan.NO_COMMIT_RETRY_REMEDY)
+        self.assertNotIn("map every commit", refused.exception.remedy)
+
+    def test_a_retry_without_commits_reports_blocked_and_gets_a_recovery_route(
+        self,
+    ) -> None:
+        """Issue #1290: a developer-retry that needs no code change reports a truthful blocked
+        report with an empty or absent commit_map; the batch then waits for a recovery decision
+        instead of ending blocked (abandon-dead-end)."""
+        for outcome, commit_map in (
+            ("blocked", []),
+            ("blocked", None),
+            ("failed", []),
+        ):
+            with self.subTest(outcome=outcome, commit_map=commit_map):
+                self._reset()
+                self._patch_config(retry_policy={"max_developer_retries": 2})
+                batch_id = self._create_batch()["batch_id"]
+                self._accepted_architect(batch_id)
+                _, (candidate,), changed = self._retried_developer_candidate(
+                    batch_id, "x"
+                )
+                self._assess(batch_id, candidate, changed)
+                retry = self._dispatch(batch_id, "developer", candidate=candidate)[
+                    "brief"
+                ]
+                self._start(retry["dispatch_id"])
+                report = self._developer_report(
+                    retry,
+                    candidate,
+                    changed,
+                    outcome=outcome,
+                    blockers={
+                        "status": "present",
+                        "details": "the failed check is environmental; no change is needed",
+                    },
+                    commit_map=[],
+                )
+                if commit_map is None:
+                    report.pop("commit_map")
+
+                submitted = self._submit(retry["dispatch_id"], report)
+
+                self.assertEqual(submitted["state"], "reported")
+                self.assertNotIn(
+                    self._batch_record(batch_id)["state"], {"blocked", "failed"}
+                )
+                decided = self._decide(batch_id, "retry", reason_category="code")
+                self.assertEqual(decided["next_action"], "developer-retry")
+
+    def _failed_check_report(self, outcome: str) -> JsonObject:
+        """A developer report with one failed check that the environment, not the diff, caused."""
+        self._create_batch()
+        self._accepted_architect(self.batch_id)
+        brief = self._dispatch(self.batch_id, "developer")["brief"]
+        self._start(brief["dispatch_id"])
+        candidate, changed = self._developer_commit("x")
+        failed = outcome == "completed"
+        return self._submit(
+            brief["dispatch_id"],
+            self._developer_report(
+                brief,
+                candidate,
+                changed,
+                outcome=outcome,
+                checks_run=self._checks(brief, "fail" if failed else "not_run"),
+                **(
+                    {}
+                    if failed
+                    else {
+                        "blockers": {
+                            "status": "present",
+                            "details": "the check passed once the worker sandbox was fixed",
+                        }
+                    }
+                ),
+            ),
+        )
+
+    def test_a_failed_check_admits_only_the_routes_the_implement_skill_names(
+        self,
+    ) -> None:
+        """Issue #1294: `/implement` → recovery "A failed check the diff may not cause" names the
+        routes the coordinator really admits. A failed check is a code_test failure: no accept,
+        and every retry is a developer-retry."""
+        self._failed_check_report("completed")
+
+        for category in (None, "verification-infrastructure"):
+            with self.subTest(category=category):
+                preview = self._packet(reason_category=category, retry_role=None)
+                self.assertEqual(preview["route_preview"]["retry"]["route"], "developer-retry")
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "blocked report"):
+            self._decide(
+                self.batch_id,
+                "accept-conditional",
+                infrastructure_failure=True,
+                note="the worker sandbox",
+            )
+        with self.assertRaisesRegex(coordinator.CoordinatorError, "can be overridden"):
+            self._decide(self.batch_id, "override-warning", note="the worker sandbox")
+
+    def test_a_blocked_report_without_a_failed_check_reruns_or_carries_the_evidence(
+        self,
+    ) -> None:
+        """Issue #1294: once the environment is fixed, a blocked report with no failed check
+        takes the read-only `verification` route under verification-infrastructure, or a human
+        accept-conditional after which `batch carry-over` hands the evidence to code-review."""
+        self._failed_check_report("blocked")
+
+        preview = self._packet(
+            reason_category="verification-infrastructure", retry_role=None
+        )
+        self._decide(
+            self.batch_id,
+            "accept-conditional",
+            infrastructure_failure=True,
+            note="the worker sandbox; evidence in the findings file",
+        )
+        carried = coordinator.carry_over_findings(
+            self._args(batch=self.batch_id, findings_file=self._findings_file())
+        )
+
+        self.assertEqual(preview["route_preview"]["retry"]["route"], "verification")
+        self.assertEqual(carried["carried_item_ids"], ["coordinator-finding-1"])
 
     def test_a_retry_that_rewrites_the_snapshot_history_is_refused(self) -> None:
         for rewrite in ("amend", "reset"):
@@ -17068,6 +17195,51 @@ class CoordinatorRetryRoutingTests(unittest.TestCase):
 
         self._assert_stopped(
             result, "budget-exhausted", "retry_policy.max_developer_retries"
+        )
+
+    def test_a_retry_without_commits_reports_blocked_and_never_ends_in_a_dead_end(
+        self,
+    ) -> None:
+        """Issue #1290: under auto, a developer-retry that needs no code change reports blocked
+        with an empty commit_map; the batch keeps a decision to take instead of ending blocked,
+        so neither batch auto-report nor batch auto-decide shows abandon-dead-end."""
+        developer = self._auto_developer_brief()
+        candidate, changed = self._developer_commit("x")
+        self._submit(
+            developer["dispatch_id"],
+            self._developer_report(
+                developer, candidate, changed, checks_run=self._checks(developer, "fail")
+            ),
+        )
+        self.assertEqual(self._auto_decide()["route"], "developer-retry")
+        retry = self._auto_dispatch("developer")
+        self._start(retry["dispatch_id"])
+
+        submitted = self._submit(
+            retry["dispatch_id"],
+            self._developer_report(
+                retry,
+                candidate,
+                changed,
+                outcome="blocked",
+                blockers={
+                    "status": "present",
+                    "details": "the failed check is environmental; no change is needed",
+                },
+                commit_map=[],
+                checks_run=self._checks(retry, "not_run"),
+            ),
+        )
+        observed = coordinator.auto_report(self._args(batch=self.batch_id))
+        decided = self._auto_decide()
+
+        self.assertEqual(submitted["state"], "reported")
+        self.assertNotIn(self._batch_record(self.batch_id)["state"], {"blocked", "failed"})
+        self.assertNotEqual(
+            (observed.get("observed_stop") or {}).get("reason"), "abandon-dead-end"
+        )
+        self.assertNotEqual(
+            ((decided.get("stop") or {}).get("reason")), "abandon-dead-end"
         )
 
     def test_carried_items_left_not_closed_stop_the_automatic_path(self) -> None:

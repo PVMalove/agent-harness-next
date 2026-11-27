@@ -15,7 +15,9 @@
         "started_at": "",
         "last_event_at": "",
         "silent": false,
-        "observation": null
+        "observation": null,
+        "purpose": "work",
+        "execution": null
       },
       {
         "dispatch_id": "dispatch-dev",
@@ -28,7 +30,9 @@
         "started_at": "2026-11-05T10:00:00+00:00",
         "last_event_at": "2026-11-05T10:12:00+00:00",
         "silent": false,
-        "observation": null
+        "observation": null,
+        "purpose": "work",
+        "execution": null
       },
       {
         "dispatch_id": "dispatch-rev",
@@ -41,7 +45,9 @@
         "started_at": "2026-11-05T10:00:00+00:00",
         "last_event_at": "2026-11-05T10:12:00+00:00",
         "silent": false,
-        "observation": null
+        "observation": null,
+        "purpose": "work",
+        "execution": null
       },
       {
         "dispatch_id": "dispatch-qa",
@@ -54,7 +60,9 @@
         "started_at": "2026-11-05T10:00:00+00:00",
         "last_event_at": "2026-11-05T10:12:00+00:00",
         "silent": false,
-        "observation": null
+        "observation": null,
+        "purpose": "work",
+        "execution": null
       },
       {
         "dispatch_id": "dispatch-qa-886",
@@ -67,7 +75,9 @@
         "started_at": "2026-11-06T09:40:00+00:00",
         "last_event_at": "2026-11-06T10:05:00+00:00",
         "silent": false,
-        "observation": null
+        "observation": null,
+        "purpose": "work",
+        "execution": null
       },
       {
         "dispatch_id": "dispatch-dev-887",
@@ -80,7 +90,9 @@
         "started_at": "2026-11-06T09:50:00+00:00",
         "last_event_at": "2026-11-06T10:12:00+00:00",
         "silent": false,
-        "observation": null
+        "observation": null,
+        "purpose": "work",
+        "execution": null
       },
       {
         "dispatch_id": "dispatch-rev-888",
@@ -93,7 +105,9 @@
         "started_at": "2026-11-06T09:55:00+00:00",
         "last_event_at": "2026-11-06T10:02:00+00:00",
         "silent": false,
-        "observation": null
+        "observation": null,
+        "purpose": "work",
+        "execution": null
       }
     ]
   },
@@ -115,7 +129,9 @@
         "next_role": null,
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       },
       {
         "origin": "orchestration",
@@ -132,7 +148,9 @@
         "next_role": null,
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       },
       {
         "origin": "orchestration",
@@ -149,7 +167,9 @@
         "next_role": null,
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       },
       {
         "origin": "orchestration",
@@ -166,7 +186,9 @@
         "next_role": null,
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       },
       {
         "origin": "orchestration",
@@ -183,7 +205,9 @@
         "next_role": null,
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       },
       {
         "origin": "orchestration",
@@ -200,7 +224,9 @@
         "next_role": "developer",
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       },
       {
         "origin": "orchestration",
@@ -217,7 +243,9 @@
         "next_role": null,
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       },
       {
         "origin": "agent",
@@ -289,7 +317,9 @@
         "next_role": null,
         "outcome": null,
         "stage": null,
-        "message": ""
+        "message": "",
+        "approved_by": null,
+        "category": null
       }
     ]
   },

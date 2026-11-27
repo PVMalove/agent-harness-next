@@ -54,7 +54,7 @@ _RU = _Words(
     owner_unreadable="Владелец: запись не читается",
     age="Держится: {held} · до снятия по таймауту: {timeout}",
     available="доступно",
-    alive_timeout="{remaining} (таймаут не снимает живого владельца)",
+    alive_timeout="не применяется (владелец жив)",
     host_timeout="не применяется (владелец на другом хосте)",
     verdict="Вердикт: {verdict}, {meaning}",
     unknown_verdict="неизвестный вердикт",
@@ -67,7 +67,7 @@ _RU = _Words(
     lease_stale=" · heartbeat пропущен",
     lease_unavailable="Lease QA-lane: состояние недоступно: {error}",
     verdicts={
-        "owner-alive": "владелец жив; живой владелец не снимается",
+        "owner-alive": "живой владелец не снимается",
         "owner-dead": "владелец завершился; ledger release-lock снимет lock",
         "owner-in-other-environment": "владелец из другого PID-пространства или загрузки; "
         "pid не проверить, снятие по таймауту",
@@ -88,7 +88,7 @@ _EN = _Words(
     owner_unreadable="Owner: record cannot be read",
     age="Held for: {held} · until the timeout release: {timeout}",
     available="available",
-    alive_timeout="{remaining} (the timeout never releases a live owner)",
+    alive_timeout="not applicable (the owner is alive)",
     host_timeout="not applicable (owner on another host)",
     verdict="Verdict: {verdict}, {meaning}",
     unknown_verdict="unknown verdict",
@@ -101,7 +101,7 @@ _EN = _Words(
     lease_stale=" · heartbeat missed",
     lease_unavailable="QA lease: state unavailable: {error}",
     verdicts={
-        "owner-alive": "the owner is alive; a live owner is never released",
+        "owner-alive": "a live owner is never released",
         "owner-dead": "the owner has exited; ledger release-lock releases the lock",
         "owner-in-other-environment": "the owner is in another PID namespace or boot; its "
         "pid cannot be checked, released by the timeout",
@@ -191,7 +191,7 @@ def lock_text(status: JsonObject, language: str = "ru") -> str:
     if status.get("release_available"):
         timeout = words.available
     elif verdict == "owner-alive":
-        timeout = words.alive_timeout.format(remaining=duration(remaining, language))
+        timeout = words.alive_timeout
     elif verdict == "owner-on-another-host":
         timeout = words.host_timeout
     else:
@@ -211,12 +211,21 @@ def lock_text(status: JsonObject, language: str = "ru") -> str:
     )
 
 
+def current_lock_view(
+    repo: Path, load: LockLoader = load_lock_status, language: str = "ru"
+) -> tuple[str, str]:
+    """The panel for ``repo``: its state (`ok` free, `warn` held, `fail` not read) and its text;
+    a failed read, including the console server's answer or failure, is shown to the operator."""
+    try:
+        status = load(repo)
+    except (HarnessError, OSError, ConsoleClientError) as exc:
+        return "fail", _words(language).unavailable.format(error=exc)
+    return ("warn" if status.get("locked") else "ok"), lock_text(status, language)
+
+
 def current_lock_text(
     repo: Path, load: LockLoader = load_lock_status, language: str = "ru"
 ) -> str:
     """Текст панели для ``repo``; ошибка чтения состояния, в том числе ответ или сбой сервера
     консоли, тоже показывается оператору."""
-    try:
-        return lock_text(load(repo), language)
-    except (HarnessError, OSError, ConsoleClientError) as exc:
-        return _words(language).unavailable.format(error=exc)
+    return current_lock_view(repo, load, language)[1]

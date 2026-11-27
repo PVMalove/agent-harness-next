@@ -6,7 +6,7 @@ import { StatusIcon } from "../ds";
 import { Icon } from "../icons";
 import { roleIcon } from "../steps/ActivityViews";
 import type { ReportHead, StageHead } from "../ws/ledger";
-import { KIND_TONE, kindTone, shortId, stageStatus, statusWords, timestamp } from "./format";
+import { KIND_TONE, dispatchLabel, kindTone, stageStatus, statusWords, timestamp } from "./format";
 import type { StageFilters } from "./format";
 
 const two = (value: number) => String(value).padStart(2, "0");
@@ -19,8 +19,8 @@ export const clockTime = (at: string) => {
 const TEXT_FILTERS: [keyof StageFilters, string][] = [
   ["ticket", "тикет"],
   ["role", "роль"],
-  ["outcome", "outcome"],
-  ["date", "дата (2026-09-27)"],
+  ["outcome", "итог"],
+  ["date", "дата ГГГГ-ММ-ДД"],
   ["state", "статус стадии"],
 ];
 
@@ -79,17 +79,20 @@ export function StageFilterBar({ filters, onChange }: { filters: StageFilters; o
 
 export function StageList({
   stages,
+  any = true,
   reports,
   selected,
   onSelect,
 }: {
   stages: readonly StageHead[];
+  /** Whether the ledger holds any stage at all: an empty filtered list then means "no match". */
+  any?: boolean;
   reports: Map<string, ReportHead>;
   selected: string | null;
   onSelect: (dispatchId: string) => void;
 }) {
   const { t, language } = useI18n();
-  if (!stages.length) return <p className="report-empty">{t("Ничего не найдено")}</p>;
+  if (!stages.length) return <p className="report-empty">{t(any ? "Ничего не найдено" : "Отчётов ещё нет")}</p>;
   return (
     <div id="report-list" className="report-list">
       {stages.map((stage) => {
@@ -112,7 +115,7 @@ export function StageList({
                 {stage.role} · {stage.ticket || "—"}
               </b>
               <small>
-                {shortId(stage.dispatch_id, "dispatch-")} · {stage.batch_id || "—"} · {report?.outcome || stage.state}
+                {dispatchLabel(stage.dispatch_id)} · {stage.batch_id || "—"} · {report?.outcome || stage.state}
               </small>
             </span>
             <StatusIcon tone={KIND_TONE[status.kind]} label={statusWords(status, language)} />

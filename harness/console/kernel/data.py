@@ -6,7 +6,7 @@
 Функция `harness.health.registry.run` вызывается внутри процесса через `run_health` с теми же
 параметрами `snapshot_diff` и вызовом CLI, что и команда `cmd_health` в `harness/bin/harness.py`,
 поэтому отчёт консоли в точности совпадает с отчётом CLI (включая дрейф снепшота скиллов). Статус дрейфа
-и количество активных батчей считываются через CLI сборщика и координатора с флагом `--json` в
+и количество активных batch считываются через CLI сборщика и координатора с флагом `--json` в
 подпроцессе, что исключает дублирование логики разрешения возможностей и журнала в консоли (оба факта
 остаются опциональными: для проекта без `.harness/harness.lock` или без бэкенд-оркестрации отображается
 «не подключено»).
@@ -35,7 +35,7 @@ BIN_HARNESS_PATH = _PACKAGE_ROOT / "bin" / "harness.py"
 
 @dataclass(frozen=True)
 class DashboardData:
-    """Факты для Dashboard: счётчики health, батчи, Repo Map, memory, версия и дрейф."""
+    """Факты для Dashboard: счётчики health, batch, Repo Map, memory, версия и дрейф."""
 
     ok: int
     warn: int
@@ -118,7 +118,7 @@ def _drift_state_of(payload: JsonObject | None) -> str:
 
 
 def active_batches(repo: Path, *, timeout: float = 30.0) -> int | None:
-    """Возвращает количество открытых батчей через `coordinator.py batch list --open`, либо None, если оркестрация не подключена."""
+    """Возвращает количество открытых batch через `coordinator.py batch list --open`, либо None, если оркестрация не подключена."""
     coordinator = repo / ".harness" / "orchestration" / "coordinator.py"
     if not coordinator.is_file():
         return None
@@ -202,6 +202,14 @@ def run_health(repo: Path, *, online: bool = False, fix: bool = False) -> Report
     )
 
 
+def _runtime_unavailable(report: Report) -> bool:
+    """Whether `orchestration.runtime` already proved the runtime did not answer in `report`."""
+    return any(
+        check.id == "orchestration.runtime" and check.status == "fail"
+        for check in report.checks
+    )
+
+
 def collect_dashboard(repo: Path, *, online: bool = False) -> DashboardData:
     """Собирает сводные данные для экрана Dashboard. По умолчанию работает в режиме офлайн без ожидания сети."""
     report = run_health(repo, online=online)
@@ -216,7 +224,7 @@ def collect_dashboard(repo: Path, *, online: bool = False) -> DashboardData:
         harness_version=harness_version(),
         drift_state=_drift_state_of(drift),
         drift_counts=drift_counts(drift),
-        active_batches=active_batches(repo),
+        active_batches=None if _runtime_unavailable(report) else active_batches(repo),
         memory_index=next(
             (check for check in report.checks if check.id == "memory.index"), None
         ),

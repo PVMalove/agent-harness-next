@@ -145,7 +145,7 @@ for (const width of [1440, 390]) {
       [...document.querySelectorAll("#publish-preflight-overview .publish-check")].filter((row) => {
         const status = row.querySelector(".ds-status-line")!.getBoundingClientRect();
         const title = row.querySelector("b")!.getBoundingClientRect();
-        return status.right > title.left;
+        return status.left < title.right && status.right > title.left;
       }).length,
     );
     expect(overlaps).toBe(0);

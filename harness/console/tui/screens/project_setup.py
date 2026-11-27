@@ -30,6 +30,7 @@ from textual.widgets import (
 )
 
 from ...kernel import brand, i18n
+from .. import icons
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from ..widgets import KpiGrid
 from ...kernel.status import Status
@@ -158,7 +159,7 @@ class _OptionButton(RadioButton):
 
 
 class _Stepper(Static):
-    """The five stages of the wizard on one line: done `✔`, current `▶`, to come `○`. A terminal
+    """The five stages of the wizard on one line: done `●`, current `►`, to come `○`. A terminal
     too narrow for all of them shows the current stage alone, with the counter."""
 
     def __init__(self, *, id: str) -> None:
@@ -182,18 +183,18 @@ class _Stepper(Static):
             if index:
                 full.append(" ─ ", style=palette["muted"])
             if index < self.stage:
-                full.append("✔ ", style=palette["success"])
+                full.append(f"{icons.STATUS_ICONS['ok']} ", style=palette["success"])
                 full.append(name, style=palette["foreground"])
             elif index == self.stage:
-                full.append("▶ ", style=palette["primary"])
+                full.append(f"{icons.STATUS_KIND_ICONS['running']} ", style=palette["primary"])
                 full.append(name, style="bold " + palette["foreground"])
             else:
-                full.append("○ " + name, style=palette["muted"])
+                full.append(f"{icons.STATUS_ICONS['skipped']} " + name, style=palette["muted"])
         width = self.content_size.width
         shown = full
         if width and cell_len(full.plain) + 2 + cell_len(counter) > width:
             shown = Text()
-            shown.append("▶ ", style=palette["primary"])
+            shown.append(f"{icons.STATUS_KIND_ICONS['running']} ", style=palette["primary"])
             shown.append(names[self.stage], style="bold " + palette["foreground"])
         room = max(2, width - cell_len(shown.plain) - cell_len(counter))
         shown.append(" " * room + counter, style=palette["muted"])
@@ -216,8 +217,10 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     ProjectSetupScreen #setup-subtitle { height: auto; color: $text-muted; }
     ProjectSetupScreen #setup-stage { height: auto; border: round $border-subtle; background: transparent; padding: 0 1; }
     ProjectSetupScreen #hub-current, ProjectSetupScreen #hub-row { margin-bottom: 1; }
+    ProjectSetupScreen.-wide #hub-current, ProjectSetupScreen.-spacious #hub-current, ProjectSetupScreen.-wide #hub-row, ProjectSetupScreen.-spacious #hub-row { margin-bottom: 0; }
     ProjectSetupScreen #hub-name { height: auto; margin-bottom: 1; }
     ProjectSetupScreen .pair { grid-size: 1; height: auto; margin-bottom: 1; }
+    ProjectSetupScreen.-wide .pair, ProjectSetupScreen.-spacious .pair { margin-bottom: 0; }
     ProjectSetupScreen.-spacious .pair { grid-size: 2; grid-columns: 1fr 1fr; grid-rows: auto; grid-gutter: 0 1; }
     ProjectSetupScreen .pair > .section-card { height: 100%; }
     ProjectSetupScreen #hub-list { height: auto; max-height: 12; border: none; padding: 0; background: transparent; }
@@ -301,7 +304,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         return getattr(self.app, "language", "ru")
 
     def _t(self, text: str) -> str:
-        return i18n.tr_text(self._language(), text)
+        return icons.tr_text(self._language(), text)
 
     def _set_busy(self, value: bool) -> None:
         self.busy = value
@@ -359,7 +362,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     def _paint_strip(self) -> None:
         text = f"{self._t('Сейчас открыт:')} {self.repo.name}"
         if self._branch:
-            text += f" · ⎇ {self._branch}"
+            text += f" · {icons.BRANCH} {self._branch}"
         self.query_one("#setup-open", Static).update(text)
 
     def _show_target(self, kind: str, text: str, emphasis: str = "") -> None:
@@ -374,7 +377,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
             self._t(line) for line in text.split("\n")
         ).partition("\n")
         status = Status(kind, first, first)
-        shown = Text(status.render(self._language()), style=status.color)
+        shown = Text(icons.render_status(status, self._language()), style=status.color)
         if emphasis:
             word = self._t(emphasis)
             start = shown.plain.find(word)
@@ -395,7 +398,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         language = self._language()
         if kind == "running":
             status = Status("running", text, i18n.tr_text("en", text))
-            output.update(Text(status.render(language), style=status.color))
+            output.update(Text(icons.render_status(status, language), style=status.color))
             fold.set_summary("")
         elif kind == "log":
             output.update(styled_log(text))
@@ -490,14 +493,17 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         palette = brand.PALETTE
         if self._blocked:
             return Text(
-                self._t("✖ заблокировано: {}").format(len(self._blocked)),
+                self._t("■ заблокировано: {}").format(len(self._blocked)),
                 style=palette["error"],
             )
         if target.conflicts:
-            return Text("⚠ " + ", ".join(target.conflicts), style=palette["warning"])
+            return Text(
+                f"{icons.STATUS_ICONS['warn']} " + ", ".join(target.conflicts),
+                style=palette["warning"],
+            )
         if self._blocked is None and not self._plan_unchecked:
             return Text(self._t("○ проверяется…"), style=palette["muted"])
-        return Text(self._t("✔ нет"), style=palette["success"])
+        return Text(self._t("● нет"), style=palette["success"])
 
     def _paint_checks(self) -> None:
         summary = self.query_one("#checks-summary", Static)
@@ -507,9 +513,18 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         checked, total, failing, skipped = self._summary
         palette = brand.PALETTE
         items = [
-            (f"✔ {self._t('Проверено {} из {}').format(checked, total)}", "success"),
-            (f"⚠ {self._t('Требует исправления {}').format(failing)}", "warning"),
-            (f"○ {self._t('Не проверено {}').format(skipped)}", "muted"),
+            (
+                f"{icons.STATUS_ICONS['ok']} {self._t('Проверено {} из {}').format(checked, total)}",
+                "success",
+            ),
+            (
+                f"{icons.STATUS_ICONS['warn']} {self._t('Требует исправления {}').format(failing)}",
+                "warning",
+            ),
+            (
+                f"{icons.STATUS_ICONS['skipped']} {self._t('Не проверено {}').format(skipped)}",
+                "muted",
+            ),
         ]
         # On one line when they fit, one under another otherwise: never cut in the middle of one.
         inline = "  ".join(item for item, _ in items)
@@ -712,23 +727,25 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         self.query_one("#hub-name", Static).update(text)
         health = home.health
         total = health.ok + health.warn + health.fail + health.skipped
-        icons = brand.STATUS_ICONS
+        status_icons = icons.STATUS_ICONS
         tiles = [
             (i18n.tr(language, "Harness"), home.harness_version or "—", "", ""),
             (
                 i18n.tr(language, "Дрейф"),
-                i18n.tr(language, "нет") if home.drift == "clean" else f"{icons['warn']} {home.drift}",
+                i18n.tr(language, "нет")
+                if home.drift == "clean"
+                else f"{status_icons['warn']} {home.drift}",
                 "",
                 "" if home.drift == "clean" else "warning",
             ),
             (
                 i18n.tr(language, "Проверки"),
                 f"{health.ok}/{total}",
-                f"{icons['fail']} {health.fail}  {icons['warn']} {health.warn}",
+                f"{status_icons['fail']} {health.fail}  {status_icons['warn']} {health.warn}",
                 "error" if health.fail else "",
             ),
             (
-                i18n.tr(language, "Батчи в работе"),
+                i18n.tr(language, "Batch в работе"),
                 "—" if home.active_batches is None else str(home.active_batches),
                 "",
                 "",
@@ -759,14 +776,14 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
     @staticmethod
     def _candidate_row(item: Candidate, language: str) -> Text:
         """`name  path` and the open / installed marks, as the Web list shows them."""
-        icons = brand.STATUS_ICONS
+        status_icons = icons.STATUS_ICONS
         text = Text(no_wrap=True, overflow="ellipsis")
         text.append(Path(item.path).name or item.path, style=f"bold {brand.PALETTE['foreground']}")
         mark = i18n.tr(language, "Открыт") if item.current else i18n.tr(language, "Не открыт")
         text.append(f"  {mark}", style=brand.PALETTE["success"] if item.current else brand.PALETTE["muted"])
         text.append("\n" + item.path, style=brand.PALETTE["muted"])
         text.append(
-            f"\n{icons['ok'] if item.installed else icons['skipped']} "
+            f"\n{status_icons['ok'] if item.installed else status_icons['skipped']} "
             + i18n.tr(language, "Harness установлен" if item.installed else "Harness не установлен"),
             style=brand.PALETTE["muted"],
         )
@@ -777,9 +794,9 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         detail = Text()
         detail.append((Path(item.path).name or item.path) + "\n", style=f"bold {brand.PALETTE['foreground']}")
         detail.append(item.path + "\n", style=brand.PALETTE["muted"])
-        icons = brand.STATUS_ICONS
+        status_icons = icons.STATUS_ICONS
         detail.append(
-            f"{icons['ok'] if item.installed else icons['skipped']} "
+            f"{status_icons['ok'] if item.installed else status_icons['skipped']} "
             + i18n.tr(language, "Harness установлен" if item.installed else "Harness не установлен")
         )
         self.query_one("#hub-detail", Static).update(detail)

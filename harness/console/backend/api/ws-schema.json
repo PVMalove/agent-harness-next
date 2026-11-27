@@ -480,7 +480,8 @@
         "source": {
           "enum": [
             "structured",
-            "plain"
+            "plain",
+            "stages"
           ],
           "title": "Source",
           "type": "string"
@@ -1478,6 +1479,93 @@
         "error"
       ],
       "title": "ErrorReply",
+      "type": "object"
+    },
+    "ExecutionSummary": {
+      "additionalProperties": false,
+      "description": "What the runtime observes of a supervised execution, a process or a container; a field\nthe runtime did not report is \"\" or null. `stderr_tail` is redacted.",
+      "properties": {
+        "container_id": {
+          "title": "Container Id",
+          "type": "string"
+        },
+        "deadline": {
+          "title": "Deadline",
+          "type": "string"
+        },
+        "engine": {
+          "title": "Engine",
+          "type": "string"
+        },
+        "exit_code": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Exit Code"
+        },
+        "image": {
+          "title": "Image",
+          "type": "string"
+        },
+        "kind": {
+          "title": "Kind",
+          "type": "string"
+        },
+        "observed_at": {
+          "title": "Observed At",
+          "type": "string"
+        },
+        "oom_killed": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Oom Killed"
+        },
+        "state": {
+          "title": "State",
+          "type": "string"
+        },
+        "stderr_tail": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Stderr Tail",
+          "type": "array"
+        },
+        "stopped_by": {
+          "title": "Stopped By",
+          "type": "string"
+        },
+        "teardown": {
+          "title": "Teardown",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "state",
+        "engine",
+        "image",
+        "container_id",
+        "deadline",
+        "observed_at",
+        "exit_code",
+        "stopped_by",
+        "oom_killed",
+        "teardown",
+        "stderr_tail"
+      ],
+      "title": "ExecutionSummary",
       "type": "object"
     },
     "FeaturePayload": {
@@ -3493,6 +3581,17 @@
       "additionalProperties": false,
       "description": "An orchestration event with the allowlisted fields its text needs.",
       "properties": {
+        "approved_by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Approved By"
+        },
         "batch_id": {
           "anyOf": [
             {
@@ -3503,6 +3602,17 @@
             }
           ],
           "title": "Batch Id"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Category"
         },
         "decision": {
           "anyOf": [
@@ -3532,7 +3642,9 @@
             "dispatch.transition",
             "gate.decision",
             "qa.run",
-            "qa.attempt"
+            "qa.attempt",
+            "auto.decision",
+            "auto.stop"
           ],
           "title": "Event",
           "type": "string"
@@ -3647,7 +3759,9 @@
         "next_role",
         "outcome",
         "stage",
-        "message"
+        "message",
+        "approved_by",
+        "category"
       ],
       "title": "OrchestrationStep",
       "type": "object"
@@ -4032,7 +4146,7 @@
     },
     "RosterDispatch": {
       "additionalProperties": false,
-      "description": "A dispatch of the journal view; the timing is read for a live dispatch only (\"\" and\nfalse otherwise), and the observation for an in-process dispatch only (null otherwise).",
+      "description": "A dispatch of the journal view; the timing is read for a live dispatch only (\"\" and\nfalse otherwise), and the observation for an in-process dispatch only (null otherwise).\n`purpose` is `work` or `publish` once its record was read; `execution` is set for a\ndispatch whose execution the runtime supervises.",
       "properties": {
         "batch_id": {
           "title": "Batch Id",
@@ -4050,6 +4164,16 @@
           "title": "Dispatch Id",
           "type": "string"
         },
+        "execution": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ExecutionSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "last_event_at": {
           "title": "Last Event At",
           "type": "string"
@@ -4063,6 +4187,10 @@
               "type": "null"
             }
           ]
+        },
+        "purpose": {
+          "title": "Purpose",
+          "type": "string"
         },
         "role": {
           "title": "Role",
@@ -4096,7 +4224,9 @@
         "started_at",
         "last_event_at",
         "silent",
-        "observation"
+        "observation",
+        "purpose",
+        "execution"
       ],
       "title": "RosterDispatch",
       "type": "object"
@@ -4838,7 +4968,8 @@
                 "log_missing",
                 "log_unreadable",
                 "log_outside_storage",
-                "log_unrecognised"
+                "log_unrecognised",
+                "qa_on_host"
               ],
               "type": "string"
             },
@@ -4856,6 +4987,7 @@
           "enum": [
             "structured",
             "plain",
+            "stages",
             "none"
           ],
           "title": "Source",

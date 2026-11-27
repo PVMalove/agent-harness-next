@@ -47,7 +47,8 @@ def test_harness_state_reads_the_lock_and_skills(tmp_path: Path) -> None:
 
 
 def test_short_time_keeps_minutes_only() -> None:
-    assert stats.short_time("2026-09-28T09:52:05.4+00:00") == "2026-09-28 09:52"
+    assert stats.short_time("2026-09-28T09:52:05.4+00:00") == "28.09.2026 09:52 UTC"
+    assert stats.short_time("2026-09-28T12:52:05+03:00") == "28.09.2026 09:52 UTC"
     assert stats.short_time("") == ""
     assert stats.short_time("вчера") == "вчера"
 

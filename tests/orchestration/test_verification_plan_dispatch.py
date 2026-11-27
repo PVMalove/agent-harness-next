@@ -104,14 +104,17 @@ class PlanFixture(unittest.TestCase):
             )
 
     def _configure(
-        self, policy: JsonObject | None, repo_map_policy: JsonObject | None = None
+        self,
+        policy: JsonObject | None,
+        repo_map_policy: JsonObject | None = None,
+        developer: list[str] | None = None,
     ) -> None:
         config: JsonObject = {
             "provider_profiles": {},
             "assignment_plans": {},
             "concurrency_budget": 1,
             "verification_commands": ["make verify"],
-            "developer_verification_commands": ["make dev"],
+            "developer_verification_commands": developer or ["make dev"],
             "review_verification_commands": ["make review"],
             "auto_retry_min_severity": "info",
         }
@@ -139,10 +142,17 @@ class PlanFixture(unittest.TestCase):
         fx._assess(batch_id, candidate, changed)
         return batch_id, candidate
 
-    def _briefs(self, first_commit: str = "x", fix_commit: str = "y") -> JsonObject:
+    def _briefs(
+        self,
+        first_commit: str = "x",
+        fix_commit: str = "y",
+        expected_files: list[str] | None = None,
+    ) -> JsonObject:
         """First developer, review (with a finding), developer-retry, then QA briefs."""
         fx = self.fx
-        batch_id = fx._create_batch(integration_ref=self.integration_ref)["batch_id"]
+        batch_id = fx._create_batch(
+            integration_ref=self.integration_ref, expected_files=expected_files
+        )["batch_id"]
         fx._accepted_architect(batch_id)
         first = fx._dispatch(batch_id, "developer")["brief"]
         fx._start(first["dispatch_id"])
@@ -452,6 +462,122 @@ class TicketDiffDispatchTests(TicketDiffFixture):
                 self.assertEqual(
                     briefs[name]["transition"]["verification_commands"], derived
                 )
+        # The first developer's expected file services/x.py holds no test (issue #1292).
+        self.assertEqual(briefs["first"]["verification_commands"], ["make lint"])
+
+    def test_the_first_developer_plan_selects_the_tests_of_its_expected_files(
+        self,
+    ) -> None:
+        """Issue #1292: the first developer has no diff yet, so its plan selects from the
+        files batch preflight expects the ticket to change."""
+        self._configure(self._on())
+
+        briefs = self._briefs(
+            "test_y", "z", expected_files=["services/test_y.py", "services/x.py"]
+        )
+
+        first = briefs["first"]
+        plan = first["verification_plan"]
+        self.assertEqual(plan["role"], "developer")
+        self.assertEqual(
+            plan["diff_source"],
+            {
+                "kind": "expected_files",
+                "expected_files": ["services/test_y.py", "services/x.py"],
+            },
+        )
+        self.assertEqual(_stage(plan, "tests")["selection"], "ticket-diff")
+        self.assertEqual(_stage(plan, "tests")["nodeids"], ["services/test_y.py"])
+        self.assertNotIn("not_run_stages", plan)
+        derived = ["make lint", "python -m pytest -q services/test_y.py"]
+        self.assertEqual(first["verification_commands"], derived)
+        self.assertEqual(first["transition"]["verification_commands"], derived)
+        self.assertEqual(
+            first["transition"]["verification_plan_sha256"],
+            verification_plan.plan_sha256(plan),
+        )
+
+    def test_a_first_developer_of_skill_files_runs_no_pytest_and_says_why(
+        self,
+    ) -> None:
+        """Issue #1292: a ticket that changes only skill Markdown runs lint, not the suite."""
+        suite = ".harness/.venv/bin/python -m pytest -q tests/orchestration tests/memory"
+        self._configure(self._on(), developer=["make lint", suite])
+
+        briefs = self._briefs(
+            expected_files=["skills/first-party/engineering/x/SKILL.md"]
+        )
+
+        first = briefs["first"]
+        self.assertEqual(first["verification_commands"], ["make lint"])
+        self.assertNotIn(suite, first["verification_commands"])
+        self.assertEqual(
+            first["verification_plan"]["not_run_stages"],
+            [{"stage_id": "tests", "reason": "no-tests-in-diff"}],
+        )
+
+    def test_a_review_of_a_diff_without_tests_says_why_no_pytest_runs(self) -> None:
+        self._configure(self._on())
+
+        briefs = self._briefs("x", "z")
+
+        for name in ("first", "retry", "clean_review", "qa"):
+            with self.subTest(brief=name):
+                self.assertEqual(
+                    briefs[name]["verification_plan"]["not_run_stages"],
+                    [{"stage_id": "tests", "reason": "no-tests-in-diff"}],
+                )
+
+    def test_a_mandatory_static_stage_stays_in_the_first_developer_brief(
+        self,
+    ) -> None:
+        """Issue #1292: the diff selects only the tests; every static stage of the policy, such
+        as a project's mandatory ``scripts/verify.py``, stays in the derived list."""
+        verify: JsonObject = {
+            "stage_id": "verify",
+            "kind": "custom",
+            "argv": ["python", "scripts/verify.py"],
+            "timeout_seconds": 1800,
+        }
+        self._configure(self._on(stages=[*POLICY["stages"], verify]))
+
+        briefs = self._briefs(
+            expected_files=["skills/first-party/engineering/x/SKILL.md"]
+        )
+
+        self.assertEqual(
+            briefs["first"]["verification_commands"],
+            ["make lint", "python scripts/verify.py"],
+        )
+
+    def test_a_batch_without_the_policy_keeps_the_first_developer_commands(
+        self,
+    ) -> None:
+        self._configure(None)
+
+        briefs = self._briefs("test_y", "z", expected_files=["services/test_y.py"])
+
+        self.assertNotIn("verification_plan", briefs["first"])
+        self.assertEqual(briefs["first"]["verification_commands"], ["make dev"])
+
+    def test_the_flag_off_keeps_the_first_developer_brief_unchanged(self) -> None:
+        self._configure(self._on(ticket_diff_selection=False))
+
+        briefs = self._briefs("test_y", "z", expected_files=["services/test_y.py"])
+
+        self.assertNotIn("verification_plan", briefs["first"])
+        self.assertNotIn("verification_plan_sha256", briefs["first"]["transition"])
+        self.assertEqual(briefs["first"]["verification_commands"], ["make dev"])
+
+    def test_a_default_branch_target_keeps_the_first_developer_brief_unchanged(
+        self,
+    ) -> None:
+        self.integration_ref = "master"
+        self._configure(self._on())
+
+        briefs = self._briefs("test_y", "z", expected_files=["services/test_y.py"])
+
+        self.assertNotIn("verification_plan", briefs["first"])
         self.assertEqual(briefs["first"]["verification_commands"], ["make dev"])
 
     def test_a_diff_without_tests_reports_only_the_static_commands(self) -> None:

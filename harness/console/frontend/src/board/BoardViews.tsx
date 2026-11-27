@@ -7,6 +7,7 @@ import { useState } from "react";
 import mascot from "../assets/mascot.svg";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
+import { NoData } from "../steps/ActivityViews";
 import { href } from "../navigation";
 import { BOARD_COLUMNS } from "../ws/taskBoard";
 import type { BoardCard, BoardColumn, BoardStale, TaskBoard } from "../ws/taskBoard";
@@ -41,16 +42,16 @@ export function BoardKpis({ board }: { board: TaskBoard }) {
         <small>{t("нельзя перенести")}</small>
       </div>
       <div>
-        <span>{t("Активный batch")}</span>
-        <b className="violet">{board.ledger === "ok" ? kpis.active_batch : t("нет данных")}</b>
-        <small>{t("занято")}</small>
+        <span>{t("В активном batch")}</span>
+        <b className="violet">{board.ledger === "ok" ? kpis.active_batch : <NoData why={t("Ledger недоступен")} />}</b>
+        <small>{t("нельзя взять в другой batch")}</small>
       </div>
       <div>
-        <span>{t("Снимок")}</span>
+        <span>{t("Обновлено")}</span>
         <b className="blue" id="board-age">
           {ageText(t, board.age_seconds)}
         </b>
-        <small>{board.stale ? t("трекер недоступен") : t("обновлено")}</small>
+        <small>{board.stale ? t("трекер недоступен") : t("назад")}</small>
       </div>
     </div>
   );
@@ -161,9 +162,11 @@ function Card({
         <span>{card.id}</span>
         <span className="board-card-badges">
           {prio && <em className={`board-prio ${prio.toLowerCase()}`}>{prio}</em>}
-          <em className="board-sp" title={t("Story points")}>
-            {card.sp === null ? t("нет данных") : `${card.sp} SP`}
-          </em>
+          {card.sp !== null && (
+            <em className="board-sp" title={t("Story points")}>
+              {card.sp} SP
+            </em>
+          )}
         </span>
       </div>
       <h3>{card.title}</h3>
@@ -197,7 +200,7 @@ function Card({
             <Icon name="external" />
           </a>
         ) : (
-          <span>{t("нет данных")}</span>
+          <NoData why={t("У задачи нет ссылки в трекере")} />
         )}
       </div>
     </article>

@@ -44,8 +44,8 @@ def test_where_text_never_leaves_a_dangling_separator() -> None:
 
     assert where_text("project", None, 160) == "project"
     assert where_text("project", "", 80) == "project"
-    assert where_text("project", "main", 160) == "project · ⎇ main"
-    assert where_text("project", "main", 80) == "⎇ main"
+    assert where_text("project", "main", 160) == "project · ◦ main"
+    assert where_text("project", "main", 80) == "◦ main"
     assert len(where_text("project", LONG_BRANCH, 80)) <= (80 - 4) // 2
 
 
@@ -108,9 +108,9 @@ def test_section_badges_come_from_the_health_facts() -> None:
 
     badges = section_badges(_home_data())
     assert badges == {
-        "Diagnostics": ("✖ 2", brand.STATUS_COLORS["fail"]),
-        "Harness": ("⚠", brand.STATUS_COLORS["warn"]),
-        "Update Harness": ("⚠", brand.STATUS_COLORS["warn"]),
+        "Diagnostics": ("■ 2", brand.STATUS_COLORS["fail"]),
+        "Harness": ("▲", brand.STATUS_COLORS["warn"]),
+        "Update Harness": ("▲", brand.STATUS_COLORS["warn"]),
         "Orchestration": ("3", brand.PALETTE["muted"]),
         "Repo Map": ("full", brand.STATUS_COLORS["ok"]),
     }
@@ -125,8 +125,8 @@ def test_section_badges_come_from_the_health_facts() -> None:
         active_batches=None,
     )
     assert section_badges(clean) == {
-        "Diagnostics": ("⚠ 1", brand.STATUS_COLORS["warn"]),
-        "Harness": ("✔", brand.STATUS_COLORS["ok"]),
+        "Diagnostics": ("▲ 1", brand.STATUS_COLORS["warn"]),
+        "Harness": ("●", brand.STATUS_COLORS["ok"]),
     }
 
 
@@ -139,17 +139,18 @@ def test_a_section_title_keeps_its_case_and_note() -> None:
 
 
 def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
-    from harness.console.kernel import i18n
-    from harness.console.tui.shell import CHECK_ROUTES, check_route
+    from harness.console.kernel.check_rationale import TITLES
+    from harness.console.tui.shell import CHECK_SECTIONS, check_route
     from harness.health.registry import REGISTRY
 
     ids = [check_id for check_id, _check in REGISTRY]
-    assert set(ids) == set(CHECK_ROUTES)
+    assert set(ids) == set(CHECK_SECTIONS)
     for check_id in ids:
         route = check_route(check_id)
         assert route.section in SECTIONS and route.section != "Home", check_id
-        assert route.title != check_id
-        assert i18n.tr("en", route.title) != route.title, route.title
+        # One title source with Diagnostics and the web console.
+        assert route.title == TITLES[check_id][0] != check_id
+        assert check_route(check_id, "en").title == TITLES[check_id][1] != route.title
     assert check_route("files.skill_snapshot").section == "Update Harness"
     assert check_route("files.integrations").section == "Configuration"
     unknown = check_route("net.something")
@@ -190,6 +191,37 @@ def test_the_menu_is_a_flat_list_in_hotkey_order() -> None:
     }
     for name, key in SECTION_KEYS.items():
         assert actions[key] == f"section({SECTIONS.index(name)})"
+
+
+def test_no_shell_screen_rebinds_a_section_key() -> None:
+    """A section key opens its section from every screen: a shell screen binds `b`, `w`, `p` or a
+    digit only to open that same section."""
+    import importlib
+    import pkgutil
+
+    from harness.console.kernel.i18n import section_label
+    from harness.console.tui import screens
+    from harness.console.tui.shell import SECTION_KEYS
+
+    for module in pkgutil.iter_modules(screens.__path__):
+        importlib.import_module(f"{screens.__name__}.{module.name}")
+
+    def subclasses(cls: type) -> list[type]:
+        found = []
+        for sub in cls.__subclasses__():
+            found += [sub, *subclasses(sub)]
+        return found
+
+    sections = {key: section_label("ru", name) for name, key in SECTION_KEYS.items()}
+    for screen_class in subclasses(ConsoleShell):
+        for binding in screen_class.__dict__.get("BINDINGS", []):
+            if not isinstance(binding, Binding) or binding.key not in sections:
+                continue
+            assert binding.description == sections[binding.key], (
+                screen_class.__name__,
+                binding.key,
+                binding.description,
+            )
 
 
 def test_the_shell_screens_carry_no_local_colours_top_bar_or_number_keys() -> None:
@@ -293,3 +325,61 @@ def test_every_screen_that_opens_the_wizard_hands_it_the_console_server_client()
         assert calls, name
         for call in calls:
             assert "client" in {keyword.arg for keyword in call.keywords}, name
+
+
+def test_the_footer_puts_esc_first_and_help_language_and_palette_last() -> None:
+    from harness.console.tui.shell import footer_order
+
+    keys = ["down", "enter", "escape", "r", "f1", "f3", "f2", "ctrl+p"]
+    bindings = {key: key for key in keys}
+    ordered = footer_order(bindings, "ctrl+p")
+    assert list(ordered) == ["escape", "down", "enter", "r", "f3", "f1", "f2", "ctrl+p"]
+    assert list(footer_order({"r": "r", "f2": "f2"}, "ctrl+p")) == ["r", "f2"]
+
+
+def test_a_fact_value_wraps_at_its_separators_and_keeps_its_styles() -> None:
+    from rich.console import Console
+    from rich.text import Text
+
+    from harness.console.tui.shell import SeparatorWrap
+
+    def lines(value: Text | str, width: int) -> list[str]:
+        console = Console(width=width, record=True, color_system=None)
+        console.print(SeparatorWrap(value))
+        return [line.rstrip() for line in console.export_text().splitlines()]
+
+    branch = "feature/issue-1290-orkestraciya-proverki-i-instrukcii"
+    shown = lines(branch, 26)
+    assert "".join(shown) == branch
+    assert all(line.endswith(("-", "/")) for line in shown[:-1])
+    assert lines("короткое значение", 40) == ["короткое значение"]
+
+    styled = Text()
+    styled.append("worktrees/", style="bold")
+    styled.append("feature-issue-887", style="blue")
+    console = Console(width=14, color_system=None)
+    segments = list(console.render(SeparatorWrap(styled), console.options))
+    styles = {str(segment.style) for segment in segments if segment.text.strip()}
+    assert {"bold", "blue"} <= styles
+
+
+def test_the_palette_offers_only_keys_maximize_screenshot_restart_and_quit() -> None:
+    from textual.app import SystemCommand
+
+    from harness.console.kernel import i18n
+    from harness.console.tui.app import palette_commands
+
+    textual = [
+        SystemCommand(title, "", lambda: None)
+        for title in ("Theme", "Quit", "Keys", "Maximize", "Screenshot", "Language / Язык")
+    ]
+    assert [command.title for command in palette_commands(textual)] == [
+        "Quit",
+        "Keys",
+        "Maximize",
+        "Screenshot",
+    ]
+    assert [
+        i18n.palette_command("ru", title, "")[0]
+        for title in ("Keys", "Maximize", "Screenshot", "Restart console", "Quit")
+    ] == ["Клавиши", "Развернуть", "Снимок экрана", "Перезапустить консоль", "Выход"]
