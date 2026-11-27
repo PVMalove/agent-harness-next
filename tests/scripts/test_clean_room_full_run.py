@@ -98,3 +98,43 @@ def test_a_failed_scenario_reports_how_long_it_ran_and_stops_the_run(
         rf"\[clean-room\] {_scenario_name(second)}: failed after \d+\.\d\d s",
         lines[1],
     )
+
+
+def test_the_live_probe_runs_only_the_scenarios_that_call_claude(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    test_author_probe = importlib.import_module("scripts.test_author_probe")
+    ran: list[object] = []
+    roots: list[Path] = []
+    for scenario in test_clean_room.SCENARIOS:
+
+        def record(context: SimpleNamespace, scenario: object = scenario) -> None:
+            ran.append(scenario)
+            roots.append(context.test_root)
+
+        monkeypatch.setattr(scenario, "run", record)
+    monkeypatch.setenv("HARNESS_TEST_RUN_ROOT", str(tmp_path))
+
+    test_author_probe.main()
+
+    assert [_scenario_name(scenario) for scenario in ran] == [  # type: ignore[arg-type]
+        "isolated_test_runner",
+        "full_route_worktree",
+    ]
+    assert roots == [tmp_path / "c", tmp_path / "c"]
+    assert not (tmp_path / "c").exists()
+    lines = capsys.readouterr().out.splitlines()
+    assert [line.partition(": ")[0] for line in lines] == [
+        "[clean-room] isolated_test_runner",
+        "[clean-room] full_route_worktree",
+    ]
+
+
+def test_make_test_author_probe_starts_the_probe_entry_point() -> None:
+    makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+    recipe = makefile.split("\ntest-author-probe: $(HARNESS_ENV_STAMP)", 1)[1]
+    command = recipe.splitlines()[1].strip()
+
+    assert command == "$(HARNESS_PYTHON) scripts/test_author_probe.py"

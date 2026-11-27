@@ -34,7 +34,7 @@ the `backend-orchestration` capability, or that the developer may relabel the ti
 A `ledger_busy` answer is not unavailability: another coordinator operation holds the ledger lock,
 so repeat the command after its `retry_after_seconds`.
 Do not infer or repair an opt-in capability. Process one ticket to a terminal batch state before
-beginning another.
+beginning another. The only exception is an error stop (`references/error-stops.md`).
 
 Before any tracker write, confirm this session is rooted in the main checkout. For an existing
 issue worktree, follow `references/issue-worktree.md` → Session write access for this runtime (Claude
@@ -229,6 +229,12 @@ unsent dispatch. `dispatch runtime-probe` diagnoses an app-server runtime withou
 infrastructure-only failure, a failed check the diff may not cause, a block bypass or tooling
 blocker, and a defect in a clean developer report. Never accept or warning-override a report whose worker worked around a hook or tool block.
 
+## Error stops
+
+Before calling a human about an error, follow
+[references/error-stops.md](references/error-stops.md): an `FMEA:` recovery, a hint remedy, then on
+an error stop the RCA phase and the next free ticket.
+
 ## Worker prompt
 
 Every worker prompt is this template, filled from the `dispatch send` result and the CLI invocation
@@ -351,5 +357,5 @@ Under `approval_policy: auto`, first show the final report of `batch auto-report
 Then offer `/to-pull-requests <ticket>`. Do not invoke it automatically, open
 or merge a PR, write to an integration branch, or close the ticket in this skill. A pull request
 needs the developer's explicit confirmation under every `approval_policy`; auto-merge is forbidden. Leave
-`status::in-progress` on the ticket: closing it and moving its unblocked dependents to
-`status::ready` belong to `/to-pull-requests` after the merge.
+`status::in-progress` on the ticket: replacing it with `status::done`, closing the ticket and moving its
+unblocked dependents to `status::ready` belong to `/to-pull-requests` after the merge.

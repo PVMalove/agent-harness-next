@@ -6,7 +6,7 @@ This repo does **not** use the upstream `mattpocock/skills` canonical five-role 
 
 ## The taxonomy
 
-Every triaged issue or PR carries exactly one label from each of the first three axes below, except while it carries `status::specs` — execution mode isn't decided yet at that stage (see [State machine](#state-machine)).
+Every triaged issue carries exactly one label from each of the first three axes below, except while it carries `status::specs` — execution mode isn't decided yet at that stage (see [State machine](#state-machine)). A PR follows the PR kind (`pr::*`) section below instead.
 
 ### 1. Type (`type::*`)
 
@@ -39,6 +39,7 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 | `status::ready` | green `#0e8a16` | Fully specified, ready to be picked up |
 | `status::in-progress` | blue `#1d76db` | Currently being worked on in an active session |
 | `status::blocked` | red `#b60205` | Blocked by a dependency, or waiting on more info from you |
+| `status::done` | green `#2ea44f` | Terminal value: the merge is confirmed. It replaces `status::in-progress` before the ticket closes, so the ticket still carries exactly one `status::*` label. An epic gets it in place of `status::specs` after the confirmed merge of its integration PR into `base_branch`. On GitLab the previous label with the same `key::` prefix is removed explicitly, by the same replacement rule as [State machine](#state-machine) step 5. |
 
 ### Context labels — applied when relevant
 
@@ -46,6 +47,7 @@ get `hitl`, not `afk`: a person reads the result and decides whether the text is
 | --- | --- | --- | --- |
 | `task-report::required` | gray `#6a737d` | `/publish-epic`, `/to-tickets` — acted on by `/to-pull-requests` | Agent must post a completion report before closing. Not part of `triage`'s own state machine — see `/to-pull-requests`'s SKILL.md. |
 | `resolution::wontfix` | gray `#c2c2c2` | `/triage` | The request was explicitly rejected. Applied at close time; see `.out-of-scope/` handling in `triage/OUT-OF-SCOPE.md`. |
+| `rca::done` | lavender `#d4c5f9` | The RCA phase of `/diagnosing-bugs` | A root-cause analysis was completed for this bug. It goes next to `type::bug`, never instead of it: the type axis stays as it is. |
 
 ### 4. Priority (`priority::*`) — optional, purely informational
 
@@ -99,6 +101,15 @@ A separate namespace, independent of `hitl`/`afk` and `status::*`. `/to-tickets`
 | `pipeline::fast` | pale blue `#c5def5` | Score `≤ fast_threshold` and `Execution: afk` — the short `/fast-implement` path, no gates. |
 | `pipeline::full` | orange-red `#d93f0b` | Score `≥ full_threshold` — the gated `/implement` pipeline. |
 
+### PR kind (`pr::*`) — pull requests only
+
+A separate axis for pull and merge requests, independent of the issue axes above. Every PR carries exactly one `pr::*` label.
+
+| Label | Color | Meaning |
+| --- | --- | --- |
+| `pr::ticket` | blue `#0075ca` | A PR of one ticket, including a ticket without an epic that goes straight to `base_branch`. It inherits the ticket's `type::*` label. |
+| `pr::integration` | dark teal `#006b75` | Any PR whose head is an `integration/*` branch, whatever its target. It carries no `type::*` label. |
+
 ## State machine
 
 An unlabeled issue is implicitly "needs triage" — there's no dedicated label for that state.
@@ -108,7 +119,8 @@ An unlabeled issue is implicitly "needs triage" — there's no dedicated label f
 3. Once specified, place the ticket in `status::ready` (nothing blocking it) or `status::blocked` (a dependency, or missing info from you — either way, post triage notes).
 4. `status::blocked` → `status::ready` once the blocker clears or you reply. A blocker clears only when its predecessor is closed, and the predecessor is closed only after its merge is confirmed; a push, publish, accepted QA or an open PR does not clear it.
 5. `status::ready` → `status::in-progress` when a session (agent or you) picks it up — `/implement` and `/fast-implement` set this in pre-flight, before the issue branch or any file edit. The label is replaced, never added: a ticket carries exactly one `status::*` label. On GitLab Free a `key::value` label is an ordinary label — mutually exclusive scoped labels are a Premium feature — so every replacement removes the previous label with the same `key::` prefix explicitly (`--unlabel`), exactly as `--remove-label` does on GitHub.
-6. Merged and closed → the ticket keeps `status::in-progress`; the closed state is its terminal `done`. In the same step `/to-pull-requests` moves every open ticket whose blockers are now all closed from `status::blocked` to `status::ready`.
+6. Merged and closed → after the developer confirms the merge and `/to-pull-requests` proves it from the PR/MR state, `status::done` replaces `status::in-progress` by the replacement rule of step 5, and the ticket is then closed (a `Closes #<ID>` ticket the tracker already closed at the merge gets the label right after the close is verified). A ticket merged into `integration/*` is closed at once, not at the integration PR. In the same step `/to-pull-requests` moves every open ticket whose blockers are now all closed from `status::blocked` to `status::ready`.
+   After the developer confirms the merge of an epic's integration PR into `base_branch`, `/to-pull-requests --release <epic>` proves it from the PR/MR state, and an epic moves from `status::specs` to `status::done` by the same replacement rule; an integration PR into another `integration/*` branch leaves the epic open and its labels unchanged.
 7. Rejected at any point → apply `resolution::wontfix`, drop the `status::*` label, close.
 8. The web console's task board moves a ticket through `harness ticket-status <repo> --spec <spec> --ticket <ref> --to <column>`, which checks the move itself and replaces the label as in step 5: Backlog → Ready only when every blocker is closed (step 4), Ready → Backlog and Ready → In progress, In progress → Ready only without an active batch. A move to Backlog writes `status::blocked`, the one Backlog label that keeps exactly one `status::*` label. Every other move, and any move into Review / QA or Done, is refused without a write: those columns follow the batch, the PR and the closed state.
 
@@ -129,7 +141,7 @@ A local-markdown-tracked ticket (`.scratch/<feature>/issues/NN-*.md`) has no Git
 
 This field block is the vocabulary that [issue-tracker.md](./issue-tracker.md)'s `Workflow:` line refers to. Wayfinder's own `Status: claimed/resolved` line (same source doc) is an orthogonal claim/lock marker for the file and coexists with these fields rather than replacing them.
 
-`status::*`'s values are the same strings as the GitHub/GitLab labels, plus a terminal `done`, which `/to-pull-requests` sets after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `.harness/instructions/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](./issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
+`status::*`'s values are the same strings as the GitHub/GitLab labels, except that the terminal value is written `done` rather than `status::done`, and `/to-pull-requests` sets it after the developer confirms the merge of the issue branch. `/implement` and `/fast-implement` end at the pushed issue branch, then offer `/to-pull-requests`. Remote tickets close only after their change is actually merged: GitHub auto-closes `Closes #<ID>` for a default-branch PR, while GitLab's pattern can be disabled or customized; verify either result. An integration-branch PR is closed explicitly after its confirmed merge (see `.harness/instructions/git-workflow.md`). There's no sub-issue mechanism for the local tracker; a decomposed ticket instead lives under the feature's `.scratch/<feature-slug>/issues/` directory (see [issue-tracker.md](./issue-tracker.md)) — that directory itself is the grouping, no separate epic-folder or field needed for it.
 
 ## Adapting this taxonomy per project
 

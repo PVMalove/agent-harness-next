@@ -25,6 +25,7 @@ from harness.orchestration.core.constants import (
 )
 from harness.orchestration.core.git_utils import (
     _git,
+    _run_git,
 )
 from harness.orchestration.core.utils import (
     CoordinatorError,
@@ -194,7 +195,7 @@ def _runtime_hashes(package: Path) -> set[str]:
 
 def _runtime_files(package: Path) -> list[Path]:
     """The runtime package at `package` (the directory holding `orchestration/`): its top-level
-    modules and every subpackage, without volatile state or bytecode."""
+    modules and every subpackage, without volatile state, bytecode or git-ignored files."""
     files: list[Path] = []
     for item in package.iterdir():
         if item.is_file() and item.suffix == ".py":
@@ -203,7 +204,55 @@ def _runtime_files(package: Path) -> list[Path]:
             item.name == "orchestration" or (item / "__init__.py").is_file()
         ):
             files.extend(_tree_files(item))
-    return sorted(files)
+    ignored = _git_ignored(package)
+    return sorted(
+        path
+        for path in files
+        if not _is_ignored(path.relative_to(package).as_posix(), ignored)
+    )
+
+
+def _git_ignored(package: Path) -> frozenset[str]:
+    """Paths under `package` that git ignores, relative to it; a directory ends with `/`.
+
+    Only a source checkout filters. An installed `.harness/` is ignored as a whole, even with
+    tracked files inside, and a pinned snapshot lies outside a work tree; there every file counts,
+    so a snapshot hashes like its source."""
+    if _run_git(package, ["check-ignore", "--no-index", "-q", "."]).returncode != 1:
+        return frozenset()
+    listed = _run_git(
+        package,
+        [
+            "ls-files",
+            "-z",
+            "--others",
+            "--ignored",
+            "--exclude-standard",
+            "--directory",
+            "--",
+            ".",
+        ],
+    )
+    if listed.returncode != 0:
+        raise CoordinatorError(
+            f"cannot list the git-ignored files of the runtime at {package}",
+            remedy=f"fix the repository so that 'git -C {package} ls-files --others --ignored "
+            "--exclude-standard' succeeds, then retry",
+        )
+    return frozenset(
+        entry
+        for entry in listed.stdout.decode("utf-8", "surrogateescape").split("\0")
+        if entry
+    )
+
+
+def _is_ignored(relative: str, ignored: frozenset[str]) -> bool:
+    if relative in ignored:
+        return True
+    parts = relative.split("/")
+    return any(
+        "/".join(parts[:depth]) + "/" in ignored for depth in range(1, len(parts))
+    )
 
 
 def _tree_files(root: Path) -> list[Path]:

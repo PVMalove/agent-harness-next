@@ -77,8 +77,14 @@ dispatch or ledger record is created. Without `test_paths` and `test_runner`, fo
 hook, or unavailable isolation: continue with the usual `/tdd` in this session, name the sanitized
 reason in one line, and never start an unprotected author.
 
+## Error stops
+
+Before calling a human about an error, follow
+[references/error-stops.md](references/error-stops.md): an `FMEA:` recovery, a hint remedy, then on
+an error stop the RCA phase and the next free ticket.
+
 ## Finish
 
 After a successful push, offer `/to-pull-requests <ticket>` as the next command. Never invoke it.
-Leave `status::in-progress` on the ticket: `/to-pull-requests` closes it and moves its unblocked
-dependents to `status::ready` after the merge.
+Leave `status::in-progress` on the ticket: after the merge, `/to-pull-requests` replaces it with
+`status::done`, closes the ticket and moves its unblocked dependents to `status::ready`.

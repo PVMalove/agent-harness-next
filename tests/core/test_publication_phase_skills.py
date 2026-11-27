@@ -90,7 +90,9 @@ def test_release_confirmation_only_covers_the_tested_sha() -> None:
 
 def test_git_workflow_names_the_release_step_and_runs_qa_before_confirmation() -> None:
     text = _text(INSTRUCTIONS / "git-workflow.md")
-    assert "**Release (integration → base_branch):**" in text
+    assert "**Integration PR (integration/* → base_branch or another integration/*):**" in text
+    assert "`pr::integration`" in text
+    assert "needed for the next epic" in text
     assert "`/to-pull-requests --release <epic>`" in text
     assert text.index("run the `qa-gate` skill") < text.index("**Confirm before opening:**")
 
@@ -123,6 +125,60 @@ def test_completion_report_has_one_source_in_the_memory_format() -> None:
     guide = _text(ENGINEERING / "to-guide/references/guide-template.md")
     assert "`/to-pull-requests` step 6" in guide
     assert "gh issue comment" not in guide
+
+
+def test_guide_hands_the_pr_and_the_closure_to_to_pull_requests() -> None:
+    """The hitl guide routes the PR/MR and the ticket closure through `/to-pull-requests`."""
+    guide = _text(ENGINEERING / "to-guide/references/guide-template.md")
+    assert "Run `/to-pull-requests <ID>` from the issue branch" in guide
+    for copy in ("gh pr create", "glab mr create", "pr_body/"):
+        assert copy not in guide, copy
+
+
+TICKET_PR_GITHUB = "--title '<title>' --label pr::ticket --label <type-label> --body-file <path>`"
+TICKET_PR_GITLAB = "-f title='<title>' -f labels='pr::ticket,<type-label>' -F description=@<path>`"
+
+
+def _step(path: Path, number: int) -> str:
+    """Нормализованный текст нумерованного шага верхнего уровня до следующего шага."""
+    text = path.read_text(encoding="utf-8")
+    start = text.index(f"\n{number}. ")
+    end = text.find(f"\n{number + 1}. ", start)
+    return " ".join(text[start : end if end != -1 else None].split())
+
+
+def test_ticket_pr_carries_pr_ticket_and_the_ticket_type() -> None:
+    """Both PR creation forms label a ticket PR with `pr::ticket` and the ticket's `type::*`."""
+    for path in (PR_SKILL, INSTRUCTIONS / "git-workflow.md"):
+        step = _step(path, 6)
+        assert TICKET_PR_GITHUB in step, path.name
+        assert TICKET_PR_GITLAB in step, path.name
+
+
+def test_ticket_pr_type_label_is_read_from_the_ticket_or_asked() -> None:
+    """The type label comes from the ticket; a missing or ambiguous one stops the skill."""
+    resolve = _step(PR_SKILL, 1)
+    assert "`<type-label>` is the ticket's one `type::*` label" in resolve
+    assert "If the ticket has no `type::*` label or more than one" in resolve
+    assert "stop and ask the developer which type to use; never infer it" in resolve
+    guide = _step(INSTRUCTIONS / "git-workflow.md", 6)
+    assert "If the ticket has no `type::*` label or more than one" in guide
+    assert "The agent must not infer the type from the title or the diff" in guide
+
+
+def test_epic_less_ticket_pr_also_gets_pr_ticket() -> None:
+    """A ticket PR into `base_branch` is labeled like one into `integration/*`."""
+    for path in (PR_SKILL, INSTRUCTIONS / "git-workflow.md"):
+        assert (
+            "`pr::ticket` labels every ticket PR, whether it targets `integration/*` "
+            "or, for an epic-less ticket, `base_branch`"
+        ) in _step(path, 6), path.name
+
+
+def test_guide_names_the_pr_labels() -> None:
+    """The hitl guide says which labels `/to-pull-requests` puts on the ticket PR."""
+    guide = _text(ENGINEERING / "to-guide/references/guide-template.md")
+    assert "labels it `pr::ticket` and the ticket's `type::*`" in guide
 
 
 def test_unblocking_and_cleanup_follow_the_tracker_and_worktree_contracts() -> None:
@@ -172,3 +228,84 @@ def test_artifacts_procedure_is_its_own_section() -> None:
     procedure = _section(INSTRUCTIONS / "artifacts.md", "Task artifacts and scratchpads")
     assert "docs/tasks/" in procedure
     assert "harness cleanup" not in procedure
+
+
+INTEGRATION_PR_GITHUB = (
+    "`gh pr create --base <target-branch> --head <integration-branch> --title '<title>' "
+    "--label pr::integration --body-file <path>`"
+)
+INTEGRATION_PR_GITLAB = (
+    "`GITLAB_HOST=<host> glab api projects/<project-id>/merge_requests -X POST "
+    "-f source_branch=<integration-branch> -f target_branch=<target-branch> -f title='<title>' "
+    "-f labels=pr::integration -F description=@<path>`"
+)
+
+
+def test_integration_pr_targets_base_or_another_integration_branch() -> None:
+    """#1027: `--target` picks `base_branch` or another `integration/*` branch."""
+    resolve = _section(REFERENCES / "release.md", "1. Resolve the epic and the branches")
+    assert "`--target <branch>`" in resolve
+    assert "`base_branch`" in resolve
+    assert "an `integration/*` branch other than `<integration-branch>`" in resolve
+    assert "`--release <epic>` (optionally `--target <branch>`)" in _text(PR_SKILL)
+
+
+def test_integration_pr_carries_pr_integration_and_no_type() -> None:
+    """#1027: the integration PR is labeled `pr::integration` and never `type::*`."""
+    release = REFERENCES / "release.md"
+    confirm = _section(release, "5. Confirm and open")
+    assert INTEGRATION_PR_GITHUB in confirm
+    assert INTEGRATION_PR_GITLAB in confirm
+    assert "it never carries a `type::*` label" in confirm
+    for line in release.read_text(encoding="utf-8").splitlines():
+        if "pr create" in line or "merge_requests -X POST" in line:
+            assert "type::" not in line, line
+
+
+def test_integration_pr_footer_closes_the_epic_only_into_base_branch() -> None:
+    """#1027: `Closes #<epic>` only into `base_branch`; children never get a closing keyword."""
+    body = _section(REFERENCES / "release.md", "4. Prepare the body")
+    assert "`Closes #<epic>` only when `<target-branch>` is `base_branch`" in body
+    assert "`Related to #<epic>` in every other case" in body
+    assert (
+        "never put a closing keyword (`Closes`, `Fixes`, `Resolves`) before a child reference"
+        in body
+    )
+
+
+def test_integration_pr_runs_the_release_gate_where_opted_in() -> None:
+    """#1027: an opt-in project also records the pair and asks `integration next` after `/qa-gate`."""
+    verify = _section(REFERENCES / "release.md", "3. Verify the integration branch")
+    assert 'integration prepare --ticket "#<epic>" --branch "<integration-branch>"' in verify
+    assert "`--target <target-branch>`" in verify
+    assert "`git rev-parse origin/<target-branch>`" in verify
+    assert "`confirm-pr`" in verify
+    assert verify.index("/qa-gate") < verify.index("integration next")
+
+
+def test_integration_pr_uses_a_worktree_of_the_integration_branch() -> None:
+    """#1027: the mode reuses a clean checkout or creates its own worktree without `-b`."""
+    verify = _section(REFERENCES / "release.md", "3. Verify the integration branch")
+    assert (
+        "`git worktree add .harness/.sandboxes/worktrees/integration-pr-<epic> "
+        "<integration-branch>`"
+    ) in verify
+    assert "Remember whether this mode created the worktree" in verify
+
+
+def test_integration_pr_after_merge_marks_the_epic_done_and_keeps_the_branch() -> None:
+    """#1027: after a merge into `base_branch` the epic is done; the branch stays for the developer."""
+    after = _section(REFERENCES / "release.md", "6. After the merge")
+    assert "Replace the epic's `status::specs` with `status::done`" in after
+    assert "leave the epic open and its labels unchanged" in after
+    assert "`git worktree remove <path>`" in after
+    assert "needed for the next epic" in after
+    for command in ("git push origin --delete", "harness branch-delete", "git branch -d"):
+        assert command not in after, command
+
+
+def test_triage_labels_move_the_epic_to_done() -> None:
+    """#1027: the state machine names the epic transition `status::specs` → `status::done`."""
+    machine = _section(INSTRUCTIONS / "triage-labels.md", "State machine")
+    assert "an epic moves from `status::specs` to `status::done`" in machine
+    assert "integration PR into `base_branch`" in machine

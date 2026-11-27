@@ -2,8 +2,8 @@
 
 Run `/to-guide` explicitly (`$to-guide` in Codex) for a `hitl` ticket a person implements by hand.
 The skill prepares a step-by-step guide with ready-to-paste prompts for an AI IDE (Cursor, Copilot
-Chat). Coding, review, `qa-gate`, and the PR stay with the person; the guide names the exact
-commands for them.
+Chat). Coding, review, `qa-gate`, and the PR stay with the person; the guide names the commands
+for them, with `/to-pull-requests` for the PR and the ticket closure.
 
 ## Preparation
 
@@ -24,8 +24,13 @@ The guide follows `references/guide-template.md` with five sections:
 2. file map;
 3. steps with prompts;
 4. verification;
-5. what to do after implementing: the skill takes the project's tracker commands for the footer and
-   the ticket closure from `.harness/instructions/git-workflow.md` §2 steps 6–7 and fills in real values.
+5. what to do after implementing: `/code-review`, a commit and push, then `/to-pull-requests <ID>`
+   for the PR/MR and, after the merge, for the ticket closure. The skill fills in `<ID>` and
+   `<target-branch>` with real values and copies no tracker commands.
+
+The PR/MR opened through `/to-pull-requests <ID>` gets the `pr::ticket` label and the ticket's
+`type::*`; what the skill does after the merge is on the [`/to-pull-requests`](to-pull-requests.md)
+page.
 
 Each prompt is self-contained, starts with the test, and names its acceptance criterion and
 `Verify` command. Verification comes from the ticket's `Action -> Verify` criteria or the spec's

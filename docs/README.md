@@ -33,6 +33,9 @@
 | [Runtime discovery](../site/docs/runtime-discovery.md) | Обнаружение skills в Claude Code и Codex. |
 | [Типовые запросы скиллов](./skills-trigger-queries.md) | Набор запросов, который проверяет срабатывание скиллов до и после правки описаний. |
 | [Восстановление и runtime store](./adr/0030-runtime-store-ledger-reconciliation.md) | ADR 0030: записи восстановления в runtime store, сверка с authority lifecycle и граница гарантии. |
+| [Каталог FMEA и remedy](./adr/0041-fmea-catalog-remedy.md) | ADR 0041: remedy-шаг только для проанализированных отказов, GUID записи, генерируемый `FmeaId` и производный SQLite. |
+| [Остановка и RCA](./adr/0042-stop-triggers-rca.md) | ADR 0042: любой вызов человека из-за ошибки запускает RCA, агент продолжает со следующим тикетом. |
+| [Жизненный цикл тикета в эпике](./adr/0043-ticket-lifecycle-status-done.md) | ADR 0043: `status::done`, закрытие при слиянии в `integration/*` и интеграционный PR. |
 
 Порядок выпуска описан в [releases.md](../site/docs/agents/releases.md), рабочий процесс — в
 [git-workflow.md](../harness/project/instructions/git-workflow.md). Дизайн публичного сайта и макеты — в

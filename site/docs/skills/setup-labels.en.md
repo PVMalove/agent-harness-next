@@ -25,7 +25,7 @@ disable-model-invocation: true
 
 #### Process
 
-1. **Read the tables.** Pull every `Label` / `Color` row from `.harness/instructions/triage-labels.md` — the type, execution mode, status and context-label tables, the Wayfinder addendum, and the pipeline hint (`pipeline::*`). Skip a table without a `Color` column (`priority::*`, `severity::*`, `env::*`): those labels stay the project's choice. Name and hex color only, skip the `Applied by` column; on GitHub skip `Meaning` too, and on GitLab keep its first sentence as the label description. If the file does not exist, ask the user to run `harness update` — it creates the file from the harness templates — and stop.
+1. **Read the tables.** Pull every `Label` / `Color` row from `.harness/instructions/triage-labels.md` — the type, execution mode, status and context-label tables, the Wayfinder addendum, the pipeline hint (`pipeline::*`) and the PR kind (`pr::*`). Skip a table without a `Color` column (`priority::*`, `severity::*`, `env::*`): those labels stay the project's choice. Name and hex color only, skip the `Applied by` column; on GitHub skip `Meaning` too, and on GitLab keep its first sentence as the label description. If the file does not exist, ask the user to run `harness update` — it creates the file from the harness templates — and stop.
 2. **Show the plan.** List every label that will be created or updated, together with its color. Confirm with the maintainer before changing the tracker: this changes the shared state of the repository and requires the same discipline as any step of this repository that mutates the tracker (see `.harness/instructions/issue-tracker.md`).
 3. **Apply.**
    - **GitHub:** for each label, run `gh label create "<name>" --color "<hex>" --force`. `--force` makes the operation idempotent: it updates the color of an existing label instead of failing, and it touches nothing else (issues that already carry this label are unchanged).
@@ -42,6 +42,13 @@ disable-model-invocation: true
 
 - **Input (Input/Brief):** `.harness/instructions/triage-labels.md` and the explicit confirmation of the maintainer.
 - **Output (Output/Report):** one result line for each label.
+
+## New labels in an existing project
+
+When `harness update` brings new table rows, such as the `pr::*` axis, `rca::done` and
+`status::done`, run `/setup-labels` again: it creates the missing labels. Existing PRs and tickets
+are not backfilled with the new labels. The label meanings are in the
+[label reference](../reference/labels.md).
 
 ## Source
 

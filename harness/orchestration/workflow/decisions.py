@@ -1933,6 +1933,14 @@ def decide_batch(args: argparse.Namespace) -> JsonObject:
                 # developer-retry (issue #506); every other batch with the initial developer.
                 batch["next_action"] = supersede.developer_next_action(batch)
             elif report["role"] == "verification":
+                # A verified candidate may sit on a rebase target newer than the pinned base: the
+                # rebaser's HEAD a check-only developer retry continued (issue #1306). Pin it as
+                # an accepted writer candidate pins it.
+                verified = dispatch.get("candidate_commit")
+                if isinstance(verified, str):
+                    approved = rebase.approved_target(repo, root, batch, verified)
+                    if approved is not None:
+                        batch["integration_base_commit"] = approved
                 batch["next_action"] = "risk-assessment"
             elif report["role"] == "code-review":
                 batch["next_action"] = "qa"
@@ -2033,6 +2041,23 @@ def _approver_source(approved_by: object) -> str:
     return "approver"
 
 
+def _continues_a_candidate(
+    repo: Path, batch: JsonObject, dispatch: JsonObject, report: JsonObject
+) -> bool:
+    """Whether a writer report that created no commit stopped on a candidate, not on the base.
+
+    A developer retry that only reruns its checks reports its unchanged ``snapshot_commit`` with
+    empty ``changed_files``; that snapshot is still a candidate a read-only verification can
+    judge (issue #1306). An early stop of the initial writer stays on the base and is not one."""
+    snapshot = dispatch.get("snapshot_commit")
+    if not isinstance(snapshot, str) or snapshot in {
+        batch.get("base_commit"),
+        batch.get("integration_base_commit"),
+    }:
+        return False
+    return _candidate_commit(repo, report["commit_sha"]) == snapshot
+
+
 def _decide_retry_route(
     repo: Path,
     root: Path,
@@ -2119,7 +2144,10 @@ def _decide_retry_route(
         stage == "developer"
         and routing["reason_category"] in OPERATIONAL_REASON_CATEGORIES
         and report.get("outcome") == "blocked"
-        and report.get("changed_files")
+        and (
+            report.get("changed_files")
+            or _continues_a_candidate(repo, batch, dispatch, report)
+        )
     ):
         candidate = _candidate_commit(repo, report["commit_sha"])
         routing = {
@@ -2265,9 +2293,11 @@ def _rebase_routing(
         )
         if carried is not None:
             return {**carried, "failure": routing.get("failure")}
+    # A rebaser rebases in the issue branch, so its report's commit is the history the retry
+    # continues, as a developer report's is (issue #1306).
     snapshot = (
         _candidate_commit(repo, report["commit_sha"])
-        if stage == "developer"
+        if stage in {"developer", "rebaser"}
         else current_candidate
     ) or batch["base_commit"]
     target = rebase.propose_target(repo, batch, snapshot)

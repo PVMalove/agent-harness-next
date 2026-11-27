@@ -123,6 +123,8 @@ plugins:
             Схемы: Diagrams
             Концепции: Concepts
             Контекст: Context
+            Каталог FMEA: FMEA catalog
+            Остановка и RCA: Error stops and RCA
             Справочник: Reference
             Метки: Labels
             Глоссарий: Glossary
@@ -209,6 +211,8 @@ nav:
           - Hooks: concepts/hooks.md
           - Worktrees: concepts/worktrees.md
           - Контекст: concepts/context.md
+          - Каталог FMEA: concepts/fmea.md
+          - Остановка и RCA: concepts/error-stops.md
   - Справочник:
       - reference/index.md
       - CLI: reference/cli.md

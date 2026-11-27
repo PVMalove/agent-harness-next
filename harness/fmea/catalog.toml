@@ -1,0 +1,33 @@
+# FMEA failure-mode catalog (ADR 0041).
+#
+# This file is the source of truth for FmeaId. Do not edit harness/fmea/ids.py by hand:
+# regenerate it with `python scripts/fmea_catalog.py generate`; `scripts/verify.py` runs
+# `python scripts/fmea_catalog.py generate --check` and fails when the module drifts.
+#
+# Add an entry only with `python scripts/fmea_catalog.py new <title>`: the command generates a
+# uuid4 `id`, appends the skeleton below and regenerates FmeaId. Never type an `id` by hand.
+#
+# Format: an array of tables, one `[[failure_mode]]` table per failure mode, with exactly these
+# seven string keys and no others; no other top-level keys are allowed.
+#
+#   [[failure_mode]]
+#   id = "<uuid4>"          # canonical lower-case UUID version 4, unique; never changes
+#   title = "<slug>"        # ^[a-z][a-z0-9]*(?:[-_][a-z0-9]+)*$, unique; may be renamed
+#   mode = ""               # what fails and how it shows up
+#   detection = ""          # how the harness detects the failure
+#   recovery = ""           # what the user or the harness does to recover
+#   test = ""               # the test that proves detection and recovery
+#   residual_risk = ""      # what stays unmitigated
+#
+# The FmeaId member name is title.upper() with "-" replaced by "_" (git-timeout -> GIT_TIMEOUT);
+# it must be unique, so `git-timeout` and `git_timeout` cannot coexist. The member value is `id`.
+# A file with comments only is a valid, empty catalog.
+
+[[failure_mode]]
+id = "869778d3-80c0-4702-97eb-88068b2baab1"
+title = "git-timeout"
+mode = "Git plumbing read (`git diff`, `git show`) of the pinned commits in the context builder hangs longer than `GIT_TIMEOUT_SECONDS`, usually on a held Git lock or an overloaded disk; the Context Package is not built."
+detection = "`subprocess.run(..., timeout=GIT_TIMEOUT_SECONDS)` in `_run_git` of `harness/context_builder/context_builder.py` raises `TimeoutExpired`; `_run_git` raises `ContextPackageError` with `fmea=FmeaId.GIT_TIMEOUT`."
+recovery = "check the repository for a held Git lock or an overloaded disk, then retry"
+test = "tests/fmea/test_git_timeout_recovery.py::test_git_timeout_recovers_after_the_lock_is_released"
+residual_risk = "the harness cannot tell a held lock from a slow disk or remove the lock itself; a lock that stays held fails the retry again."

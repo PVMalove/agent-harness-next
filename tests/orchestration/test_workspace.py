@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -65,6 +66,76 @@ class HarnessRuntimeSnapshotTests(unittest.TestCase):
             self.assertFalse(_runtime_matches(repo, pinned))
             # A batch planned while the pin covered orchestration/ alone keeps its meaning.
             self.assertTrue(_runtime_matches(repo, legacy))
+
+
+class GitIgnoredRuntimeFilesTests(unittest.TestCase):
+    """A source checkout keeps git-ignored files (node_modules, build output) out of the pin."""
+
+    def _checkout(self, root: Path, gitignore: str) -> Path:
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        (root / ".gitignore").write_text(gitignore, encoding="utf-8")
+        package = root / ".harness"
+        (package / "orchestration").mkdir(parents=True)
+        (package / "orchestration" / "runner.py").write_text(
+            "A = 1\n", encoding="utf-8"
+        )
+        (package / "console").mkdir()
+        (package / "console" / "__init__.py").write_text("", encoding="utf-8")
+        return package
+
+    def _add_node_modules(self, package: Path) -> None:
+        modules = package / "console" / "frontend" / "node_modules" / "tool"
+        modules.mkdir(parents=True)
+        (modules / "SKILL.md").write_text("vendored\n", encoding="utf-8")
+
+    def test_git_ignored_files_change_neither_the_pin_nor_the_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
+            repo = Path(temporary) / "repo"
+            package = self._checkout(repo, "node_modules/\n")
+            pinned = _harness_runtime_sha256(repo)
+
+            self._add_node_modules(package)
+            snapshot = workspace._store_runtime_snapshot(
+                Path(temporary) / "state", package, pinned
+            )
+
+            self.assertEqual(_harness_runtime_sha256(repo), pinned)
+            self.assertEqual(list((snapshot / "harness").rglob("SKILL.md")), [])
+            self.assertTrue(
+                (snapshot / "harness" / "orchestration" / "runner.py").is_file()
+            )
+
+    def test_an_untracked_module_that_git_does_not_ignore_stays_in_the_pin(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
+            repo = Path(temporary) / "repo"
+            package = self._checkout(repo, "node_modules/\n")
+            pinned = _harness_runtime_sha256(repo)
+
+            (package / "console" / "new_module.py").write_text(
+                "B = 1\n", encoding="utf-8"
+            )
+
+            self.assertNotEqual(_harness_runtime_sha256(repo), pinned)
+
+    def test_an_installed_runtime_ignored_as_a_whole_still_counts_every_file(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temporary:
+            repo = Path(temporary) / "repo"
+            package = self._checkout(repo, ".harness/\n")
+            tracked = package / "console" / "__init__.py"
+            subprocess.run(
+                ["git", "-C", str(repo), "add", "-f", str(tracked)], check=True
+            )
+            pinned = _harness_runtime_sha256(repo)
+
+            (package / "orchestration" / "runner.py").write_text(
+                "A = 2\n", encoding="utf-8"
+            )
+
+            self.assertNotEqual(_harness_runtime_sha256(repo), pinned)
 
 
 class RoleManifestSourceTests(unittest.TestCase):

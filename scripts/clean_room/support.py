@@ -82,9 +82,13 @@ def run_step(
 
     Остальные аргументы (`check`, `capture_output`, `input`, `env`, `cwd`) передаются без
     изменений, поэтому каждая проверка сохраняет свою семантику; явный `timeout` вызывающего
-    кода имеет приоритет над `STEP_TIMEOUT_SECONDS`.
+    кода имеет приоритет над `STEP_TIMEOUT_SECONDS`. Без явных `stdin` и `input` шаг получает
+    `subprocess.DEVNULL`: иначе команда из терминала, например `harness init`, задаёт вопросы
+    разработчику, и его ответ попадает в одноразовый проект.
     """
     kwargs.setdefault("timeout", STEP_TIMEOUT_SECONDS)
+    if "input" not in kwargs:
+        kwargs.setdefault("stdin", subprocess.DEVNULL)
     try:
         return subprocess.run(cmd, **kwargs)
     except subprocess.TimeoutExpired:
