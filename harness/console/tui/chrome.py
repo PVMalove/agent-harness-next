@@ -17,12 +17,12 @@ from . import icons
 HealthCounts = tuple[int, int, int, int]
 
 
-def health_counts_markup(counts: HealthCounts, *, gaps: str = " ") -> str:
-    """`✅42 ⚠️0 ❌2 ⚪11`: a counter is coloured only when non-zero so a clean report stays calm."""
+def health_counts_markup(counts: HealthCounts, *, gaps: str = "  ") -> str:
+    """`✅ 42  🔶 0  ❌ 2  ⚪ 11`: a counter is coloured only when non-zero so a clean report stays calm."""
     parts = []
     for status, value in zip(("ok", "warn", "fail", "skipped"), counts):
         color = brand.STATUS_COLORS[status] if value else brand.PALETTE["muted"]
-        parts.append(f"[{color}]{icons.STATUS_ICONS[status]}{value}[/]")
+        parts.append(f"[{color}]{icons.STATUS_ICONS[status]} {value}[/]")
     return gaps.join(parts)
 
 
@@ -65,18 +65,18 @@ class TopBar(Horizontal):
         muted = brand.PALETTE["muted"]
         version = console_data.harness_version()
         crumbs = i18n.tr(getattr(self.app, "language", "ru"), self.crumbs)
-        left = f"[bold]☰ {brand.MARK} {brand.PRODUCT} {escape(version)}[/][{muted}] · {escape(crumbs)}[/]"
+        left = f"[bold]≡ {brand.MARK} {brand.PRODUCT} {escape(version)}[/][{muted}] · {escape(crumbs)}[/]"
         counts: HealthCounts | None = getattr(self.app, "health_counts", None)
         counters = health_counts_markup(counts) if counts is not None else ""
         right = ""
         branch = self._branch
         if branch:
             # The whole branch name whenever it fits; the breadcrumb already ellipsizes first.
-            left_cells = cell_len(f"☰ {brand.MARK} {brand.PRODUCT} {version} · {crumbs}")
+            left_cells = cell_len(f"≡ {brand.MARK} {brand.PRODUCT} {version} · {crumbs}")
             counter_cells = (
                 cell_len(
-                    " ".join(
-                        f"{icons.STATUS_ICONS[status]}{value}"
+                    "  ".join(
+                        f"{icons.STATUS_ICONS[status]} {value}"
                         for status, value in zip(("ok", "warn", "fail", "skipped"), counts)
                     )
                 )
@@ -98,7 +98,7 @@ def where_text(project: str, branch: str | None, width: int) -> str:
         return project
     if width < brand.NARROW_WIDTH:
         return f"{icons.BRANCH} {brand.shorten(branch, max(12, (width - 4) // 2 - 4))}"
-    limit = max(16, width // 2 - len(project) - 10)
+    limit = max(16, width // 2 - cell_len(project) - 10)
     return f"{project} · {icons.BRANCH} {brand.shorten(branch, limit)}"
 
 

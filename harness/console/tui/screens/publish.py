@@ -84,7 +84,7 @@ class PublishScreen(ConsoleShell):
     BINDINGS = [Binding("r", "refresh", "Обновить")]
     CSS = SHELL_CSS + brand.shell_css("""
     PublishScreen #publish-page { height: 1fr; padding: 0 2; }
-    PublishScreen #publish-live { width: 2; height: 1; color: $primary; }
+    PublishScreen #publish-live { width: 2; height: 1; margin: 0 1; color: $primary; }
     PublishScreen #publish-body { height: 1fr; }
     PublishScreen #publish-list-panel { width: 36; height: 1fr; margin-right: 1; }
     PublishScreen #publish-batches { height: 1fr; border: none; background: transparent; }

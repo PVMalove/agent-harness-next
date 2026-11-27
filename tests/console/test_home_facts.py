@@ -123,6 +123,56 @@ def test_an_answering_runtime_or_a_file_ledger_offers_no_start_command(
     assert store_facts(files).start_command == ""
 
 
+def test_collect_home_skips_runtime_probes_when_dashboard_already_found_runtime_down(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.console.backend.infrastructure import home_facts
+    from harness.console.kernel.data import DashboardData
+    from harness.console.kernel.home_snapshot import HarnessInstall, ProjectFacts
+    from harness.orchestration.runtime_client import RuntimeClient
+
+    _pointer(tmp_path, {"version": 4, "generation": "generation-ff01"})
+    monkeypatch.setattr(home_facts, "head_commit", lambda repo: None)
+    monkeypatch.setattr(home_facts, "memory_status", lambda repo: None)
+    monkeypatch.setattr(
+        home_facts, "project_facts", lambda repo: ProjectFacts("repo", "main", "abc", "")
+    )
+    monkeypatch.setattr(
+        home_facts,
+        "harness_install",
+        lambda repo: HarnessInstall(True, "2.0.0", 1, 1, 1, ("backend-orchestration",), ()),
+    )
+    dashboard = DashboardData(
+        ok=1,
+        warn=0,
+        fail=1,
+        skipped=0,
+        repo_map_tier="minimal",
+        harness_version="2.0.0",
+        drift_state="clean",
+        active_batches=None,
+        problems=(
+            ("fail", "orchestration.runtime", "runtime не отвечает: no socket"),
+        ),
+    )
+
+    def must_not_call(self: RuntimeClient, operation: str, **kwargs: object) -> object:
+        raise AssertionError(f"unexpected runtime call: {operation}")
+
+    monkeypatch.setattr(RuntimeClient, "call", must_not_call)
+
+    snapshot = home_facts.collect_home(tmp_path, dashboard=lambda repo: dashboard)
+
+    assert snapshot.store is not None
+    assert snapshot.store.authority == "runtime-store"
+    assert snapshot.store.audit_records is None
+    assert "runtime_unavailable" in snapshot.store.reason
+    assert snapshot.store.start_command == (
+        f"harness-runtime serve --repo {shlex.quote(str(tmp_path.resolve()))}"
+    )
+    assert snapshot.recent_sessions == ()
+
+
 def test_the_file_ledger_never_asks_the_runtime(tmp_path: Path) -> None:
     _pointer(tmp_path, {"version": 3, "generation": "generation-ab12"})
 

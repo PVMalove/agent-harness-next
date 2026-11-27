@@ -44,7 +44,7 @@ def test_setup_output_marks_report_statuses_but_not_plain_list_items() -> None:
     text = "- установка\nИтого: ok=1 warn=0 fail=1 skipped=1\n[FAIL] env.uv: нет\n- net: офлайн"
     assert styled_log(text).plain.split("\n") == [
         "- установка",
-        "Итого: ✅ ok=1 ⚠️ warn=0 ❌ fail=1 ⚪ skipped=1",
+        "Итого: ✅ ok=1 🔶 warn=0 ❌ fail=1 ⚪ skipped=1",
         "❌ [FAIL] env.uv: нет",
         "⚪ - net: офлайн",
     ]

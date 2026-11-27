@@ -202,6 +202,14 @@ def run_health(repo: Path, *, online: bool = False, fix: bool = False) -> Report
     )
 
 
+def _runtime_unavailable(report: Report) -> bool:
+    """Whether `orchestration.runtime` already proved the runtime did not answer in `report`."""
+    return any(
+        check.id == "orchestration.runtime" and check.status == "fail"
+        for check in report.checks
+    )
+
+
 def collect_dashboard(repo: Path, *, online: bool = False) -> DashboardData:
     """Собирает сводные данные для экрана Dashboard. По умолчанию работает в режиме офлайн без ожидания сети."""
     report = run_health(repo, online=online)
@@ -216,7 +224,7 @@ def collect_dashboard(repo: Path, *, online: bool = False) -> DashboardData:
         harness_version=harness_version(),
         drift_state=_drift_state_of(drift),
         drift_counts=drift_counts(drift),
-        active_batches=active_batches(repo),
+        active_batches=None if _runtime_unavailable(report) else active_batches(repo),
         memory_index=next(
             (check for check in report.checks if check.id == "memory.index"), None
         ),

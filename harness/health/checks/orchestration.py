@@ -60,7 +60,12 @@ class _LedgerState:
     with a file ledger and with the runtime store. Nothing reads a virtual store path after the
     view closes, and an unavailable runtime never falls back to the old generation."""
 
-    def __init__(self, repo: Path) -> None:
+    def __init__(
+        self,
+        repo: Path,
+        *,
+        unavailable: Exception | None = None,
+    ) -> None:
         from harness.orchestration.core.constants import STATE_REL
         from harness.orchestration.core import state_view
         from harness.orchestration.ledger.ledger_ops import read_state
@@ -78,6 +83,11 @@ class _LedgerState:
         self.batches: list[JsonObject] = []
         self.dispatch_statuses: dict[str, JsonObject] = {}
         self.records_root: Path | None = None
+        if unavailable is not None and store_is_authority(self.ledger.root):
+            self.error = str(unavailable)
+            code = getattr(unavailable, "code", None)
+            self.error_code = code if isinstance(code, str) else None
+            return
         try:
             # File health stays lock-free and never initializes an empty state directory.
             reader = (
@@ -139,6 +149,51 @@ def _store_is_authority(repo: Path) -> bool:
     return store_is_authority(repo / STATE_REL)
 
 
+_RUNTIME_STATUS_KEY = "orchestration.runtime_status"
+_LEDGER_STATE_KEY = "orchestration.ledger_state"
+
+
+def _runtime_status(context: HealthContext) -> tuple[object | None, object | None]:
+    """One `status` probe of the project's runtime per health run: `(reply, error)`."""
+    cached = context._cache.get(_RUNTIME_STATUS_KEY)
+    if isinstance(cached, tuple) and len(cached) == 2:
+        return cached
+    from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+
+    try:
+        client = RuntimeClient(context.repo)
+        reply = client.call(
+            "status",
+            operation_id=f"health-status-{client.paths.repo_id}",
+            timeout_seconds=_RUNTIME_TIMEOUT_SECONDS,
+        )
+        outcome: tuple[object | None, object | None] = (reply, None)
+    except RuntimeClientError as error:
+        outcome = (None, error)
+    context._cache[_RUNTIME_STATUS_KEY] = outcome
+    return outcome
+
+
+def _runtime_unavailable(context: HealthContext) -> Exception | None:
+    """The cached `runtime_unavailable` error from `check_runtime`, if it already ran and failed."""
+    cached = context._cache.get(_RUNTIME_STATUS_KEY)
+    if isinstance(cached, tuple) and len(cached) == 2:
+        error = cached[1]
+        if isinstance(error, Exception) and getattr(error, "code", None) == "runtime_unavailable":
+            return error
+    return None
+
+
+def _ledger_state(context: HealthContext) -> _LedgerState:
+    """One shared `_LedgerState` per health run; short-circuits when `check_runtime` failed."""
+    cached = context._cache.get(_LEDGER_STATE_KEY)
+    if isinstance(cached, _LedgerState):
+        return cached
+    state = _LedgerState(context.repo, unavailable=_runtime_unavailable(context))
+    context._cache[_LEDGER_STATE_KEY] = state
+    return state
+
+
 def check_runtime(context: HealthContext) -> CheckResult:
     """Whether the runtime of a runtime-store repository answers one `status` request; it is
     never started here. A file ledger needs no runtime, so the check is skipped."""
@@ -152,16 +207,10 @@ def check_runtime(context: HealthContext) -> CheckResult:
             status="skipped",
             message="ledger файловый: runtime не нужен",
         )
-    from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+    from harness.orchestration.runtime_client import RuntimeClientError, RuntimeReply
 
-    try:
-        client = RuntimeClient(context.repo)
-        reply = client.call(
-            "status",
-            operation_id=f"health-status-{client.paths.repo_id}",
-            timeout_seconds=_RUNTIME_TIMEOUT_SECONDS,
-        )
-    except RuntimeClientError as error:
+    reply, error = _runtime_status(context)
+    if isinstance(error, RuntimeClientError):
         if error.code == "runtime_unavailable":
             return CheckResult(
                 id=check_id,
@@ -177,6 +226,7 @@ def check_runtime(context: HealthContext) -> CheckResult:
             message=f"runtime отказал ({error.code}): {error}",
             fix=Fix(text=error.remedy),
         )
+    assert isinstance(reply, RuntimeReply)
     protocol = reply.hello.get("protocol")
     version = (
         f"{protocol.get('major')}.{protocol.get('minor')}"
@@ -198,7 +248,7 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
     check_id = "orchestration.ledger_summary"
     if not context.orchestration_enabled():
         return _skipped(check_id, context)
-    state = _LedgerState(context.repo)
+    state = _ledger_state(context)
     if state.unreadable:
         return CheckResult(
             id=check_id,
@@ -282,7 +332,7 @@ def check_unfinished_batches(context: HealthContext) -> CheckResult:
     check_id = "orchestration.unfinished_batches"
     if not context.orchestration_enabled():
         return _skipped(check_id, context)
-    state = _LedgerState(context.repo)
+    state = _ledger_state(context)
     if state.unreadable:
         return CheckResult(
             id=check_id,
@@ -353,7 +403,7 @@ def check_blocked_batches(context: HealthContext) -> CheckResult:
     check_id = "orchestration.blocked_batches"
     if not context.orchestration_enabled():
         return _skipped(check_id, context)
-    state = _LedgerState(context.repo)
+    state = _ledger_state(context)
     if state.unreadable:
         return CheckResult(
             id=check_id,
@@ -398,7 +448,7 @@ def check_stale_dispatches(context: HealthContext) -> CheckResult:
     check_id = "orchestration.stale_dispatches"
     if not context.orchestration_enabled():
         return _skipped(check_id, context)
-    state = _LedgerState(context.repo)
+    state = _ledger_state(context)
     if state.unreadable:
         return CheckResult(
             id=check_id,
@@ -496,6 +546,13 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
     from harness.storage import sandboxes_root, storage_root
 
     repo = context.repo
+    if _store_is_authority(repo) and _runtime_unavailable(context) is not None:
+        return CheckResult(
+            id=check_id,
+            group="orchestration",
+            status="skipped",
+            message="не удалось определить осиротевшие воркдеревья (git или ledger недоступны)",
+        )
     registered = _registered_worktrees(repo)
     root = storage_root(repo)
     active = _active_worktrees(root)
@@ -567,8 +624,15 @@ def check_disposable_data(context: HealthContext) -> CheckResult:
         return _skipped(check_id, context)
     from harness.cleanup import plan_cleanup
 
+    unavailable = (
+        _runtime_unavailable(context) if _store_is_authority(context.repo) else None
+    )
     try:
-        plan = plan_cleanup(context.repo, mode="hard")
+        plan = plan_cleanup(
+            context.repo,
+            mode="hard",
+            runtime_unavailable=str(unavailable) if unavailable is not None else None,
+        )
     except ValueError as exc:
         return CheckResult(
             id=check_id,
@@ -755,22 +819,17 @@ def check_worker_binaries(context: HealthContext) -> CheckResult:
             status="skipped",
             message="ledger файловый: worker запускает адаптер в окружении координатора",
         )
-    from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
+    from harness.orchestration.runtime_client import RuntimeClientError, RuntimeReply
 
-    try:
-        client = RuntimeClient(context.repo)
-        reply = client.call(
-            "status",
-            operation_id=f"health-search-path-{client.paths.repo_id}",
-            timeout_seconds=_RUNTIME_TIMEOUT_SECONDS,
-        )
-    except RuntimeClientError as error:
+    reply, error = _runtime_status(context)
+    if isinstance(error, RuntimeClientError):
         return CheckResult(
             id=check_id,
             group="orchestration",
             status="skipped",
             message=f"runtime недоступен ({error.code}): см. orchestration.runtime",
         )
+    assert isinstance(reply, RuntimeReply)
     search_path = reply.result.get("search_path")
     if not isinstance(search_path, str):
         return CheckResult(
@@ -838,12 +897,13 @@ _REBASER_FALLBACK = "маршрут rebase недоступен, сдвинут�
 _REBASER_STORE_NOTE = "store harness-runtime должен быть собран из той же версии"
 
 
-def _pinned_without_rebaser(repo: Path) -> list[str]:
+def _pinned_without_rebaser(context: HealthContext) -> list[str]:
     """Unfinished batches pinned to a runtime snapshot that ships no rebaser route.
 
     Only reads: the snapshot is neither re-hashed nor rewritten. An unreadable ledger or one that
     needs a migration yields nothing here; the ledger checks report it themselves."""
-    state = _LedgerState(repo)
+    repo = context.repo
+    state = _ledger_state(context)
     if state.unreadable or state.needs_migration or not state.batches:
         return []
     from harness.orchestration.core import workspace
@@ -932,7 +992,7 @@ def check_rebaser_route(context: HealthContext) -> CheckResult:
         context.repo / ".harness" / "orchestration" / "roles",
         config,
     )
-    pinned = _pinned_without_rebaser(context.repo)
+    pinned = _pinned_without_rebaser(context)
     pinned_note = (
         f"; batch-и на закреплённом runtime без rebaser ({len(pinned)}): {', '.join(pinned)}; "
         "они завершаются на rebase-fix-forward, snapshot не переписывается"

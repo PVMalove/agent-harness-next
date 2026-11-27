@@ -303,7 +303,7 @@ def execution_lines(summary: ExecutionSummary | None, t: Callable[[str], str]) -
 # What the observer knows of the worker process: glyph, Russian and English words, colour.
 _PROCESS_WORDS = {
     "live": ("🤖", "процесс работает", "process running", "success"),
-    "stopped": ("🛠️", "процесс завершён", "process exited", "muted"),
+    "stopped": ("🧰", "процесс завершён", "process exited", "muted"),
     "absent": ("💤", "процесс не найден", "process not found", "warning"),
 }
 # The state of the worker's event stream: Russian and English words and colour.
@@ -361,12 +361,12 @@ def heartbeat_line(snapshot: JsonObject, language: str) -> Text:
 
 
 def _status_colour(line: str) -> str:
-    """The colour of a status note by its leading symbol: ⚠️ warning, ❌ error, others muted."""
+    """The colour of a status note by its leading symbol: 🔶 warning, ❌ error, others muted."""
     return brand.PALETTE[
         "warning"
-        if line.startswith(("⚠️", "⚠"))
+        if line.startswith((icons.STATUS_ICONS["warn"], "⚠"))
         else "error"
-        if line.startswith(("❌", "✖"))
+        if line.startswith((icons.STATUS_ICONS["fail"], "✖"))
         else "muted"
     ]
 
@@ -405,12 +405,12 @@ EVENT_KINDS: dict[str, tuple[str, str, str, str]] = {
     "tool-result":  ("📦", "результат",   "result",       brand.PALETTE["muted"]),
     "result":       ("✅", "итог",        "outcome",      brand.PALETTE["success"]),
     "error":        ("❌", "ошибка",      "error",        brand.PALETTE["error"]),
-    "stderr":       ("⚠️", "stderr",      "stderr",       brand.PALETTE["warning"]),
+    "stderr":       (icons.STATUS_ICONS["warn"], "stderr",      "stderr",       brand.PALETTE["warning"]),
     "permission":   ("🔐", "разрешение",  "permission",   brand.PALETTE["warning"]),
-    "stage":        ("▶️", "стадия QA",   "QA stage",     brand.PALETTE["primary"]),
+    "stage":        (icons.STATUS_KIND_ICONS["running"], "стадия QA",   "QA stage",     brand.PALETTE["primary"]),
     "stage-result": ("🏁", "итог стадии", "stage result", brand.PALETTE["foreground"]),
     "log":          ("📝", "лог",         "log",          brand.PALETTE["muted"]),
-    "system":       ("⚙️", "система",     "system",       brand.PALETTE["muted"]),
+    "system":       ("🔩", "система",     "system",       brand.PALETTE["muted"]),
     "omitted":      ("💤", "пропущено",   "omitted",      brand.PALETTE["muted"]),
 }
 # The glyph of a finished QA stage follows its result, as `_stage_result` words it.
@@ -1090,7 +1090,7 @@ class WorkerObservationScreen(ConsoleShell):
         self.query_one("#worker-status", Static).update(
             icons.tr_text(
                 getattr(self.app, "language", "ru"),
-                "⚠️ Наблюдение недоступно; исход процесса неизвестен. Повторный worker не запускается.",
+                f"{icons.STATUS_ICONS['warn']} Наблюдение недоступно; исход процесса неизвестен. Повторный worker не запускается.",
             )
         )
 
@@ -1141,14 +1141,15 @@ class WorkerObservationScreen(ConsoleShell):
             lines.append(
                 f"exit: {exit_evidence['exit_code']} · {snapshot.get('access_mode', 'inherit')}"
             )
+        warn = icons.STATUS_ICONS["warn"]
         if snapshot.get("permission_requests"):
             lines.append(
-                t("⚠️ Требуется разрешение native runtime; решение принимает человек.")
+                t(f"{warn} Требуется разрешение native runtime; решение принимает человек.")
             )
         failure = snapshot.get("failure")
         if isinstance(failure, dict):
             lines.append(
-                "⚠️ "
+                f"{warn} "
                 + str(
                     failure.get("error") or failure.get("kind") or "refused"
                 ).splitlines()[0][:140]
@@ -1156,12 +1157,12 @@ class WorkerObservationScreen(ConsoleShell):
         if staged:
             lines.append(
                 t(
-                    "⚠️ Отчёт ожидает доставки; завершение процесса не означает приёмку работы."
+                    f"{warn} Отчёт ожидает доставки; завершение процесса не означает приёмку работы."
                 )
             )
         if startup.get("deadline_exceeded"):
             lines.append(
-                t("⚠️ Истёк срок первого self-report; таймаут не доказывает остановку.")
+                t(f"{warn} Истёк срок первого self-report; таймаут не доказывает остановку.")
             )
         if snapshot.get("stream_state") in {"unavailable", "waiting"}:
             lines.append(t("⚪ Нет новых событий; это не проверка здоровья worker."))
@@ -1172,7 +1173,7 @@ class WorkerObservationScreen(ConsoleShell):
         reason = snapshot.get("steps_reason")
         if isinstance(reason, str) and reason in STEP_REASONS:
             lines.append(
-                f"{t('⚠️ Шаги worker недоступны')}: {t(STEP_REASONS[reason])}. "
+                f"{t(f'{warn} Шаги worker недоступны')}: {t(STEP_REASONS[reason])}. "
                 + t("Исход worker от наблюдения не зависит.")
             )
         self._paint_context(snapshot, worker, lines)
@@ -1188,7 +1189,7 @@ class WorkerObservationScreen(ConsoleShell):
             output.write(
                 Text(
                     t(
-                        "⚠️ Поток был сокращён или перезаписан; показана доступная история."
+                        f"{warn} Поток был сокращён или перезаписан; показана доступная история."
                     )
                 )
             )

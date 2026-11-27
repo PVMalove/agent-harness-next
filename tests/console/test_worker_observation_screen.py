@@ -318,7 +318,7 @@ def test_the_status_lines_word_the_process_ledger_stream_and_heartbeat() -> None
     }
     assert (
         process_line(snapshot, "live", "ru").plain
-        == "🤖 процесс работает · ledger ▶️ Выполняется · поток подключён"
+        == "🤖 процесс работает · ledger ⏩ Выполняется · поток подключён"
     )
     assert process_line(snapshot, "absent", "en").plain.startswith(
         "💤 process not found"

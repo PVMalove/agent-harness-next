@@ -7,15 +7,18 @@ the Web UI keep their shared contract unchanged.
 
 from __future__ import annotations
 
-import re
-
 from ..kernel import i18n
 from ..kernel.status import Status
+
+# Every icon below is a single-codepoint Emoji_Presentation=Yes (`East_Asian_Width=W`) glyph with
+# `rich.cells.cell_len(glyph) == 2` and no Variation Selector-16 (`\ufe0f`). Text-default glyphs +
+# `\ufe0f` (such as `⚠️`, `▶️`, `⚙️`) report width 2 in Rich while VTE/xterm terminals advance the
+# cursor by 1 cell, shifting vertical borders left and swallowing the space after the icon.
 
 # Health / check statuses (parallels `brand.STATUS_ICONS`).
 STATUS_ICONS: dict[str, str] = {
     "ok": "✅",
-    "warn": "⚠️",
+    "warn": "🔶",
     "fail": "❌",
     "skipped": "⚪",
 }
@@ -23,20 +26,20 @@ STATUS_ICONS: dict[str, str] = {
 # Session, ledger and process status kinds (parallels `status.KINDS`).
 STATUS_KIND_ICONS: dict[str, str] = {
     "accepted": "✅",
-    "running": "▶️",
-    "paused": "⏸️",
+    "running": "⏩",
+    "paused": "⏳",
     "not_started": "⚪",
     "error": "❌",
-    "warning": "⚠️",
+    "warning": "🔶",
 }
 
 # Action, navigation and section icons used across TUI screens.
-STOP = "⏹️"
+STOP = "🛑"
 REFRESH = "🔄"
 BRANCH = "🌿"
 STAR = "⭐"
 LAUNCH_CONTEXT = "🎯"
-DELETE = "🗑️"
+DELETE = "⛔"
 PLAIN_LOG = "📄"
 UNKNOWN = "❓"
 
@@ -47,9 +50,9 @@ LIVE_OFF = "⚪"
 # Context group icons on the Home screen.
 CONTEXT_ICONS: dict[str, str] = {
     "card-project": "🏠",
-    "card-harness": "⚙️",
+    "card-harness": "🧰",
     "card-orchestration": "🤖",
-    "card-repo-map": "🗺️",
+    "card-repo-map": "🧭",
     "card-memory": "🧠",
 }
 CONTEXT_FALLBACK = "📌"
@@ -57,30 +60,35 @@ CONTEXT_FALLBACK = "📌"
 _TO_TUI: tuple[tuple[str, str], ...] = (
     ("✔", "✅"),
     ("✓", "✅"),
+    ("⚠️", "🔶"),
+    ("⚠", "🔶"),
     ("✖", "❌"),
     ("○", "⚪"),
     ("◌", PLAIN_LOG),
-    ("Ⅱ", "⏸️"),
+    ("▶️", "⏩"),
+    ("▶", "⏩"),
+    ("⏸️", "⏳"),
+    ("Ⅱ", "⏳"),
+    ("🗑️", DELETE),
     ("⊘", DELETE),
     ("◉", LAUNCH_CONTEXT),
+    ("⏹️", STOP),
     ("□", STOP),
     ("★", STAR),
 )
 _TO_KERNEL: tuple[tuple[str, str], ...] = (
     ("✅", "✔"),
-    ("⚠️", "⚠"),
+    ("🔶", "⚠"),
     ("❌", "✖"),
     ("⚪", "○"),
     (PLAIN_LOG, "◌"),
-    ("▶️", "▶"),
-    ("⏸️", "Ⅱ"),
+    ("⏩", "▶"),
+    ("⏳", "Ⅱ"),
     (DELETE, "⊘"),
     (LAUNCH_CONTEXT, "◉"),
     (STOP, "□"),
     (STAR, "★"),
 )
-_BARE_WARN = re.compile(r"⚠(?!\ufe0f)")
-_BARE_PLAY = re.compile(r"▶(?!\ufe0f)")
 
 
 def status_symbol(status: Status) -> str:
@@ -98,10 +106,6 @@ def restyle_text(text: str) -> str:
     for old, new in _TO_TUI:
         if old in text:
             text = text.replace(old, new)
-    if "⚠" in text:
-        text = _BARE_WARN.sub("⚠️", text)
-    if "▶" in text:
-        text = _BARE_PLAY.sub("▶️", text)
     return text
 
 

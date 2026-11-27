@@ -641,7 +641,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                 )[0]
                 for entry in members
             )
-            summary = " ".join(f"{symbol} {count}" for symbol, count in counts.items())
+            summary = "  ".join(f"{symbol} {count}" for symbol, count in counts.items())
             heading = f"{'▾' if opened else '▸'} {i18n.group_title(self._language, group)} · {len(members)}"
             if not opened:
                 heading += "   " + summary

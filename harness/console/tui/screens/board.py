@@ -270,7 +270,7 @@ class BoardScreen(ConsoleShell):
     BoardScreen #board-priority { width: 24; margin-right: 1; }
     BoardScreen #board-free { width: auto; }
     BoardScreen #board-status-line { height: 1; margin-bottom: 1; }
-    BoardScreen #board-live { width: 2; height: 1; color: $primary; }
+    BoardScreen #board-live { width: 2; height: 1; margin-right: 1; color: $primary; }
     BoardScreen #board-status { width: 1fr; height: 1; color: $text-muted; }
     BoardScreen #board-segment { height: 1; margin-bottom: 1; overflow: hidden hidden; }
     BoardScreen #board-segment Button { height: 1; min-width: 0; border: none; padding: 0 1; color: $text-muted; }

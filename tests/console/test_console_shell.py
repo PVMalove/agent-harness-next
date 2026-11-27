@@ -109,8 +109,8 @@ def test_section_badges_come_from_the_health_facts() -> None:
     badges = section_badges(_home_data())
     assert badges == {
         "Diagnostics": ("❌ 2", brand.STATUS_COLORS["fail"]),
-        "Harness": ("⚠️", brand.STATUS_COLORS["warn"]),
-        "Update Harness": ("⚠️", brand.STATUS_COLORS["warn"]),
+        "Harness": ("🔶", brand.STATUS_COLORS["warn"]),
+        "Update Harness": ("🔶", brand.STATUS_COLORS["warn"]),
         "Orchestration": ("3", brand.PALETTE["muted"]),
         "Repo Map": ("full", brand.STATUS_COLORS["ok"]),
     }
@@ -125,7 +125,7 @@ def test_section_badges_come_from_the_health_facts() -> None:
         active_batches=None,
     )
     assert section_badges(clean) == {
-        "Diagnostics": ("⚠️ 1", brand.STATUS_COLORS["warn"]),
+        "Diagnostics": ("🔶 1", brand.STATUS_COLORS["warn"]),
         "Harness": ("✅", brand.STATUS_COLORS["ok"]),
     }
 

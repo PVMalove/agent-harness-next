@@ -105,3 +105,49 @@ def test_a_file_ledger_skips_the_runtime_check(
     monkeypatch.setattr(RuntimeClient, "call", _Refuse("runtime_unavailable", "start it"))
 
     assert checks.check_runtime(context).status == "skipped"
+
+
+def test_health_probes_unavailable_runtime_once_across_all_orchestration_checks(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    context = _context(tmp_path, store=True)
+    (tmp_path / ".harness" / "orchestration.json").write_text(
+        json.dumps({"extensions": {"runtime_access": "docker"}}), encoding="utf-8"
+    )
+    calls: list[str] = []
+
+    def refuse(self: RuntimeClient, operation: str, **kwargs: object) -> RuntimeReply:
+        calls.append(operation)
+        raise RuntimeClientError(
+            "runtime_unavailable",
+            "harness-runtime does not answer",
+            remedy="start it",
+            domain="infrastructure",
+        )
+
+    monkeypatch.setattr(RuntimeClient, "call", refuse)
+
+    results = {
+        check_id: fn(context)
+        for check_id, fn in (
+            ("orchestration.runtime", checks.check_runtime),
+            ("orchestration.ledger_summary", checks.check_ledger_summary),
+            ("orchestration.unfinished_batches", checks.check_unfinished_batches),
+            ("orchestration.blocked_batches", checks.check_blocked_batches),
+            ("orchestration.stale_dispatches", checks.check_stale_dispatches),
+            ("orchestration.orphaned_worktrees", checks.check_orphaned_worktrees),
+            ("orchestration.disposable_data", checks.check_disposable_data),
+            ("orchestration.worker_binaries", checks.check_worker_binaries),
+            ("orchestration.rebaser_route", checks.check_rebaser_route),
+        )
+    }
+
+    assert calls == ["status"]
+    assert results["orchestration.runtime"].status == "fail"
+    assert results["orchestration.ledger_summary"].status == "fail"
+    assert results["orchestration.ledger_summary"].fix is not None
+    assert results["orchestration.unfinished_batches"].status == "fail"
+    assert results["orchestration.blocked_batches"].status == "fail"
+    assert results["orchestration.stale_dispatches"].status == "fail"
+    assert results["orchestration.orphaned_worktrees"].status == "skipped"
+    assert results["orchestration.worker_binaries"].status == "skipped"

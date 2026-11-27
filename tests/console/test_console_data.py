@@ -72,3 +72,34 @@ def test_dashboard_aggregates_supplied_health_facts(
         ("fail", "files.agents", "missing", "files"),
         ("skipped", "repo_map.tier", "minimal", "repo_map"),
     )
+
+
+def test_collect_dashboard_skips_active_batches_subprocess_when_runtime_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from harness.health.model import CheckResult, Report
+
+    report = Report(
+        1,
+        str(tmp_path),
+        False,
+        [
+            CheckResult(
+                "orchestration.runtime",
+                "orchestration",
+                "fail",
+                "runtime не отвечает: harness-runtime does not answer",
+            ),
+        ],
+    )
+    monkeypatch.setattr(console_data, "run_health", lambda repo, **kwargs: report)
+    monkeypatch.setattr(console_data, "drift_report", lambda repo: {"state": "clean"})
+
+    def must_not_spawn(repo: Path) -> int | None:
+        raise AssertionError("active_batches must not run when runtime already failed")
+
+    monkeypatch.setattr(console_data, "active_batches", must_not_spawn)
+
+    result = console_data.collect_dashboard(tmp_path)
+
+    assert result.active_batches is None

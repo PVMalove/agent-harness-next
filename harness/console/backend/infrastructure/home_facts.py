@@ -114,7 +114,12 @@ def _cutover_at(root: Path) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def store_facts(repo: Path, *, runtime: RuntimeCall | None = None) -> StoreFacts:
+def store_facts(
+    repo: Path,
+    *,
+    runtime: RuntimeCall | None = None,
+    runtime_unavailable: bool = False,
+) -> StoreFacts:
     """The state authority read from `ledger.json` and the selected generation without the ledger
     lock. In the runtime-store epoch the audit count comes from the incremental `state.validate`
     of the running runtime (2 s, `runtime` replaces the client in tests) and the cutover time from
@@ -133,18 +138,22 @@ def store_facts(repo: Path, *, runtime: RuntimeCall | None = None) -> StoreFacts
         audit_records: int | None = None
         reason = ""
         start_command = ""
-        try:
-            result = (runtime or _runtime_call(repo))("state.validate", {"full": False})
-            count = result.get("audit_records")
-            if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
-                audit_records = count
-            else:
-                reason = NO_AUDIT_COUNT
-        except (RuntimeClientError, OSError, ValueError) as error:
-            reason = runtime_reason(error)
-            # Only a runtime that did not answer at all is started; a refusal has its own remedy.
-            if isinstance(error, RuntimeClientError) and error.code == "runtime_unavailable":
-                start_command = serve_command(repo)
+        if runtime_unavailable and runtime is None:
+            reason = RUNTIME_DOWN.format(cause="runtime_unavailable")
+            start_command = serve_command(repo)
+        else:
+            try:
+                result = (runtime or _runtime_call(repo))("state.validate", {"full": False})
+                count = result.get("audit_records")
+                if isinstance(count, int) and not isinstance(count, bool) and count >= 0:
+                    audit_records = count
+                else:
+                    reason = NO_AUDIT_COUNT
+            except (RuntimeClientError, OSError, ValueError) as error:
+                reason = runtime_reason(error)
+                # Only a runtime that did not answer at all is started; a refusal has its own remedy.
+                if isinstance(error, RuntimeClientError) and error.code == "runtime_unavailable":
+                    start_command = serve_command(repo)
         return StoreFacts(
             "runtime-store",
             schema,
@@ -190,15 +199,19 @@ def recent_sessions(view: LedgerView) -> tuple[RecentSession, ...]:
     return tuple(sessions)
 
 
-def collect_context(repo: Path) -> HomeContext:
+def collect_context(repo: Path, *, runtime_unavailable: bool = False) -> HomeContext:
     """Read the Repo Map cached for the project's HEAD (else the latest cached map of another
     commit, shown as stale), the memory status, the project, harness
     and store facts and the recent ledger sessions; builds and writes nothing."""
     head = head_commit(repo)
-    try:
-        sessions = recent_sessions(load_ledger_view(repo))
-    except Exception:  # an unreadable ledger shows no sessions, never stale ones
+    sessions: tuple[RecentSession, ...]
+    if runtime_unavailable:
         sessions = ()
+    else:
+        try:
+            sessions = recent_sessions(load_ledger_view(repo))
+        except Exception:  # an unreadable ledger shows no sessions, never stale ones
+            sessions = ()
     repo_map = cached_map(repo, head) if head else None
     return HomeContext(
         repo_map=repo_map,
@@ -206,8 +219,18 @@ def collect_context(repo: Path) -> HomeContext:
         memory=memory_status(repo),
         project=project_facts(repo),
         harness=harness_install(repo),
-        store=store_facts(repo),
+        store=store_facts(repo, runtime_unavailable=runtime_unavailable),
         recent_sessions=sessions,
+    )
+
+
+def _runtime_down(data: DashboardData) -> bool:
+    """Whether `data` already carries an `orchestration.runtime` unavailability failure."""
+    return any(
+        status == "fail"
+        and check_id == "orchestration.runtime"
+        and "runtime не отвечает" in message
+        for status, check_id, message in data.problems
     )
 
 
@@ -234,4 +257,9 @@ def collect_home(
         if online
         else cast(_CollectDashboard, dashboard)(repo)
     )
-    return build_home_snapshot(data, context(repo))
+    home_context = (
+        collect_context(repo, runtime_unavailable=_runtime_down(data))
+        if context is collect_context
+        else context(repo)
+    )
+    return build_home_snapshot(data, home_context)

@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, cast
 
+from rich.cells import cell_len
 from rich.markup import escape
 from rich.table import Table
 from rich.text import Text
@@ -128,9 +129,11 @@ def _render_summary_full(
         lines.append(_summary_label(t("ошибки и предупреждения")))
         colors = {"fail": brand.PALETTE["error"], "warn": brand.PALETTE["warning"]}
         lines.extend(
-            f"  [{colors.get(status, brand.PALETTE['muted'])}]{_status_label(status):<6}[/] "
+            f"  [{colors.get(status, brand.PALETTE['muted'])}]"
+            f"{label}{' ' * max(0, 7 - cell_len(label))}[/] "
             f"{escape(check_id)} — {escape(message)}"
             for status, check_id, message in data.problems
+            for label in (_status_label(status),)
         )
     return "\n".join(lines)
 
@@ -337,13 +340,13 @@ def context_facts(rows: list[tuple[str, Text]], language: str, width: int = 0) -
     With a known `width`, a value longer than its room wraps at its separators (`-`, `/`, `.`),
     never inside a word."""
     labels = [i18n.fact_label(language, label) for label, _ in rows]
-    label_width = max((len(label) for label in labels), default=0)
+    label_width = max((cell_len(label) for label in labels), default=0)
     room = width - label_width - 1
     table = Table.grid(padding=(0, 1), expand=True)
     table.add_column(width=label_width, no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(ratio=1, overflow="fold")
     for label, (_, value) in zip(labels, rows):
-        if room > 8 and len(value.plain) > room and not value.spans:
+        if room > 8 and cell_len(value.plain) > room and not value.spans:
             value = Text(wrap_value(value.plain, room), style=value.style)
         table.add_row(label, value)
     return table
@@ -404,7 +407,7 @@ class DashboardScreen(ConsoleShell):
     DashboardScreen #dashboard-attention, DashboardScreen #dashboard-problems { height: auto; }
     DashboardScreen .problem-row { height: auto; border-bottom: solid $border-subtle; }
     DashboardScreen .problem-row:last-of-type { border-bottom: none; }
-    DashboardScreen .problem-symbol { width: 2; height: 1; }
+    DashboardScreen .problem-symbol { width: 2; height: 1; margin-right: 1; }
     DashboardScreen .problem-text { width: 1fr; height: auto; }
     DashboardScreen .problem-title { height: 1; color: $foreground; text-wrap: nowrap; text-overflow: ellipsis; }
     DashboardScreen .problem-caption { height: 1; color: $text-muted; text-wrap: nowrap; text-overflow: ellipsis; }
@@ -631,7 +634,13 @@ class DashboardScreen(ConsoleShell):
                     id="dashboard-attention-mode",
                     classes="no-i18n",
                 )
-            stages = self._home_sessions(interactive=True)
+            stages = (
+                []
+                if self._snapshot is not None
+                and self._snapshot.store is not None
+                and self._snapshot.store.reason
+                else self._home_sessions(interactive=True)
+            )
             with SectionCard(
                 title="Рабочие сессии", note=str(len(stages)), id="home-sessions-card"
             ):
