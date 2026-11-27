@@ -3,6 +3,7 @@ health counters - the same one-line context on every screen."""
 
 from __future__ import annotations
 
+from rich.cells import cell_len
 from rich.markup import escape
 from textual.app import ComposeResult
 from textual.containers import Horizontal
@@ -10,17 +11,18 @@ from textual.widgets import Static
 
 from ..kernel import brand, i18n
 from ..kernel import data as console_data
+from . import icons
 
 # Health counters shared through the app: (ok, warn, fail, skipped); None until a check has run.
 HealthCounts = tuple[int, int, int, int]
 
 
 def health_counts_markup(counts: HealthCounts, *, gaps: str = " ") -> str:
-    """`✔42 ⚠0 ✖2 ○11`: a counter is coloured only when non-zero so a clean report stays calm."""
+    """`✅42 ⚠️0 ❌2 ⚪11`: a counter is coloured only when non-zero so a clean report stays calm."""
     parts = []
     for status, value in zip(("ok", "warn", "fail", "skipped"), counts):
         color = brand.STATUS_COLORS[status] if value else brand.PALETTE["muted"]
-        parts.append(f"[{color}]{brand.STATUS_ICONS[status]}{value}[/]")
+        parts.append(f"[{color}]{icons.STATUS_ICONS[status]}{value}[/]")
     return gaps.join(parts)
 
 
@@ -70,25 +72,34 @@ class TopBar(Horizontal):
         branch = self._branch
         if branch:
             # The whole branch name whenever it fits; the breadcrumb already ellipsizes first.
-            left_cells = len(f"☰ {brand.MARK} {brand.PRODUCT} {version} · {crumbs}")
-            counter_cells = len(" ".join(f"x{v}" for v in counts)) if counts else 0
-            room = self.size.width - 2 - left_cells - counter_cells - 8
+            left_cells = cell_len(f"☰ {brand.MARK} {brand.PRODUCT} {version} · {crumbs}")
+            counter_cells = (
+                cell_len(
+                    " ".join(
+                        f"{icons.STATUS_ICONS[status]}{value}"
+                        for status, value in zip(("ok", "warn", "fail", "skipped"), counts)
+                    )
+                )
+                if counts
+                else 0
+            )
+            room = self.size.width - 2 - left_cells - counter_cells - 9
             limit = max(len(branch) if room >= len(branch) else room, 14)
-            right += f"[{muted}]⎇ {escape(brand.shorten(branch, limit))}[/]  "
+            right += f"[{muted}]{icons.BRANCH} {escape(brand.shorten(branch, limit))}[/]  "
         right += counters
         self.query_one("#topbar-left", Static).update(left)
         self.query_one("#topbar-right", Static).update(right.rstrip())
 
 
 def where_text(project: str, branch: str | None, width: int) -> str:
-    """The right side of the top bar: `project · ⎇ branch` on a wide terminal and the branch alone,
+    """The right side of the top bar: `project · 🌿 branch` on a wide terminal and the branch alone,
     shortened to fit, on a narrow one; only the project when there is no branch."""
     if not branch:
         return project
     if width < brand.NARROW_WIDTH:
-        return f"⎇ {brand.shorten(branch, max(12, (width - 4) // 2 - 4))}"
+        return f"{icons.BRANCH} {brand.shorten(branch, max(12, (width - 4) // 2 - 4))}"
     limit = max(16, width // 2 - len(project) - 10)
-    return f"{project} · ⎇ {brand.shorten(branch, limit)}"
+    return f"{project} · {icons.BRANCH} {brand.shorten(branch, limit)}"
 
 
 class WorkspaceHeader(TopBar):

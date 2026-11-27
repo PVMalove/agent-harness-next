@@ -32,6 +32,7 @@ from ...kernel.reports import BatchTimeline, LedgerView, ReportEntry, StageEntry
 from ...kernel import brand
 from ...kernel import i18n
 from ...kernel.json_fields import strings, text
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from .export import EXPORT_BINDING_KEY, export_document
 from .commands import call_from_worker
@@ -58,7 +59,7 @@ _SELECT_OPTIONS = {
     ],
     "sort-direction": [("По убыванию", "desc"), ("По возрастанию", "asc")],
 }
-_REFRESH_LABELS = ("r Обновить", "↻")
+_REFRESH_LABELS = ("r Обновить", icons.REFRESH)
 _QA_LABELS = ("F3 QA-логи", "QA")
 
 
@@ -81,7 +82,7 @@ def _report_label(
     label.append(f"[{entry.role}]", style=f"bold {colour}")
     label.append(f" {_short_id(entry.dispatch_id, 'dispatch-')}\n")
     status = console_reports.stage_status(entry, narrow=narrow)
-    label.append(status.render(language), style=status.color)
+    label.append(icons.render_status(status, language), style=status.color)
     return label
 
 
@@ -90,7 +91,7 @@ def _batch_label(batch: console_reports.BatchSummary, language: str = "ru") -> T
     status = console_reports.batch_status(batch)
     start = i18n.tr_text(language, console_reports.batch_start_text(batch))
     label = Text(f"{start} · {batch.ticket} {_short_id(batch.batch_id, 'batch-')}\n")
-    label.append(status.render(language), style=status.color)
+    label.append(icons.render_status(status, language), style=status.color)
     label.append(
         f" · {console_reports.batch_timing_text(batch, language=language)}",
         style=brand.PALETTE["muted"],
@@ -367,17 +368,17 @@ class ReportsScreen(ConsoleShell):
             return Text(i18n.tr(language, "Загрузка…"), style=brand.PALETTE["muted"])
         if self.view.unavailable:
             return Text(
-                f"{brand.STATUS_ICONS['fail']} {self.view.unavailable}",
+                f"{icons.STATUS_ICONS['fail']} {self.view.unavailable}",
                 style=brand.STATUS_COLORS["fail"],
             )
         if not self.view.stages:
             return Text(
-                f"{brand.STATUS_ICONS['skipped']} "
+                f"{icons.STATUS_ICONS['skipped']} "
                 + i18n.tr(language, "Стадий ещё нет: ни один dispatch не записан в ledger"),
                 style=brand.PALETTE["muted"],
             )
         return Text(
-            f"{brand.STATUS_ICONS['skipped']} "
+            f"{icons.STATUS_ICONS['skipped']} "
             + i18n.tr(language, "По фильтрам ничего не найдено"),
             style=brand.PALETTE["muted"],
         )
@@ -386,18 +387,18 @@ class ReportsScreen(ConsoleShell):
         language = self._language()
         if self.refresh_error:
             return Text(
-                f"{brand.STATUS_ICONS['fail']} "
+                f"{icons.STATUS_ICONS['fail']} "
                 + i18n.tr_text(language, self.refresh_error),
                 style=brand.STATUS_COLORS["fail"],
             )
         if self.view.unavailable:
             return Text(
-                f"{brand.STATUS_ICONS['fail']} {self.view.unavailable}",
+                f"{icons.STATUS_ICONS['fail']} {self.view.unavailable}",
                 style=brand.STATUS_COLORS["fail"],
             )
         if self.refreshing:
             running = Status("running", "Обновление…", "Refreshing…")
-            return Text(running.render(language), style=running.color)
+            return Text(icons.render_status(running, language), style=running.color)
         shown, total = len(self.shown), len(self.view.reports)
         if any(entry.report is None for entry in self.view.stages):
             stages = len(self.view.stages)
@@ -515,7 +516,7 @@ class ReportsScreen(ConsoleShell):
             for label, value in (
                 ("Тикет", Text(entry.ticket, style=f"bold {brand.PALETTE['primary']}")),
                 ("Роль", Text(entry.role, style=f"bold {colour}")),
-                ("Статус", Text(status.render(language), style=status.color)),
+                ("Статус", Text(icons.render_status(status, language), style=status.color)),
                 (
                     "Время",
                     Text(at.strftime("%d.%m.%Y %H:%M UTC"))
@@ -695,7 +696,7 @@ def _status_text(status: Status | None, body: str, language: str) -> Text:
     """A line of a report: the status (symbol and label) in its colour, then the text."""
     line = Text()
     if status is not None:
-        line.append(status.render(language), style=status.color)
+        line.append(icons.render_status(status, language), style=status.color)
         if body:
             line.append("  ")
     line.append(body)
@@ -753,7 +754,7 @@ class ReportScreen(ConsoleShell):
         language = self._language()
         status = console_reports.outcome_status(entry.outcome)
         line = Text(f"{entry.ticket} · {entry.role} · ")
-        line.append(status.render(language), style=status.color)
+        line.append(icons.render_status(status, language), style=status.color)
         when = (
             _utc_text(entry.reported_at)
             if entry.reported_at
@@ -864,7 +865,7 @@ class BatchTimelineScreen(ConsoleShell):
         language = self._language()
         timing = console_reports.batch_timing_text(batch, language=language)
         return [
-            ("Состояние", console_reports.batch_status(batch).render(language)),
+            ("Состояние", icons.render_status(console_reports.batch_status(batch), language)),
             ("До PR", timing.removeprefix("до PR: ").removeprefix("to PR: ")),
             (
                 "Начало",
@@ -890,7 +891,7 @@ class BatchTimelineScreen(ConsoleShell):
 
     def _notice_text(self) -> Text:
         return Text(
-            f"{brand.STATUS_ICONS['warn']} {i18n.tr_text(self._language(), self.notice)}",
+            f"{icons.STATUS_ICONS['warn']} {i18n.tr_text(self._language(), self.notice)}",
             style=brand.STATUS_COLORS["warn"],
         )
 
@@ -996,7 +997,7 @@ class QaLogsScreen(ConsoleShell):
         unknown = "time ?" if language == "en" else "время ?"
         return Text("\n").join(
             Text(
-                f"{brand.STATUS_ICONS['warn']} {attempt.failed_at or unknown} · "
+                f"{icons.STATUS_ICONS['warn']} {attempt.failed_at or unknown} · "
                 f"{attempt.dispatch_id} · {attempt.stage}: {attempt.message}",
                 style=brand.STATUS_COLORS["warn"],
             )
@@ -1026,7 +1027,10 @@ class QaLogsScreen(ConsoleShell):
             else f"хвост лога (последние {len(run.tail)} из {run.total_lines} строк):"
         )
         text = Text()
-        text.append(verdict.render(self._language()), style=f"bold {verdict.color}")
+        text.append(
+            icons.render_status(verdict, self._language()),
+            style=f"bold {verdict.color}",
+        )
         text.append(f"  {run.artifact}\n")
         text.append(f"{dispatch} · {run.ticket} · {outcome}\n{counts}\n{tail}\n")
         text.append(
@@ -1051,7 +1055,7 @@ class QaLogsScreen(ConsoleShell):
             if view.unavailable:
                 yield Static(
                     Text(
-                        f"{brand.STATUS_ICONS['fail']} {view.unavailable}",
+                        f"{icons.STATUS_ICONS['fail']} {view.unavailable}",
                         style=brand.STATUS_COLORS["fail"],
                     ),
                     id="qa-unavailable",

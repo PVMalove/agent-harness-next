@@ -25,6 +25,7 @@ from textual.widgets import (
 from textual.widgets.selection_list import Selection
 
 from ...kernel import brand, i18n
+from .. import icons
 from .. import stats as console_stats
 from ...kernel.catalog import (
     CONFIRMATION_REASONS,
@@ -58,7 +59,7 @@ MODES = (
 _MODE_CONSEQUENCES = {
     "update": ("Локальные правки сохраняются. Остановится на конфликтах.", None),
     "update-force-managed": (
-        "⚠ Заменит и конфликтные файлы версией пакета: ваши правки в них пропадут.",
+        "⚠️ Заменит и конфликтные файлы версией пакета: ваши правки в них пропадут.",
         "warn",
     ),
     SEED_MODE: ("Только отмеченные seed-файлы; остальное не меняется.", None),
@@ -184,7 +185,7 @@ def render_versions(
     if not state.installed:
         text = Text()
         text.append(
-            f"{brand.STATUS_ICONS['fail']} "
+            f"{icons.STATUS_ICONS['fail']} "
             + t("Харнесс не установлен: нет читаемого .harness/harness.lock"),
             style=colors["fail"],
         )
@@ -198,9 +199,9 @@ def render_versions(
     if not narrow:
         current = state.installed_version == package_version
         icon, color, verdict = (
-            (brand.STATUS_ICONS["ok"], colors["ok"], "Версия актуальна")
+            (icons.STATUS_ICONS["ok"], colors["ok"], "Версия актуальна")
             if current
-            else (brand.STATUS_ICONS["warn"], colors["warn"], "Доступно обновление")
+            else (icons.STATUS_ICONS["warn"], colors["warn"], "Доступно обновление")
         )
         text.append(f"\n{icon} {t(verdict)}", style=color)
     rows = [("Состав", ", ".join(state.capabilities) or t("нет"))]
@@ -224,8 +225,8 @@ def version_verdict(
     if state is None or not state.installed:
         return ""
     if state.installed_version == package_version:
-        return f"{brand.STATUS_ICONS['ok']} актуальна"
-    return f"{brand.STATUS_ICONS['warn']} доступно обновление"
+        return f"{icons.STATUS_ICONS['ok']} актуальна"
+    return f"{icons.STATUS_ICONS['warn']} доступно обновление"
 
 
 def render_drift(
@@ -240,15 +241,15 @@ def render_drift(
     muted = brand.PALETTE["muted"]
 
     def t(text: str) -> str:
-        return i18n.tr_text(language, text)
+        return icons.tr_text(language, text)
 
     if loading:
-        text = Text(f"{brand.STATUS_ICONS['skipped']} {t(_LOADING)}", style=muted)
+        text = Text(f"{icons.STATUS_ICONS['skipped']} {t(_LOADING)}", style=muted)
         text.append("\n" + t("Счётчики и список файлов появятся после проверки."))
         return text
     if payload is None:
         text = Text(
-            f"{brand.STATUS_ICONS['fail']} {t('Не удалось проверить дрейф')}",
+            f"{icons.STATUS_ICONS['fail']} {t('Не удалось проверить дрейф')}",
             style=colors["fail"],
         )
         text.append(
@@ -266,14 +267,14 @@ def render_drift(
     if not rows:
         if payload.get("state") == "clean":
             return Text(
-                f"{brand.STATUS_ICONS['ok']} {t('Расхождений нет')}", style=colors["ok"]
+                f"{icons.STATUS_ICONS['ok']} {t('Расхождений нет')}", style=colors["ok"]
             )
         return Text(t(f"Состояние: {payload.get('state', 'неизвестно')}"))
     for index, (label, count, status) in enumerate(rows):
         if index:
             text.append("\n")
         text.append(
-            f"{count:>4} {brand.STATUS_ICONS[status]} ", style=f"bold {colors[status]}"
+            f"{count:>4} {icons.STATUS_ICONS[status]} ", style=f"bold {colors[status]}"
         )
         text.append(t(label))
     return text
@@ -432,7 +433,7 @@ class UpdateHarnessScreen(ConsoleShell):
                         )
             with Fold(
                 title="Результат",
-                summary=_RESULT_STATUS["empty"].render("ru"),
+                summary=icons.render_status(_RESULT_STATUS["empty"], "ru"),
                 collapsed=narrow,
                 id="output-frame",
             ):
@@ -479,7 +480,7 @@ class UpdateHarnessScreen(ConsoleShell):
         return getattr(self.app, "language", "ru")
 
     def _t(self, text: str) -> str:
-        return i18n.tr_text(self._language(), text)
+        return icons.tr_text(self._language(), text)
 
     def _render_state(self) -> None:
         """The version and drift cards from the stored state, in the current language."""
@@ -497,7 +498,7 @@ class UpdateHarnessScreen(ConsoleShell):
         if not state.installed:
             self.query_one("#update-drift", Static).update(
                 Text(
-                    f"{brand.STATUS_ICONS['skipped']} "
+                    f"{icons.STATUS_ICONS['skipped']} "
                     + self._t("Нет установки — сравнивать нечего."),
                     style=brand.PALETTE["muted"],
                 )
@@ -546,7 +547,7 @@ class UpdateHarnessScreen(ConsoleShell):
             self._payload_ready = True
             self.query_one("#update-versions", Static).update(
                 Text(
-                    f"{brand.STATUS_ICONS['fail']} "
+                    f"{icons.STATUS_ICONS['fail']} "
                     + self._t("Сервер консоли не отдал состояние Harness: ")
                     + facts,
                     style=brand.STATUS_COLORS["fail"],
@@ -588,7 +589,7 @@ class UpdateHarnessScreen(ConsoleShell):
         """The seed card: what ticking a file does (or that nothing differs) and `ticked of all`."""
         if self._seed_count:
             note = Text(
-                f"{brand.STATUS_ICONS['warn']} "
+                f"{icons.STATUS_ICONS['warn']} "
                 + self._t(
                     "Отмечены файлы, которые будут перезаписаны эталоном; их правки пропадут."
                 ),
@@ -596,7 +597,7 @@ class UpdateHarnessScreen(ConsoleShell):
             )
         else:
             note = Text(
-                f"{brand.STATUS_ICONS['ok']} "
+                f"{icons.STATUS_ICONS['ok']} "
                 + self._t("Seed-файлы совпадают с шаблоном — перезаписывать нечего."),
                 style=brand.STATUS_COLORS["ok"],
             )
@@ -627,7 +628,7 @@ class UpdateHarnessScreen(ConsoleShell):
                 self._diff_kinds[relative] = field
                 label = Text()
                 label.append(
-                    f"{brand.STATUS_ICONS[status]} {self._t(tag):<14} ",
+                    f"{icons.STATUS_ICONS[status]} {self._t(tag):<14} ",
                     style=brand.STATUS_COLORS[status],
                 )
                 label.append(relative)
@@ -712,7 +713,7 @@ class UpdateHarnessScreen(ConsoleShell):
             else "Выберите режим с перезаписью или разберите файл вручную (см. diff ниже)."
         )
         text = Text(
-            f"{brand.STATUS_ICONS['warn']} {i18n.tr(language, lead)} "
+            f"{icons.STATUS_ICONS['warn']} {i18n.tr(language, lead)} "
             + _conflicts(conflicts, language),
             style=brand.STATUS_COLORS["warn"],
         )
@@ -771,7 +772,7 @@ class UpdateHarnessScreen(ConsoleShell):
         self.query_one("#mode-frame", Fold).set_summary(self._mode_name())
         self.query_one("#diff-frame", Fold).set_summary(self._diff_summary())
         self.query_one("#output-frame", Fold).set_summary(
-            _RESULT_STATUS[self._result].render(self._language())
+            icons.render_status(_RESULT_STATUS[self._result], self._language())
         )
 
     def _plan_reasons(self) -> list[tuple[Button, str]]:
@@ -856,7 +857,9 @@ class UpdateHarnessScreen(ConsoleShell):
         self._set_busy(True)
         line = entry.cli_line(self.repo)
         self.query_one("#update-output", Static).update(
-            colorize_log(f"$ {line}\n{_RESULT_STATUS['running'].symbol} Выполняется…")
+            colorize_log(
+                f"$ {line}\n{icons.status_symbol(_RESULT_STATUS['running'])} Выполняется…"
+            )
         )
         argv = entry.cli_argv(self.repo)
 

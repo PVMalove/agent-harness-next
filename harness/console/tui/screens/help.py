@@ -8,6 +8,7 @@ from textual.containers import Horizontal, VerticalScroll
 from textual.widgets import ListItem, ListView, Markdown, Static
 
 from ...kernel import brand, i18n
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from .commands import call_from_worker
@@ -27,7 +28,9 @@ def guide_parts(
         guide = client.help(language)
     except ConsoleClientError as exc:
         return f"{i18n.tr(language, 'Справка недоступна:')} {exc}", []
-    return guide.intro, list(guide.sections)
+    return icons.restyle_text(guide.intro), [
+        (title, icons.restyle_text(body)) for title, body in guide.sections
+    ]
 
 
 class HelpScreen(ConsoleShell):
@@ -136,7 +139,10 @@ class HelpScreen(ConsoleShell):
             label = i18n.section_label(language, source)
             text += f" · {i18n.tr(language, 'Вы пришли с экрана')}: {label}"
         if self._navigation_blocked:
-            text += " · ⚠ " + i18n.tr(language, "Сначала завершите или отмените диалог")
+            text += (
+                f" · {icons.STATUS_ICONS['warn']} "
+                + i18n.tr(language, "Сначала завершите или отмените диалог")
+            )
         self.query_one("#help-source", Static).update(text)
 
     def _adapt_sections(self, width: int) -> None:

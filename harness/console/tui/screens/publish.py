@@ -15,6 +15,7 @@ from textual.widgets import Button, ListItem, ListView, Static
 
 from ...kernel import brand, i18n
 from ...kernel.reports import BatchSummary, LedgerView, StageEntry, batch_status
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..shell import SHELL_CSS, ConsoleShell, ElidedPath, SectionCard, ShellIds, fact_table
 from ..widgets import LiveDot
@@ -230,7 +231,7 @@ class PublishScreen(ConsoleShell):
         status = batch_status(batch)
         text = Text()
         text.append(batch.ticket or "—", style=f"bold {brand.PALETTE['primary']}")
-        text.append(f"  {status.render(language)}\n", style=status.color)
+        text.append(f"  {icons.render_status(status, language)}\n", style=status.color)
         text.append_text(_pr_value(batch, language))
         return text
 
@@ -258,7 +259,7 @@ class PublishScreen(ConsoleShell):
         candidate = _candidate(stages)
         muted = brand.PALETTE["muted"]
         meta: list[tuple[str, Text]] = [
-            ("Состояние", Text(status.render(language), style=status.color)),
+            ("Состояние", Text(icons.render_status(status, language), style=status.color)),
             ("Ветка", Text(batch.branch, style=brand.PALETTE["primary"]) if batch.branch else Text("—", style=muted)),
             ("PR", _pr_value(batch, language, named=False)),
             ("Кандидат", Text(candidate, style=brand.PALETTE["foreground"]) if candidate else Text("—", style=muted)),
@@ -276,14 +277,14 @@ class PublishScreen(ConsoleShell):
             reasons = [f"не пройден {label}" for label in failed]
             reasons += [f"нет {label}" for label in missing]
             gate.append(
-                f"{brand.STATUS_ICONS['fail']} Release Gate: заблокирован — "
+                f"{icons.STATUS_ICONS['fail']} Release Gate: заблокирован — "
                 + ", ".join(reasons)
                 + "\n",
                 style=brand.STATUS_COLORS["fail"],
             )
         else:
             gate.append(
-                f"{brand.STATUS_ICONS['ok']} Release Gate: проверки пройдены\n",
+                f"{icons.STATUS_ICONS['ok']} Release Gate: проверки пройдены\n",
                 style=brand.STATUS_COLORS["ok"],
             )
         gate.append(
@@ -295,7 +296,7 @@ class PublishScreen(ConsoleShell):
         outcomes = {"Review": review, "QA": qa, "Publish": publish}
         for label, state in checks:
             body.append(
-                f"{brand.STATUS_ICONS[state]} {label}", style=brand.STATUS_COLORS[state]
+                f"{icons.STATUS_ICONS[state]} {label}", style=brand.STATUS_COLORS[state]
             )
             stage = outcomes.get(label)
             if stage is not None and stage.report is not None:

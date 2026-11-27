@@ -44,8 +44,8 @@ def test_where_text_never_leaves_a_dangling_separator() -> None:
 
     assert where_text("project", None, 160) == "project"
     assert where_text("project", "", 80) == "project"
-    assert where_text("project", "main", 160) == "project · ⎇ main"
-    assert where_text("project", "main", 80) == "⎇ main"
+    assert where_text("project", "main", 160) == "project · 🌿 main"
+    assert where_text("project", "main", 80) == "🌿 main"
     assert len(where_text("project", LONG_BRANCH, 80)) <= (80 - 4) // 2
 
 
@@ -108,9 +108,9 @@ def test_section_badges_come_from_the_health_facts() -> None:
 
     badges = section_badges(_home_data())
     assert badges == {
-        "Diagnostics": ("✖ 2", brand.STATUS_COLORS["fail"]),
-        "Harness": ("⚠", brand.STATUS_COLORS["warn"]),
-        "Update Harness": ("⚠", brand.STATUS_COLORS["warn"]),
+        "Diagnostics": ("❌ 2", brand.STATUS_COLORS["fail"]),
+        "Harness": ("⚠️", brand.STATUS_COLORS["warn"]),
+        "Update Harness": ("⚠️", brand.STATUS_COLORS["warn"]),
         "Orchestration": ("3", brand.PALETTE["muted"]),
         "Repo Map": ("full", brand.STATUS_COLORS["ok"]),
     }
@@ -125,8 +125,8 @@ def test_section_badges_come_from_the_health_facts() -> None:
         active_batches=None,
     )
     assert section_badges(clean) == {
-        "Diagnostics": ("⚠ 1", brand.STATUS_COLORS["warn"]),
-        "Harness": ("✔", brand.STATUS_COLORS["ok"]),
+        "Diagnostics": ("⚠️ 1", brand.STATUS_COLORS["warn"]),
+        "Harness": ("✅", brand.STATUS_COLORS["ok"]),
     }
 
 

@@ -41,6 +41,7 @@ from ...kernel import data as console_data
 from ....health.model import CheckResult, Report
 from ....health.render import GROUP_LABELS_RU
 from ...kernel.export import MarkdownDocument, MarkdownSection
+from .. import icons
 from ..client import ScreenClient
 from ..server_api import apply_health_fixes
 from .commands import call_from_worker, short_repo
@@ -108,7 +109,7 @@ _TOTALS = re.compile(r"(Итого|Total): ok=\d+ warn=\d+ fail=\d+ skipped=\d+"
 def _icon(status: str, *, muted: bool = False) -> Text:
     """The status symbol; a zero counter is muted, like its number."""
     color = brand.PALETTE["muted"] if muted else brand.STATUS_COLORS[status]
-    return Text(f"{brand.STATUS_ICONS[status]} ", style=f"bold {color}")
+    return Text(f"{icons.STATUS_ICONS[status]} ", style=f"bold {color}")
 
 
 def _summary_line(line: str) -> Text:
@@ -271,9 +272,9 @@ class DiagnosticsScreen(ConsoleShell):
                     with Horizontal(id="diagnostics-filters"):
                         for status, label in (
                             ("all", "Все"),
-                            ("fail", "✖"),
-                            ("warn", "⚠"),
-                            ("skipped", "○"),
+                            ("fail", icons.STATUS_ICONS["fail"]),
+                            ("warn", icons.STATUS_ICONS["warn"]),
+                            ("skipped", icons.STATUS_ICONS["skipped"]),
                         ):
                             yield Button(
                                 label,
@@ -566,7 +567,7 @@ class DiagnosticsScreen(ConsoleShell):
         return (
             f"$ {short()} · --online {tr('для «Онлайн»')} · "
             f"{' '.join(fix)} {tr('для «Исправить» (два шага)')} · "
-            f"{tr('○ не проверено ≠ успешно')}"
+            f"{icons.tr(language, '⚪ не проверено ≠ успешно')}"
         )
 
     def _render_overview(self) -> None:
@@ -616,7 +617,7 @@ class DiagnosticsScreen(ConsoleShell):
             label = (
                 tr("Все")
                 if status == "all"
-                else f"{brand.STATUS_ICONS[status]} {report.summary()[status] if report else 0}"
+                else f"{icons.STATUS_ICONS[status]} {report.summary()[status] if report else 0}"
             )
             button = self.query_one(f"#filter-{status}", Button)
             button.label = label

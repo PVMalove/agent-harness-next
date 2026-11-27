@@ -45,6 +45,7 @@ from ...kernel.data import DashboardData
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel.home_snapshot import HomeContext as HomeContext, HomeSnapshot
 from ....health.model import CheckResult, Status
+from .. import icons
 from .commands import call_from_worker
 
 DRIFT_LABELS = {"clean": "нет", "drift": "есть", "missing": "не установлен"}
@@ -52,14 +53,14 @@ DRIFT_LABELS_EN = {"clean": "none", "drift": "yes", "missing": "not installed"}
 
 
 def _status_label(status: str) -> str:
-    """A status as its symbol plus its word, so it never rests on colour alone: `✖ fail`."""
-    return f"{brand.STATUS_ICONS.get(status, '·')} {status}"
+    """A status as its symbol plus its word, so it never rests on colour alone: `❌ fail`."""
+    return f"{icons.STATUS_ICONS.get(status, '·')} {status}"
 
 
 def _counter(name: str, value: int, color: str) -> str:
     """A health counter with its status symbol, coloured only when it is non-zero so a clean
     report stays calm."""
-    text = f"{brand.STATUS_ICONS.get(name, '·')} {name}={value}"
+    text = f"{icons.STATUS_ICONS.get(name, '·')} {name}={value}"
     return f"[{color}]{text}[/]" if value else f"[{brand.PALETTE['muted']}]{text}[/]"
 
 
@@ -156,7 +157,7 @@ def _value(text: str, status: str | None = None, language: str = "ru") -> Text:
     text = i18n.tr_text(language, text)
     if status is None:
         return Text(text)
-    return Text(f"{brand.STATUS_ICONS[status]} {text}", style=_color(status))
+    return Text(f"{icons.STATUS_ICONS[status]} {text}", style=_color(status))
 
 
 def _dashboard_data(snapshot: HomeSnapshot) -> DashboardData:
@@ -220,7 +221,7 @@ def _snapshot_facts(
     drift_status = {"clean": "ok", "drift": "warn"}.get(data.drift_state, "skipped")
     drift_labels = DRIFT_LABELS if language == "ru" else DRIFT_LABELS_EN
     drift = Text(
-        f"{brand.STATUS_ICONS[drift_status]} "
+        f"{icons.STATUS_ICONS[drift_status]} "
         f"{drift_labels.get(data.drift_state, i18n.tr_text(language, data.drift_state))}",
         style=_color(drift_status),
     )
@@ -318,18 +319,15 @@ def _snapshot_facts(
 
 
 # The glyph in front of each context group's title on the home screen.
-CONTEXT_ICONS = {
-    "card-project": "⌂",
-    "card-harness": "◆",
-    "card-orchestration": "◈",
-    "card-repo-map": "▦",
-    "card-memory": "◍",
-}
+CONTEXT_ICONS = icons.CONTEXT_ICONS
 
 
 def context_title(card_id: str, title: str, language: str) -> Text:
     """A context group's title: its glyph in the accent colour, then the title in bold."""
-    head = Text(f"{CONTEXT_ICONS.get(card_id, '•')} ", style=f"bold {brand.PALETTE['primary']}")
+    head = Text(
+        f"{CONTEXT_ICONS.get(card_id, icons.CONTEXT_FALLBACK)} ",
+        style=f"bold {brand.PALETTE['primary']}",
+    )
     head.append(i18n.tr(language, title), style=f"bold {brand.PALETTE['foreground']}")
     return head
 
@@ -746,7 +744,7 @@ class DashboardScreen(ConsoleShell):
         if data.problems:
             return ""
         return (
-            f"[{_color('ok')}]{brand.STATUS_ICONS['ok']} "
+            f"[{_color('ok')}]{icons.STATUS_ICONS['ok']} "
             f"{i18n.tr_text(self._language, 'Проблем не найдено')}[/]"
         )
 
@@ -775,7 +773,7 @@ class DashboardScreen(ConsoleShell):
             rows.append(
                 Horizontal(
                     Static(
-                        Text(brand.STATUS_ICONS.get(status, "·"), style=_color(status)),
+                        Text(icons.STATUS_ICONS.get(status, "·"), style=_color(status)),
                         classes="problem-symbol no-i18n",
                     ),
                     Vertical(

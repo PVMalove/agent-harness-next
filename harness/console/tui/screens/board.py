@@ -26,6 +26,7 @@ from textual.widgets import (
 
 from ...kernel import brand, i18n
 from ...kernel.task_board import BoardCard, BoardSnapshot, BoardSpecs
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..shell import SHELL_CSS, ConsoleShell, ElidedPath, SectionCard, ShellIds
 from ..widgets import LiveDot
@@ -76,10 +77,10 @@ def _card_text(card: BoardCard, language: str) -> Text:
     meta: list[str] = []
     if card.open_blockers:
         meta.append(
-            f"{brand.STATUS_ICONS['warn']} {i18n.tr(language, 'Блокеры').lower()} {card.open_blockers}"
+            f"{icons.STATUS_ICONS['warn']} {i18n.tr(language, 'Блокеры').lower()} {card.open_blockers}"
         )
     else:
-        meta.append(f"{brand.STATUS_ICONS['ok']} {i18n.tr(language, 'без блокеров')}")
+        meta.append(f"{icons.STATUS_ICONS['ok']} {i18n.tr(language, 'без блокеров')}")
     if card.command:
         meta.append(card.command)
     if card.batch:
@@ -107,13 +108,16 @@ def _detail_text(card: BoardCard, language: str) -> Text:
         text.append(_short(card.what, 400) + "\n")
     if card.blockers:
         text.append("\n" + i18n.tr(language, "Блокеры") + "\n", style=f"bold {primary}")
-        icons = {
-            "open": brand.STATUS_ICONS["fail"],
-            "closed": brand.STATUS_ICONS["ok"],
-            "unknown": brand.STATUS_ICONS["warn"],
+        blocker_icons = {
+            "open": icons.STATUS_ICONS["fail"],
+            "closed": icons.STATUS_ICONS["ok"],
+            "unknown": icons.STATUS_ICONS["warn"],
         }
         for blocker in card.blockers:
-            text.append(f"{icons[blocker.state]} {blocker.id} {blocker.why}".rstrip() + "\n")
+            text.append(
+                f"{blocker_icons[blocker.state]} {blocker.id} {blocker.why}".rstrip()
+                + "\n"
+            )
     if card.criteria:
         text.append("\n" + i18n.tr(language, "Критерии") + "\n", style=f"bold {primary}")
         for item in card.criteria[:8]:
@@ -184,9 +188,9 @@ class BoardCardModal(Translated, ModalScreen[None]):
                     )
                     for blocker in card.blockers:
                         state = {
-                            "open": brand.STATUS_ICONS["fail"],
-                            "closed": brand.STATUS_ICONS["ok"],
-                            "unknown": brand.STATUS_ICONS["warn"],
+                            "open": icons.STATUS_ICONS["fail"],
+                            "closed": icons.STATUS_ICONS["ok"],
+                            "unknown": icons.STATUS_ICONS["warn"],
                         }[blocker.state]
                         yield Static(
                             f"{state} {blocker.id} · {blocker.why}".rstrip(" ·"),

@@ -36,6 +36,7 @@ from ...kernel import reports
 from ...kernel.execution_facts import ExecutionSummary, observe_execution
 from ..chrome import TopBar
 from ...kernel.runner import CommandRunner
+from .. import icons
 from ..client import WorkerSteps
 from ..session_card import session_card, status_caption
 from ...kernel.status import PERMISSION_PENDING, process_status, session_status
@@ -301,9 +302,9 @@ def execution_lines(summary: ExecutionSummary | None, t: Callable[[str], str]) -
 
 # What the observer knows of the worker process: glyph, Russian and English words, colour.
 _PROCESS_WORDS = {
-    "live": ("●", "процесс работает", "process running", "success"),
-    "stopped": ("■", "процесс завершён", "process exited", "muted"),
-    "absent": ("○", "процесс не найден", "process not found", "warning"),
+    "live": ("🤖", "процесс работает", "process running", "success"),
+    "stopped": ("🛠️", "процесс завершён", "process exited", "muted"),
+    "absent": ("💤", "процесс не найден", "process not found", "warning"),
 }
 # The state of the worker's event stream: Russian and English words and colour.
 _STREAM_WORDS = {
@@ -317,12 +318,12 @@ def process_line(snapshot: JsonObject, worker: str, language: str) -> Text:
     """The process, the ledger state and the event stream in words, each in its colour."""
     en = language == "en"
     glyph, ru_word, en_word, colour = _PROCESS_WORDS.get(
-        worker, ("?", "процесс не наблюдается", "process not observed", "muted")
+        worker, (icons.UNKNOWN, "процесс не наблюдается", "process not observed", "muted")
     )
     line = Text(f"{glyph} {en_word if en else ru_word}", style=brand.PALETTE[colour])
     state = session_status(str(snapshot.get("state") or "unknown"))
     line.append(" · ledger ", style=brand.PALETTE["muted"])
-    line.append(state.render(language), style=state.color)
+    line.append(icons.render_status(state, language), style=state.color)
     stream = str(snapshot.get("stream_state") or "")
     ru_stream, en_stream, stream_colour = _STREAM_WORDS.get(
         stream, (f"поток: {stream or '—'}", f"stream: {stream or '—'}", "muted")
@@ -360,9 +361,13 @@ def heartbeat_line(snapshot: JsonObject, language: str) -> Text:
 
 
 def _status_colour(line: str) -> str:
-    """The colour of a status note by its leading symbol: ⚠ warning, ✖ error, others muted."""
+    """The colour of a status note by its leading symbol: ⚠️ warning, ❌ error, others muted."""
     return brand.PALETTE[
-        "warning" if line.startswith("⚠") else "error" if line.startswith("✖") else "muted"
+        "warning"
+        if line.startswith(("⚠️", "⚠"))
+        else "error"
+        if line.startswith(("❌", "✖"))
+        else "muted"
     ]
 
 
@@ -395,30 +400,30 @@ def timeline_table(rows: list[tuple[str, str, str, str]]) -> Table:
 # tabs. Each glyph is a solid shape of its own, drawn as a chip, so the kinds differ at a glance;
 # an unknown kind is shown with the `system` look and its own name.
 EVENT_KINDS: dict[str, tuple[str, str, str, str]] = {
-    "output": ("●", "вывод", "output", brand.PALETTE["foreground"]),
-    "tool": ("◆", "инструмент", "tool", brand.PALETTE["primary"]),
-    "tool-result": ("◇", "результат", "result", brand.PALETTE["muted"]),
-    "result": ("✔", "итог", "outcome", brand.PALETTE["success"]),
-    "error": ("✖", "ошибка", "error", brand.PALETTE["error"]),
-    "stderr": ("▲", "stderr", "stderr", brand.PALETTE["warning"]),
-    "permission": ("⚠", "разрешение", "permission", brand.PALETTE["warning"]),
-    "stage": ("■", "стадия QA", "QA stage", brand.PALETTE["primary"]),
-    "stage-result": ("□", "итог стадии", "stage result", brand.PALETTE["foreground"]),
-    "log": ("▪", "лог", "log", brand.PALETTE["muted"]),
-    "system": ("○", "система", "system", brand.PALETTE["muted"]),
-    "omitted": ("⋯", "пропущено", "omitted", brand.PALETTE["muted"]),
+    "output":       ("💬", "вывод",       "output",       brand.PALETTE["foreground"]),
+    "tool":         ("🔧", "инструмент",  "tool",         brand.PALETTE["primary"]),
+    "tool-result":  ("📦", "результат",   "result",       brand.PALETTE["muted"]),
+    "result":       ("✅", "итог",        "outcome",      brand.PALETTE["success"]),
+    "error":        ("❌", "ошибка",      "error",        brand.PALETTE["error"]),
+    "stderr":       ("⚠️", "stderr",      "stderr",       brand.PALETTE["warning"]),
+    "permission":   ("🔐", "разрешение",  "permission",   brand.PALETTE["warning"]),
+    "stage":        ("▶️", "стадия QA",   "QA stage",     brand.PALETTE["primary"]),
+    "stage-result": ("🏁", "итог стадии", "stage result", brand.PALETTE["foreground"]),
+    "log":          ("📝", "лог",         "log",          brand.PALETTE["muted"]),
+    "system":       ("⚙️", "система",     "system",       brand.PALETTE["muted"]),
+    "omitted":      ("💤", "пропущено",   "omitted",      brand.PALETTE["muted"]),
 }
 # The glyph of a finished QA stage follows its result, as `_stage_result` words it.
 _STAGE_RESULTS = {
-    "pass": ("✔", brand.PALETTE["success"]),
-    "fail": ("✖", brand.PALETTE["error"]),
-    "not_run": ("○", brand.PALETTE["muted"]),
+    "pass":    ("🟢", brand.PALETTE["success"]),
+    "fail":    ("🔴", brand.PALETTE["error"]),
+    "not_run": ("⚪", brand.PALETTE["muted"]),
 }
-CHIP_WIDTH = 3
+CHIP_WIDTH = 4
 
 
 def _event_look(kind: str, text: str, language: str) -> tuple[str, str, str]:
-    glyph, ru, en, colour = EVENT_KINDS.get(kind, ("○", kind, kind, brand.PALETTE["muted"]))
+    glyph, ru, en, colour = EVENT_KINDS.get(kind, ("⚪", kind, kind, brand.PALETTE["muted"]))
     if kind == "stage-result":
         words = text.partition(":")[2].split()
         glyph, colour = _STAGE_RESULTS.get(words[0] if words else "", (glyph, colour))
@@ -426,7 +431,7 @@ def _event_look(kind: str, text: str, language: str) -> tuple[str, str, str]:
 
 
 def _chip(glyph: str, colour: str) -> Text:
-    """A glyph as a three-cell chip on a tinted ground, so it reads larger than a bare symbol."""
+    """A glyph as a four-cell chip on a tinted ground, so it reads larger than a bare symbol."""
     return Text(
         f" {glyph} ",
         style=f"bold {colour} on {brand.SHELL_TOKENS['event-active-background']}",
@@ -568,7 +573,7 @@ def context_table(rows: list[tuple[str, Text]], language: str) -> Table:
 
 
 def readiness_text(snapshot: JsonObject) -> Text:
-    """The environment checks, one per line: ✔ confirmed, ✖ refuted, ○ not checked."""
+    """The environment checks, one per line: ✅ confirmed, ❌ refuted, ⚪ not checked."""
     model_report = snapshot.get("model_self_report") or {}
     tree = snapshot.get("worktree_attestation") or {}
     checks = Text()
@@ -583,7 +588,7 @@ def readiness_text(snapshot: JsonObject) -> Text:
         state = "ok" if verified is True else "fail" if verified is False else "skipped"
         if index:
             checks.append("\n")
-        checks.append(f"{brand.STATUS_ICONS[state]} ", style=brand.STATUS_COLORS[state])
+        checks.append(f"{icons.STATUS_ICONS[state]} ", style=brand.STATUS_COLORS[state])
         checks.append(name, style=brand.PALETTE["foreground" if state != "skipped" else "muted"])
     return checks
 
@@ -826,7 +831,7 @@ class WorkerObservationScreen(ConsoleShell):
                 i18n.tr(language, "Рабочих сессий нет: ledger не записал ни одного dispatch")
             )
             self.query_one("#worker-status", Static).update(
-                i18n.tr(language, "○ Наблюдать нечего. Сессия появится, когда координатор запустит worker.")
+                icons.tr(language, "⚪ Наблюдать нечего. Сессия появится, когда координатор запустит worker.")
             )
         self._paint_sessions()
 
@@ -853,7 +858,7 @@ class WorkerObservationScreen(ConsoleShell):
                         markup=False,
                     )
                     yield Static(
-                        "○ Ожидание",
+                        "⚪ Ожидание",
                         id="worker-badge",
                         classes="no-i18n",
                         markup=False,
@@ -871,7 +876,7 @@ class WorkerObservationScreen(ConsoleShell):
                     classes="no-i18n",
                 )
                 yield Static(
-                    "○ Ожидание наблюдения",
+                    "⚪ Ожидание наблюдения",
                     id="worker-status",
                     markup=False,
                     classes="no-i18n",
@@ -939,17 +944,17 @@ class WorkerObservationScreen(ConsoleShell):
                 with Horizontal(id="worker-actions"):
                     yield Button("Развернуть сессию", id="worker-focus")
                     yield Button("Детали", id="worker-details")
-                    stop = Button("□ Остановить", id="worker-stop", disabled=True)
+                    stop = Button(f"{icons.STOP} Остановить", id="worker-stop", disabled=True)
                     stop.tooltip = "Этот адаптер не предоставляет подтверждённый канал остановки. Закрытие панели не останавливает worker."
                     yield stop
-                    yield Button("↻", id="worker-reconnect")
+                    yield Button(icons.REFRESH, id="worker-reconnect")
                 yield Static(
                     "Наблюдение · без дополнительных LLM-вызовов",
                     id="worker-cost",
                 )
 
     def compose_context(self) -> ComposeResult:
-        yield Static("◉ КОНТЕКСТ ЗАПУСКА", classes="context-label")
+        yield Static(f"{icons.LAUNCH_CONTEXT} КОНТЕКСТ ЗАПУСКА", classes="context-label")
         yield Button(
             "Запрос native",
             id="worker-permission",
@@ -961,7 +966,7 @@ class WorkerObservationScreen(ConsoleShell):
         )
         yield Static("ГОТОВНОСТЬ СРЕДЫ", classes="context-label")
         yield Static(
-            "○ Не проверено",
+            "⚪ Не проверено",
             id="worker-readiness",
             classes="context-value no-i18n",
             markup=False,
@@ -1083,9 +1088,9 @@ class WorkerObservationScreen(ConsoleShell):
 
     def _show_unavailable(self) -> None:
         self.query_one("#worker-status", Static).update(
-            i18n.tr_text(
+            icons.tr_text(
                 getattr(self.app, "language", "ru"),
-                "⚠ Наблюдение недоступно; исход процесса неизвестен. Повторный worker не запускается.",
+                "⚠️ Наблюдение недоступно; исход процесса неизвестен. Повторный worker не запускается.",
             )
         )
 
@@ -1095,7 +1100,7 @@ class WorkerObservationScreen(ConsoleShell):
         language = getattr(self.app, "language", "ru")
 
         def t(text: str) -> str:
-            return i18n.tr_text(language, text)
+            return icons.tr_text(language, text)
 
         if snapshot.get("observation_error"):
             self._show_unavailable()
@@ -1138,12 +1143,12 @@ class WorkerObservationScreen(ConsoleShell):
             )
         if snapshot.get("permission_requests"):
             lines.append(
-                t("⚠ Требуется разрешение native runtime; решение принимает человек.")
+                t("⚠️ Требуется разрешение native runtime; решение принимает человек.")
             )
         failure = snapshot.get("failure")
         if isinstance(failure, dict):
             lines.append(
-                "⚠ "
+                "⚠️ "
                 + str(
                     failure.get("error") or failure.get("kind") or "refused"
                 ).splitlines()[0][:140]
@@ -1151,23 +1156,23 @@ class WorkerObservationScreen(ConsoleShell):
         if staged:
             lines.append(
                 t(
-                    "⚠ Отчёт ожидает доставки; завершение процесса не означает приёмку работы."
+                    "⚠️ Отчёт ожидает доставки; завершение процесса не означает приёмку работы."
                 )
             )
         if startup.get("deadline_exceeded"):
             lines.append(
-                t("⚠ Истёк срок первого self-report; таймаут не доказывает остановку.")
+                t("⚠️ Истёк срок первого self-report; таймаут не доказывает остановку.")
             )
         if snapshot.get("stream_state") in {"unavailable", "waiting"}:
-            lines.append(t("○ Нет новых событий; это не проверка здоровья worker."))
+            lines.append(t("⚪ Нет новых событий; это не проверка здоровья worker."))
         if snapshot.get("steps_source") == "plain":
             lines.append(
-                t("◌ Структура недоступна: показан хвост обычного лога worker.")
+                t(f"{icons.PLAIN_LOG} Структура недоступна: показан хвост обычного лога worker.")
             )
         reason = snapshot.get("steps_reason")
         if isinstance(reason, str) and reason in STEP_REASONS:
             lines.append(
-                f"{t('⚠ Шаги worker недоступны')}: {t(STEP_REASONS[reason])}. "
+                f"{t('⚠️ Шаги worker недоступны')}: {t(STEP_REASONS[reason])}. "
                 + t("Исход worker от наблюдения не зависит.")
             )
         self._paint_context(snapshot, worker, lines)
@@ -1183,7 +1188,7 @@ class WorkerObservationScreen(ConsoleShell):
             output.write(
                 Text(
                     t(
-                        "⚠ Поток был сокращён или перезаписан; показана доступная история."
+                        "⚠️ Поток был сокращён или перезаписан; показана доступная история."
                     )
                 )
             )
@@ -1248,7 +1253,7 @@ class WorkerObservationScreen(ConsoleShell):
             f"{ticket} · {t('Наблюдение за работой')}"
         )
         self.query_one("#worker-badge", Static).update(
-            Text(status.render(language), style=status.color)
+            Text(icons.render_status(status, language), style=status.color)
         )
         runtime = {"claude": "Claude Code", "codex": "Codex"}.get(
             str(snapshot.get("runtime") or ""),

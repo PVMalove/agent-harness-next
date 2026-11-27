@@ -32,6 +32,7 @@ from textual.widgets import (
 )
 
 from ...kernel import brand, i18n
+from .. import icons
 from .. import ledger_lock
 from ...kernel import reports as console_reports
 from .. import stats as console_stats
@@ -439,7 +440,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             self._show_batches(event.item.name)
 
     def menu_items(self) -> Sequence[tuple[str, str]]:
-        """Команды координатора по группам; необратимые отмечены ⚠."""
+        """Команды координатора по группам; необратимые отмечены ⚠️."""
         ordered = sorted(
             self._entries.values(),
             key=lambda entry: _GROUP_ORDER.index(_group_title(entry.group)),
@@ -447,7 +448,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         return [
             (
                 entry.key,
-                ("⚠ " if entry.needs_confirmation else "  ")
+                (f"{icons.STATUS_ICONS['warn']} " if entry.needs_confirmation else "   ")
                 + i18n.tr(self._language, entry.title),
             )
             for entry in ordered

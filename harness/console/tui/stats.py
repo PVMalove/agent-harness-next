@@ -10,7 +10,8 @@ from collections import Counter
 
 from ..kernel.harness_facts import HarnessState as HarnessState
 from ..kernel.harness_facts import harness_state as harness_state
-from ..kernel import brand, i18n
+from ..kernel import i18n
+from . import icons
 from ..kernel.pipeline_kpi import (
     AGING_BUCKETS,
     PipelineAnalytics,
@@ -163,13 +164,23 @@ def harness_summary_fields(
     return [
         (
             "Версия",
-            state.installed_version + (f" ⚠ ({package_version})" if mismatch else " ✔"),
+            state.installed_version
+            + (
+                f" {icons.STATUS_ICONS['warn']} ({package_version})"
+                if mismatch
+                else f" {icons.STATUS_ICONS['ok']}"
+            ),
         ),
         ("Состав", ", ".join(state.capabilities) or "нет"),
         ("Скиллов", str(state.skills)),
         ("Управляемых файлов", str(state.managed_files)),
         ("Lock", state.updated_at),
-        ("Оркестрация", "✔ подключена" if state.orchestration else "○ не подключена"),
+        (
+            "Оркестрация",
+            f"{icons.STATUS_ICONS['ok']} подключена"
+            if state.orchestration
+            else f"{icons.STATUS_ICONS['skipped']} не подключена",
+        ),
     ]
 
 
@@ -183,7 +194,7 @@ def kpi_tiles(kpi: PipelineKpi, language: str) -> list[tuple[str, str, str, str]
     def flagged(count: int, level: str) -> tuple[str, str]:
         if not count:
             return str(count), ""
-        return f"{brand.STATUS_ICONS[level]} {count}", {"warn": "warning", "fail": "error"}[level]
+        return f"{icons.STATUS_ICONS[level]} {count}", {"warn": "warning", "fail": "error"}[level]
 
     def duration(seconds: int | None) -> str:
         return duration_text(seconds, language)
@@ -216,7 +227,7 @@ def kpi_tiles(kpi: PipelineKpi, language: str) -> list[tuple[str, str, str, str]
         (
             tr("PR за 7 дней"),
             str(kpi.throughput_7d),
-            f"{brand.STATUS_ICONS['fail']} {tr('провалено')} {kpi.failed}" if kpi.failed else "",
+            f"{icons.STATUS_ICONS['fail']} {tr('провалено')} {kpi.failed}" if kpi.failed else "",
             "",
         ),
     ]
@@ -235,7 +246,7 @@ def reports_kpi_tiles(kpi: ReportsKpi, language: str) -> list[tuple[str, str, st
     def flagged(count: int) -> tuple[str, str]:
         if not count:
             return str(count), ""
-        return f"{brand.STATUS_ICONS['warn']} {count}", "warning"
+        return f"{icons.STATUS_ICONS['warn']} {count}", "warning"
 
     risks, risks_colour = flagged(kpi.attention)
     blockers, blockers_colour = flagged(kpi.blocked)

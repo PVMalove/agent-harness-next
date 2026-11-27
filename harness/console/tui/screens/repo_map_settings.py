@@ -30,6 +30,7 @@ from ...kernel.catalog import (
 )
 from ...kernel.repo_map_settings import MemoryStatus, TierSetting
 from ...kernel.repo_map_snapshot import RepoMapFacts
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..logtext import colorize_log
 from ...kernel.runner import CommandRunner, capturing_runner
@@ -60,7 +61,7 @@ _REASONS = {
 def _marked(kind: str, text: str) -> Text:
     """`text` behind the symbol of a status kind, in its colour: a state is never colour alone."""
     status = Status(kind, text, text)
-    return Text.assemble((status.symbol + " ", status.color), text)
+    return Text.assemble((icons.status_symbol(status) + " ", status.color), text)
 
 
 class RepoMapSettings(Vertical):

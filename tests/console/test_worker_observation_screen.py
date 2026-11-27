@@ -238,13 +238,13 @@ def test_a_session_event_is_one_chip_and_its_text_with_a_hanging_indent() -> Non
     from harness.console.tui.screens.worker_observation import transcript_row
 
     assert _plain(transcript_row({"kind": "output", "text": "Читаю тикет"})) == [
-        " ●  Читаю тикет"
+        " 💬  Читаю тикет"
     ]
     assert _plain(
         transcript_row({"kind": "tool", "text": "Bash uv sync\n--locked"})
-    ) == [" ◆  Bash uv sync", "    --locked"]
-    assert _plain(transcript_row({"kind": "error", "text": "boom"})) == [" ✖  boom"]
-    assert _plain(transcript_row({"kind": "new-kind", "text": "x"})) == [" ○  x"]
+    ) == [" 🔧  Bash uv sync", "     --locked"]
+    assert _plain(transcript_row({"kind": "error", "text": "boom"})) == [" ❌  boom"]
+    assert _plain(transcript_row({"kind": "new-kind", "text": "x"})) == [" ⚪  x"]
 
 
 def test_a_finished_qa_stage_shows_its_result_as_the_chip() -> None:
@@ -253,19 +253,19 @@ def test_a_finished_qa_stage_shows_its_result_as_the_chip() -> None:
     def chip(text: str) -> str:
         return _plain(transcript_row({"kind": "stage-result", "text": text}))[0][:3]
 
-    assert chip("pytest: pass · exit 0") == " ✔ "
-    assert chip("pytest: fail · exit 1") == " ✖ "
-    assert chip("lint: not_run") == " ○ "
+    assert chip("pytest: pass · exit 0") == " 🟢 "
+    assert chip("pytest: fail · exit 1") == " 🔴 "
+    assert chip("lint: not_run") == " ⚪ "
 
 
 def test_an_events_row_shows_the_chip_the_kind_and_the_first_line() -> None:
     from harness.console.tui.screens.worker_observation import event_row
 
     row = _plain(event_row({"kind": "tool", "text": "Bash pytest\nmore\nlines"}), 60)
-    assert row == [" ◆  инструмент  Bash pytest  +2"]
+    assert row == [" 🔧  инструмент  Bash pytest  +2"]
     # The kind column is as wide as the longest label of the language: «stage result».
     assert _plain(event_row({"kind": "error", "text": "boom"}, "en"), 60) == [
-        " ✖  error        boom"
+        " ❌  error        boom"
     ]
 
 
@@ -318,10 +318,10 @@ def test_the_status_lines_word_the_process_ledger_stream_and_heartbeat() -> None
     }
     assert (
         process_line(snapshot, "live", "ru").plain
-        == "● процесс работает · ledger ▶ Выполняется · поток подключён"
+        == "🤖 процесс работает · ledger ▶️ Выполняется · поток подключён"
     )
     assert process_line(snapshot, "absent", "en").plain.startswith(
-        "○ process not found"
+        "💤 process not found"
     )
     assert (
         heartbeat_line(snapshot, "ru").plain

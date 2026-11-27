@@ -21,6 +21,7 @@ from textual.widgets import Button, Collapsible, Footer, ListItem, ListView, Sta
 from typing_extensions import TypeVar
 
 from ..kernel import brand, i18n
+from . import icons
 from .chrome import WorkspaceHeader
 from .crumbs import ELLIPSIS, Crumb, collapse_crumbs, split_path
 from ..kernel.data import DashboardData
@@ -469,7 +470,7 @@ class SectionCard(Vertical):
     def relabel(self) -> None:
         language = getattr(self.app, "language", "ru")
         self.set_head(
-            i18n.tr(language, self._title), i18n.tr_text(language, self._note)
+            icons.tr(language, self._title), icons.tr_text(language, self._note)
         )
 
 
@@ -526,8 +527,8 @@ class Fold(Collapsible):
 
     def relabel(self) -> None:
         language = getattr(self.app, "language", "ru")
-        title = i18n.tr(language, self._source)
-        summary = i18n.tr_text(language, self._summary)
+        title = icons.tr(language, self._source)
+        summary = icons.tr_text(language, self._summary)
         if not summary:
             self.title = escape(title)
             return
@@ -726,20 +727,20 @@ def section_badges(data: DashboardData) -> dict[str, Badge]:
     """A short status per menu section from the home screen's health facts; a section without a
     status has no badge. Every shell screen shows them, so they are computed here once."""
     colors = brand.STATUS_COLORS
-    icons = brand.STATUS_ICONS
+    status_icons = icons.STATUS_ICONS
     badges: dict[str, Badge] = {}
     if data.fail:
-        badges["Diagnostics"] = (f"{icons['fail']} {data.fail}", colors["fail"])
+        badges["Diagnostics"] = (f"{status_icons['fail']} {data.fail}", colors["fail"])
     elif data.warn:
-        badges["Diagnostics"] = (f"{icons['warn']} {data.warn}", colors["warn"])
+        badges["Diagnostics"] = (f"{status_icons['warn']} {data.warn}", colors["warn"])
     else:
-        badges["Diagnostics"] = (icons["ok"], colors["ok"])
+        badges["Diagnostics"] = (status_icons["ok"], colors["ok"])
     if data.drift_state == "clean":
-        badges["Harness"] = (icons["ok"], colors["ok"])
+        badges["Harness"] = (status_icons["ok"], colors["ok"])
     elif data.drift_state == "drift":
         # The installed files drifted from the package: the update brings them back.
-        badges["Harness"] = (icons["warn"], colors["warn"])
-        badges["Update Harness"] = (icons["warn"], colors["warn"])
+        badges["Harness"] = (status_icons["warn"], colors["warn"])
+        badges["Update Harness"] = (status_icons["warn"], colors["warn"])
     if data.active_batches is not None:
         badges["Orchestration"] = (str(data.active_batches), brand.PALETTE["muted"])
     tier = repo_map_tier_name(data.repo_map_tier)

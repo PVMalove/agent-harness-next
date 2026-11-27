@@ -38,6 +38,7 @@ from ...kernel.repo_map_snapshot import RepoMapFacts, shown_view
 from ...kernel.runner import CommandRunner, capturing_runner
 from ...kernel import brand, i18n
 from ...kernel import repo_map_settings
+from .. import icons
 from ..client import ConsoleClientError, ScreenClient
 from ..server_api import build_repo_map
 from .commands import call_from_worker
@@ -212,7 +213,7 @@ class RepoMapScreen(ConsoleShell):
         """The status as a symbol and its text, coloured by kind."""
         text = i18n.tr_text(self._language, self._status_text)
         status = Status(self._status_kind, text, text)
-        return Text(status.render(self._language), style=status.color)
+        return Text(icons.render_status(status, self._language), style=status.color)
 
     def _context_text(self) -> str:
         line = f"Проект: {self.repo.name}"
@@ -435,7 +436,7 @@ class RepoMapScreen(ConsoleShell):
             color = brand.STATUS_COLORS.get(check.level, brand.PALETTE["muted"])
             text.append(
                 ("\n" if index else "")
-                + brand.STATUS_ICONS.get(check.level, "·")
+                + icons.STATUS_ICONS.get(check.level, "·")
                 + " ",
                 style=color,
             )
@@ -512,12 +513,12 @@ class RepoMapScreen(ConsoleShell):
         rows = console_repo_map.diagnostic_rows(view)
         if not rows:
             ok = Status("accepted", "диагностик нет", "no diagnostics")
-            return Text(ok.render(language), style=ok.color)
+            return Text(icons.render_status(ok, language), style=ok.color)
         shown = Text()
         for index, (status, _, path) in enumerate(rows):
             if index:
                 shown.append("\n")
-            shown.append(status.render(language), style=status.color)
+            shown.append(icons.render_status(status, language), style=status.color)
             shown.append(f": {path}")
         return shown
 
@@ -572,7 +573,7 @@ class RepoMapScreen(ConsoleShell):
                 label.append(f" [{item.parser_status}]", style=status.color)
             return label
         label = Text(f"{name} ")
-        label.append(f"{status.symbol} [{item.parser_status}]", style=status.color)
+        label.append(f"{icons.status_symbol(status)} [{item.parser_status}]", style=status.color)
         return label
 
     def _directory_node(

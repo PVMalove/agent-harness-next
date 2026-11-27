@@ -26,6 +26,7 @@ from ...kernel.recovery_view import (
     RecoveryView,
     WizardTarget,
 )
+from .. import icons
 from ..client import ScreenClient
 from ..server_api import ServerCoordinatorApi
 from ..shell import SHELL_CSS, ConsoleShell, ShellIds
@@ -251,7 +252,7 @@ class RecoveryScreen(ConsoleShell):
             entry is not None and entry.enabled and entry.batch_id == self.batch_choice
         )
         self.query_one("#recovery-entry", Static).update(
-            f"{mark(entry.state)}  {_t(language, entry.reason)}"
+            f"{_t(language, mark(entry.state))}  {_t(language, entry.reason)}"
             if entry is not None
             else ""
         )
@@ -307,7 +308,7 @@ class RecoveryScreen(ConsoleShell):
         if action is None:
             return
         if not action.enabled:
-            self._status = f"✖ {action.reason}"
+            self._status = f"{icons.STATUS_ICONS['fail']} {action.reason}"
             self._refresh()
             return
         language = self._language
@@ -368,7 +369,7 @@ class RecoveryScreen(ConsoleShell):
         try:
             target = session.fix(FixChoice.EDIT_AT_POINTER, diagnostic)
         except ValueError as exc:
-            self._status = f"✖ {exc}"
+            self._status = f"{icons.STATUS_ICONS['fail']} {exc}"
             self._refresh()
             return
         if isinstance(target, WizardTarget):
@@ -398,7 +399,7 @@ class RecoveryScreen(ConsoleShell):
                 if then_refresh:
                     session.refresh()
             except (PermissionError, ValueError, ArgvError) as exc:
-                status = f"✖ {exc}"
+                status = f"{icons.STATUS_ICONS['fail']} {exc}"
 
             def done() -> None:
                 self._busy = False

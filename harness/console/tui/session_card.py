@@ -14,6 +14,7 @@ from rich.text import Text
 
 from ..kernel import brand
 from ..kernel.status import Status, session_status
+from . import icons
 
 
 def role_label(role: str) -> Text:
@@ -24,7 +25,7 @@ def role_label(role: str) -> Text:
 
 def status_caption(status: Status, language: str) -> Text:
     """The status as symbol plus words, in the status colour."""
-    return Text(status.render(language), style=status.color)
+    return Text(icons.render_status(status, language), style=status.color)
 
 
 def session_card(
