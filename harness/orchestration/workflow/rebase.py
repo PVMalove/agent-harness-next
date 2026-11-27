@@ -96,12 +96,14 @@ def approved_target(
 
     Before the rebase-fix-forward report is accepted, a later retry of it continues a candidate
     already on that target; after the accept pins the target, no target is newer than the base.
+    A rebaser brief counts too: a developer retry of a blocked rebaser report continues the
+    rebaser's HEAD, which already sits on the rebaser's target (issue #1306).
     """
     base = batch.get("integration_base_commit")
     if not isinstance(base, str) or not base:
         return None
     for item in reversed(batch.get("dispatches", [])):
-        if item.get("role") != batch_writer_role(batch):
+        if item.get("role") not in {batch_writer_role(batch), "rebaser"}:
             continue
         target = plan_rules.rebase_target(_load_dispatch(root, item["dispatch_id"]))
         if (

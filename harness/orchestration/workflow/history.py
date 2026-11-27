@@ -549,17 +549,19 @@ def _latest_developer_candidate(repo: Path, root: Path, batch: JsonObject) -> st
 
 
 def _retry_pinned_candidate(repo: Path, root: Path, batch: JsonObject) -> str | None:
-    """The candidate of the unaccepted developer report a pending developer retry continues.
+    """The candidate of the unaccepted writer report a pending developer retry continues.
 
     A ``retry`` decision on a developer work report leaves its candidate unaccepted, yet the next
-    developer starts from that history, not from an older accepted candidate or the base. Any other
-    retried stage (code-review, QA, publish, verification) has no such candidate: ``None``."""
+    developer starts from that history, not from an older accepted candidate or the base. A
+    rebaser rebases in the issue branch itself, so a retried rebaser report pins its own HEAD the
+    same way (issue #1306). Any other retried stage (code-review, QA, publish, verification) has no
+    such candidate: ``None``."""
     if batch.get("next_action") != "developer-retry":
         return None
     previous = _last_decided_entry(batch)
     if (
         previous is None
-        or previous.get("role") != batch_writer_role(batch)
+        or previous.get("role") not in {batch_writer_role(batch), "rebaser"}
         or previous["decision"].get("decision") != "retry"
     ):
         return None
@@ -626,10 +628,14 @@ def _current_developer_candidate(
 ) -> str | None:
     """The candidate the next developer-side dispatch continues: the retry-pinned candidate, else
     the latest accepted developer candidate, else a superseding batch's ``start_commit`` (the
-    abandoned batch's last accepted candidate, issue #506), else ``None``."""
+    abandoned batch's last accepted candidate, issue #506), else ``None``. While a read-only
+    verification is pending, it is the registered candidate that verification judges (issue
+    #1306), even when an older candidate was accepted before."""
     pinned = _retry_pinned_candidate(repo, root, batch)
     if pinned is not None:
         return pinned
+    if batch.get("next_action") == "verification":
+        return _latest_registered_verification_candidate(repo, batch)
     try:
         return _latest_developer_candidate(repo, root, batch)
     except CoordinatorError:
