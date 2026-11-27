@@ -46,6 +46,7 @@ from ..shell import (
     SHELL_CSS,
     Breadcrumbs,
     ConsoleShell,
+    SeparatorWrap,
     ShellIds,
     WrappedValue,
 )
@@ -391,8 +392,8 @@ def timeline_table(rows: list[tuple[str, str, str, str]]) -> Table:
     table.add_column(no_wrap=True)
     table.add_column(no_wrap=True, style=brand.PALETTE["primary"])
     table.add_column(ratio=1, overflow="fold")
-    for row in rows:
-        table.add_row(*row)
+    for at, kind, role, text in rows:
+        table.add_row(at, kind, role, SeparatorWrap(text))
     return table
 
 
@@ -449,7 +450,7 @@ def transcript_row(event: JsonObject, language: str = "ru") -> Table:
     row.add_column(ratio=1, overflow="fold")
     row.add_row(
         _chip(glyph, colour),
-        Text(text, style=brand.PALETTE["foreground"] if plain else colour),
+        SeparatorWrap(Text(text, style=brand.PALETTE["foreground"] if plain else colour)),
     )
     return row
 
@@ -557,8 +558,8 @@ def context_rows(
 
 def _worktree(path: str, room: int) -> str:
     """The worktree path when it fits, else `…/` and its directory, which is named after the
-    branch; a directory too long for one line wraps at its separators."""
-    return path if len(path) <= room else wrap_value(f"…/{Path(path).name}", room)
+    branch; the table wraps a directory too long for one line at its separators."""
+    return path if len(path) <= room else f"…/{Path(path).name}"
 
 
 def context_table(rows: list[tuple[str, Text]], language: str) -> Table:
@@ -568,7 +569,7 @@ def context_table(rows: list[tuple[str, Text]], language: str) -> Table:
     table.add_column(width=CONTEXT_LABEL_WIDTH, no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(ratio=1, overflow="fold")
     for label, (_, value) in zip(labels, rows):
-        table.add_row(label, value)
+        table.add_row(label, SeparatorWrap(value))
     return table
 
 

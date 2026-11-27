@@ -24,7 +24,6 @@ from ...kernel import brand, i18n
 from .. import task_titles
 from ..chrome import TopBar
 from ..session_card import elapsed_text, session_row
-from ..wrap import wrap_value
 from ..shell import (
     CONFIGURATION_SECTION,
     HOME_SECTION,
@@ -36,6 +35,7 @@ from ..shell import (
     Fold,
     JumpLink,
     SectionCard,
+    SeparatorWrap,
     check_route,
     section_badges,
 )
@@ -331,20 +331,16 @@ def context_title(card_id: str, title: str, language: str) -> Text:
     return head
 
 
-def context_facts(rows: list[tuple[str, Text]], language: str, width: int = 0) -> Table:
-    """A context group's facts: muted labels as wide as the group's longest one, coloured values.
-    With a known `width`, a value longer than its room wraps at its separators (`-`, `/`, `.`),
-    never inside a word."""
+def context_facts(rows: list[tuple[str, Text]], language: str) -> Table:
+    """A context group's facts: muted labels as wide as the group's longest one, coloured values
+    that wrap at their separators (`-`, `/`, `.`), never inside a word."""
     labels = [i18n.fact_label(language, label) for label, _ in rows]
     label_width = max((cell_len(label) for label in labels), default=0)
-    room = width - label_width - 1
     table = Table.grid(padding=(0, 1), expand=True)
     table.add_column(width=label_width, no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(ratio=1, overflow="fold")
     for label, (_, value) in zip(labels, rows):
-        if room > 8 and cell_len(value.plain) > room and not value.spans:
-            value = Text(wrap_value(value.plain, room), style=value.style)
-        table.add_row(label, value)
+        table.add_row(label, SeparatorWrap(value))
     return table
 
 
@@ -498,8 +494,6 @@ class DashboardScreen(ConsoleShell):
     def on_resize(self, event: events.Resize) -> None:
         super().on_resize(event)
         self._repaint_sessions()
-        if self._data is not None:
-            self.call_after_refresh(self._paint_context)
 
     def _repaint_sessions(self) -> None:
         """Re-render the session rows; the ledger is read off the UI thread."""
@@ -694,14 +688,13 @@ class DashboardScreen(ConsoleShell):
                 )
 
     def _paint_context(self) -> None:
-        """The context groups in the current language, wrapped to the panel's width."""
-        width = self.query_one("#dashboard-context").content_size.width
+        """The context groups in the current language."""
         for card_id, title, rows in self._facts():
             self.query_one(f"#{card_id}-title", Static).update(
                 context_title(card_id, title, self._language)
             )
             self.query_one(f"#{card_id}-facts", Static).update(
-                context_facts(rows, self._language, width)
+                context_facts(rows, self._language)
             )
 
     def _facts(self) -> list[tuple[str, str, list[tuple[str, Text]]]]:

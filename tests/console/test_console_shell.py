@@ -335,3 +335,29 @@ def test_the_footer_puts_esc_first_and_help_language_and_palette_last() -> None:
     ordered = footer_order(bindings, "ctrl+p")
     assert list(ordered) == ["escape", "down", "enter", "r", "f3", "f1", "f2", "ctrl+p"]
     assert list(footer_order({"r": "r", "f2": "f2"}, "ctrl+p")) == ["r", "f2"]
+
+
+def test_a_fact_value_wraps_at_its_separators_and_keeps_its_styles() -> None:
+    from rich.console import Console
+    from rich.text import Text
+
+    from harness.console.tui.shell import SeparatorWrap
+
+    def lines(value: Text | str, width: int) -> list[str]:
+        console = Console(width=width, record=True, color_system=None)
+        console.print(SeparatorWrap(value))
+        return [line.rstrip() for line in console.export_text().splitlines()]
+
+    branch = "feature/issue-1290-orkestraciya-proverki-i-instrukcii"
+    shown = lines(branch, 26)
+    assert "".join(shown) == branch
+    assert all(line.endswith(("-", "/")) for line in shown[:-1])
+    assert lines("короткое значение", 40) == ["короткое значение"]
+
+    styled = Text()
+    styled.append("worktrees/", style="bold")
+    styled.append("feature-issue-887", style="blue")
+    console = Console(width=14, color_system=None)
+    segments = list(console.render(SeparatorWrap(styled), console.options))
+    styles = {str(segment.style) for segment in segments if segment.text.strip()}
+    assert {"bold", "blue"} <= styles

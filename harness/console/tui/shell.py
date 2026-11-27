@@ -7,6 +7,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 
 from rich.cells import cell_len
+from rich.console import Console, ConsoleOptions, RenderResult
+from rich.measure import Measurement
 from rich.table import Table
 from rich.text import Text
 from textual import events
@@ -685,14 +687,43 @@ def repo_map_tier_name(message: str) -> str | None:
     return found.group(1) if found else None
 
 
+class SeparatorWrap:
+    """A value of a fact table - a path, an ID, a branch, a sentence - broken into lines at its
+    separators and spaces (`wrap_value`) for the width it is drawn at, never inside a name; its
+    styles are kept. A piece wider than the column still folds."""
+
+    def __init__(self, value: Text | str) -> None:
+        self.text = value if isinstance(value, Text) else Text(value)
+
+    def __rich_console__(
+        self, console: Console, options: ConsoleOptions
+    ) -> RenderResult:
+        plain = self.text.plain
+        wrapped = wrap_value(plain, options.max_width)
+        offsets: list[int] = []
+        index = 0
+        for char in wrapped:
+            if char == "\n" and (index >= len(plain) or plain[index] != "\n"):
+                offsets.append(index)
+                continue
+            index += 1
+        yield Text("\n").join(self.text.divide(offsets)) if offsets else self.text
+
+    def __rich_measure__(
+        self, console: Console, options: ConsoleOptions
+    ) -> Measurement:
+        return Measurement.get(console, options, self.text)
+
+
 def fact_table(rows: Sequence[tuple[str, Text | str]], language: str) -> Table:
-    """Facts of a context card: the label on the left (muted), the value on the right."""
+    """Facts of a context card: the label on the left (muted), the value on the right, broken at
+    its separators rather than inside a word."""
     table = Table.grid(expand=True, padding=(0, 1))
     # One label width for every card, so the values of neighbouring cards line up.
     table.add_column(min_width=12, no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(ratio=1, overflow="fold")
     for label, value in rows:
-        table.add_row(i18n.fact_label(language, label), value)
+        table.add_row(i18n.fact_label(language, label), SeparatorWrap(value))
     return table
 
 

@@ -39,7 +39,7 @@ from .. import stats as console_stats
 from ...kernel.coordinator_catalog import COORDINATOR_COMMANDS, CoordinatorCommand, process_argv
 from ...kernel.runner import CommandRunner, capturing_runner
 from ..client import ConsoleClientError, LockUnavailable, OrchestrationView, ScreenClient
-from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, SectionCard
+from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, SectionCard, SeparatorWrap
 from ..widgets import CheckBox, KpiGrid
 from .commands import (
     CommandForm,
@@ -139,7 +139,7 @@ def _analytics_table(rows: Sequence[tuple[str, str]]) -> Table:
     table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(ratio=1, overflow="fold")
     for label, value in rows:
-        table.add_row(label, value)
+        table.add_row(label, SeparatorWrap(value))
     return table
 
 

@@ -450,7 +450,7 @@ def test_home_context_groups_carry_a_glyph_and_wrap_a_branch_at_its_separators()
 
     branch = "feature/issue-1290-orkestraciya-proverki-i-instrukcii"
     console = Console(width=34, record=True, color_system=None)
-    console.print(context_facts([("Ветка", Text(branch))], "ru", 34))
+    console.print(context_facts([("Ветка", Text(branch))], "ru"))
     lines = [line.rstrip() for line in console.export_text().splitlines()]
     assert lines[0].startswith("Ветка ")
     # Every line ends at a separator or the end: no word is cut in two.

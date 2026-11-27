@@ -21,7 +21,15 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Button, Input, ListItem, ListView, Select, Static
 
-from ..shell import SHELL_CSS, ConsoleShell, FieldGrid, Fold, SectionCard, WrappedValue
+from ..shell import (
+    SHELL_CSS,
+    ConsoleShell,
+    FieldGrid,
+    Fold,
+    SectionCard,
+    SeparatorWrap,
+    WrappedValue,
+)
 from ...kernel.status import Status
 from ..translate import translate_bindings
 from ..stats import reports_kpi_tiles
@@ -526,7 +534,7 @@ class ReportsScreen(ConsoleShell):
                 ("Batch", Text(entry.batch_id)),
                 ("Dispatch", Text(entry.dispatch_id)),
             ):
-                table.add_row(i18n.tr(language, label), value)
+                table.add_row(i18n.tr(language, label), SeparatorWrap(value))
         detail = self.query_one("#report-detail", Static)
         detail.update(
             Group(
