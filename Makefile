@@ -61,7 +61,7 @@ test-author-probe: export HARNESS_REQUIRE_TEST_SANDBOX := 1
 test-author-probe: export HARNESS_VERIFY_CLAUDE_TEST_AUTHOR := 1
 test-author-probe: export HARNESS_REQUIRE_CLAUDE_TEST_AUTHOR := 1
 test-author-probe: $(HARNESS_ENV_STAMP) ## Подтвердить test-author на реальном Claude Code (нужны claude и вход; тратит квоту)
-	$(HARNESS_PYTHON) scripts/test_clean_room.py
+	$(HARNESS_PYTHON) scripts/test_author_probe.py
 
 WEB_DIR := harness/console/frontend
 

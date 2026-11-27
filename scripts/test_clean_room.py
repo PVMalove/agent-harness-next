@@ -137,14 +137,14 @@ def _check_path_budget(test_root):
         )
 
 
-def _run(test_root: Path):
-    """Выполнить все сценарии по порядку с общим контекстом, начиная с корня `test_root`.
+def _run(test_root: Path, scenarios=SCENARIOS):
+    """Выполнить сценарии по порядку с общим контекстом, начиная с корня `test_root`.
 
     После каждого сценария печатается `[clean-room] <сценарий>: X s`, после упавшего —
     `[clean-room] <сценарий>: failed after X s`: так видно, куда уходит время прогона.
     """
     context = SimpleNamespace(test_root=test_root)
-    for scenario in SCENARIOS:
+    for scenario in scenarios:
         name = scenario.__name__.rpartition(".")[2]
         started = time.perf_counter()
         try:
@@ -156,8 +156,12 @@ def _run(test_root: Path):
         print(f"[clean-room] {name}: {time.perf_counter() - started:.2f} s", flush=True)
 
 
-def main():
-    """Точка входа: подготовить корень запуска, выполнить сценарии и убрать за собой."""
+def main(scenarios=SCENARIOS):
+    """Точка входа: подготовить корень запуска, выполнить сценарии и убрать за собой.
+
+    QA-стадия всегда запускает весь `SCENARIOS` (ADR 0023): argv ничего не выбирает. Другой набор
+    передаёт только отдельная точка входа, например живая проба `scripts/test_author_probe.py`.
+    """
     run_root = os.environ.get("HARNESS_TEST_RUN_ROOT")
     if run_root:
         test_root = Path(run_root) / "c"
@@ -168,7 +172,7 @@ def main():
         test_root = Path(tempfile.mkdtemp(prefix="c", dir=tests_root))
     try:
         _check_path_budget(test_root)
-        _run(test_root)
+        _run(test_root, scenarios)
     finally:
         try:
             shutil.rmtree(test_root, onexc=_force_remove_readonly)
