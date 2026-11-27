@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import tomllib
 import uuid
@@ -48,6 +49,16 @@ def member_name(title: str) -> str:
 def load_catalog(path: Path = CATALOG_PATH) -> tuple[FmeaEntry, ...]:
     """Прочитать и проверить каталог из файла."""
     return parse_catalog(path.read_text(encoding="utf-8"), str(path))
+
+
+def find_entry(fmea_id: str, path: Path | None = None) -> FmeaEntry | None:
+    """Запись каталога по GUID или None; `path=None` читает `CATALOG_PATH` в момент вызова."""
+    return _entries_by_id(CATALOG_PATH if path is None else path).get(str(fmea_id))
+
+
+@functools.cache
+def _entries_by_id(path: Path) -> dict[str, FmeaEntry]:
+    return {item.id: item for item in load_catalog(path)}
 
 
 def parse_catalog(text: str, source: str) -> tuple[FmeaEntry, ...]:
