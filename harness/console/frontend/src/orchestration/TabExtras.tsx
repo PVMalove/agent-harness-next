@@ -70,7 +70,7 @@ export function FlowExtras({ data }: { data: OrchestrationSnapshot }) {
             ))}
           </dl>
         ) : (
-          <p className="report-empty">{t("Пайплайн ещё не запускался: batch в леджере нет.")}</p>
+          <p className="report-empty">{t("Конвейер ещё не запускался: batch в ledger нет.")}</p>
         )}
       </section>
     </>

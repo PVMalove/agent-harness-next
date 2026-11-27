@@ -728,7 +728,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
                 "error" if health.fail else "",
             ),
             (
-                i18n.tr(language, "Батчи в работе"),
+                i18n.tr(language, "Batch в работе"),
                 "—" if home.active_batches is None else str(home.active_batches),
                 "",
                 "",

@@ -1,10 +1,10 @@
-"""Раздел Harness: команды харнесса и обслуживания леджера из `harness.console.kernel.catalog.HARNESS_COMMANDS`,
+"""Раздел Harness: команды харнесса и обслуживания ledger из `harness.console.kernel.catalog.HARNESS_COMMANDS`,
 доступные для запуска в текущем репозитории, каждая с отображением эквивалента CLI. Обратимые команды
 без параметров запускаются немедленно; любые другие команды открывают модальный экран `CommandFormScreen`,
 запрашивающий параметры, поясняющий причины подтверждения для необратимых действий и требующий ввода
 контрольного слова (например, RESET). Отмена формы ничего не выполняет.
 
-Состояние, дрейф, использование пайплайна и факты обслуживания экран читает у сервера консоли
+Состояние, дрейф, использование конвейера и факты обслуживания экран читает у сервера консоли
 (`harness.snapshot`, `harness.maintenance`), а каждая команда выполняется job сервера
 (`ServerJobRunner`): локальный `process_argv` нужен только для строки CLI на экране.
 """
@@ -364,7 +364,7 @@ class CommandFormScreen(CommandForm):
 
 class HarnessScreen(ConsoleShell, CommandMenuScreen):
     """Экран раздела Harness на общей оболочке консоли: меню доступных команд харнесса и
-    обслуживания леджера."""
+    обслуживания ledger."""
 
     CRUMB = "Harness"
     CANCEL_OWN_WORKERS_ONLY = True
@@ -808,7 +808,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             else:
                 stats = console_stats.pipeline_stats(view)
                 usage = self._t(
-                    f"Пайплайн: запусков {stats.batches} · тикетов {stats.tickets} · диспатчей {sum(stats.dispatches_by_role.values())} · отчётов {sum(stats.reports_by_outcome.values())}"
+                    f"Конвейер: запусков {stats.batches} · тикетов {stats.tickets} · dispatch {sum(stats.dispatches_by_role.values())} · отчётов {sum(stats.reports_by_outcome.values())}"
                 )
         elif view.unavailable:
             usage = "○ " + usage

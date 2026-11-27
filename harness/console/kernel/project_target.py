@@ -114,8 +114,8 @@ def inspect_target(value: str) -> ProjectTarget:
 
 
 _LABELS = {
-    "project-foundation": "Основа — небольшой набор инструкций и навыков",
-    "mattpocock-suite": "Upstream — полный закреплённый набор навыков",
+    "project-foundation": "Основа — небольшой набор инструкций и скиллов",
+    "mattpocock-suite": "Upstream — полный закреплённый набор скиллов",
     "engineering-suite": "Workflow — задачи, QA и ручная настройка project.json",
     "backend-orchestration": "Backend — workflow и роли; добавляет orchestration.json",
 }
@@ -146,8 +146,8 @@ def capability_summary(name: str) -> str:
 
 
 _DETAILS = {
-    "project-foundation": "Добавляет инструкции и базовые навыки. Не создаёт project.json и orchestration.json; подходит, когда нужен только общий каркас.",
-    "mattpocock-suite": "Полный закреплённый upstream-набор навыков. Не содержит workflow project.json; подходит, когда нужны только навыки.",
+    "project-foundation": "Добавляет инструкции и базовые скиллы. Не создаёт project.json и orchestration.json; подходит, когда нужен только общий каркас.",
+    "mattpocock-suite": "Полный закреплённый upstream-набор скиллов. Не содержит workflow project.json; подходит, когда нужны только скиллы.",
     "engineering-suite": "Workflow задач, QA и code-review; создаёт project.json. Нужен для мастера project.json; без ролей оркестрации.",
     "backend-orchestration": "Всё из workflow плюс роли и координатор; добавляет orchestration.json. Выбирайте для backend-проекта с автоматизацией этапов.",
 }

@@ -15,7 +15,7 @@ from harness.orchestration import coordinator
 
 
 def test_ledger_view_fields_cannot_be_rebound() -> None:
-    view = LedgerView(unavailable="нет леджера")
+    view = LedgerView(unavailable="нет ledger")
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         view.unavailable = None  # type: ignore[misc]

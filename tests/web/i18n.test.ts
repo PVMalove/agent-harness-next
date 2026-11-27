@@ -140,7 +140,7 @@ describe("states, check titles and plurals", () => {
   });
 
   test("a check shows its title, not its id", () => {
-    expect(checkTitle("ru", "files.skill_snapshot")).toBe("Снимок навыков");
+    expect(checkTitle("ru", "files.skill_snapshot")).toBe("Снимок скиллов");
     expect(checkTitle("en", "files.skill_snapshot")).toBe("Skill snapshot");
     expect(checkTitle("ru", "memory.index")).not.toContain("memory.");
   });

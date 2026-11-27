@@ -40,7 +40,7 @@ const RELATED: readonly (readonly [route: string, text: string])[] = [
   ["diagnostics", "Отчёт harness health, онлайн-проверки, исправление --fix и экспорт в Markdown."],
   ["update-harness", "Установленная и доступная версии, дрейф, diff, режим обновления и подтверждённый запуск."],
   ["open-project", "Путь, проверка Git-проекта и план init/adopt/update перед подтверждением."],
-  ["orchestration", "Статистика пайплайна, история batch по состояниям и команды coordinator."],
+  ["orchestration", "Статистика конвейера, история batch по состояниям и команды coordinator."],
   ["repo-map", "Карта для HEAD: сводка, файлы со статусом парсера, символы, связи и хабы."],
   ["configuration", "Шаги project.json и orchestration.json, черновик, проверка и diff, версии и откат."],
 ];

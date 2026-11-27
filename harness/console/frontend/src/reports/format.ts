@@ -350,7 +350,7 @@ export function qaLogText(ledger: Ledger, dispatchId: string, t: Translate): str
 }
 
 export const roleFlowText = (timeline: BatchTimeline, t: Translate): string =>
-  timeline.role_flow.join(" → ") || t("диспатчей ещё не было");
+  timeline.role_flow.join(" → ") || t("dispatch ещё не было");
 
 /* -- KPI tiles -------------------------------------------------------------------------------- */
 

@@ -17,7 +17,7 @@ export const STRUCTURE_LABELS: Readonly<Record<AgentStep["structure"], string>> 
 
 /** The Russian text of each orchestration event; the placeholders come from the step. */
 export const EVENT_LABELS: Readonly<Record<OrchestrationStep["event"], string>> = {
-  "batch.transition": "Пакет {batch}: {from} → {to}",
+  "batch.transition": "Batch {batch}: {from} → {to}",
   "dispatch.transition": "Dispatch {dispatch}: {from} → {to}",
   "gate.decision": "Гейт {dispatch}: {decision}",
   "qa.run": "Прогон QA {dispatch}: {outcome}",

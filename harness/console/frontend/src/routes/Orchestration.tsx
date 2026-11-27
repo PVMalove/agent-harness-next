@@ -49,7 +49,7 @@ export function Orchestration() {
     <div className="ds-page ds-fit orch-page" data-section="Orchestration">
       <PageHeader
         title={section("Orchestration")}
-        subtitle={t("Состояние пайплайна, история batch и решения человека.")}
+        subtitle={t("Состояние конвейера, история batch и решения человека.")}
         actions={
           <>
             <button id="orch-refresh" className="ds-btn ds-btn-icon" type="button" aria-label={t("Обновить")} title={t("Обновить")} onClick={() => screen.refresh(true)}>
@@ -69,7 +69,7 @@ export function Orchestration() {
         id="orch-summary"
         label={t("Сводка оркестрации")}
         stats={[
-          { label: t("Батчи"), value: counts?.batches ?? "—", caption: t("в конвейере") },
+          { label: t("Batch"), value: counts?.batches ?? "—", caption: t("в конвейере") },
           { label: "Dispatch", value: counts?.dispatches ?? "—", caption: t("назначено") },
           { label: t("Активные"), value: counts?.active ?? "—", caption: t("работают или ждут") },
           { label: t("Требует внимания"), value: counts?.attention ?? "—", caption: t("dispatch требует решения") },

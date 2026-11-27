@@ -5,7 +5,7 @@
       "name": "Оркестрация",
       "category": "execution",
       "state": "working",
-      "description": "Батчи, dispatch и роли: путь задачи от плана до PR.",
+      "description": "Batch, dispatch и роли: путь задачи от плана до PR.",
       "off_effect": "Задачи нельзя запускать через batch и dispatch.",
       "depends_on": [
         "capability:backend-orchestration"
@@ -928,7 +928,7 @@
       "name": "project-foundation",
       "category": "capabilities",
       "state": "disabled",
-      "description": "Основа — небольшой набор инструкций и навыков",
+      "description": "Основа — небольшой набор инструкций и скиллов",
       "off_effect": "Файлы этой capability не установлены в проект.",
       "depends_on": [],
       "required_by": [],
@@ -951,7 +951,7 @@
       "name": "mattpocock-suite",
       "category": "capabilities",
       "state": "working",
-      "description": "Upstream — полный закреплённый набор навыков",
+      "description": "Upstream — полный закреплённый набор скиллов",
       "off_effect": "Файлы этой capability не установлены в проект.",
       "depends_on": [],
       "required_by": [

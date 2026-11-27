@@ -49,7 +49,7 @@
   "E   assert 3 == 2",
   "FAILED tests/console/test_reports.py::test_kpi",
   "developer → review → qa → developer",
-  "батч создан",
+  "batch создан",
   "developer: d-dev, итог: reported",
   "отчёт developer: completed",
   "review: d-rev, итог: reported",

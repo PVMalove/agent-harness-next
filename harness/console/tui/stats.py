@@ -61,7 +61,7 @@ def _counts(counts: dict[str, int]) -> str:
 
 def pipeline_stats_text(stats: PipelineStats) -> str:
     if not stats.batches:
-        return "Пайплайн ещё не запускался: batch в леджере нет."
+        return "Конвейер ещё не запускался: batch в ledger нет."
     states = ", ".join(
         f"{STATE_LABELS.get(state, state)} {stats.by_state[state]}"
         for state in state_order(stats.by_state)
@@ -71,7 +71,7 @@ def pipeline_stats_text(stats: PipelineStats) -> str:
         (
             f"Запусков (batch): {stats.batches}, тикетов: {stats.tickets}",
             f"По состояниям: {states}",
-            f"Диспатчи по ролям: {_counts(stats.dispatches_by_role)}",
+            f"Dispatch по ролям: {_counts(stats.dispatches_by_role)}",
             f"Отчёты по итогам: {_counts(stats.reports_by_outcome)}",
             f"QA-прогонов: {stats.qa_runs}, неудачных попыток qa-lane: {stats.qa_attempts_failed}",
             f"Период: {period}",
@@ -142,11 +142,11 @@ def harness_state_text(state: HarnessState, harness_version: str) -> str:
 def usage_text(view: LedgerView) -> str:
     """Pipeline usage for the Harness section: a one-line summary of the ledger."""
     if view.unavailable:
-        return f"Использование пайплайна: {view.unavailable}"
+        return f"Использование конвейера: {view.unavailable}"
     stats = pipeline_stats(view)
     return (
-        f"Использование пайплайна: запусков {stats.batches}, тикетов {stats.tickets}, "
-        f"диспатчей {sum(stats.dispatches_by_role.values())}, отчётов "
+        f"Использование конвейера: запусков {stats.batches}, тикетов {stats.tickets}, "
+        f"dispatch {sum(stats.dispatches_by_role.values())}, отчётов "
         f"{sum(stats.reports_by_outcome.values())}"
     )
 
@@ -206,7 +206,7 @@ def kpi_tiles(kpi: PipelineKpi, language: str) -> list[tuple[str, str, str, str]
         (tr("Заблокировано"), blocked, "", blocked_colour),
         (tr("Без движения"), stale, tr("активные > 6 ч"), stale_colour),
         (tr("QA с первого раза"), first_pass, tr("по тикетам"), ""),
-        (tr("Доработки"), str(kpi.rework), tr("повторные диспатчи"), ""),
+        (tr("Доработки"), str(kpi.rework), tr("повторные dispatch"), ""),
         (
             tr("Цикл до PR"),
             f"{duration(kpi.cycle_p50_seconds)} / {duration(kpi.cycle_p95_seconds)}",
@@ -295,7 +295,7 @@ def analytics_rows(
     if section == "flow":
         buckets = figures.get("aging", {})
         return [
-            (tr("Батчи по состояниям"), _count_text(figures.get("by_state"), {k: tr(v) for k, v in STATE_LABELS.items()})),
+            (tr("Batch по состояниям"), _count_text(figures.get("by_state"), {k: tr(v) for k, v in STATE_LABELS.items()})),
             (
                 tr("Возраст незавершённых"),
                 " · ".join(f"{aging[name]} {buckets.get(name, 0)}" for name in AGING_BUCKETS) if isinstance(buckets, dict) else "—",

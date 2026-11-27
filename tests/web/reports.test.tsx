@@ -72,7 +72,7 @@ const TUI_ONLY = new Set([
   "Checks",
   "Next action",
   "developer → review → qa → developer",
-  "батч создан",
+  "batch создан",
   "developer: d-dev, итог: reported",
   "отчёт developer: completed",
   "review: d-rev, итог: reported",
@@ -371,7 +371,7 @@ describe("the report body, QA log and route follow the language", () => {
     expect(review(en)).toBe("candidate: c0ffee1\nstandards: warning, findings: 1\n  [warning] s: e\nspec: clean, findings: 0");
     const timeline = parseTimeline(TIMELINE)!;
     expect(roleFlowText(timeline, en)).toBe("developer → review → qa → developer");
-    expect(roleFlowText({ ...timeline, role_flow: [] }, ru)).toBe("диспатчей ещё не было");
+    expect(roleFlowText({ ...timeline, role_flow: [] }, ru)).toBe("dispatch ещё не было");
     expect(roleFlowText({ ...timeline, role_flow: [] }, en)).toBe("no dispatches yet");
   });
 

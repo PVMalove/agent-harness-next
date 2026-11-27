@@ -114,9 +114,9 @@ async def _replace_items(listing: ListView, items: list[ListItem]) -> None:
     )
 
 
-SERVER_UNAVAILABLE = "Сервер консоли не отдал данные леджера"
+SERVER_UNAVAILABLE = "Сервер консоли не отдал данные ledger"
 REPORT_MISSING = "Сервер консоли не нашёл тело этого отчёта"
-TIMELINE_MISSING = "Хронология батча недоступна"
+TIMELINE_MISSING = "Хронология batch недоступна"
 
 
 def read_view(client: ScreenClient, *, online: bool = False) -> LedgerView:
@@ -338,7 +338,7 @@ class ReportsScreen(ConsoleShell):
                 with SectionCard(title="Детали отчёта", id="report-detail-card"):
                     yield Static("", id="report-detail", classes="no-i18n", markup=False)
             with Fold(
-                title="Батчи",
+                title="Batch",
                 summary=self._batches_summary(),
                 collapsed=narrow,
                 id="batch-fold",

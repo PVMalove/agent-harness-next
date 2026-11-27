@@ -65,7 +65,7 @@
       "id": "files.skill_snapshot",
       "group": "files",
       "status": "warn",
-      "message": "2 навыка отличаются от снэпшота пакета",
+      "message": "2 скилла отличаются от снэпшота пакета",
       "fix": {
         "text": "Посмотрите diff и примените обновление",
         "command": "harness update ."
@@ -75,7 +75,7 @@
       "id": "files.skill_registry",
       "group": "files",
       "status": "ok",
-      "message": "REGISTRY.md совпадает с установленными навыками",
+      "message": "REGISTRY.md совпадает с установленными скиллами",
       "fix": null
     },
     {
@@ -385,16 +385,16 @@
       "id": "orchestration.ledger_summary",
       "group": "orchestration",
       "status": "ok",
-      "message": "леджер читается: 12 батчей",
+      "message": "ledger читается: 12 batch",
       "fix": null
     },
     {
       "id": "orchestration.unfinished_batches",
       "group": "orchestration",
       "status": "warn",
-      "message": "2 незавершённых батча старше 7 дней",
+      "message": "2 незавершённых batch старше 7 дней",
       "fix": {
-        "text": "Завершите или отмените батчи на экране Оркестрация",
+        "text": "Завершите или отмените batch на экране Оркестрация",
         "command": null
       }
     },
@@ -402,7 +402,7 @@
       "id": "orchestration.blocked_batches",
       "group": "orchestration",
       "status": "ok",
-      "message": "заблокированных батчей нет",
+      "message": "заблокированных batch нет",
       "fix": null
     },
     {
@@ -416,7 +416,7 @@
       "id": "orchestration.orphaned_worktrees",
       "group": "orchestration",
       "status": "fail",
-      "message": "1 worktree без батча: .harness/.sandboxes/worktrees/issue-41",
+      "message": "1 worktree без batch: .harness/.sandboxes/worktrees/issue-41",
       "fix": {
         "text": "Удалите worktree очисткой на экране Harness",
         "command": null

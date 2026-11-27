@@ -23,7 +23,7 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "AGENTS.md is the agents' first instruction; template placeholders give them wrong project rules.",
     ),
     "files.discovery_links": (
-        "Через discovery-ссылки runtime находит навыки проекта; битая ссылка скрывает навыки от агента.",
+        "Через discovery-ссылки runtime находит скиллы проекта; битая ссылка скрывает скиллы от агента.",
         "Runtimes find the project's skills through the discovery links; a broken link hides skills from the agent.",
     ),
     "files.project_json": (
@@ -39,11 +39,11 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "The coordinator reads roles, limits and policies from orchestration.json; an error there stops orchestration.",
     ),
     "files.skill_snapshot": (
-        "Расхождение снэпшота навыков с пакетом ломает воспроизводимость навыков между машинами.",
+        "Расхождение снэпшота скиллов с пакетом ломает воспроизводимость скиллов между машинами.",
         "A skill snapshot that differs from the package breaks skill reproducibility across machines.",
     ),
     "files.skill_registry": (
-        "Устаревший реестр навыков ведёт агента к несуществующим или старым навыкам.",
+        "Устаревший реестр скиллов ведёт агента к несуществующим или старым скиллам.",
         "A stale skill registry points the agent to missing or outdated skills.",
     ),
     "files.overlay_locks": (
@@ -195,7 +195,7 @@ RATIONALES: dict[str, tuple[str, str]] = {
         "If pytest's temp directory is not writable or belongs to another user, tests fail before they start.",
     ),
     "environment.symlinks": (
-        "Без права создавать symlink discovery-ссылки навыков и часть тестов не работают.",
+        "Без права создавать symlink discovery-ссылки скиллов и часть тестов не работают.",
         "Without the right to create symlinks the skill discovery links and some tests do not work.",
     ),
     "environment.hook_bash": (
@@ -312,12 +312,12 @@ TITLES: dict[str, tuple[str, str]] = {
     "files.lock": ("Файл harness.lock", "harness.lock file"),
     "files.seed_baseline": ("Baseline seed-файлов", "Seed file baseline"),
     "files.agents_md": ("Инструкция AGENTS.md", "AGENTS.md instructions"),
-    "files.discovery_links": ("Ссылки обнаружения навыков", "Skill discovery links"),
+    "files.discovery_links": ("Ссылки обнаружения скиллов", "Skill discovery links"),
     "files.project_json": ("Настройки project.json", "project.json settings"),
     "files.sandboxes": ("Каталог песочниц", "Sandboxes directory"),
     "files.orchestration_config": ("Настройки оркестрации", "Orchestration settings"),
-    "files.skill_snapshot": ("Снимок навыков", "Skill snapshot"),
-    "files.skill_registry": ("Реестр навыков", "Skill registry"),
+    "files.skill_snapshot": ("Снимок скиллов", "Skill snapshot"),
+    "files.skill_registry": ("Реестр скиллов", "Skill registry"),
     "files.overlay_locks": ("Блокировки оверлеев", "Overlay locks"),
     "files.integrations": ("Интеграции", "Integrations"),
     "files.verification_routing": ("Маршрутизация проверок", "Verification routing"),

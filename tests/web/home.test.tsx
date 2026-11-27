@@ -65,7 +65,7 @@ describe("Home", () => {
     const chips = document.getElementById("home-chips")!.textContent!;
     expect(chips).toContain("установлено 1.5.1");
     expect(chips).toContain("file-ledger");
-    expect(chips).toContain("32 навыков");
+    expect(chips).toContain("32 скиллов");
     expect(chips).not.toContain("2.0.0");
     const attention = document.getElementById("attention-list")!;
     expect(within(attention).getByText("skills.drift")).toBeTruthy();
@@ -205,7 +205,7 @@ describe("Home after the owner's review", () => {
       problems_total: 1,
     });
     const attention = document.getElementById("attention-list")!;
-    expect(within(attention).getByText("Снимок навыков")).toBeTruthy();
+    expect(within(attention).getByText("Снимок скиллов")).toBeTruthy();
     expect(attention.querySelector("b")!.textContent).not.toContain("files.skill_snapshot");
     expect(document.getElementById("problem-count")!.textContent).toContain("1 ошибка");
   });

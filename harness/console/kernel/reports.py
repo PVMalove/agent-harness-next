@@ -1,14 +1,14 @@
 """Данные для раздела Reports консоли средствами только стандартной библиотеки: отчёты о завершении
-из выбранного поколения леджера жизненного цикла, их фильтры и секции, а также хронология батча.
+из выбранного поколения ledger жизненного цикла, их фильтры и секции, а также хронология batch.
 
 Все операции представляют собой нестрогое чтение данных с диска (`LifecycleLedger.records_root_lenient`
 и `read_record_lenient` — те же вызовы только для чтения, которые используют проверки health
 `orchestration.*` и `delivery_stats`): отсутствующая, неполная или повреждённая запись приводит к отсутствию
-значения вместо сбоя экрана. Модуль ничего не записывает, не мигрирует и не блокирует леджер.
+значения вместо сбоя экрана. Модуль ничего не записывает, не мигрирует и не блокирует ledger.
 
 Отчёт о завершении не содержит собственной метки времени (см. `_persist_report` в
 harness/orchestration/workflow/reports.py), поэтому его датой служит запись журнала аудита для
-`reports/<dispatch_id>.json`; изменения состояния батча считываются из записей `transition` того же аудита.
+`reports/<dispatch_id>.json`; изменения состояния batch считываются из записей `transition` того же аудита.
 Логи QA gate (`qa-artifacts/<sha256>.log`) связываются с отчётом QA через `sha256:<digest>` в поле Output;
 неудачные попытки qa-lane (`qa-lane/attempts/*.json`) — по `dispatch_id`.
 """
@@ -46,7 +46,7 @@ _ROLE_FLOW_SEPARATOR = " → "
 
 @dataclass(frozen=True)
 class ReportEntry:
-    """Отчёт о завершении задачи вместе с атрибутами леджера для фильтрации и отображения в списке."""
+    """Отчёт о завершении задачи вместе с атрибутами ledger для фильтрации и отображения в списке."""
 
     dispatch_id: str
     batch_id: str
@@ -84,7 +84,7 @@ class StageEntry:
 
 @dataclass(frozen=True)
 class BatchSummary:
-    """Краткая сводка по батчу (идентификатор, тикет, состояние, время создания)."""
+    """Краткая сводка по batch (идентификатор, тикет, состояние, время создания)."""
 
     batch_id: str
     ticket: str
@@ -98,7 +98,7 @@ class BatchSummary:
 
 @dataclass(frozen=True)
 class TimelineEvent:
-    """Событие хронологии выполнения батча (смена состояния, диспатч, отчёт, решение координатора, оценка риска)."""
+    """Событие хронологии выполнения batch (смена состояния, dispatch, отчёт, решение координатора, оценка риска)."""
 
     at: str
     kind: str
@@ -108,7 +108,7 @@ class TimelineEvent:
 
 @dataclass(frozen=True)
 class BatchTimeline:
-    """Полная хронология батча: сводка, последовательность ролей (role flow) и список событий."""
+    """Полная хронология batch: сводка, последовательность ролей (role flow) и список событий."""
 
     batch: BatchSummary
     role_flow: list[str]
@@ -141,7 +141,7 @@ class QaRun:
 
 @dataclass(frozen=True)
 class LedgerView:
-    """Полный снимок записей леджера оркестрации, считанный для раздела Reports.
+    """Полный снимок записей ledger оркестрации, считанный для раздела Reports.
 
     Поля не переназначаются: `load_ledger_view` только заполняет их контейнеры при чтении.
     """
@@ -160,7 +160,7 @@ class LedgerView:
     stages: list[StageEntry] = field(default_factory=list)
 
     def dispatch_records(self) -> list[JsonObject]:
-        """Все записи диспатчей леджера (для статистики по ролям)."""
+        """Все записи dispatch ledger (для статистики по ролям)."""
         return list(self._dispatches.values())
 
     def dispatches_by_id(self) -> Mapping[str, JsonObject]:
@@ -168,7 +168,7 @@ class LedgerView:
         return MappingProxyType(self._dispatches)
 
     def timeline(self, batch_id: str) -> BatchTimeline | None:
-        """Строит хронологию для указанного батча либо возвращает None, если батч не найден."""
+        """Строит хронологию для указанного batch либо возвращает None, если batch не найден."""
         batch = self._batch_records.get(batch_id)
         if batch is None:
             return None
@@ -183,7 +183,7 @@ def _objects(value: JsonValue | None) -> list[JsonObject]:
 
 
 def _read_directory(root: Path, directory: str) -> list[JsonObject]:
-    """Считывает все валидные JSON-записи из указанной поддиректории леджера."""
+    """Считывает все валидные JSON-записи из указанной поддиректории ledger."""
     records: list[JsonObject] = []
     for path in sorted((root / directory).glob("*.json")):
         record = LifecycleLedger.read_record_lenient(path)
@@ -295,7 +295,7 @@ def _file_qa_logs(root: Path) -> Iterable[QaLog]:
 
 
 def _audit_index(events: list[JsonObject]) -> dict[str, list[JsonObject]]:
-    """Строит индекс событий аудита леджера, сгруппированных по относительному пути файла."""
+    """Строит индекс событий аудита ledger, сгруппированных по относительному пути файла."""
     index: dict[str, list[JsonObject]] = {}
     for event in events:
         details = event.get("details")
@@ -323,7 +323,7 @@ def load_ledger_view(
     store_read: StoreRead | None = None,
     read_timeout: float = STORE_READ_TIMEOUT_SECONDS,
 ) -> LedgerView:
-    """Загружает полное представление данных леджера оркестрации для указанного репозитория.
+    """Загружает полное представление данных ledger оркестрации для указанного репозитория.
 
     In the runtime-store epoch the records come from the store (``store_read``, by default the
     project's runtime), never from the archived file generation; the store answers no QA gate log
@@ -339,7 +339,7 @@ def load_ledger_view(
     root = LifecycleLedger(state).records_root_lenient()
     if root is None:
         return LedgerView(
-            unavailable="леджер оркестрации не найден или не инициализирован"
+            unavailable="ledger оркестрации не найден или не инициализирован"
         )
     records = {directory: _read_directory(root, directory) for directory in _DIRECTORIES}
     return _build_view(records, _file_qa_logs(root))
@@ -838,11 +838,11 @@ def report_header(entry: ReportEntry) -> str:
 
 
 def _build_timeline(view: LedgerView, batch: JsonObject) -> BatchTimeline:
-    """Собирает структурированную хронологию событий батча из записей леджера."""
+    """Собирает структурированную хронологию событий batch из записей ledger."""
     batch_id = cast(str, batch["batch_id"])
     summary = next(item for item in view.batches if item.batch_id == batch_id)
     events: list[TimelineEvent] = [
-        TimelineEvent(at=summary.created_at, kind="state", text="батч создан")
+        TimelineEvent(at=summary.created_at, kind="state", text="batch создан")
     ]
     for audit in view._audit.get(f"batches/{batch_id}.json", []):
         details = audit.get("details")
@@ -977,7 +977,7 @@ def _build_timeline(view: LedgerView, batch: JsonObject) -> BatchTimeline:
 
 def role_flow_text(timeline: BatchTimeline) -> str:
     """Формирует строку последовательности перехода между ролями через стрелки."""
-    return _ROLE_FLOW_SEPARATOR.join(timeline.role_flow) or "диспатчей ещё не было"
+    return _ROLE_FLOW_SEPARATOR.join(timeline.role_flow) or "dispatch ещё не было"
 
 
 def _cell(value: str) -> str:
@@ -1020,7 +1020,7 @@ def report_document(view: LedgerView, entry: ReportEntry) -> MarkdownDocument:
 
 
 def timeline_document(timeline: BatchTimeline) -> MarkdownDocument:
-    """Формирует структурированный MarkdownDocument для экспорта хронологии батча."""
+    """Формирует структурированный MarkdownDocument для экспорта хронологии batch."""
     batch = timeline.batch
     rows = [
         "| Время | Тип | Роль | Событие |",
@@ -1032,7 +1032,7 @@ def timeline_document(timeline: BatchTimeline) -> MarkdownDocument:
         ),
     ]
     return MarkdownDocument(
-        title=f"Хронология батча {batch.batch_id}",
+        title=f"Хронология batch {batch.batch_id}",
         slug=f"timeline-{batch.batch_id}",
         ticket=batch.ticket,
         meta=[

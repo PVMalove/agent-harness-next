@@ -33,12 +33,12 @@ from harness.errors import INTERNAL_INVARIANT_REMEDY, HarnessError
 from ..context import HealthContext
 from ..model import CheckResult, Fix, JsonObject
 
-_MIGRATION_MESSAGE = "леджер оркестрации требует миграции схемы"
+_MIGRATION_MESSAGE = "ledger оркестрации требует миграции схемы"
 
 
 def _migration_fix(context: HealthContext) -> Fix:
     return Fix(
-        text="выполните миграцию схемы леджера",
+        text="выполните миграцию схемы ledger",
         command=context.coordinator_command("ledger", "migrate"),
     )
 
@@ -150,7 +150,7 @@ def check_runtime(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="skipped",
-            message="леджер файловый: runtime не нужен",
+            message="ledger файловый: runtime не нужен",
         )
     from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
 
@@ -204,7 +204,7 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="fail",
-            message=f"леджер оркестрации недоступен: {state.error}",
+            message=f"ledger оркестрации недоступен: {state.error}",
             fix=_serve_fix(context) if state.error_code == "runtime_unavailable" else None,
         )
     if state.needs_migration:
@@ -238,7 +238,7 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
     counts_text = (
         ", ".join(f"{name}={count}" for name, count in sorted(counts.items()))
         if counts
-        else "батчей нет"
+        else "batch нет"
     )
     location = (
         "authority=runtime-store"
@@ -250,8 +250,8 @@ def check_ledger_summary(context: HealthContext) -> CheckResult:
         group="orchestration",
         status="ok",
         message=(
-            f"леджер: {location} "
-            f"schema_version={state.status['version']}; батчи по состояниям: {counts_text}"
+            f"ledger: {location} "
+            f"schema_version={state.status['version']}; batch по состояниям: {counts_text}"
         ),
     )
 
@@ -288,7 +288,7 @@ def check_unfinished_batches(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="fail",
-            message=f"леджер оркестрации недоступен: {state.error}",
+            message=f"ledger оркестрации недоступен: {state.error}",
         )
     if state.needs_migration:
         return CheckResult(
@@ -306,7 +306,7 @@ def check_unfinished_batches(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="ok",
-            message="незавершённых батчей нет",
+            message="незавершённых batch нет",
         )
     described = [
         f"{batch.get('batch_id', '?')} [{batch.get('state', '?')}] "
@@ -320,7 +320,7 @@ def check_unfinished_batches(context: HealthContext) -> CheckResult:
         id=check_id,
         group="orchestration",
         status="ok",
-        message=f"незавершённые батчи ({len(unfinished)}): " + "; ".join(described),
+        message=f"незавершённые batch ({len(unfinished)}): " + "; ".join(described),
     )
 
 
@@ -359,7 +359,7 @@ def check_blocked_batches(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="fail",
-            message=f"леджер оркестрации недоступен: {state.error}",
+            message=f"ledger оркестрации недоступен: {state.error}",
         )
     if state.needs_migration:
         return CheckResult(
@@ -380,7 +380,7 @@ def check_blocked_batches(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="warn",
-            message="заблокированные батчи: " + ", ".join(blocked),
+            message="заблокированные batch: " + ", ".join(blocked),
             fix=Fix(
                 text="разрешите блокировку через coordinator.py batch decide (в harness console: "
                 "Orchestration → «Решение по batch»)"
@@ -390,7 +390,7 @@ def check_blocked_batches(context: HealthContext) -> CheckResult:
         id=check_id,
         group="orchestration",
         status="ok",
-        message="заблокированных батчей нет",
+        message="заблокированных batch нет",
     )
 
 
@@ -404,7 +404,7 @@ def check_stale_dispatches(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="fail",
-            message=f"леджер оркестрации недоступен: {state.error}",
+            message=f"ledger оркестрации недоступен: {state.error}",
         )
     if state.needs_migration:
         return CheckResult(
@@ -419,7 +419,7 @@ def check_stale_dispatches(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="ok",
-            message="леджер оркестрации ещё не инициализирован (диспатчей нет)",
+            message="ledger оркестрации ещё не инициализирован (dispatch нет)",
         )
     from harness.orchestration.core.constants import LIVE_DISPATCH_STATES
     from harness.orchestration.core.utils import CoordinatorError, _silent_seconds
@@ -453,7 +453,7 @@ def check_stale_dispatches(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="warn",
-            message="диспатчи без heartbeat дольше порога: " + ", ".join(sorted(stale)),
+            message="dispatch без heartbeat дольше порога: " + ", ".join(sorted(stale)),
             fix=Fix(
                 text=(
                     f"порог {threshold}s из attention_policy.stale_dispatch_seconds; "
@@ -465,7 +465,7 @@ def check_stale_dispatches(context: HealthContext) -> CheckResult:
         id=check_id,
         group="orchestration",
         status="ok",
-        message="все активные диспатчи посылают heartbeat вовремя",
+        message="все активные dispatch посылают heartbeat вовремя",
     )
 
 
@@ -504,7 +504,7 @@ def check_orphaned_worktrees(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="skipped",
-            message="не удалось определить осиротевшие воркдеревья (git или леджер недоступны)",
+            message="не удалось определить осиротевшие воркдеревья (git или ledger недоступны)",
         )
     known = set(registered) | active
     worktree_dirs = [sandboxes_root(repo) / "worktrees", root / "worktrees"]
@@ -753,7 +753,7 @@ def check_worker_binaries(context: HealthContext) -> CheckResult:
             id=check_id,
             group="orchestration",
             status="skipped",
-            message="леджер файловый: worker запускает адаптер в окружении координатора",
+            message="ledger файловый: worker запускает адаптер в окружении координатора",
         )
     from harness.orchestration.runtime_client import RuntimeClient, RuntimeClientError
 

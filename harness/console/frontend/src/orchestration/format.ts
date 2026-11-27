@@ -105,7 +105,7 @@ export function pipelineStatsFields(stats: PipelineStats): [string, string][] {
   return [
     ["Запусков (batch)", `${stats.batches}, тикетов: ${stats.tickets}`],
     ["По состояниям", states],
-    ["Диспатчи по ролям", counts(stats.dispatchesByRole)],
+    ["Dispatch по ролям", counts(stats.dispatchesByRole)],
     ["Отчёты по итогам", counts(stats.reportsByOutcome)],
     ["QA-прогонов", `${stats.qaRuns}, неудачных попыток qa-lane: ${stats.qaAttemptsFailed}`],
     ["Период", period],

@@ -211,7 +211,7 @@ function CandidateDetail({ item, facts, home, copied, onCopy }: { item: Candidat
         {
           label: "Skills snapshot",
           tone: drift === null || install === null ? "wait" : drift.total ? "warn" : "ok",
-          text: install && drift ? t("{skills} навыков · drift {drift}", { skills: install.skills, drift: drift.total }) : t("нет данных · дрейф не прочитан"),
+          text: install && drift ? t("{skills} скиллов · drift {drift}", { skills: install.skills, drift: drift.total }) : t("нет данных · дрейф не прочитан"),
         },
         {
           label: t("Локальные правки управляемых файлов"),
@@ -339,7 +339,7 @@ export function OpenProject() {
   }));
   const composition = (
     <dl className="ds-kv" id="open-project-composition-counts">
-      {[t("Файлов"), t("Навыков"), t("Хуков")].map((label) => (
+      {[t("Файлов"), t("Скиллов"), t("Хуков")].map((label) => (
         <div className="ds-kv-row" key={label}>
           <dt>{label}</dt>
           <dd>

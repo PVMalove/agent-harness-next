@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from pathlib import Path
 from typing import cast, get_args
 
@@ -23,7 +24,7 @@ STRUCTURE_LABELS = {
 }
 # The text of each orchestration event (`ws/steps.ts`, `EVENT_LABELS`).
 EVENT_LABELS = {
-    "batch.transition": "Пакет {batch}: {from} → {to}",
+    "batch.transition": "Batch {batch}: {from} → {to}",
     "dispatch.transition": "Dispatch {dispatch}: {from} → {to}",
     "gate.decision": "Гейт {dispatch}: {decision}",
     "qa.run": "Прогон QA {dispatch}: {outcome}",
@@ -54,6 +55,9 @@ PAGE_LABELS = (
 
 
 def _english(text: str) -> str:
+    # A label that names project entities only (`Batch {batch}: …`) is already English.
+    if not re.search("[А-Яа-яЁё]", text):
+        return text
     catalog = cast(dict[str, dict[str, str]], json.loads(web_catalog.render()))
     english = catalog["en"].get(text, "")
     assert english and english != text, text

@@ -153,6 +153,8 @@ describe("the steps reducer", () => {
     )).toBe("Batch batch-885: — → working");
     const english: Record<string, string> = catalog.en;
     for (const label of [...Object.values(EVENT_LABELS), ...Object.values(STRUCTURE_LABELS)]) {
+      // A label that names project entities only («Batch {batch}: …») is already English.
+      if (!/[А-Яа-яЁё]/.test(label)) continue;
       expect(english[label], label).toBeTruthy();
     }
     expect(translate("en", STRUCTURE_LABELS.unavailable)).toBe("structure unavailable");

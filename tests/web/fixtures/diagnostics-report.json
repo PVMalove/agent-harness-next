@@ -88,7 +88,7 @@
       "id": "orchestration.coordinator",
       "group": "orchestration",
       "status": "ok",
-      "message": "coordinator.py подключён, леджер читается",
+      "message": "coordinator.py подключён, ledger читается",
       "fix": null
     },
     {

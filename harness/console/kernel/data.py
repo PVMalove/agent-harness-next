@@ -6,7 +6,7 @@
 Функция `harness.health.registry.run` вызывается внутри процесса через `run_health` с теми же
 параметрами `snapshot_diff` и вызовом CLI, что и команда `cmd_health` в `harness/bin/harness.py`,
 поэтому отчёт консоли в точности совпадает с отчётом CLI (включая дрейф снепшота скиллов). Статус дрейфа
-и количество активных батчей считываются через CLI сборщика и координатора с флагом `--json` в
+и количество активных batch считываются через CLI сборщика и координатора с флагом `--json` в
 подпроцессе, что исключает дублирование логики разрешения возможностей и журнала в консоли (оба факта
 остаются опциональными: для проекта без `.harness/harness.lock` или без бэкенд-оркестрации отображается
 «не подключено»).
@@ -35,7 +35,7 @@ BIN_HARNESS_PATH = _PACKAGE_ROOT / "bin" / "harness.py"
 
 @dataclass(frozen=True)
 class DashboardData:
-    """Факты для Dashboard: счётчики health, батчи, Repo Map, memory, версия и дрейф."""
+    """Факты для Dashboard: счётчики health, batch, Repo Map, memory, версия и дрейф."""
 
     ok: int
     warn: int
@@ -118,7 +118,7 @@ def _drift_state_of(payload: JsonObject | None) -> str:
 
 
 def active_batches(repo: Path, *, timeout: float = 30.0) -> int | None:
-    """Возвращает количество открытых батчей через `coordinator.py batch list --open`, либо None, если оркестрация не подключена."""
+    """Возвращает количество открытых batch через `coordinator.py batch list --open`, либо None, если оркестрация не подключена."""
     coordinator = repo / ".harness" / "orchestration" / "coordinator.py"
     if not coordinator.is_file():
         return None

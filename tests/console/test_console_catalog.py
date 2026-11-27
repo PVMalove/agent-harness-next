@@ -26,7 +26,7 @@ ENTRIES = {entry.key: entry for entry in HARNESS_COMMANDS}
 
 
 def test_catalog_covers_every_harness_and_ledger_command() -> None:
-    """Проверить, что каталог команд покрывает все команды харнесса и леджера."""
+    """Проверить, что каталог команд покрывает все команды харнесса и ledger."""
     assert {
         "init",
         "update",

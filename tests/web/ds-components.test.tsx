@@ -115,7 +115,7 @@ describe("Panel, PageHeader and Summary", () => {
     render(
       <>
         <PageHeader title="Harness" subtitle="Установка" actions={<button type="button">Проверить</button>} />
-        <Summary label="Сводка" stats={[{ label: "Версия", value: "1.5.1", caption: "Схема 6" }, { label: "Навыки", value: "—" }]}
+        <Summary label="Сводка" stats={[{ label: "Версия", value: "1.5.1", caption: "Схема 6" }, { label: "Скиллы", value: "—" }]}
           facts={<span>3 ошибки</span>} snapshot="Снимок 22:01" />
       </>,
     );

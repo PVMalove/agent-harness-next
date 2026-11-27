@@ -184,7 +184,7 @@ def first_lock(found: OrchestrationView) -> JsonObject:
 
 
 class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
-    """Экран раздела Orchestration на общей оболочке консоли: статистика пайплайна, живое состояние
+    """Экран раздела Orchestration на общей оболочке консоли: статистика конвейера, живое состояние
     lock ledger, история batch с фильтром по состоянию (выбор batch открывает его хронологию) и
     список команд координатора."""
 
@@ -276,7 +276,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             with Horizontal(id="orchestration-header"):
                 yield Static("Оркестрация", id="orchestration-title")
                 yield Static(
-                    "Пайплайн batch, рабочие сессии и команды координатора.",
+                    "Конвейер batch, рабочие сессии и команды координатора.",
                     id="orchestration-subtitle",
                 )
                 yield Button("Восстановление", id="open-recovery", compact=True)
@@ -292,7 +292,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         CommandMenuScreen.sync_language(self)
 
     def _overview_parts(self) -> ComposeResult:
-        """Статистика пайплайна и история batch: слева состояния с числом batch, справа batch
+        """Статистика конвейера и история batch: слева состояния с числом batch, справа batch
         выбранного состояния."""
         view = self._view
         panel: Widget
@@ -367,7 +367,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
                     ),
                     id="state-filter",
                 )
-            with SectionCard(title="История пайплайна", id="batch-history-card"):
+            with SectionCard(title="История конвейера", id="batch-history-card"):
                 yield ListView(id="batch-history")
 
     def on_mount(self) -> None:

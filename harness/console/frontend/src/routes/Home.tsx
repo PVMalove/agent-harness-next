@@ -562,7 +562,7 @@ export function Home() {
       <div className="page-title home-title">
         <div>
           <h1>{t("Состояние харнесса")}</h1>
-          <p>{t("Здоровье, runtime-store, навыки и контекст проекта.")}</p>
+          <p>{t("Здоровье, runtime-store, скиллы и контекст проекта.")}</p>
           <div className="home-facts" id="home-chips">
             {snapshot ? (
               <>
@@ -575,7 +575,7 @@ export function Home() {
                 <span id="home-facts">
                   {health ? `${health.ok} ${t("пройдено")} · ${health.warn} ${t("внимание")} · ${health.fail} ${t("ошибки")} · ${health.skipped} ${t("пропущено")}` : unavailable}
                 </span>
-                {install ? <span>{t("{count} навыков", { count: install.skills })}</span> : null}
+                {install ? <span>{t("{count} скиллов", { count: install.skills })}</span> : null}
                 {snapshot.repo_map.tier ? <span>Repo Map {snapshot.repo_map.tier}</span> : null}
                 <span id="snapshot-status">
                   {state.cached ? t("Кэш") : t("Новый снимок")} · {state.ageSeconds ?? 0} s

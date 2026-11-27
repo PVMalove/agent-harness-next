@@ -65,7 +65,7 @@ export function refusalCaption(t: Translate, reason: string | null, facts: Refus
     case "not_found":
       return t("Тикет не найден в спеке");
     case "ledger_unavailable":
-      return t("Леджер оркестрации недоступен: перенос не записан");
+      return t("Ledger оркестрации недоступен: перенос не записан");
     default:
       return t("Смена статуса не выполнена");
   }

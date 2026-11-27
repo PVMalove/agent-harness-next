@@ -78,7 +78,7 @@ export function AttentionPanel({ overview }: { overview: HarnessOverview | null 
   const { t, state: word } = useI18n();
   const items: [string, string, string, Tone, string][] = [];
   if (overview) {
-    if (overview.drift !== "clean") items.push(["drift", t("Расхождение навыков · {count}", { count: overview.drift_files ?? "—" }), t("Файлы пакета отличаются от установленных."), "warn", href("update-harness")]);
+    if (overview.drift !== "clean") items.push(["drift", t("Расхождение скиллов · {count}", { count: overview.drift_files ?? "—" }), t("Файлы пакета отличаются от установленных."), "warn", href("update-harness")]);
     if (overview.state.installed_version !== overview.package_version) items.push(["version", `${overview.state.installed_version} → ${overview.package_version}`, t("Доступна другая версия пакета."), "warn", href("update-harness")]);
     for (const item of overview.integrations ?? []) {
       if (item.status !== "current") items.push([item.name, item.name, `${word(item.status)} · ${item.detail || "—"}`, item.status === "missing" ? "err" : "warn", href("diagnostics")]);

@@ -48,7 +48,7 @@ describe("the Help route", () => {
       "Разделов", "Сочетаний клавиш", "Правил безопасности", "Вопросов",
     ]);
     expect(document.querySelectorAll(".ds-pillars > div")).toHaveLength(3);
-    expect(content()).toContain("Справка по пульту");
+    expect(content()).toContain("Справка по консоли");
     // Every guide section is shown in one of the tabs.
     const seen = new Set<string>();
     for (const name of tabs()) {

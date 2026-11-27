@@ -298,7 +298,7 @@ export function UpdateHarness() {
           facts && state?.installed ? (
             <>
               <span>{`${state.installed_version} → ${facts.package_version}`}</span>
-              <span>{plural(language, state.skills, ["навык", "навыка", "навыков"], ["skill", "skills"])}</span>
+              <span>{plural(language, state.skills, ["скилл", "скилла", "скиллов"], ["skill", "skills"])}</span>
               {versions?.rows.map(([label, value]) => (
                 <span key={label}>
                   {label}: {value}
