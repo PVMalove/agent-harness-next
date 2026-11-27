@@ -205,6 +205,84 @@ def test_guard_calls_fail_without_a_hook_denial_in_the_transcript(
         claude_probe.check_guard_calls(project, [])
 
 
+@pytest.mark.parametrize(
+    ("missing", "message"),
+    [
+        ("write", "model_declined: the model made no Write call for 'src/canary.txt'"),
+        ("bash", "model_declined: the model made no Bash call for 'touch bash-probe.txt'"),
+    ],
+)
+def test_a_step_the_model_declined_is_reported_and_never_confirms_the_hook(
+    project: Path, missing: str, message: str
+) -> None:
+    calls = _guard_calls(project)
+    del calls[["write", "bash"].index(missing)]
+
+    with pytest.raises(SystemExit, match=message) as failure:
+        claude_probe.check_guard_calls(project, calls)
+
+    assert "not confirmed" in str(failure.value.code)
+
+
+def test_a_failed_check_keeps_the_tool_calls_in_the_usage_report(
+    project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    reports = tmp_path / "reports"
+    stream = _stream(
+        _use("a", "Write", {"file_path": "tests/allowed-probe.txt"}),
+        _result("a", "ok"),
+        {"type": "result", "result": "1. Skipped: outside test_paths."},
+    )
+    monkeypatch.setattr(claude_probe, "storage_path", lambda *args: reports)
+    monkeypatch.setattr(
+        claude_probe, "run_step", lambda *args, **kwargs: _completed(0, stream)
+    )
+
+    with pytest.raises(SystemExit, match="model_declined"):
+        claude_probe._run_claude(
+            "/bin/claude",
+            project,
+            {},
+            claude_probe.GUARD_PROMPT,
+            "Write,Bash",
+            check=lambda calls: claude_probe.check_guard_calls(project, calls),
+        )
+
+    (report,) = reports.glob("test-author-probe-*.json")
+    recorded = json.loads(report.read_text(encoding="utf-8"))
+    assert recorded["phase"] == "guard"
+    assert recorded["outcome"] == "failed"
+    assert recorded["tool_calls"] == [
+        {
+            "name": "Write",
+            "input": '{"file_path": "tests/allowed-probe.txt"}',
+            "result": "ok",
+            "is_error": False,
+        }
+    ]
+    assert recorded["final_result"] == "1. Skipped: outside test_paths."
+
+
+def test_a_passed_check_keeps_the_usage_report_free_of_tool_calls(
+    project: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    reports = tmp_path / "reports"
+    monkeypatch.setattr(claude_probe, "storage_path", lambda *args: reports)
+    monkeypatch.setattr(
+        claude_probe, "run_step", lambda *args, **kwargs: _completed(0, "{}")
+    )
+
+    claude_probe._run_claude(
+        "/bin/claude", project, {}, "scenario", "Read", check=lambda calls: None
+    )
+
+    (report,) = reports.glob("test-author-probe-*.json")
+    recorded = json.loads(report.read_text(encoding="utf-8"))
+    assert recorded["outcome"] == "passed"
+    assert "tool_calls" not in recorded
+    assert "final_result" not in recorded
+
+
 @pytest.mark.parametrize("leftover", ["src/canary.txt", "bash-probe.txt"])
 def test_guard_calls_fail_when_a_denied_file_exists(
     project: Path, leftover: str
@@ -420,11 +498,19 @@ def test_a_verified_probe_cleans_up_what_the_agent_left(
     streams = iter(["guard", "red"])
 
     def fake_run(
-        claude: str, root: Path, env: dict[str, str], prompt: str, tools: str
+        claude: str,
+        root: Path,
+        env: dict[str, str],
+        prompt: str,
+        tools: str,
+        *,
+        check: object,
     ) -> str:
         kind = next(streams)
         if kind == "red":
             (root / "tests" / "test_probe.py").write_text("x", encoding="utf-8")
+        assert callable(check)
+        check(claude_probe.tool_calls(kind))
         return kind
 
     monkeypatch.setattr(claude_probe.shutil, "which", lambda name: "/bin/claude")
