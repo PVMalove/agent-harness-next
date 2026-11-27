@@ -8,6 +8,10 @@
 
 - **[Режим интеграционного PR]:** `/to-pull-requests --release <epic>` открывает PR integration-ветки эпика с меткой `pr::integration` в `base_branch` или, с `--target <branch>`, в другую ветку `integration/*`, а в проекте с opt-in вызывает Release Gate. После подтверждённого merge в `base_branch` эпик закрывается и получает `status::done`, а integration-ветка остаётся, пока разработчик не решит её судьбу. (#1027)
 
+### Changed
+
+- **[Короткая проба тест-автора]:** `make test-author-probe` запускает только два сценария clean-room, которые вызывают настоящий Claude Code (`isolated_test_runner` и `full_route_worktree`), а не весь clean-room. Проба идёт быстрее и не падает на сценариях, не относящихся к тест-автору; `make test-clean-room` и `scripts/verify.py` по-прежнему запускают все сценарии. (#1303)
+
 ## [2.0.1] - 2026-11-24
 
 ### Fixed
