@@ -33,7 +33,8 @@ class PolicyError(HarnessError):
 
 
 INTERNAL_INVARIANT_REMEDY = (
-    "internal invariant violated -- file a bug report with this traceback"
+    "internal invariant violated -- stop and run the RCA phase of the diagnosing-bugs skill"
+    " with this traceback"
 )
 
 
