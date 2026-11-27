@@ -184,6 +184,16 @@ def first_lock(found: OrchestrationView) -> JsonObject:
     return found.lock
 
 
+def lock_panel(state: str, text: str) -> Text:
+    """The lock panel: its first line with the state's icon and colour (free, held, not read),
+    the details muted under it."""
+    head, _, rest = text.partition("\n")
+    panel = Text(f"{icons.STATUS_ICONS[state]} {head}", style=f"bold {brand.STATUS_COLORS[state]}")
+    if rest:
+        panel.append("\n" + rest, style=brand.PALETTE["foreground"])
+    return panel
+
+
 class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
     """Экран раздела Orchestration на общей оболочке консоли: статистика конвейера, живое состояние
     lock ledger, история batch с фильтром по состоянию (выбор batch открывает его хронологию) и
@@ -348,8 +358,10 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         lock = Static(
             "Загрузка…"
             if self._first_lock.lock_error == LOADING
-            else ledger_lock.current_lock_text(
-                self.repo, lambda repo: first_lock(self._first_lock), self._language
+            else lock_panel(
+                *ledger_lock.current_lock_view(
+                    self.repo, lambda repo: first_lock(self._first_lock), self._language
+                )
             ),
             id="ledger-lock",
             classes="overview",
@@ -404,15 +416,15 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         language = self._language
 
         def work() -> None:
-            text = ledger_lock.current_lock_text(
+            state, text = ledger_lock.current_lock_view(
                 self.repo, lambda repo: self._client.ledger_lock(), language
             )
-            call_from_worker(self, lambda: self._show_lock(text))
+            call_from_worker(self, lambda: self._show_lock(lock_panel(state, text)))
 
         self.run_worker(work, thread=True, exclusive=True, group="ledger-lock")
 
-    def _show_lock(self, text: str) -> None:
-        self.query_one("#ledger-lock", Static).update(text)
+    def _show_lock(self, panel: Text) -> None:
+        self.query_one("#ledger-lock", Static).update(panel)
 
     def _show_batches(self, state: str) -> None:
         history = self.query_one("#batch-history", ListView)

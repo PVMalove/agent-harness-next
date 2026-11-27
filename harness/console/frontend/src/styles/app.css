@@ -146,6 +146,11 @@
 .orch-analytics-head { flex-wrap: wrap; gap: 8px; }
 .orch-lock-body { padding: 8px 16px 12px; font-size: var(--fs-1); }
 .orch-lock-body p { margin: 0 0 4px; overflow-wrap: anywhere; }
+/* The first line names the lock's state with its icon and colour: free, held, not read. */
+.orch-lock-body .orch-lock-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.orch-lock-head.ok b { color: var(--ds-ok); }
+.orch-lock-head.warn b { color: var(--ds-warn); }
+.orch-lock-head.err b { color: var(--ds-err); }
 .orch-history .panel-head select { max-width: 50%; }
 .orch-section-title { margin: 8px 0 12px; font-size: var(--fs-2); }
 .orch-title .actions { flex-wrap: wrap; }

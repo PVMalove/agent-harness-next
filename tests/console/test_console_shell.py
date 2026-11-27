@@ -324,3 +324,13 @@ def test_every_screen_that_opens_the_wizard_hands_it_the_console_server_client()
         assert calls, name
         for call in calls:
             assert "client" in {keyword.arg for keyword in call.keywords}, name
+
+
+def test_the_footer_puts_esc_first_and_help_language_and_palette_last() -> None:
+    from harness.console.tui.shell import footer_order
+
+    keys = ["down", "enter", "escape", "r", "f1", "f3", "f2", "ctrl+p"]
+    bindings = {key: key for key in keys}
+    ordered = footer_order(bindings, "ctrl+p")
+    assert list(ordered) == ["escape", "down", "enter", "r", "f3", "f1", "f2", "ctrl+p"]
+    assert list(footer_order({"r": "r", "f2": "f2"}, "ctrl+p")) == ["r", "f2"]

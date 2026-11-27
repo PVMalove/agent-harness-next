@@ -83,7 +83,18 @@ def test_a_live_owner_is_never_announced_as_released_by_the_timeout() -> None:
     )
 
     assert "доступно" not in text
-    assert "таймаут не снимает живого владельца" in text
+    # The timeout line and the verdict say it once each, without repeating one another.
+    assert "до снятия по таймауту: не применяется (владелец жив)" in text
+    assert "Вердикт: owner-alive, живой владелец не снимается" in text
+
+
+def test_the_panel_state_is_free_held_or_not_read(tmp_path: Path) -> None:
+    def broken(repo: Path) -> dict[str, object]:
+        raise OSError("нет доступа")
+
+    assert ledger_lock.current_lock_view(tmp_path, lambda repo: {"locked": False})[0] == "ok"
+    assert ledger_lock.current_lock_view(tmp_path, lambda repo: _status())[0] == "warn"
+    assert ledger_lock.current_lock_view(tmp_path, broken)[0] == "fail"
 
 
 def test_an_owner_on_another_host_has_no_timeout_countdown() -> None:

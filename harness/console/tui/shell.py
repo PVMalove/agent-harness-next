@@ -797,6 +797,18 @@ async def _pop_to(app: App[None], target: Screen[None]) -> None:
 ShellResult = TypeVar("ShellResult", default=None)
 
 
+FooterEntry = TypeVar("FooterEntry")
+
+
+def footer_order(bindings: dict[str, FooterEntry], palette: str) -> dict[str, FooterEntry]:
+    """One footer order on every screen: `esc` first, then the keys of the focused widget and the
+    screen in their own order, then `f1`, `f2` and the command palette."""
+    first = [key for key in ("escape",) if key in bindings]
+    last = [key for key in ("f1", "f2", palette) if key in bindings]
+    middle = [key for key in bindings if key not in first and key not in last]
+    return {key: bindings[key] for key in (*first, *middle, *last)}
+
+
 class ConsoleShell(Translated, Screen[ShellResult]):
     """The console's common frame: top bar, numbered main menu with the active section marked,
     breadcrumbs, a context strip, the screen's content, an optional context panel and the footer.
@@ -956,7 +968,7 @@ class ConsoleShell(Translated, Screen[ShellResult]):
         bindings = super().active_bindings
         keys = self.NARROW_FOOTER_KEYS
         if keys is None or self.app.size.width >= brand.NARROW_WIDTH:
-            return bindings
+            return footer_order(bindings, self.app.COMMAND_PALETTE_BINDING)
         palette = self.app.COMMAND_PALETTE_BINDING
         return {
             key: active
