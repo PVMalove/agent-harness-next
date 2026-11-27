@@ -98,7 +98,7 @@ def test_the_label_and_the_confirmation_reason_are_the_kernel_catalog_texts(
     assert by_key["uninstall-apply"]["confirmation_reason"] == (
         "Команда удаляет локальные данные — восстановить их нельзя."
     )
-    assert by_key["uninstall-apply"]["reversibility_label"] == "✖ удаление"
+    assert by_key["uninstall-apply"]["reversibility_label"] == "⊘ удаление"
 
 
 def test_availability_is_computed_for_the_served_project(tmp_path: Path) -> None:

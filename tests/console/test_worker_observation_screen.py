@@ -302,3 +302,29 @@ def test_the_context_names_the_block_reason_first_and_fits_long_values() -> None
     assert shown["Модель"] == "opus · high"
     assert shown["Сессия"] == "не наблюдалась"
     assert shown["Worktree"] == "…/feature-issue-887-kpi"
+
+
+def test_the_status_lines_word_the_process_ledger_stream_and_heartbeat() -> None:
+    from harness.console.tui.screens.worker_observation import (
+        heartbeat_line,
+        process_line,
+    )
+
+    snapshot = {
+        "state": "working",
+        "stream_state": "connected",
+        "heartbeat_at": "2026-11-08T11:35:00+00:00",
+        "last_event_age_seconds": 2,
+    }
+    assert (
+        process_line(snapshot, "live", "ru").plain
+        == "● процесс работает · ledger ▶ Выполняется · поток подключён"
+    )
+    assert process_line(snapshot, "absent", "en").plain.startswith(
+        "○ process not found"
+    )
+    assert (
+        heartbeat_line(snapshot, "ru").plain
+        == "heartbeat 08.11.2026 11:35:00 UTC · событие 2 с назад"
+    )
+    assert heartbeat_line({}, "en").plain == "heartbeat not observed · no events yet"

@@ -56,7 +56,7 @@ describe("the Harness commands panel", () => {
     expect(socket.request("job.catalog")).toMatchObject({ section: "harness" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Harness");
     expect(within(row("diff")).getByText("✔ обратимо")).toBeTruthy();
-    expect(within(row("uninstall-apply")).getByText("✖ удаление")).toBeTruthy();
+    expect(within(row("uninstall-apply")).getByText("⊘ удаление")).toBeTruthy();
     expect(screen.getByRole("tab", { name: /Команды/ }).getAttribute("aria-selected")).toBe("true");
   });
 
@@ -152,7 +152,7 @@ describe("the Harness commands panel", () => {
   test("in English the server's label and reasons are translated", () => {
     const { socket, list } = renderHarness();
     act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
-    expect(within(row("uninstall-apply")).getByText(catalog.en["✖ удаление"])).toBeTruthy();
+    expect(within(row("uninstall-apply")).getByText(catalog.en["⊘ удаление"])).toBeTruthy();
     act(() => fireEvent.click(screen.getByRole("button", { name: "Run uninstall-apply" })));
     expect(
       within(screen.getByRole("dialog")).getByText("The command deletes local data — it cannot be restored."),

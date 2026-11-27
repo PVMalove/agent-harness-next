@@ -487,6 +487,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             "down",
             "enter",
             "y",
+            "f1",
             "f2",
             self.app.COMMAND_PALETTE_BINDING,
         )
@@ -728,9 +729,9 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             ru = self._language != "en"
             if self._facts_error:
                 line = (
-                    "○ Состояние харнесса недоступно: "
+                    "✖ Состояние харнесса недоступно: "
                     if ru
-                    else "○ Harness state unavailable: "
+                    else "✖ Harness state unavailable: "
                 ) + self._facts_error
             else:
                 line = (
@@ -739,7 +740,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                     else "○ Loading the Harness state…"
                 )
             self.query_one("#harness-state", Static).update(
-                Text(line, style=brand.PALETTE["muted"])
+                Text(line, style=brand.PALETTE["error" if self._facts_error else "muted"])
             )
             self.query_one("#harness-state").tooltip = None
             self.query_one("#harness-usage", Static).update("")

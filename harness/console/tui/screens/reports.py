@@ -75,7 +75,7 @@ def _report_label(
     """One row: date, ticket, role badge and short id, then the stage status (symbol and label).
     A `Text`, never markup: the fields come from untrusted role output. The row wraps, never cuts."""
     at = console_reports.timestamp(entry.at)
-    date = at.strftime("%m-%d %H:%M") if at else "?"
+    date = at.strftime("%d.%m %H:%M") if at else "?"
     colour = brand.ROLE_COLORS.get(entry.role, brand.PALETTE["muted"])
     label = Text(f"{date:<11} {entry.ticket:<6} ")
     label.append(f"[{entry.role}]", style=f"bold {colour}")
@@ -360,15 +360,26 @@ class ReportsScreen(ConsoleShell):
         return f"хронология · {len(self.view.batches)}"
 
     def _empty_text(self) -> Text:
-        """The line under an empty list: why the ledger is unavailable, or that nothing matched."""
+        """The line under an empty list: still loading, why the ledger is unavailable, that the
+        ledger has no stage yet, or that the filters matched nothing."""
+        language = self._language()
+        if self.refreshing and not self.view.stages:
+            return Text(i18n.tr(language, "Загрузка…"), style=brand.PALETTE["muted"])
         if self.view.unavailable:
             return Text(
                 f"{brand.STATUS_ICONS['fail']} {self.view.unavailable}",
                 style=brand.STATUS_COLORS["fail"],
             )
+        if not self.view.stages:
+            return Text(
+                f"{brand.STATUS_ICONS['skipped']} "
+                + i18n.tr(language, "Стадий ещё нет: ни один dispatch не записан в ledger"),
+                style=brand.PALETTE["muted"],
+            )
         return Text(
             f"{brand.STATUS_ICONS['skipped']} "
-            + i18n.tr(self._language(), "Ничего не найдено")
+            + i18n.tr(language, "По фильтрам ничего не найдено"),
+            style=brand.PALETTE["muted"],
         )
 
     def _status(self) -> Text | str:
@@ -498,19 +509,21 @@ class ReportsScreen(ConsoleShell):
         table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
         table.add_column(ratio=1, overflow="fold")
         if entry is not None:
-            outcome = (
-                entry.report.outcome
-                if entry.report
-                else i18n.tr(language, "отчёт ещё не получен")
-            )
+            status = console_reports.stage_status(entry)
+            at = console_reports.timestamp(entry.at)
+            colour = brand.ROLE_COLORS.get(entry.role, brand.PALETTE["foreground"])
             for label, value in (
-                ("Тикет", entry.ticket),
-                ("Роль", entry.role),
-                ("Состояние", entry.state),
-                ("Итог", outcome),
-                ("Время", entry.at or i18n.tr(language, "время неизвестно")),
-                ("Batch", entry.batch_id),
-                ("Dispatch", entry.dispatch_id),
+                ("Тикет", Text(entry.ticket, style=f"bold {brand.PALETTE['primary']}")),
+                ("Роль", Text(entry.role, style=f"bold {colour}")),
+                ("Статус", Text(status.render(language), style=status.color)),
+                (
+                    "Время",
+                    Text(at.strftime("%d.%m.%Y %H:%M UTC"))
+                    if at
+                    else Text(i18n.tr(language, "время неизвестно"), style=brand.PALETTE["muted"]),
+                ),
+                ("Batch", Text(entry.batch_id)),
+                ("Dispatch", Text(entry.dispatch_id)),
             ):
                 table.add_row(i18n.tr(language, label), value)
         detail = self.query_one("#report-detail", Static)

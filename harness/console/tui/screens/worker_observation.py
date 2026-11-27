@@ -299,6 +299,73 @@ def execution_lines(summary: ExecutionSummary | None, t: Callable[[str], str]) -
     return lines
 
 
+# What the observer knows of the worker process: glyph, Russian and English words, colour.
+_PROCESS_WORDS = {
+    "live": ("●", "процесс работает", "process running", "success"),
+    "stopped": ("■", "процесс завершён", "process exited", "muted"),
+    "absent": ("○", "процесс не найден", "process not found", "warning"),
+}
+# The state of the worker's event stream: Russian and English words and colour.
+_STREAM_WORDS = {
+    "connected": ("поток подключён", "stream connected", "success"),
+    "waiting": ("поток ждёт событий", "stream waiting for events", "muted"),
+    "unavailable": ("поток недоступен", "stream unavailable", "warning"),
+}
+
+
+def process_line(snapshot: JsonObject, worker: str, language: str) -> Text:
+    """The process, the ledger state and the event stream in words, each in its colour."""
+    en = language == "en"
+    glyph, ru_word, en_word, colour = _PROCESS_WORDS.get(
+        worker, ("?", "процесс не наблюдается", "process not observed", "muted")
+    )
+    line = Text(f"{glyph} {en_word if en else ru_word}", style=brand.PALETTE[colour])
+    state = session_status(str(snapshot.get("state") or "unknown"))
+    line.append(" · ledger ", style=brand.PALETTE["muted"])
+    line.append(state.render(language), style=state.color)
+    stream = str(snapshot.get("stream_state") or "")
+    ru_stream, en_stream, stream_colour = _STREAM_WORDS.get(
+        stream, (f"поток: {stream or '—'}", f"stream: {stream or '—'}", "muted")
+    )
+    reason = snapshot.get("stream_reason")
+    line.append(" · ", style=brand.PALETTE["muted"])
+    line.append(
+        (en_stream if en else ru_stream) + (f" ({reason})" if reason else ""),
+        style=brand.PALETTE[stream_colour],
+    )
+    return line
+
+
+def heartbeat_line(snapshot: JsonObject, language: str) -> Text:
+    """The last heartbeat as a UTC time and the age of the last event in words."""
+    en = language == "en"
+    beat = reports.timestamp(str(snapshot.get("heartbeat_at") or ""))
+    line = Text("heartbeat ", style=brand.PALETTE["muted"])
+    line.append(
+        beat.strftime("%d.%m.%Y %H:%M:%S UTC")
+        if beat
+        else ("not observed" if en else "не наблюдался"),
+        style=brand.PALETTE["foreground" if beat else "muted"],
+    )
+    age = snapshot.get("last_event_age_seconds")
+    line.append(" · ", style=brand.PALETTE["muted"])
+    if isinstance(age, int | float) and not isinstance(age, bool):
+        line.append(
+            f"event {int(age)} s ago" if en else f"событие {int(age)} с назад",
+            style=brand.PALETTE["foreground"],
+        )
+    else:
+        line.append("no events yet" if en else "событий ещё нет", style=brand.PALETTE["muted"])
+    return line
+
+
+def _status_colour(line: str) -> str:
+    """The colour of a status note by its leading symbol: ⚠ warning, ✖ error, others muted."""
+    return brand.PALETTE[
+        "warning" if line.startswith("⚠") else "error" if line.startswith("✖") else "muted"
+    ]
+
+
 def timeline_rows(
     timeline: reports.BatchTimeline | None, limit: int = TIMELINE_LIMIT
 ) -> list[tuple[str, str, str, str]]:
@@ -407,7 +474,8 @@ def legend_text(language: str = "ru") -> Columns:
     items = []
     for kind in EVENT_KINDS:
         glyph, label, colour = _event_look(kind, "", language)
-        item = _chip(glyph, colour)
+        item = Text()
+        item.append_text(_chip(glyph, colour))
         item.append(f" {label}", style=brand.PALETTE["muted"])
         items.append(item)
     return Columns(items, padding=(0, 2))
@@ -627,7 +695,7 @@ class WorkerObservationScreen(ConsoleShell):
     WorkerObservationScreen #worker-badge { width: auto; color: $text-muted; }
     WorkerObservationScreen #worker-subtitle { height: 1; padding: 0 2; color: $text-muted; }
     WorkerObservationScreen #worker-pipeline { height: 2; padding: 0 2; }
-    WorkerObservationScreen #worker-status { height: auto; max-height: 5; padding: 0 2; border-top: solid $border-subtle; border-bottom: solid $border-subtle; color: $text-muted; }
+    WorkerObservationScreen #worker-status { height: auto; max-height: 6; padding: 0 2; border-top: solid $border-subtle; border-bottom: solid $border-subtle; color: $text-muted; }
     WorkerObservationScreen #worker-tabs { height: 1fr; }
     WorkerObservationScreen TabPane { padding: 0; }
     WorkerObservationScreen ContentSwitcher { height: 1fr; }
@@ -751,6 +819,15 @@ class WorkerObservationScreen(ConsoleShell):
         )
         if self.dispatch is None and self._choices:
             self._restart(self._choices[0][1])
+        elif self.dispatch is None:
+            # Nothing to choose: say why instead of asking for a choice.
+            language = getattr(self.app, "language", "ru")
+            self.query_one("#worker-subtitle", Static).update(
+                i18n.tr(language, "Рабочих сессий нет: ledger не записал ни одного dispatch")
+            )
+            self.query_one("#worker-status", Static).update(
+                i18n.tr(language, "○ Наблюдать нечего. Сессия появится, когда координатор запустит worker.")
+            )
         self._paint_sessions()
 
     def compose_strip(self) -> ComposeResult:
@@ -1046,14 +1123,12 @@ class WorkerObservationScreen(ConsoleShell):
                 self._last_operation = str(event.get("text") or "—").splitlines()[0][
                     :100
                 ]
-        glyph = {"live": "●", "stopped": "■", "absent": "○"}.get(worker, "?")
-        age = snapshot.get("last_event_age_seconds")
-        reason = snapshot.get("stream_reason")
-        stream = f"{snapshot.get('stream_state')}" + (f" ({reason})" if reason else "")
+        process = process_line(snapshot, worker, language)
+        heartbeat = heartbeat_line(snapshot, language)
         lines = [
             f"{snapshot.get('batch_id')} / {dispatch} · {snapshot.get('role')}",
-            f"{glyph} {t('Процесс')}: {worker} · ledger: {snapshot.get('state')} · {t('Поток')}: {stream}",
-            f"heartbeat: {snapshot.get('heartbeat_at') or t('не наблюдался')} · {t('Событие')}: {str(age) + 's' if age is not None else '—'}",
+            process.plain,
+            heartbeat.plain,
             f"{t('Операция')}: {self._last_operation}",
         ]
         exit_evidence = snapshot.get("runtime_exit")
@@ -1096,9 +1171,13 @@ class WorkerObservationScreen(ConsoleShell):
                 + t("Исход worker от наблюдения не зависит.")
             )
         self._paint_context(snapshot, worker, lines)
-        self.query_one("#worker-status", Static).update(
-            "\n".join(lines[1:3] + lines[4:])
-        )
+        status = Text()
+        status.append_text(process)
+        status.append("\n")
+        status.append_text(heartbeat)
+        for line in lines[4:]:
+            status.append("\n" + line, style=_status_colour(line))
+        self.query_one("#worker-status", Static).update(status)
         output = self.query_one("#worker-output", RichLog)
         if snapshot.get("reset"):
             output.write(

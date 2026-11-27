@@ -179,6 +179,8 @@ class RepoMapScreen(ConsoleShell):
         self._client = client
         self._command_runner = command_runner
         self.facts: RepoMapFacts | None = None
+        # Why the first snapshot was not read; empty while it is still being read.
+        self._load_error = ""
         self.head: str | None = None
         self.view: RepoMapView | None = None
         self._status_text, self._status_kind = "читаю снимок Repo Map…", "running"
@@ -401,6 +403,8 @@ class RepoMapScreen(ConsoleShell):
             )
             if self.facts is None:
                 self._set_status(failure, "error")
+                self._load_error = failure
+                self._render_map()
             return
         first = self.facts is None
         self.facts, self.head = facts, facts.head
@@ -447,6 +451,12 @@ class RepoMapScreen(ConsoleShell):
 
     # -- the map -------------------------------------------------------------------------------
 
+    def _no_map_text(self) -> str:
+        """What stands in for a missing map: still loading, not read, or really no map."""
+        if self.facts is None:
+            return "снимок Repo Map не прочитан" if self._load_error else "Загрузка…"
+        return _NO_MAP
+
     def _render_map(self) -> None:
         view = self.view
         language = self._language
@@ -455,10 +465,12 @@ class RepoMapScreen(ConsoleShell):
         self.query_one("#provenance-card").display = view is not None
         self.query_one("#map-index-row").display = view is not None
         if view is None:
+            placeholder = i18n.tr(language, self._no_map_text())
             summary.set_fields([])
             empty.display = True
-            self.query_one("#map-hubs", Static).update(_NO_MAP)
-            self.query_one("#map-diagnostics", Static).update(_NO_MAP)
+            empty.update(placeholder)
+            self.query_one("#map-hubs", Static).update(placeholder)
+            self.query_one("#map-diagnostics", Static).update(placeholder)
         else:
             empty.display = False
             fields = console_repo_map.summary_fields(view)
@@ -516,7 +528,7 @@ class RepoMapScreen(ConsoleShell):
         view = self.view
         language = self._language
         if view is None:
-            tree.root.set_label(i18n.tr(language, _NO_MAP))
+            tree.root.set_label(i18n.tr(language, self._no_map_text()))
             counter.update("")
             return
         tree.root.set_label(Text(f"{view.commit[:12]} · {view.tier}"))

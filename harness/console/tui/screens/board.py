@@ -515,11 +515,18 @@ class BoardScreen(ConsoleShell):
         """The shown cards in board order, a muted heading before each status when all are shown."""
         list_view.clear()
         if not self._shown:
+            # A failed read is not an empty board: the list says the board was not read.
+            if self._error:
+                empty = "Доска не прочитана: r — повторить"
+            elif self._board is not None and self._board.tickets:
+                empty = "По фильтрам ничего не найдено"
+            else:
+                empty = "Карточек нет"
             list_view.extend(
                 [
                     ListItem(
                         Static(
-                            i18n.tr(language, "Карточек нет"),
+                            i18n.tr(language, empty),
                             classes="board-empty",
                             markup=False,
                         ),

@@ -212,6 +212,17 @@ EN: dict[str, str] = {
     "○ Ожидание наблюдения": "○ Waiting for observation",
     "Данные проверки ещё не получены": "Check results not received yet",
     "Проверка доступов →": "Check access →",
+    "Кандидат на выпуск": "Release candidate",
+    "Ledger не прочитан": "Ledger not read",
+    "Batch ещё нет": "No batches yet",
+    "Стадий ещё нет: ни один dispatch не записан в ledger": "No stages yet: the ledger records no dispatch",
+    "По фильтрам ничего не найдено": "Nothing matches the filters",
+    "Доска не прочитана: r — повторить": "The board was not read: r retries",
+    "снимок Repo Map не прочитан": "Repo Map snapshot not read",
+    "Рабочих сессий нет: ledger не записал ни одного dispatch": "No worker sessions: the ledger records no dispatch",
+    "○ Наблюдать нечего. Сессия появится, когда координатор запустит worker.": "○ Nothing to observe. A session appears when the coordinator starts a worker.",
+    "Читаю ledger…": "Reading the ledger…",
+    "Публиковать нечего: в ledger нет ни одного batch. Как запустить первый, описано в Справке.": "Nothing to publish: the ledger has no batch. The Guide describes how to start the first one.",
     "Ожидание данных сессии": "Waiting for session data",
     "Разрешения и hooks действуют; монитор их не выдаёт.": "Permissions and hooks apply; the monitor does not grant them.",
     "не наблюдалась": "not observed",
@@ -836,6 +847,7 @@ RU_FROM_EN: dict[str, str] = {
 
 # Phrases inside longer dynamic text (statuses, summaries, plans); applied longest first.
 EN_PHRASES: dict[str, str] = {
+    "r — повторить; если ошибка повторяется, откройте Диагностику.": "r retries; if the error repeats, open Diagnostics.",
     "Контекст исполнителя": "Executor context",
     "Контекст проекта": "Project context",
     "Worker: выбранная сессия": "Worker: selected session",
@@ -1385,7 +1397,7 @@ EN.update(
         "✔ обратимые": "✔ reversible",
         "⚠ с подтверждением": "⚠ confirmation",
         "✔ обратимо": "✔ reversible",
-        "✖ удаление": "✖ deletion",
+        "⊘ удаление": "⊘ deletion",
         "⚠ внешнее": "⚠ external",
         "⚠ решение": "⚠ decision",
         "⚠ перезапись": "⚠ overwrite",
@@ -1413,7 +1425,7 @@ EN_PHRASES.update(
         if key
         in (
             "✔ обратимо",
-            "✖ удаление",
+            "⊘ удаление",
             "⚠ внешнее",
             "⚠ решение",
             "⚠ перезапись",

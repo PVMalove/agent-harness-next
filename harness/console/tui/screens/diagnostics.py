@@ -36,7 +36,7 @@ from ..shell import (
     check_route,
 )
 from ..logtext import colorize_log
-from ...kernel import brand, i18n
+from ...kernel import brand, check_rationale, i18n
 from ...kernel import data as console_data
 from ....health.model import CheckResult, Report
 from ....health.render import GROUP_LABELS_RU
@@ -632,12 +632,20 @@ class DiagnosticsScreen(ConsoleShell):
 
         self.run_worker(replace(), group=f"render-{selector}", exclusive=True)
 
+    def _check_title(self, check: CheckResult) -> str:
+        """The check's readable title in the console language; its id when it has none."""
+        ru, en = check_rationale.TITLES.get(check.id, (check.id, check.id))
+        return en if self._language == "en" else ru
+
     def _check_row(self, check: CheckResult) -> Text:
-        """A list row: the status symbol and id, then the muted message."""
+        """A list row: the status symbol and the check's readable title, the muted id and group,
+        then the muted message. A check without a title is titled by its id."""
+        title = self._check_title(check)
         text = _icon(check.status)
-        text.append(check.id, style=f"bold {brand.PALETTE['foreground']}")
-        group = GROUP_LABELS_RU.get(check.group, check.group)
-        text.append(f"  {i18n.tr(self._language, group)}", style=brand.PALETTE["muted"])
+        text.append(title, style=f"bold {brand.PALETTE['foreground']}")
+        group = i18n.tr(self._language, GROUP_LABELS_RU.get(check.group, check.group))
+        where = group if title == check.id else f"{check.id} · {group}"
+        text.append(f"  {where}", style=brand.PALETTE["muted"])
         text.append("\n" + check.message, style=brand.PALETTE["muted"])
         return text
 
@@ -689,10 +697,12 @@ class DiagnosticsScreen(ConsoleShell):
         remedy = Text()
         command = ""
         if check is not None:
+            title = self._check_title(check)
             detail.append_text(_icon(check.status))
-            detail.append(check.id + "\n", style=f"bold {brand.PALETTE['foreground']}")
-            group = GROUP_LABELS_RU.get(check.group, check.group)
-            detail.append(i18n.tr(language, group) + "\n", style=brand.PALETTE["muted"])
+            detail.append(title + "\n", style=f"bold {brand.PALETTE['foreground']}")
+            group = i18n.tr(language, GROUP_LABELS_RU.get(check.group, check.group))
+            where = group if title == check.id else f"{check.id} · {group}"
+            detail.append(where + "\n", style=brand.PALETTE["muted"])
             detail.append(check.message)
             fix = check.fix
             remedy = Text(

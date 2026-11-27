@@ -13,10 +13,10 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.widgets import Button, ListItem, ListView, Static
 
-from ...kernel import brand
-from ...kernel.reports import BatchSummary, LedgerView, StageEntry
+from ...kernel import brand, i18n
+from ...kernel.reports import BatchSummary, LedgerView, StageEntry, batch_status
 from ..client import ConsoleClientError, ScreenClient
-from ..shell import SHELL_CSS, ConsoleShell, ElidedPath, SectionCard, ShellIds
+from ..shell import SHELL_CSS, ConsoleShell, ElidedPath, SectionCard, ShellIds, fact_table
 from ..widgets import LiveDot
 from .commands import call_from_worker
 
@@ -34,6 +34,24 @@ def _check(stage: StageEntry | None) -> str:
     if stage is None or stage.report is None:
         return "warn"
     return "ok" if stage.report.outcome == "completed" else "fail"
+
+
+# A batch's PR state as the ledger records it, in the console language with its colour.
+_PR_STATES = {
+    "found": ("создан", "created", "success"),
+    "missing": ("не создан", "not created", "muted"),
+    "unknown": ("неизвестно", "unknown", "warning"),
+}
+
+
+def _pr_value(batch: BatchSummary, language: str, *, named: bool = True) -> Text:
+    """The PR link when the ledger has one, else the PR state in words, after `PR` when `named`
+    (a list row); a `PR` fact row already names it."""
+    if batch.pr_url:
+        return Text(batch.pr_url, style=brand.PALETTE["primary"])
+    ru, en, colour = _PR_STATES.get(batch.pr_state, (batch.pr_state, batch.pr_state, "muted"))
+    word = en if language == "en" else ru
+    return Text(f"PR {word}" if named else word, style=brand.PALETTE[colour])
 
 
 def _candidate(stages: list[StageEntry]) -> str:
@@ -105,10 +123,10 @@ class PublishScreen(ConsoleShell):
     def compose_content(self) -> ComposeResult:
         with Vertical(id="publish-page"):
             with Horizontal(id="publish-body"):
-                with SectionCard(title="Пакеты", id="publish-list-panel"):
+                with SectionCard(title="Batch", id="publish-list-panel"):
                     yield ListView(id="publish-batches")
                 with VerticalScroll(id="publish-right"):
-                    with SectionCard(title="Release candidate", id="publish-candidate"):
+                    with SectionCard(title="Кандидат на выпуск", id="publish-candidate"):
                         yield Static("", id="publish-detail-title", markup=False)
                         yield Static("", id="publish-detail-meta", markup=False)
                     with SectionCard(title="Preflight", id="publish-detail"):
@@ -130,7 +148,7 @@ class PublishScreen(ConsoleShell):
         self._epoch += 1
         epoch = self._epoch
         self._set_busy(True)
-        self._set_title("Читаю леджер…")
+        self._set_title("Читаю ledger…")
         client = self._client
 
         def work() -> None:
@@ -158,7 +176,24 @@ class PublishScreen(ConsoleShell):
         self._busy = False
         self._error = message
         self._set_busy(False)
-        self._set_title(message)
+        self._show_empty(
+            "Ledger не прочитан",
+            f"{message}\nr — повторить; если ошибка повторяется, откройте Диагностику.",
+        )
+
+    def _show_empty(self, title: str, detail: str) -> None:
+        """No batch to show: one line in the list, the reason and the next step on the right, and
+        no empty Preflight or decision cards."""
+        language = getattr(self.app, "language", "ru")
+        listing = self.query_one("#publish-batches", ListView)
+        listing.clear()
+        listing.extend(
+            [ListItem(Static(i18n.tr(language, title), classes="board-empty"), disabled=True)]
+        )
+        self._set_title(i18n.tr(language, title))
+        self.query_one("#publish-detail-meta", Static).update(i18n.tr_text(language, detail))
+        for card in ("#publish-detail", "#publish-decision"):
+            self.query_one(card).display = False
 
     def _loaded(self, view: LedgerView, epoch: int) -> None:
         if epoch != self._epoch:
@@ -168,14 +203,19 @@ class PublishScreen(ConsoleShell):
         self._view = view
         self._error = view.unavailable or ""
         batches = [batch for batch in view.batches if batch.batch_id]
+        if not batches:
+            if view.unavailable:
+                self._show_empty("Ledger не прочитан", view.unavailable)
+            else:
+                self._show_empty(
+                    "Batch ещё нет",
+                    "Публиковать нечего: в ledger нет ни одного batch. Как запустить первый, описано в Справке.",
+                )
+            return
+        for card in ("#publish-detail", "#publish-decision"):
+            self.query_one(card).display = True
         listing = self.query_one("#publish-batches", ListView)
         listing.clear()
-        if not batches:
-            listing.extend(
-                [ListItem(Static("Пакетов нет", classes="board-empty"), disabled=True)]
-            )
-            self._set_title("Пакетов нет")
-            return
         listing.extend(
             ListItem(
                 Static(self._batch_row(batch), classes="no-i18n", markup=False),
@@ -186,12 +226,12 @@ class PublishScreen(ConsoleShell):
         self._select(batches[0].batch_id)
 
     def _batch_row(self, batch: BatchSummary) -> Text:
+        language = getattr(self.app, "language", "ru")
+        status = batch_status(batch)
         text = Text()
         text.append(batch.ticket or "—", style=f"bold {brand.PALETTE['primary']}")
-        text.append(f"  {batch.state}\n", style=brand.PALETTE["muted"])
-        pr = batch.pr_url or batch.pr_state
-        if pr:
-            text.append(pr, style=brand.PALETTE["muted"])
+        text.append(f"  {status.render(language)}\n", style=status.color)
+        text.append_text(_pr_value(batch, language))
         return text
 
     def _select(self, batch_id: str) -> None:
@@ -213,14 +253,17 @@ class PublishScreen(ConsoleShell):
             ("Publish", _check(publish)),
         )
         self._set_title(f"{batch.ticket or '—'} · {batch.batch_id}")
-        meta = [
-            f"Состояние: {batch.state}",
-            f"Ветка: {batch.branch or '—'}",
-            f"PR: {batch.pr_url or '—'}",
-            f"PR state: {batch.pr_state}",
-            f"Кандидат: {_candidate(stages) or '—'}",
+        language = getattr(self.app, "language", "ru")
+        status = batch_status(batch)
+        candidate = _candidate(stages)
+        muted = brand.PALETTE["muted"]
+        meta: list[tuple[str, Text]] = [
+            ("Состояние", Text(status.render(language), style=status.color)),
+            ("Ветка", Text(batch.branch, style=brand.PALETTE["primary"]) if batch.branch else Text("—", style=muted)),
+            ("PR", _pr_value(batch, language, named=False)),
+            ("Кандидат", Text(candidate, style=brand.PALETTE["foreground"]) if candidate else Text("—", style=muted)),
         ]
-        self.query_one("#publish-detail-meta", Static).update("\n".join(meta))
+        self.query_one("#publish-detail-meta", Static).update(fact_table(meta, language))
 
         passed = sum(state == "ok" for _, state in checks)
         self.query_one("#publish-detail", SectionCard).set_note(

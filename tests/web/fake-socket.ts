@@ -144,7 +144,7 @@ export const COMMANDS = [
     title: "Удалить харнесс из проекта (с резервной копией изменённых файлов)",
     section: "harness",
     reversibility: "deletes-local-data",
-    reversibility_label: "✖ удаление",
+    reversibility_label: "⊘ удаление",
     needs_confirmation: true,
     confirmation_reason: "Команда удаляет локальные данные — восстановить их нельзя.",
     typed_confirmation: "UNINSTALL",
