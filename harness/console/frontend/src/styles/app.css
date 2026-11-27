@@ -641,7 +641,12 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   .work-fit > .work-panel > .decision-panel { grid-column: 1 / -1; max-height: 160px; overflow-y: auto; }
   /* Timeline and Statistics hold the panel; their long parts scroll inside. */
   .work-fit > .work-panel > .work-analytics { grid-column: 1 / -1; grid-row: 1 / -1; display: flex; flex-direction: column; overflow-y: auto; }
-  .work-fit .work-analytics .work-gantt { flex: 1 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
+  .work-fit .work-analytics .work-gantt { flex: 0 1 auto; max-height: none; min-height: 0; overflow-y: auto; }
+  /* A tab panel the user is not on stays hidden: `display: grid` above would override the hidden
+     attribute and leave an empty panel above the timeline and the statistics. */
+  .work-fit > .work-panel[hidden] { display: none; }
+  /* The timeline and the statistics panel are as tall as their rows, not the free height. */
+  .work-fit > .work-panel > .work-analytics { align-self: start; max-height: 100%; }
 }
 
 /* Orchestration on the v3 shell (#1095): the KPI facts of the summary, the stage strip, the
@@ -893,9 +898,13 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
     .work-analytics > .orch-legend, .orch-analytics-grid, .orch-analytics-rows, .work-observation-reason, .work-observation-title,
     .work-observation-facts, .work-observation-checkpoints, .route-select
   ) { padding-inline: 12px; }
-  /* A two-line list row keeps a .ds-row's 4 px above and below, not 12–16 px: the attention
-     list of Home, the report list and the dispatch list show more rows. */
-  .home-attn .it, .report-row, .orch-dispatch-row { padding-block: 4px; }
+  /* A two-line list row keeps a .ds-row's 4 px above and below, not 12–16 px: the lists of Home,
+     the reports, the dispatches, the checks and the sessions show more rows. */
+  .home-attn .it, .report-row, .orch-dispatch-row, .diag-row, .work-row, .task-row { padding-block: 4px; }
+  /* Chart groups of an analytics tab sit 12 px apart, as the charts inside a group, not 32 px
+     (the grid's bottom padding plus the block's margin). */
+  .orch-analytics { margin-bottom: 12px; }
+  .orch-analytics-grid { padding-bottom: 0; }
   /* The Home facts run under the title and the buttons across the page width, not in the column
      beside the buttons where they wrapped: the title block's children join the title's grid. */
   #home .home-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 16px; row-gap: 0; }
