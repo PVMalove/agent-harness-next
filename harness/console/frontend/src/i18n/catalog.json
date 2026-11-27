@@ -941,6 +941,7 @@
     "Ошибка записи в трекер: изменение не сохранено": "Tracker write error: the change was not saved",
     "Ошибка плана очистки: ": "Cleanup plan error: ",
     "Ошибки": "Errors",
+    "Ошибки · внимание": "Errors · warnings",
     "Пакет": "Package",
     "Пакет контекста": "Context package",
     "Пакет решения": "Decision packet",

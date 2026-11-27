@@ -24,10 +24,11 @@ export function KpiStrip({ snapshot, activity }: { snapshot: HomeSnapshot | null
       tone: health && health.fail === 0 ? "ok" : "",
     },
     {
-      label: t("Ошибки и предупреждения"),
+      // The label names both figures in their order, so the tile needs no caption repeating it.
+      label: t("Ошибки · внимание"),
       icon: "warning",
       value: health ? `${health.fail} · ${health.warn}` : null,
-      note: health ? `${t("ошибки")} · ${t("внимание")}` : null,
+      note: null,
       tone: health && health.fail > 0 ? "err" : "",
     },
     { label: t("Активные batch"), icon: "orchestration", value: batches === null ? null : String(batches), note: null },

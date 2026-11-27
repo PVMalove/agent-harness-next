@@ -175,6 +175,7 @@ EN: dict[str, str] = {
     "Выберите batch в истории": "Choose a batch in the history",
     "Плана нет: функция не переключается из консоли.": "No plan: the console cannot switch this feature.",
     "Весь вывод": "Full output",
+    "Ошибки · внимание": "Errors · warnings",
     "Тема: как в системе": "Theme: system",
     "Тема: светлая": "Theme: light",
     "Тема: тёмная": "Theme: dark",
