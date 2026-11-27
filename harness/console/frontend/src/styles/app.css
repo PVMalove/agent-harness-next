@@ -893,4 +893,9 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
     .work-analytics > .orch-legend, .orch-analytics-grid, .orch-analytics-rows, .work-observation-reason, .work-observation-title,
     .work-observation-facts, .work-observation-checkpoints, .route-select
   ) { padding-inline: 12px; }
+  /* A two-line list row keeps 6 px above and below, near a .ds-row's 4 px, not 12–16 px: the
+     attention list of Home, the report list and the dispatch list show more rows. */
+  .home-attn .it, .report-row, .orch-dispatch-row { padding-block: 6px; }
+  /* The facts line under the Home title takes the page width instead of wrapping at 68ch. */
+  .ds-main--legacy .home-title .home-facts { max-width: none; }
 }
