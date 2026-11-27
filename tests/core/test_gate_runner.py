@@ -280,7 +280,7 @@ class GateRunnerTests(unittest.TestCase):
                     subprocess.CompletedProcess(
                         [], 0, stdout="?? stray.txt\n", stderr=""
                     ),
-                    "internal invariant violated",
+                    "RCA phase of the diagnosing-bugs skill",
                 ),
             ):
                 with self.subTest(returncode=status_result.returncode):
