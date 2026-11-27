@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.2 — 26 November 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Added: 2 · Changed: 3 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
+<p class="ah-release-meta">Added: 2 · Changed: 4 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
 
 <p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions · orchestration progress in the console.</p>
 
@@ -29,6 +29,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
     - **[Fast session list]:** the worker session list of the "Work progress" screen shows 775 sessions within a fraction of a second after the ledger is read, instead of ~8 seconds, and the console keeps answering input meanwhile. The list stays complete, with the same cards and selection by mouse, keys and `alt+1`…`alt+3`. (#1286)
     - **[First developer checks]:** with `verification_plan_policy.ticket_diff_selection` and an `integration/*` target, the first developer gets checks selected by the expected diff (`base..snapshot` plus `--expected-file` from `batch preflight`) instead of the full `developer_verification_commands`: a ticket that changes only skill Markdown runs `lint` without the full pytest suite. The brief's verification plan names the reason `no-tests-in-diff` for the skipped tests. A batch without expected files, the flag off and a default-branch target keep the previous commands. (#1292)
     - **[/implement coordinator]:** after `batch preflight`, `/implement` shows the ticket estimate and offers `/fast-implement` when the ticket changes only documentation or skill texts or fits `fast_threshold`. Before `batch auto-decide` on a failed check, the coordinator finds out whether the diff causes it and, for an unrelated failure, waits for the developer's decision; it judges worker liveness only by `dispatch status`, and under `approval_policy: auto` it runs `batch approve` itself. (#1294)
+    - **[Console terms]:** the TUI, the web console and the orchestration health messages name entities as the project glossary does: batch, dispatch and ledger stay in English, «скилл» replaces «навык», «конвейер» replaces «пайплайн», and «консоль» replaces «пульт». (#1296)
 
     **Fixed**
 
