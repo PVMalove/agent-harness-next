@@ -11,6 +11,18 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 <div class="ah-releases" markdown="1">
 
+## v2.0.3 — 27 November 2026 {.ah-release-title}
+
+<p class="ah-release-meta">Fixed: 1 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.3">Open on GitHub</a></p>
+
+<p class="ah-release-summary">Highlights: the test author probe tells a model refusal from a hook failure.</p>
+
+??? note "Full notes"
+
+    **Fixed**
+
+    - **[Model refusal in the test author probe]:** `make test-author-probe` no longer fails with `the transcript has no Write call` when the model declines a forbidden step of the guard scenario without a tool call: the probe asks the model to make the call and leave the refusal to the hook, and if the call is still missing, it names the outcome `model_declined` and does not count it as a hook confirmation. The `test-author-probe-*.json` report of a failed call keeps the tool calls and the model's final answer, so the cause can be examined without another paid run. (#1298)
+
 ## v2.0.2 — 26 November 2026 {.ah-release-title}
 
 <p class="ah-release-meta">Added: 3 · Changed: 18 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
