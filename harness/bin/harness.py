@@ -56,6 +56,7 @@ sys.path.insert(0, str(ROOT))
 from harness.errors import HarnessError, print_and_exit
 from harness.branch_delete import BranchDeleteRefused, delete_merged_branch
 from harness.cleanup import apply_cleanup, plan_cleanup, plan_digest, remove_worktree
+from harness.fmea import db as fmea_db
 from harness.worktree_venv import WorktreeVenvError, link_worktree_venv
 from harness.source_checkout import SourceCheckoutError, update_source_checkout
 from harness.uninstall import (
@@ -1840,6 +1841,18 @@ def cmd_registry(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_fmea(args: argparse.Namespace) -> int:
+    """Напечатать запись FMEA по `title` или GUID из собранного SQLite-файла."""
+    entry = fmea_db.find_entry(args.key, fmea_db.DB_PATH)
+    print(f"FMEA: {entry.id} ({entry.title})")
+    print(f"mode: {entry.mode}")
+    print(f"detection: {entry.detection}")
+    print(f"recovery: {entry.recovery}")
+    print(f"test: {entry.test}")
+    print(f"residual_risk: {entry.residual_risk}")
+    return 0
+
+
 def cmd_lock_project_skills(args: argparse.Namespace) -> int:
     """Зафиксировать хэши файлов локальных проектных скиллов в overlay-lock файле."""
     repo = Path(args.repo).expanduser().resolve()
@@ -2420,6 +2433,16 @@ def parser() -> argparse.ArgumentParser:
     lock_project = commands.add_parser("lock-project-skills")
     lock_project.add_argument("repo")
     lock_project.set_defaults(func=cmd_lock_project_skills)
+
+    fmea = commands.add_parser("fmea", help="read the FMEA failure-mode catalog")
+    fmea_commands = fmea.add_subparsers(dest="fmea_operation", required=True)
+    fmea_show = fmea_commands.add_parser(
+        "show",
+        help="print a failure mode from .harness/fmea.db "
+        "(build it with `python scripts/fmea_catalog.py db`)",
+    )
+    fmea_show.add_argument("key", help="title or id (GUID) of the failure mode")
+    fmea_show.set_defaults(func=cmd_fmea)
 
     memory = commands.add_parser("memory", help="explicit offline project-memory cache")
     memory_commands = memory.add_subparsers(dest="memory_operation", required=True)
