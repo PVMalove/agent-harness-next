@@ -61,7 +61,7 @@ init/adopt/update. Установка требует подтверждения 
 | `1` | Открыть или подключить проект |
 | `2` | Открыть экран обновления Harness: версии, дрейф, diff, режим и подтверждённый запуск |
 | `3`–`9` | Открыть соответствующий раздел из таблицы выше с любого экрана общего каркаса |
-| `r` / `o` | Офлайн- / онлайн-проверки на главном экране; `r` в Reports обновляет списки |
+| `r` / `o` | Офлайн- / онлайн-проверки на главном экране и в Диагностике; `r` в Reports обновляет списки |
 | `p` | Открыть или подключить проект; «Публикация» в Оркестрации |
 | `y` | Скопировать полную CLI-строку выбранной команды (Harness, Orchestration) |
 | `Tab` | Следующий элемент экрана |
@@ -190,7 +190,7 @@ every screen. Conflicts in discovery paths and managed files must be resolved be
 | `1` | Open or connect a project |
 | `2` | Open the Harness update screen: versions, drift, diff, mode and a confirmed run |
 | `3`–`9` | Open the corresponding section in the table above from any shared-shell screen |
-| `r` / `o` | Offline / online checks on the home screen; `r` in Reports refreshes the lists |
+| `r` / `o` | Offline / online checks on the home screen and in Diagnostics; `r` in Reports refreshes the lists |
 | `p` | Open or connect a project; Publish in Orchestration |
 | `y` | Copy the full CLI line of the selected command (Harness, Orchestration) |
 | `Tab` | Next element on the screen |
