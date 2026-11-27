@@ -46,6 +46,36 @@ def test_a_step_keeps_its_arguments_and_gets_the_default_bound(
     }
 
 
+def _seen_options(
+    monkeypatch: pytest.MonkeyPatch, **options: object
+) -> dict[str, object]:
+    seen: dict[str, object] = {}
+
+    def fake_run(
+        command: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        seen.update(kwargs)
+        return subprocess.CompletedProcess(command, 0)
+
+    monkeypatch.setattr(support.subprocess, "run", fake_run)
+    support.run_step(["harness", "init"], **options)
+    return seen
+
+
+def test_a_step_never_reads_the_terminal_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _seen_options(monkeypatch)["stdin"] == subprocess.DEVNULL
+
+
+def test_a_step_keeps_the_stdin_its_caller_chose(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert _seen_options(monkeypatch, stdin=subprocess.PIPE)["stdin"] == (
+        subprocess.PIPE
+    )
+
+
 @pytest.mark.parametrize(
     ("helper", "returncode", "stdout"),
     [
