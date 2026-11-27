@@ -72,6 +72,17 @@ export function Recovery() {
   const isOpen = batch !== "" && batch === opened;
   const view = isOpen ? data?.view : null;
   const actions = view ? [...view.actions, ...(fixed === batch ? [FIX_APPLY] : [])] : [];
+  // The kernel opens the rows with the reason, the last confirmed boundary and the verdict; the
+  // summary keeps one line of them, the full list below shows every row.
+  const [reason, , verdict] = view?.rows ?? [];
+  const entry = data?.entry;
+  const openWhy = isOpen
+    ? t("Уже открыт")
+    : !entry || entry.batch_id !== batch
+      ? t("Выберите batch в истории")
+      : entry.enabled
+        ? ""
+        : t(entry.reason);
 
   const choose = (next: string) => {
     setChoice(next === opened ? null : next);
@@ -143,16 +154,16 @@ export function Recovery() {
           <div className="panel-head">
             <h2>{t("Состояние")}</h2>
           </div>
-          {view ? (
-            view.rows.slice(0, 3).map((row, index) => (
-              <div className="row" key={index}>
-                <div>
-                  <b>{t(row.label)}</b>
-                  <small>{t(row.value).split("\n")[0]}</small>
-                </div>
-                <span className={`status ${row.state === "ok" ? "active" : "warn"}`}>{row.mark ? t(row.mark) : "—"}</span>
+          {verdict && reason ? (
+            <div className="row" id="recovery-verdict">
+              <div>
+                <b>
+                  {t(verdict.label)}: {t(verdict.value)}
+                </b>
+                <small>{t(reason.value).split("\n")[0]}</small>
               </div>
-            ))
+              <span className={`status ${verdict.state === "ok" ? "active" : "warn"}`}>{verdict.mark ? t(verdict.mark) : "—"}</span>
+            </div>
           ) : (
             <div className="body">
               <p className="muted">
@@ -200,15 +211,16 @@ export function Recovery() {
           </div>
           <div className="recovery-entry">
             <span id="recovery-entry">{data.entry ? `${t(data.entry.mark)}  ${t(data.entry.reason)}` : ""}</span>
-            <button
-              id="recovery-open"
-              className="btn primary"
-              type="button"
-              disabled={!(data.entry?.enabled && data.entry.batch_id === batch) || isOpen}
-              onClick={open}
-            >
-              {t("Открыть recovery")}
-            </button>
+            <span className="recovery-open">
+              {(isOpen || !entry || entry.batch_id !== batch) && (
+                <small className="muted" id="recovery-open-why">
+                  {openWhy}
+                </small>
+              )}
+              <button id="recovery-open" className="btn primary" type="button" disabled={!(entry?.enabled && entry.batch_id === batch) || isOpen} title={openWhy || undefined} onClick={open}>
+                {t("Открыть recovery")}
+              </button>
+            </span>
           </div>
         </section>
       )}

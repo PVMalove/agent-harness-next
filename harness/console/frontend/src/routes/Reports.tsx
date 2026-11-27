@@ -50,7 +50,7 @@ function kpiRow(ledger: ReportsSnapshot, tiles: readonly Tile[], t: (text: strin
     0,
   );
   const staleTile: Tile = {
-    label: "Stale evidence",
+    label: t("Evidence устарела"),
     figure: String(stale),
     hint: t("нельзя считать актуальным"),
     tone: stale ? "warning" : "",

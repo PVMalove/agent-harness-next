@@ -323,7 +323,7 @@ export function FeaturesView({
           {current === null ? (
             <p className="ds-empty">{t("Выберите функцию")}</p>
           ) : current.toggle === null ? (
-            <p className="ds-note">{t(NO_KEY_REASON)}</p>
+            <p className="ds-empty">{t("Плана нет: функция не переключается из консоли.")}</p>
           ) : (
             <div className="ds-feature-plan">
               <dl className="ds-kv">

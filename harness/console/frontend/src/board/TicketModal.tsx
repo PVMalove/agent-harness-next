@@ -110,9 +110,11 @@ export function TicketModal({
                   {label}
                 </em>
               ))}
-              <em className="orch-pill mint" id="board-sp">
-                {card.sp ?? t("нет данных")} SP
-              </em>
+              {card.sp !== null && (
+                <em className="orch-pill mint" id="board-sp">
+                  {card.sp} SP
+                </em>
+              )}
             </div>
           </div>
           <button className="icon-btn" type="button" aria-label={t("Закрыть")} onClick={onClose}>

@@ -86,7 +86,7 @@ describe("the Open Project route", () => {
     expect(document.querySelector("#open-project-current .ds-project-icon svg")?.getAttribute("data-icon")).toBe("folder");
     const flow = document.querySelector("#open-project-flow") as HTMLElement;
     expect(flow.querySelector("h2")?.textContent).toBe("Схема внедрения");
-    expect([...flow.querySelectorAll(".ds-loop-node b")].map((node) => node.textContent)).toEqual(["Проект", "Harness", "Capability", "Runtime", "Health"]);
+    expect([...flow.querySelectorAll(".ds-loop-node b")].map((node) => node.textContent)).toEqual(["Проект", "Harness", "Capability", "Runtime", "Проверки"]);
     const capability = () => flow.querySelector("[data-flow-cap]")?.textContent;
     expect(capability()).toBe("engineering-suite");
     stepTo(2);
@@ -177,10 +177,10 @@ describe("the Open Project route", () => {
     expect(stats).toEqual([
       ["Harness", "1.5.1"],
       ["Скиллов", "32"],
-      ["Managed", "232"],
-      ["Health", "42/56"],
+      ["Управляемых файлов", "232"],
+      ["Проверки", "42/56"],
     ]);
-    expect(current.textContent).not.toContain("Managed");
+    expect(current.textContent).not.toContain("Управляемых файлов");
     expect(current.textContent).not.toContain("42/56");
     expect(document.querySelectorAll("main#content .ds-legacy-island")).toHaveLength(1);
     expect(document.querySelector("main#content .ds-legacy-island #open-project-steps, main#content .ds-legacy-island .ds-panel")).toBeNull();

@@ -17,9 +17,9 @@ import {
   ContainersPanel,
   InstallPanel,
   LoopPanel,
-  NoData,
   RuntimePanel,
 } from "../harness/HarnessOverview";
+import { NoData } from "../steps/ActivityViews";
 import { Maintenance } from "../harness/Maintenance";
 import { TabPanel } from "../views/Tabs";
 import { Icon } from "../icons";
@@ -126,9 +126,9 @@ export function Harness() {
           { label: t("Установлено"), value: state ? (state.installed ? state.installed_version : "—") : "—", caption: data ? t("доступно {version}", { version: data.package_version }) : unavailable },
           { label: "Runtime store", value: store?.schema != null ? `schema ${store.schema}` : t("нет данных"),
             caption: store ? `generation ${store.generation ?? "—"} · audit ${store.audit_records ?? "—"}` : unavailable },
-          { label: "Audit chain", value: store?.audit_records ?? t("нет данных"),
+          { label: t("Цепочка аудита"), value: store?.audit_records ?? t("нет данных"),
             caption: <>cutover {store?.cutover_at ? store.cutover_at : store?.authority === "file-ledger" ? t("не выполнен") : <NoData />}</> },
-          { label: "Skills", value: state ? state.skills : "—",
+          { label: t("Скиллы"), value: state ? state.skills : "—",
             caption: state ? `drift ${data?.drift_files ?? "—"} · ${t("{count} управляемых файлов", { count: state.managed_files })}` : unavailable },
         ]}
         facts={

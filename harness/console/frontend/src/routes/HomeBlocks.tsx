@@ -1,6 +1,7 @@
 /* The blocks of Home that are lists of numbers and events: the KPI strip and the last events. */
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
+import { NoData } from "../steps/ActivityViews";
 import { href } from "../navigation";
 import type { HomeActivity, HomeEvent, HomeSnapshot } from "../ws/types";
 import { healthTotal } from "../ws/types";
@@ -55,7 +56,7 @@ export function KpiStrip({ snapshot, activity }: { snapshot: HomeSnapshot | null
           <div className="label">
             <Icon name={tile.icon} /> {tile.label}
           </div>
-          {tile.value === null ? <b className="muted no-data">{t("нет данных")}</b> : <b className={tile.tone ?? ""}>{tile.value}</b>}
+          {tile.value === null ? <b><NoData /></b> : <b className={tile.tone ?? ""}>{tile.value}</b>}
           <span>{tile.note ?? "\u00a0"}</span>
         </div>
       ))}

@@ -8,17 +8,8 @@ import type { Tone } from "../ds";
 import { Icon } from "../icons";
 import { useI18n } from "../i18n";
 import { href } from "../navigation";
+import { NoData } from "../steps/ActivityViews";
 import type { HarnessOverview, MaintenanceView } from "../ws/screens";
-
-/** The explicit no-data value of a fact the console has no source for. */
-export function NoData({ why }: { why?: string }) {
-  const { t } = useI18n();
-  return (
-    <span className="ds-muted ds-nodata" title={why ?? t("Недоступно в текущем снимке")}>
-      {t("нет данных")}
-    </span>
-  );
-}
 
 type Translate = (text: string, values?: Record<string, string | number>) => string;
 

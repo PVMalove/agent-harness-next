@@ -11,7 +11,7 @@ import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
 import { PageHeader, Panel, PipeTabs, ScreenState, StatusIcon, Summary, Switch } from "../ds";
 import type { Tone as DsTone } from "../ds";
-import { NoData } from "../harness/HarnessOverview";
+import { NoData } from "../steps/ActivityViews";
 import { plural, useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";

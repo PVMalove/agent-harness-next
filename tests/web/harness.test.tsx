@@ -74,8 +74,8 @@ describe("the Harness route", () => {
     expect([...kpis().querySelectorAll(".ds-stat-label")].map((label) => label.textContent)).toEqual([
       "Установлено",
       "Runtime store",
-      "Audit chain",
-      "Skills",
+      "Цепочка аудита",
+      "Скиллы",
     ]);
     expect(within(kpis()).getByText("schema 3", { selector: ".ds-stat-value" })).toBeTruthy();
     expect(kpis().textContent).toContain("cutover не выполнен");
@@ -197,9 +197,9 @@ describe("the Harness route", () => {
     const containers = document.querySelector("#harness-tab-containers") as HTMLElement;
     // Every probe failed: the engine is named, each fact says no data with the probe's reason.
     expect(within(containers).getByText("docker", { selector: "b" })).toBeTruthy();
-    const daemon = containers.querySelector("#harness-engine .ds-nodata") as HTMLElement;
+    const daemon = containers.querySelector("#harness-engine .no-data") as HTMLElement;
     expect(daemon.title).toBe("docker info: код 1: Cannot connect to the Docker daemon");
-    const counts = containers.querySelectorAll("[data-fact='images-volumes'] .ds-nodata");
+    const counts = containers.querySelectorAll("[data-fact='images-volumes'] .no-data");
     expect([...counts].map((item) => (item as HTMLElement).title)).toEqual(["docker images: код 1", "docker volume ls: код 1"]);
     expect(within(containers).getAllByText("нет данных").length).toBeGreaterThan(4);
   });

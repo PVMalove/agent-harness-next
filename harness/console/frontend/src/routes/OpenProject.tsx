@@ -8,14 +8,14 @@
    sent nowhere. The only change the page can start is the installation into the served project,
    through the CommandPanel of the job section `setup`, and every run opens the confirmation first.
    Every step is a TabPanel (kept mounted) built of ds components; only the shared CommandPanel
-   still sits in `.ds-legacy-island`. The KPIs (Harness, Скиллов, Managed, Health) live in the
+   still sits in `.ds-legacy-island`. The KPIs (Harness, Скиллов, Управляемых файлов, Проверки) live in the
    summary only. */
 import { useState } from "react";
 import { CommandPanel } from "../commands/CommandPanel";
 import type { RunRequest } from "../commands/CommandPanel";
 import { PageHeader, Panel, PipeTabs, ScreenState, StatusIcon, Summary } from "../ds";
 import type { PipeTab, Tone } from "../ds";
-import { NoData } from "../harness/HarnessOverview";
+import { NoData } from "../steps/ActivityViews";
 import { useI18n } from "../i18n";
 import { Icon } from "../icons";
 import { href } from "../navigation";
@@ -99,7 +99,7 @@ function flowNodes(facts: OpenProjectFacts, home: HomeSnapshot | null, chosen: s
       : { icon: "store", label: "Runtime", value: t("нет данных"), sub: t(store ? "в проекте нет состояния оркестрации" : "снимок Home ещё не получен"), tone: "pending" },
     {
       icon: "pulse",
-      label: "Health",
+      label: t("Проверки"),
       value: health && total ? t("{ok}/{total} пройдено", { ok: health.ok, total }) : t("после установки"),
       sub: t("проверки — на странице «Диагностика»"),
       tone: "after",
@@ -370,8 +370,8 @@ export function OpenProject() {
         stats={[
           { label: "Harness", value: home?.harness?.installed ? home.harness.installed_version : "—", caption: home?.harness_version ? t("доступно {version}", { version: home.harness_version }) : <NoData /> },
           { label: t("Скиллов"), value: home?.harness?.skills || "—" },
-          { label: "Managed", value: home?.harness?.managed_files || "—" },
-          { label: "Health", value: health && total ? `${health.ok}/${total}` : "—" },
+          { label: t("Управляемых файлов"), value: home?.harness?.managed_files || "—" },
+          { label: t("Проверки"), value: health && total ? `${health.ok}/${total}` : "—" },
         ]}
         facts={
           facts ? (

@@ -240,7 +240,7 @@ describe("Home after the owner's review", () => {
     const rows = () => [...tasks.querySelectorAll(".task-row")];
     expect(icons(rows()[0].querySelector(".task-role")!)).toEqual(["developer"]);
     expect(icons(rows()[1].querySelector(".task-role")!)).toEqual(["qa"]);
-    expect(rows()[0].querySelector(".task-status")!.textContent).toContain("Активен");
+    expect(rows()[0].querySelector(".task-status")!.textContent).toContain("В работе");
     expect(icons(rows()[0].querySelector(".task-status")!)).toEqual(["play"]);
     expect(rows()[0].querySelector(".task-time")!.textContent).toBe("2 мин");
     expect(rows()[1].querySelector(".task-time")!.textContent).toBe("31 мин");
@@ -254,7 +254,7 @@ describe("Home after the owner's review", () => {
   test("the session route spans the panel with localized steps and marks the running step", () => {
     renderHome();
     const steps = [...document.querySelectorAll("#home-tasks .route-step")];
-    expect(steps.map((step) => step.querySelector("small")!.textContent)).toEqual(["Отчёт сдан", "Выполняется"]);
+    expect(steps.map((step) => step.querySelector("small")!.textContent)).toEqual(["Отчёт получен", "Выполняется"]);
     expect(steps[1].className).toContain("current");
     expect(icons(steps[0])).toEqual(["architect"]);
   });

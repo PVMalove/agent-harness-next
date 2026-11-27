@@ -142,7 +142,7 @@ describe("the Reports route", () => {
     expect(document.querySelectorAll("#reports-tabs .ds-pipe-tab")).toHaveLength(4);
     expect(document.querySelector("main .orch-pill")).toBeNull();
     const kpi = [...document.querySelectorAll("#reports-kpi > div > span")].map((item) => item.textContent);
-    expect(kpi).toEqual(["Evidence полно", "Stale evidence", "Задержка отчёта", "QA с первого раза"]);
+    expect(kpi).toEqual(["Evidence полно", "Evidence устарела", "Задержка отчёта", "QA с первого раза"]);
     expect(document.querySelector("#reports-kpi")!.textContent).not.toContain("С рисками");
     const row = document.querySelector("#report-filter-row")!;
     expect(row.querySelector("select#report-status")).not.toBeNull();

@@ -126,7 +126,7 @@ describe("the ticket modal", () => {
     expect(modal.querySelector("h2")?.textContent).toBe("<script>alert(1)</script> Небезопасный заголовок");
     expect(modal.querySelector(".board-modal-links a")).toBeNull();
     expect(modal.querySelector(".board-blocker em")?.textContent).toBe("нет данных");
-    expect(modal.querySelector("#board-sp")?.textContent).toBe("нет данных SP");
+    expect(modal.querySelector("#board-sp")).toBeNull();
     act(() => fireEvent.click(screen.getByRole("tab", { name: "Acceptance (2)" })));
     expect([...modal.querySelectorAll(".board-acceptance li")].map((item) => item.textContent)).toEqual([
       "<b>не HTML</b>",

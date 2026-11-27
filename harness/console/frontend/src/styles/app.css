@@ -183,6 +183,7 @@
 .view-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
 .view-action { display: inline-flex; flex-direction: column; gap: 2px; max-width: 100%; }
 .view-action-reason { max-width: 260px; color: var(--muted); font-size: var(--fs-1); overflow-wrap: anywhere; }
+.recovery-open { display: inline-flex; align-items: center; gap: 8px; }
 .recovery-inputs { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 16px 12px; }
 .recovery-inputs input { flex: 1 1 160px; min-width: 0; }
 .command-confirm .board-confirm-note { white-space: pre-line; overflow-wrap: anywhere; }
@@ -240,7 +241,7 @@ main#content:has(> .board-page) { display: flex; flex-direction: column; min-hei
 .board-confirm-diff { flex-wrap: wrap; }
 .board-modal-links select { max-width: 100%; }
 /* Mockup parity: a field without a data source shows an explicit no-data state in its place. */
-.no-data { font-style: normal; color: var(--muted); }
+.no-data { font-style: normal; font-weight: 400; font-size: var(--ds-fs-2); color: var(--muted); }
 /* A multi-line kernel value renders as lines, not as a string with line breaks. */
 .view-line { display: block; overflow-wrap: anywhere; }
 /* The gate latency trend of Orchestration → Гейты: a lone hour of the mockup's line chart is a dot. */
@@ -845,7 +846,7 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
 /* UX review of #1296 (wide): a row's focus ring stays inside its scrolling list; the preflight
    reads name first, status on the right, in one aligned column; Publish gives the candidates
    less width than the detail. */
-.ds-panel-body :is(.ds-row, .report-row, .orch-dispatch-row, .work-row):focus-visible { outline-offset: -2px; }
+:is(.ds-panel-body, .panel) :is(.ds-row, .report-row, .orch-dispatch-row, .work-row, .task-row):focus-visible { outline-offset: -2px; }
 .publish-preflight .publish-check { grid-template-columns: minmax(0, 1fr) max-content; }
 .publish-preflight .publish-check > :last-child { justify-self: end; }
 @media (min-width: 1200px) {

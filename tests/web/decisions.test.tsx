@@ -147,10 +147,10 @@ test("a disconnect invalidates the choice and reconnect refreshes without replay
 test("the work view includes native requests and translates the decision context to English", () => {
   const { socket } = open("agent-activity");
   answer(socket, fixture.snapshot.items);
-  expect(screen.queryByText("Approval dispatch")).toBeNull();
+  expect(screen.queryByText("Одобрение dispatch")).toBeNull();
   act(() => fireEvent.click(screen.getByRole("button", { name: "EN · Английский язык" })));
   expect(screen.getByRole("heading", { name: "Pending decisions" })).toBeTruthy();
-  expect(screen.getByRole("heading", { name: "Native permission request" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Native runtime permission request" })).toBeTruthy();
 });
 
 test("the work view keeps the decision job result after its last native request disappears", () => {

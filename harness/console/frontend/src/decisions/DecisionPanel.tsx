@@ -10,7 +10,7 @@ import type { DecisionItem } from "../ws/decisions";
 import { useDecisions } from "./useDecisions";
 
 const KINDS: Readonly<Record<string, string>> = {
-  "native-permission": "Запрос native permission", "dispatch-approval": "Approval dispatch",
+  "native-permission": "Запрос разрешения native runtime", "dispatch-approval": "Одобрение dispatch",
   "report-decision": "Решение по отчёту", "batch-approval": "Утверждение batch", attention: "Требуется внимание",
 };
 

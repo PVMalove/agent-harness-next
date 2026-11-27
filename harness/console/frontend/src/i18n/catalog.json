@@ -9,7 +9,6 @@
     "03 · Решай": "03 · Decide",
     "? неизвестно": "? unknown",
     "Acceptance ({count})": "Acceptance ({count})",
-    "Approval dispatch": "Dispatch approval",
     "Approve плана": "Plan approval",
     "Backend": "Backend",
     "Backend — workflow и роли; добавляет orchestration.json": "Backend — workflow and roles; adds orchestration.json",
@@ -45,6 +44,7 @@
     "Enter — хронология": "Enter — timeline",
     "Evidence по стадиям": "Evidence by stage",
     "Evidence полно": "Evidence complete",
+    "Evidence устарела": "Stale evidence",
     "F3 QA-логи": "F3 QA logs",
     "Findings нет": "No findings",
     "Findings по severity": "Findings by severity",
@@ -70,6 +70,7 @@
     "In-process воркер работает внутри сессии coordinator и не отдаёт поток событий. Ход работы виден по heartbeat, self-report модели и чекпоинтам.": "An in-process worker runs inside the coordinator session and has no event stream. Follow its progress through the heartbeat, the model self-report and the checkpoints.",
     "Job уже не выполняется": "The job is no longer running",
     "Ledger не прочитан": "Ledger not read",
+    "Ledger недоступен": "The ledger is unavailable",
     "Ledger оркестрации недоступен: перенос не записан": "The orchestration ledger is unavailable: the move was not written",
     "Lock обновлён": "Lock updated",
     "Markdown": "Markdown",
@@ -259,7 +260,6 @@
     "Активное время роли не отделено от ожидания в ledger": "The ledger does not separate a role's active time from waiting",
     "Активные": "Active",
     "Активные batch": "Active batches",
-    "Активный batch": "Active batch",
     "Активный batch {batch}": "Active batch {batch}",
     "Активных сессий нет. Откройте «Оркестрация», чтобы выбрать задачу.": "No active sessions. Open Orchestration to choose a task.",
     "Аналитика": "Analytics",
@@ -281,6 +281,7 @@
     "Бэклог": "Backlog",
     "В provenance парсера нет max_tokens": "The parser provenance has no max_tokens",
     "В provenance парсера нет python_tag и platform_tag": "The parser provenance has no python_tag or platform_tag",
+    "В активном batch": "In an active batch",
     "В выбранной спеке пока нет тикетов. Разбейте спеку через /to-tickets.": "The selected spec has no tickets yet. Split the spec with /to-tickets.",
     "В плане очистки нет контейнеров": "The cleanup plan has no containers",
     "В плане очистки нет контейнеров и сетей": "The cleanup plan has no containers or networks",
@@ -350,6 +351,7 @@
     "Всё из workflow плюс роли и координатор; добавляет orchestration.json. Выбирайте для backend-проекта с автоматизацией этапов.": "Everything from workflow plus roles and the coordinator; adds orchestration.json. Choose it for a backend project with stage automation.",
     "Входящие": "Incoming",
     "Вы пришли с экрана": "Opened from",
+    "Выберите batch в истории": "Choose a batch in the history",
     "Выберите batch, чтобы открыть его хронологию": "Choose a batch to open its timeline",
     "Выберите worker": "Select worker",
     "Выберите версию": "Select a version",
@@ -536,7 +538,6 @@
     "Заполняет тело PR по шаблону из diff, коммитов и результата qa-gate.": "Fills the PR body from the template using the diff, the commits and the qa-gate result.",
     "Запрещает агентам менять политику хуков и перепроверяет чувствительные пути.": "Forbids agents to change the hook policy and rechecks sensitive paths.",
     "Запрос native": "Native prompt",
-    "Запрос native permission": "Native permission request",
     "Запрос отменён": "Request cancelled",
     "Запрос разрешения native runtime": "Native runtime permission request",
     "Запросить предложение": "Request a proposal",
@@ -823,6 +824,7 @@
     "Обновление управляемых файлов": "Updating the managed files",
     "Обновление управляемых файлов Harness в проекте сервера; перед запуском — подтверждение.": "Updates the managed Harness files of the server’s project; a confirmation comes first.",
     "Обновление…": "Refreshing…",
+    "Обновлено": "Updated",
     "Обновятся управляемые файлы харнесса:": "Managed harness files will be updated:",
     "Оболочка qa-gate": "qa-gate shell",
     "Образ": "Image",
@@ -840,6 +842,7 @@
     "Одна доска на спеку. Колонки, блокеры и переносы соответствуют трекеру.": "One board per spec. Columns, blockers and moves follow the tracker.",
     "Одновременных batch": "Concurrent batches",
     "Одобрение": "Approval",
+    "Одобрение dispatch": "Dispatch approval",
     "Одобрение человеком": "Human approval",
     "Одобрить и создать dispatch": "Approve and create the dispatch",
     "Одобрить и создать dispatch QA": "Approve and create the QA dispatch",
@@ -980,6 +983,7 @@
     "План переключения": "Switch plan",
     "План появится после проверки пути.": "The plan appears after the path is checked.",
     "План установки": "Install plan",
+    "Плана нет: функция не переключается из консоли.": "No plan: the console cannot switch this feature.",
     "Платформа": "Platform",
     "По возрастанию": "Ascending",
     "По времени": "By time",
@@ -1439,6 +1443,7 @@
     "Трекер недоступен: смена статуса не записана": "The tracker is unavailable: the status change was not written",
     "Трекер определяется по remote": "The tracker is derived from the remote",
     "Тренд latency за сутки": "Latency trend over a day",
+    "У задачи нет ссылки в трекере": "The ticket has no tracker link",
     "У тикета активный batch или PR": "The ticket has an active batch or PR",
     "Удаление выполняется только командами очистки с подтверждением на вкладке «Команды».": "Removal runs only through the cleanup commands with a confirmation in the Commands tab.",
     "Удаление харнесса из проекта: план": "Remove Harness from the project: plan",
@@ -1528,6 +1533,7 @@
     "Хуков": "Hooks",
     "Цель": "Target",
     "Цепочка audit не читается консолью: показано только число записей.": "The console does not read the audit chain: only the record count is shown.",
+    "Цепочка аудита": "Audit chain",
     "Цикл до PR": "Cycle to PR",
     "Цикл до PR p50 / p95": "Cycle to PR p50 / p95",
     "Частично": "Partial",
@@ -1607,6 +1613,7 @@
     "в плане {count}": "{count} in the plan",
     "в проекте нет состояния оркестрации": "the project has no orchestration state",
     "в работе": "in progress",
+    "в сети": "online",
     "в справке консоли": "in the console guide",
     "варианты:": "choices:",
     "ваши правки": "your changes",
@@ -1683,7 +1690,6 @@
     "закреплённый SHA": "pinned SHA",
     "закрыт после merge": "closed after merge",
     "замечаний нет": "no findings",
-    "занято": "busy",
     "записей нет": "no records",
     "запланирован": "planned",
     "запуск роли": "role start",
@@ -1695,6 +1701,7 @@
     "итог": "outcome",
     "итог стадии": "stage result",
     "итог: {verdict} — команд {total}, с ошибкой {failed}": "result: {verdict} — {total} commands, {failed} failed",
+    "итоговые значения": "resolved values",
     "карта для HEAD": "map for HEAD",
     "карты для HEAD нет": "no map for HEAD",
     "карты нет": "no map",
@@ -1722,6 +1729,7 @@
     "наблюдаемые данные": "observed data",
     "наблюдаемые факты": "observed facts",
     "наблюдаемый факт": "observed fact",
+    "назад": "ago",
     "название": "title",
     "назначение": "purpose",
     "назначено": "assigned",
@@ -1760,6 +1768,7 @@
     "незавершённые batch": "unfinished batches",
     "незавершённые этапы по ролям": "unfinished stages by role",
     "неизвестно": "unknown",
+    "нельзя взять в другой batch": "cannot join another batch",
     "нельзя перенести": "cannot be moved",
     "нельзя считать актуальным": "cannot count as current",
     "нет": "none",
@@ -1791,7 +1800,6 @@
     "обновится": "will be updated",
     "обновление": "update",
     "обновление выполняется": "an update is running",
-    "обновлено": "updated",
     "обновлён": "updated",
     "обновятся": "will be updated",
     "объект": "object",
@@ -1821,6 +1829,7 @@
     "ошибки": "errors",
     "первый прогон QA": "first QA run",
     "передача человеку": "handoff to a human",
+    "переподключение": "reconnecting",
     "переработки и evidence": "rework and evidence",
     "переходы batch": "batch transitions",
     "переходы dispatch": "dispatch transitions",
@@ -2422,19 +2431,19 @@
   "states": {
     "abandoned": {
       "en": "Abandoned",
-      "ru": "Брошен"
+      "ru": "Брошено"
     },
     "accepted": {
       "en": "Accepted",
       "ru": "Принят"
     },
     "active": {
-      "en": "Active",
-      "ru": "Активен"
+      "en": "In progress",
+      "ru": "В работе"
     },
     "approved": {
       "en": "Approved",
-      "ru": "Одобрен"
+      "ru": "Одобрено"
     },
     "awaiting-approval": {
       "en": "Awaiting decision",
@@ -2450,11 +2459,11 @@
     },
     "canceled": {
       "en": "Cancelled",
-      "ru": "Отменён"
+      "ru": "Отменено"
     },
     "cancelled": {
       "en": "Cancelled",
-      "ru": "Отменён"
+      "ru": "Отменено"
     },
     "clean": {
       "en": "Clean",
@@ -2462,7 +2471,7 @@
     },
     "closed": {
       "en": "Closed",
-      "ru": "Закрыт"
+      "ru": "Закрыто"
     },
     "completed": {
       "en": "Completed",
@@ -2470,11 +2479,11 @@
     },
     "current": {
       "en": "Up to date",
-      "ru": "Актуальна"
+      "ru": "Актуально"
     },
     "dispatched": {
       "en": "Dispatched",
-      "ru": "Отправлен"
+      "ru": "Отправлено"
     },
     "done": {
       "en": "Done",
@@ -2506,7 +2515,7 @@
     },
     "found": {
       "en": "Found",
-      "ru": "Найден"
+      "ru": "Найдено"
     },
     "info": {
       "en": "Info",
@@ -2514,7 +2523,7 @@
     },
     "merged": {
       "en": "Merged",
-      "ru": "Слит"
+      "ru": "Влито"
     },
     "missing": {
       "en": "Missing",
@@ -2546,11 +2555,11 @@
     },
     "open": {
       "en": "Open",
-      "ru": "Открыт"
+      "ru": "Открыто"
     },
     "outdated": {
       "en": "Outdated",
-      "ru": "Устарела"
+      "ru": "Устарело"
     },
     "owner-alive": {
       "en": "Owner alive",
@@ -2574,7 +2583,7 @@
     },
     "published": {
       "en": "Published",
-      "ru": "Опубликован"
+      "ru": "Опубликовано"
     },
     "queued": {
       "en": "Queued",
@@ -2589,8 +2598,8 @@
       "ru": "Отклонён"
     },
     "reported": {
-      "en": "Reported",
-      "ru": "Отчёт сдан"
+      "en": "Report received",
+      "ru": "Отчёт получен"
     },
     "running": {
       "en": "Running",

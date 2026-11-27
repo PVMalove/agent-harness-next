@@ -82,6 +82,7 @@ export function Bar({ value, max, tone = "cyan" }: { value: number; max: number;
   );
 }
 
+/** The one no-data token: a muted caption-size word, the reason in its tooltip. */
 export function NoData({ why }: { why?: string }) {
   const { t } = useI18n();
   return (

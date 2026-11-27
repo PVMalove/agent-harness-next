@@ -438,7 +438,7 @@ function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activi
             </g>
             <g className="ct-node">
               <rect x="342" y="292" width="250" height="54" rx="7" />
-              <text className="ct-title" x="355" y="311">Audit chain</text>
+              <text className="ct-title" x="355" y="311">{t("Цепочка аудита")}</text>
               <text className="ct-sub" x="355" y="327">{t("{count} записей", { count: fact(store?.audit_records) })}</text>
             </g>
             <g className="ct-node">
@@ -507,7 +507,7 @@ function Contour({ snapshot, activity }: { snapshot: HomeSnapshot | null; activi
 }
 
 export function Home() {
-  const { t, section, fact, language, state: stateText, plural } = useI18n();
+  const { t, section, fact, language, state: stateText, plural, duration } = useI18n();
   const { state, client, replies, events, recentEvents, snapshotAt, repliedAt: checkedAt } = useConsole();
   const [online, setOnline] = useState(false);
   const [filter, setFilter] = useState<"all" | "problem" | "skipped">("all");
@@ -578,7 +578,7 @@ export function Home() {
                 {install ? <span>{t("{count} скиллов", { count: install.skills })}</span> : null}
                 {snapshot.repo_map.tier ? <span>Repo Map {snapshot.repo_map.tier}</span> : null}
                 <span id="snapshot-status">
-                  {state.cached ? t("Кэш") : t("Новый снимок")} · {state.ageSeconds ?? 0} s
+                  {state.cached ? t("Кэш") : t("Новый снимок")} · {duration(state.ageSeconds ?? 0)}
                 </span>
               </>
             ) : (

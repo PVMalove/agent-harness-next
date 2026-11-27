@@ -100,7 +100,7 @@ function Overview({ facts, store, onRun }: { facts: ConfigurationFacts; store: S
           </div>
           <p className="ds-note">{facts.transaction_pending ? t("Есть незавершённая запись: сначала восстановите её.") : t("Незавершённой записи нет.")}</p>
         </Panel>
-        <Panel title={t("Политики")} id="configuration-policy" meta="resolved values" fill scroll="list">
+        <Panel title={t("Политики")} id="configuration-policy" meta={t("итоговые значения")} fill scroll="list">
           {params.length === 0 ? (
             <p className="ds-note"><NoData why={t("Сервер не прислал каталог параметров")} /></p>
           ) : (
