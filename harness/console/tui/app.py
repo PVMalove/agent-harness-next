@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from functools import partial
 from pathlib import Path
 from threading import Lock
 from typing import Iterable, Mapping, Sequence, cast
@@ -27,6 +28,7 @@ from .client import ConsoleClientError, HomeClient, ScreenClient
 from ..launcher import restart_console
 from ..kernel.runner import CommandRunner, capturing_runner
 from .screens.dashboard import DashboardScreen
+from .shell import SECTION_KEYS, SECTIONS, ConsoleShell
 from .style import ThinScrollBarRender
 
 HARNESS_THEME = Theme(
@@ -54,6 +56,21 @@ HARNESS_THEME = Theme(
         "row-highlight": brand.SHELL_TOKENS["row-highlight"],
     },
 )
+
+
+def section_commands(screen: object, language: str) -> Iterable[SystemCommand]:
+    """A palette entry per menu section, named by its key so the sections head the list in menu
+    order (`0 · Главная` … `p · Публикация`); choosing one opens the section as its key does. A
+    screen outside the console shell has no sections."""
+    if not isinstance(screen, ConsoleShell):
+        return
+    hint = "Раздел меню" if language != "en" else "Menu section"
+    for index, name in enumerate(SECTIONS):
+        yield SystemCommand(
+            f"{SECTION_KEYS[name]} · {i18n.section_label(language, name)}",
+            hint,
+            partial(screen.action_section, index),
+        )
 
 
 class HarnessConsoleApp(App[None]):
@@ -115,7 +132,7 @@ class HarnessConsoleApp(App[None]):
     }
     CommandPalette #--results { overlay: none; height: auto; }
     CommandPalette CommandList {
-        height: auto; max-height: 16; border: none; padding: 0; background: transparent;
+        height: auto; max-height: 24; border: none; padding: 0; background: transparent;
     }
     CommandPalette CommandList > .option-list--option { padding: 0 1; }
     CommandPalette CommandList > .option-list--option-highlighted,
@@ -300,9 +317,12 @@ class HarnessConsoleApp(App[None]):
             title, help_text = i18n.palette_command(
                 self.language, command.title, command.help
             )
-            yield command._replace(title=title, help=help_text)
+            # The trailing line break leaves a blank line after each entry, so the entries do not
+            # run together.
+            yield command._replace(title=title, help=f"{help_text}\n")
 
     def _console_commands(self, screen: Screen[object]) -> Iterable[SystemCommand]:
+        yield from section_commands(screen, self.language)
         # The console draws with its own brand palette, so Textual's theme switch would leave
         # those colours on a foreign background; the palette does not offer it.
         yield from (

@@ -361,3 +361,22 @@ def test_a_fact_value_wraps_at_its_separators_and_keeps_its_styles() -> None:
     segments = list(console.render(SeparatorWrap(styled), console.options))
     styles = {str(segment.style) for segment in segments if segment.text.strip()}
     assert {"bold", "blue"} <= styles
+
+
+def test_the_palette_opens_every_section_by_its_key_in_menu_order() -> None:
+    from textual.screen import Screen
+
+    from harness.console.kernel import i18n
+    from harness.console.tui.app import section_commands
+    from harness.console.tui.shell import SECTION_KEYS
+
+    class _Shell(ConsoleShell):
+        pass
+
+    commands = list(section_commands(_Shell(), "ru"))
+    assert [command.title for command in commands] == [
+        f"{SECTION_KEYS[name]} · {i18n.section_label('ru', name)}" for name in SECTIONS
+    ]
+    assert commands[5].title == "5 · Оркестрация"
+    assert list(section_commands(Screen(), "ru")) == []
+    assert i18n.palette_command("ru", "Language / Язык", "")[0] == "Язык / Language"

@@ -66,6 +66,24 @@ def render_actions(actions: Sequence[Action], language: str) -> list[str]:
     ]
 
 
+def group_title(group: str, language: str) -> str:
+    """A readable title of a fact group: `access_policy.roles.developer` reads «Доступ роли
+    developer»; any other group is its own title, translated."""
+    parts = group.split(".")
+    if parts == ["access_policy", "defaults"]:
+        return _t(language, "Доступ по умолчанию")
+    if len(parts) == 3 and parts[0] == "access_policy" and parts[1] in _GROUP_TEMPLATES:
+        return _t(language, _GROUP_TEMPLATES[parts[1]]).format(name=parts[2])
+    return _t(language, group)
+
+
+# The title of an `access_policy.<section>.<name>` group; `{name}` is the role or the operation.
+_GROUP_TEMPLATES = {
+    "roles": "Доступ роли {name}",
+    "operations": "Доступ операции {name}",
+}
+
+
 def render_body(
     rows: Sequence[Row],
     blockers: Sequence[str],
@@ -89,9 +107,15 @@ def render_body(
     for row in rows:
         if row.group != group:
             group = row.group
+            # A blank line and a readable title open each group; its rows are indented.
+            if parts and parts[-1]:
+                parts.append("")
             if group:
-                parts.append(_t(language, group).upper())
-        parts.append(render_row(row, language, narrow))
+                parts.append(group_title(group, language))
+        line = render_row(row, language, narrow)
+        if group:
+            line = "\n".join(f"  {part}" for part in line.split("\n"))
+        parts.append(line)
     unavailable = render_actions(actions, language)
     if unavailable:
         parts.append("")
@@ -193,7 +217,10 @@ class ContainerRouteScreen(ConsoleShell):
     ContainerRouteScreen #route-page { height: 1fr; padding: 0 2; }
     ContainerRouteScreen #route-title { height: 1; text-style: bold; margin-bottom: 1; }
     ContainerRouteScreen #route-select { height: auto; margin-bottom: 1; }
-    ContainerRouteScreen #route-select Input { width: 1fr; margin-right: 1; }
+    ContainerRouteScreen #route-select .route-field { width: 1fr; height: auto; margin-right: 1; }
+    ContainerRouteScreen #route-select .route-field-label { height: 1; color: $text-muted; }
+    ContainerRouteScreen #route-select Input { width: 100%; }
+    ContainerRouteScreen #route-choose { margin-top: 1; }
     ContainerRouteScreen #route-tabs { height: auto; margin-bottom: 1; }
     ContainerRouteScreen #route-tabs Button { margin-right: 1; }
     ContainerRouteScreen #route-tab-reason { height: auto; color: $text-muted; margin-bottom: 1; }
@@ -203,7 +230,7 @@ class ContainerRouteScreen(ConsoleShell):
     ContainerRouteScreen #route-approver { margin-top: 1; }
     ContainerRouteScreen #route-status { height: auto; margin-top: 1; }
     ContainerRouteScreen.-narrow #route-select { layout: vertical; }
-    ContainerRouteScreen.-narrow #route-select Input { width: 100%; margin-right: 0; }
+    ContainerRouteScreen.-narrow #route-select .route-field { width: 100%; margin-right: 0; }
     ContainerRouteScreen.-narrow #route-tabs { layout: vertical; }
     ContainerRouteScreen.-narrow #route-actions { layout: vertical; }
     """)
@@ -252,11 +279,16 @@ class ContainerRouteScreen(ConsoleShell):
         with VerticalScroll(id="route-page"):
             yield Static("Контейнерный маршрут", id="route-title")
             with Horizontal(id="route-select"):
-                yield Input(selection.batch, placeholder="batch", id="route-batch")
-                yield Input(selection.role, placeholder="role", id="route-role")
-                yield Input(
-                    selection.runtime, placeholder="runtime", id="route-runtime"
+                # Each field keeps its name above it once filled, as on the web route.
+                fields = (
+                    ("Batch", selection.batch, "batch", "route-batch"),
+                    ("Роль", selection.role, "role", "route-role"),
+                    ("Runtime, необязательно", selection.runtime, "runtime", "route-runtime"),
                 )
+                for label, value, placeholder, field_id in fields:
+                    with Vertical(classes="route-field"):
+                        yield Static(label, classes="route-field-label")
+                        yield Input(value, placeholder=placeholder, id=field_id)
                 yield Button("Выбрать", id="route-choose")
             with Horizontal(id="route-tabs"):
                 for stage in Stage:
@@ -294,7 +326,10 @@ class ContainerRouteScreen(ConsoleShell):
             button = self.query_one(f"#tab-{tab.stage.value}", Button)
             button.label = tab_label(tab, language, tab.stage is self.stage)
         reason = self._current_tab().reason
-        self.query_one("#route-tab-reason", Static).update(_t(language, reason))
+        tab_reason = self.query_one("#route-tab-reason", Static)
+        tab_reason.update(_t(language, reason))
+        # No reason, no line: an empty one left a blank band under the stage tabs.
+        tab_reason.display = bool(reason)
         self.query_one("#route-body", Static).update(
             render_view(view, language, narrow)
         )
