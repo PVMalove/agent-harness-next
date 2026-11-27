@@ -883,4 +883,14 @@ main input:focus-visible, main select:focus-visible, main textarea:focus-visible
   }
   .chip:hover, .ds-app .seg button:hover { border-color: var(--ds-accent); color: var(--ds-fg); }
   .chip.on, .ds-app .seg button[aria-pressed="true"] { background: var(--ds-accent-bg); border-color: var(--ds-accent); color: var(--ds-fg); }
+  /* A panel head is a .ds-panel-head (8/12 px), and the panel content starts at the same 12 px, as a
+     .ds-row does. A page that compacts its heads keeps its own vertical padding. */
+  .ds-main--legacy .panel-head { padding: 8px 12px; }
+  #content.ds-main--legacy .panel > .panel-head,
+  #content.ds-main--legacy :is(
+    .home-attn .it, .health-panel > .body, .contour-panel > .body, .context-section, .task-head, .task-row, .active-route,
+    .work-source-grid, .work-filters, .work-row, .work-more, .work-note, .work-route-body, .work-event, .work-empty, .work-gantt,
+    .work-analytics > .orch-legend, .orch-analytics-grid, .orch-analytics-rows, .work-observation-reason, .work-observation-title,
+    .work-observation-facts, .work-observation-checkpoints, .route-select
+  ) { padding-inline: 12px; }
 }
