@@ -13,7 +13,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
 
 ## v2.0.2 — 26 November 2026 {.ah-release-title}
 
-<p class="ah-release-meta">Added: 2 · Changed: 9 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
+<p class="ah-release-meta">Added: 2 · Changed: 10 · Fixed: 10 · <a href="https://github.com/PVMalove/agent-harness-next/releases/tag/v2.0.2">Open on GitHub</a></p>
 
 <p class="ah-release-summary">Highlights: Release Gate for an integration branch · a retry without a commit instead of a dead end · first developer checks by the diff · the adapter inside a worker · /implement coordinator instructions · orchestration progress in the console.</p>
 
@@ -35,6 +35,7 @@ notes. The canonical list with assets is in [GitHub Releases](https://github.com
     - **[Footer and ledger lock]:** the key row of every TUI screen starts with `esc` and ends with `f1`, `f2` and the command palette. The ledger lock card in the TUI and the web console starts with the state's icon and colour (free, held, not read), and for a live owner the timeout line no longer repeats the verdict. (#1296)
     - **[Loading and check titles]:** every loading or running line in the TUI carries one "in progress" icon, the same as the running status. Home names the checks as Diagnostics and the web console do: "Skill snapshot", "Hook policy", not with separate wordings. (#1296)
     - **[Long value wrapping]:** branches, paths, IDs and commands in the TUI fact tables — the Home and "Work progress" context, the Orchestration analytics, the report details and the session events — wrap at their separators (`/`, `-`, `_`, `.`) to the column width, not inside a word. (#1296)
+    - **[Reports and Orchestration layout]:** Reports show the KPIs in one row and give the room to the stage list: at 160×48 every stage is visible, and the report details scroll instead of clipping Dispatch. Orchestration puts the batch history, the ledger lock and the commands right after the KPIs, and the analytics and statistics under the command output; the header links look like links, an empty output says "No output yet", and the repository path is cut from the left as on the Board and Publish screens. (#1296)
 
     **Fixed**
 
