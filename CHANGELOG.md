@@ -8,6 +8,10 @@
 
 - **[Режим интеграционного PR]:** `/to-pull-requests --release <epic>` открывает PR integration-ветки эпика с меткой `pr::integration` в `base_branch` или, с `--target <branch>`, в другую ветку `integration/*`, а в проекте с opt-in вызывает Release Gate. После подтверждённого merge в `base_branch` эпик закрывается и получает `status::done`, а integration-ветка остаётся, пока разработчик не решит её судьбу. (#1027)
 
+### Fixed
+
+- **[Clean-room без вопросов]:** `make test-clean-room` и `make test-author-probe`, запущенные из терминала, больше не задают вопросы `harness init` в сценариях: шаг без явного ввода получает пустой stdin. Ответ разработчика больше не попадает в одноразовый проект и не ломает сценарий, как `recovery_cycle` с `branch_pattern` `master`. (#1302)
+
 ## [2.0.1] - 2026-11-24
 
 ### Fixed
