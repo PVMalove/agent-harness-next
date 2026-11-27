@@ -72,6 +72,7 @@ core = "sysmon"
 "harness/reporting/delivery_stats.py" = ["E402"]
 "scripts/check_upstream_drift.py" = ["E402"]
 "scripts/fmea_catalog.py" = ["E402"]
+"scripts/test_author_probe.py" = ["E402"]
 "scripts/test_clean_room.py" = ["E402"]
 "scripts/verify.py" = ["E402"]
 "tests/orchestration/test_advisory.py" = ["E402"]
