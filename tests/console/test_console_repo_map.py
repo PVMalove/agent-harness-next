@@ -149,18 +149,18 @@ def test_summary_fields_carry_the_mockup_labels_and_the_real_values() -> None:
     view = _view()
     fields = console_repo_map.summary_fields(view)
     assert [label for label, _ in fields] == [
-        "tier",
+        "Уровень",
         "Деградация",
-        "commit",
+        "Commit",
         "Файлов",
         "Рёбер",
         "Токенов (оценка)",
         "Источник",
     ]
     values = dict(fields)
-    assert values["tier"] == "full (parser: bundle)"
+    assert values["Уровень"] == "full · парсер bundle"
     assert values["Деградация"] == "parser bundle applied"
-    assert values["commit"] == "f" * 40
+    assert values["Commit"] == "f" * 40
     assert (values["Файлов"], values["Рёбер"], values["Токенов (оценка)"]) == (
         "4",
         "4",
@@ -179,9 +179,9 @@ def test_file_status_is_a_symbol_and_the_parser_word_and_absent_without_a_parser
 ):
     view = _view()
     ok, _, broken, _ = view.files
-    assert _shown(ok) == "✔ ok"
-    assert _shown(broken) == "✖ syntax_error"
-    assert _shown(replace(ok, parser_status="too_large")) == "⚠ too_large"
+    assert _shown(ok) == "✔ разобран"
+    assert _shown(broken) == "✖ ошибка синтаксиса"
+    assert _shown(replace(ok, parser_status="too_large")) == "⚠ слишком большой"
     assert _shown(replace(ok, parser_status="odd")) == "⚠ odd"
     assert _shown(replace(ok, parser_status=None)) is None
 

@@ -5,7 +5,7 @@
    count the served ledger lists, as the TUI does. tests/web/fixtures/orch-snapshot-facts.json
    pins every text to the one the TUI shows for the same snapshot. */
 import type { Language } from "../i18n";
-import { durationText } from "../reports/format";
+import { dateTimeText, durationText } from "../reports/format";
 import type { BatchSummary, Figure, Ledger, StageHead } from "../ws/ledger";
 
 /** The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state. */
@@ -33,9 +33,8 @@ export const ALL_STATES = "all";
 
 const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** An ISO timestamp as `YYYY-MM-DD HH:MM`; anything else unchanged. */
-export const shortTime = (value: string): string =>
-  value.length >= 16 && value[10] === "T" ? value.slice(0, 16).replace("T", " ") : value;
+/** `short_time`: a recorded, timezone-aware time as `DD.MM.YYYY HH:MM UTC`; anything else unchanged. */
+export const shortTime = (value: string): string => dateTimeText(value) ?? value;
 
 /* -- analytics -------------------------------------------------------------------------------- */
 

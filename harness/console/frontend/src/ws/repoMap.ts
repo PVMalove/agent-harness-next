@@ -1,6 +1,13 @@
 /* Read models of repo_map.snapshot. Keep the wire fields, including provenance, for export. */
 import type { RepoMapSnapshotRequest, SnapshotPageRequest } from "./protocol.gen";
 export interface MapFile { path: string; signatures?: string[]; parser_status?: string }
+/** `PARSER_WORDS`: a parser status in words, Russian and English; an unknown one as recorded. */
+export const PARSER_WORDS: Readonly<Record<string, [string, string]>> = {
+  ok: ["разобран", "parsed"],
+  too_large: ["слишком большой", "too large"],
+  syntax_error: ["ошибка синтаксиса", "syntax error"],
+  invalid_encoding: ["неверная кодировка", "invalid encoding"],
+};
 export interface MapEdge { source: string; target: string; kind: string; confidence: string }
 export interface RepoMap {
   schema_version: 1; commit: string; tier: "minimal" | "full"; parser: string;

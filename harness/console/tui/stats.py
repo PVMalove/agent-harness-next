@@ -21,7 +21,7 @@ from ..kernel.pipeline_kpi import (
 )
 from ..kernel.pipeline_stats import PipelineStats as PipelineStats
 from ..kernel.pipeline_stats import pipeline_stats as pipeline_stats
-from ..kernel.reports import BatchSummary, LedgerView
+from ..kernel.reports import BatchSummary, LedgerView, timestamp
 
 # The batch lifecycle in order: planned → awaiting-approval ↔ active → a terminal state.
 BATCH_STATES = (
@@ -48,10 +48,10 @@ ALL_STATES = "all"
 
 
 def short_time(value: str) -> str:
-    """An ISO timestamp as `YYYY-MM-DD HH:MM`; anything else is returned unchanged."""
-    return (
-        value[:16].replace("T", " ") if len(value) >= 16 and value[10] == "T" else value
-    )
+    """A recorded, timezone-aware time as `DD.MM.YYYY HH:MM UTC`, as elsewhere in the console;
+    anything else is returned unchanged."""
+    moment = timestamp(value)
+    return moment.strftime("%d.%m.%Y %H:%M UTC") if moment else value
 
 
 # A report outcome in the statistics, in Russian; the English screen translates the phrase.
