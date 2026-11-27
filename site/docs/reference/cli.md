@@ -14,6 +14,7 @@
 | `update` | Подтягивает новую версию capability; на ledger версии 3 с `--approved-by`, `--approved-at` и `--reason` выполняет `harness-runtime migrate` ([миграция на 2.0](../guides/upgrade-2-0.md)) | да |
 | `registry` | Пересобирает реестр скиллов проекта | да |
 | `lock-project-skills` | Фиксирует хеши скиллов, которыми владеет сам проект | да |
+| `fmea show` | Печатает запись [каталога FMEA](../concepts/fmea.md) по `title` или GUID из `.harness/fmea.db` клона harness; `<repo>` не принимает | нет |
 | `memory build/search/rebuild/sync/eval` | Локальный индекс памяти и указатели на разрешённые источники | `build`, `rebuild`, `sync`: да; `search`, `eval`: нет |
 | `parsers status/install` | Парсеры графа проекта: состояние bundle и установка языков | `install`: да; `status`: нет |
 | `health` | Диагностика установки и окружения | только с `--fix` |
@@ -134,6 +135,20 @@ python3 harness/bin/harness.py memory rebuild /path/to/repository
 Поиск возвращает указатели на источник (заголовок, статус, путь и хеш), без текста документа.
 Источник открывают, только если он нужен. Индекс производный: если его удалить, ничего не потеряется,
 `rebuild` восстановит его с нуля. Без явного allowlist в `memory_policy` индекс остаётся пустым.
+
+## Каталог FMEA
+
+`harness fmea show <title|id>` читает SQLite-файл `.harness/fmea.db`, собранный из
+`harness/fmea/catalog.toml` в клоне harness, и печатает строку `FMEA: <guid> (<title>)` и поля
+`mode`, `detection`, `recovery`, `test` и `residual_risk`. Файл не коммитится; если его нет, команда
+отказывает и называет команду сборки.
+
+```bash
+python scripts/fmea_catalog.py db
+python3 harness/bin/harness.py fmea show git-timeout
+```
+
+Формат каталога и правила записей описаны на странице [«Каталог FMEA»](../concepts/fmea.md).
 
 ## Repo Map
 

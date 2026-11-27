@@ -28,6 +28,10 @@ The guide follows `references/guide-template.md` with five sections:
    for the PR/MR and, after the merge, for the ticket closure. The skill fills in `<ID>` and
    `<target-branch>` with real values and copies no tracker commands.
 
+The PR/MR opened through `/to-pull-requests <ID>` gets the `pr::ticket` label and the ticket's
+`type::*`; what the skill does after the merge is on the [`/to-pull-requests`](to-pull-requests.md)
+page.
+
 Each prompt is self-contained, starts with the test, and names its acceptance criterion and
 `Verify` command. Verification comes from the ticket's `Action -> Verify` criteria or the spec's
 `## Acceptance & Verification Criteria`. The guide is written in the language from
