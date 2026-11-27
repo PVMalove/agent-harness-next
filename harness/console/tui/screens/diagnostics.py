@@ -578,7 +578,7 @@ class DiagnosticsScreen(ConsoleShell):
         return (
             f"$ {short()} · --online {tr('для «Онлайн»')} · "
             f"{' '.join(fix)} {tr('для «Исправить» (два шага)')} · "
-            f"{icons.tr(language, '⚪ не проверено ≠ успешно')}"
+            f"{icons.tr(language, '⁘ не проверено ≠ успешно')}"
         )
 
     def _render_overview(self) -> None:

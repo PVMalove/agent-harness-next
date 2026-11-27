@@ -47,7 +47,8 @@ def session_card(
     card.append_text(role_label(role))
     card.append("\n")
     card.append(
-        brand.shorten(dispatch_id, id_limit) + ("\n" if stacked else "  ·  "),
+        brand.shorten(brand.short_dispatch(dispatch_id), id_limit)
+        + ("\n" if stacked else "  ·  "),
         style=brand.PALETTE["muted"],
     )
     card.append_text(status_caption(session_status(state, outcome), language))

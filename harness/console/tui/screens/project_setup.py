@@ -159,7 +159,7 @@ class _OptionButton(RadioButton):
 
 
 class _Stepper(Static):
-    """The five stages of the wizard on one line: done `✅`, current `⏩`, to come `⚪`. A terminal
+    """The five stages of the wizard on one line: done `✦`, current `►`, to come `⁘`. A terminal
     too narrow for all of them shows the current stage alone, with the counter."""
 
     def __init__(self, *, id: str) -> None:
@@ -491,7 +491,7 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
         palette = brand.PALETTE
         if self._blocked:
             return Text(
-                self._t("❌ заблокировано: {}").format(len(self._blocked)),
+                self._t("✖ заблокировано: {}").format(len(self._blocked)),
                 style=palette["error"],
             )
         if target.conflicts:
@@ -500,8 +500,8 @@ class ProjectSetupScreen(ConsoleShell[Path | None]):
                 style=palette["warning"],
             )
         if self._blocked is None and not self._plan_unchecked:
-            return Text(self._t("⚪ проверяется…"), style=palette["muted"])
-        return Text(self._t("✅ нет"), style=palette["success"])
+            return Text(self._t("⁘ проверяется…"), style=palette["muted"])
+        return Text(self._t("✦ нет"), style=palette["success"])
 
     def _paint_checks(self) -> None:
         summary = self.query_one("#checks-summary", Static)

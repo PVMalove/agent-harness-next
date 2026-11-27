@@ -305,9 +305,9 @@ def execution_lines(summary: ExecutionSummary | None, t: Callable[[str], str]) -
 
 # What the observer knows of the worker process: glyph, Russian and English words, colour.
 _PROCESS_WORDS = {
-    "live": ("🤖", "процесс работает", "process running", "success"),
-    "stopped": ("🧰", "процесс завершён", "process exited", "muted"),
-    "absent": ("💤", "процесс не найден", "process not found", "warning"),
+    "live": ("►", "процесс работает", "process running", "success"),
+    "stopped": (icons.STOP, "процесс завершён", "process exited", "muted"),
+    "absent": ("※", "процесс не найден", "process not found", "warning"),
 }
 # The state of the worker's event stream: Russian and English words and colour.
 _STREAM_WORDS = {
@@ -364,7 +364,7 @@ def heartbeat_line(snapshot: JsonObject, language: str) -> Text:
 
 
 def _status_colour(line: str) -> str:
-    """The colour of a status note by its leading symbol: 🔶 warning, ❌ error, others muted."""
+    """The colour of a status note by its leading symbol: ✤ warning, ✖ error, others muted."""
     return brand.PALETTE[
         "warning"
         if line.startswith((icons.STATUS_ICONS["warn"], "⚠"))
@@ -388,45 +388,62 @@ def timeline_rows(
 
 def timeline_table(rows: list[tuple[str, str, str, str]]) -> Table:
     """The timeline as a grid: an event's text wraps inside its own column, so the time, kind and
-    role columns stay aligned on a narrow main column."""
+    role columns stay aligned on a narrow main column. The role is its icon in its colour."""
     table = Table.grid(padding=(0, 1), expand=True)
     table.add_column(no_wrap=True, style=brand.PALETTE["muted"])
     table.add_column(no_wrap=True)
-    table.add_column(no_wrap=True, style=brand.PALETTE["primary"])
+    table.add_column(width=1, no_wrap=True)
     table.add_column(ratio=1, overflow="fold")
     for at, kind, role, text in rows:
-        table.add_row(at, kind, role, SeparatorWrap(text))
+        glyph, colour = icons.role_icon(role)
+        table.add_row(
+            at, kind, Text(glyph, style=f"bold {colour}"), SeparatorWrap(brand.short_dispatch(text))
+        )
     return table
 
 
-# An event kind's glyph, Russian and English label and colour on the «Сессия» and «События»
-# tabs. Each glyph is a solid shape of its own, drawn as a chip, so the kinds differ at a glance;
-# an unknown kind is shown with the `system` look and its own name.
+def role_legend(rows: list[tuple[str, str, str, str]]) -> Text:
+    """The roles of the shown events, each as its icon and name, under the timeline."""
+    legend = Text()
+    for role in dict.fromkeys(role for _at, _kind, role, _text in rows):
+        glyph, colour = icons.role_icon(role)
+        if not glyph:
+            continue
+        if legend:
+            legend.append("   ")
+        legend.append(glyph, style=f"bold {colour}")
+        legend.append(f" {role}", style=brand.PALETTE["muted"])
+    return legend
+
+
+# An event kind's glyph, Russian and English label and colour on the «События» tab. Each glyph
+# is a shape of its own in its own colour, drawn as a chip, so the kinds differ at a glance; an
+# unknown kind is shown with the `system` look and its own name.
 EVENT_KINDS: dict[str, tuple[str, str, str, str]] = {
-    "output":       ("💬", "вывод",       "output",       brand.PALETTE["foreground"]),
-    "tool":         ("🔧", "инструмент",  "tool",         brand.PALETTE["primary"]),
-    "tool-result":  ("📦", "результат",   "result",       brand.PALETTE["muted"]),
-    "result":       ("✅", "итог",        "outcome",      brand.PALETTE["success"]),
-    "error":        ("❌", "ошибка",      "error",        brand.PALETTE["error"]),
+    "output":       ("›", "вывод",       "output",       brand.PALETTE["foreground"]),
+    "tool":         ("✣", "инструмент",  "tool",         brand.PALETTE["primary"]),
+    "tool-result":  ("↫", "результат",   "result",       brand.PALETTE["muted"]),
+    "result":       (icons.STATUS_ICONS["ok"], "итог",        "outcome",      brand.PALETTE["success"]),
+    "error":        (icons.STATUS_ICONS["fail"], "ошибка",      "error",        brand.PALETTE["error"]),
     "stderr":       (icons.STATUS_ICONS["warn"], "stderr",      "stderr",       brand.PALETTE["warning"]),
-    "permission":   ("🔐", "разрешение",  "permission",   brand.PALETTE["warning"]),
+    "permission":   ("◈", "разрешение",  "permission",   brand.PALETTE["warning"]),
     "stage":        (icons.STATUS_KIND_ICONS["running"], "стадия QA",   "QA stage",     brand.PALETTE["primary"]),
-    "stage-result": ("🏁", "итог стадии", "stage result", brand.PALETTE["foreground"]),
-    "log":          ("📝", "лог",         "log",          brand.PALETTE["muted"]),
-    "system":       ("🔩", "система",     "system",       brand.PALETTE["muted"]),
-    "omitted":      ("💤", "пропущено",   "omitted",      brand.PALETTE["muted"]),
+    "stage-result": (icons.STATUS_ICONS["ok"], "итог стадии", "stage result", brand.PALETTE["foreground"]),
+    "log":          (icons.PLAIN_LOG, "лог",         "log",          brand.PALETTE["muted"]),
+    "system":       ("⁑", "система",     "system",       brand.PALETTE["muted"]),
+    "omitted":      ("⁖", "пропущено",   "omitted",      brand.PALETTE["muted"]),
 }
 # The glyph of a finished QA stage follows its result, as `_stage_result` words it.
 _STAGE_RESULTS = {
-    "pass":    ("🟢", brand.PALETTE["success"]),
-    "fail":    ("🔴", brand.PALETTE["error"]),
-    "not_run": ("⚪", brand.PALETTE["muted"]),
+    "pass":    (icons.STATUS_ICONS["ok"], brand.PALETTE["success"]),
+    "fail":    (icons.STATUS_ICONS["fail"], brand.PALETTE["error"]),
+    "not_run": (icons.STATUS_ICONS["skipped"], brand.PALETTE["muted"]),
 }
-CHIP_WIDTH = 4
+CHIP_WIDTH = 3
 
 
 def _event_look(kind: str, text: str, language: str) -> tuple[str, str, str]:
-    glyph, ru, en, colour = EVENT_KINDS.get(kind, ("⚪", kind, kind, brand.PALETTE["muted"]))
+    glyph, ru, en, colour = EVENT_KINDS.get(kind, (icons.UNKNOWN, kind, kind, brand.PALETTE["muted"]))
     if kind == "stage-result":
         words = text.partition(":")[2].split()
         glyph, colour = _STAGE_RESULTS.get(words[0] if words else "", (glyph, colour))
@@ -434,7 +451,7 @@ def _event_look(kind: str, text: str, language: str) -> tuple[str, str, str]:
 
 
 def _chip(glyph: str, colour: str) -> Text:
-    """A glyph as a four-cell chip on a tinted ground, so it reads larger than a bare symbol."""
+    """A glyph as a three-cell chip on a tinted ground, so it reads larger than a bare symbol."""
     return Text(
         f" {glyph} ",
         style=f"bold {colour} on {brand.SHELL_TOKENS['event-active-background']}",
@@ -513,7 +530,7 @@ def _result(kind: str, text: str, language: str, expanded: bool) -> RenderableTy
         prefix = Text(_RESULT_PREFIX if index == 0 else "", style=muted)
         if kind == "stage-result" and index == 0:
             words = line.partition(":")[2].split()
-            glyph, colour = _STAGE_RESULTS.get(words[0] if words else "", ("⚪", muted))
+            glyph, colour = _STAGE_RESULTS.get(words[0] if words else "", (icons.STATUS_ICONS["skipped"], muted))
             body = Text(f"{glyph} ", style=colour)
             body.append(line, style=default)
         elif code:
@@ -612,7 +629,10 @@ def context_rows(
     rows.append(
         (
             "Dispatch",
-            Text(brand.shorten(str(snapshot.get("dispatch_id") or "—"), room), style=brand.PALETTE["primary"]),
+            Text(
+                brand.shorten(brand.short_dispatch(str(snapshot.get("dispatch_id") or "—")), room),
+                style=brand.PALETTE["primary"],
+            ),
         )
     )
     who = Text(role, style=f"bold {brand.ROLE_COLORS.get(role, brand.PALETTE['foreground'])}")
@@ -672,7 +692,7 @@ def context_table(rows: list[tuple[str, Text]], language: str) -> Table:
 
 
 def readiness_text(snapshot: JsonObject) -> Text:
-    """The environment checks, one per line: ✅ confirmed, ❌ refuted, ⚪ not checked."""
+    """The environment checks, one per line: ✦ confirmed, ✖ refuted, ⁘ not checked."""
     model_report = snapshot.get("model_self_report") or {}
     tree = snapshot.get("worktree_attestation") or {}
     checks = Text()
@@ -788,6 +808,9 @@ class WorkerObservationScreen(ConsoleShell):
     DEFAULT_CSS = brand.shell_css("""
     WorkerObservationScreen #worker-panes { height: 1fr; }
     WorkerObservationScreen.-spacious.-tight #worker-sessions { width: 26; }
+    /* The run context holds short facts (a dispatch reads as d8e030c3f), so it gives its room to the work. */
+    WorkerObservationScreen.-spacious #worker-context { width: 36; }
+    WorkerObservationScreen.-spacious.-roomy #worker-context { width: 40; }
     WorkerObservationScreen #worker-sessions { width: 34; height: 1fr; background: transparent; border-right: solid $border-subtle; padding: 1; }
     WorkerObservationScreen #worker-live { width: 2; height: 1; margin-left: 1; color: $success; }
     WorkerObservationScreen #worker-session-count { height: 2; padding: 0 1; color: $text-muted; }
@@ -933,7 +956,7 @@ class WorkerObservationScreen(ConsoleShell):
                 i18n.tr(language, "Рабочих сессий нет: ledger не записал ни одного dispatch")
             )
             self.query_one("#worker-status", Static).update(
-                icons.tr(language, "⚪ Наблюдать нечего. Сессия появится, когда координатор запустит worker.")
+                icons.tr(language, "⁘ Наблюдать нечего. Сессия появится, когда координатор запустит worker.")
             )
         self._paint_sessions()
 
@@ -960,7 +983,7 @@ class WorkerObservationScreen(ConsoleShell):
                         markup=False,
                     )
                     yield Static(
-                        "⚪ Ожидание",
+                        "⁘ Ожидание",
                         id="worker-badge",
                         classes="no-i18n",
                         markup=False,
@@ -978,7 +1001,7 @@ class WorkerObservationScreen(ConsoleShell):
                     classes="no-i18n",
                 )
                 yield Static(
-                    "⚪ Ожидание наблюдения",
+                    "⁘ Ожидание наблюдения",
                     id="worker-status",
                     markup=False,
                     classes="no-i18n",
@@ -1067,7 +1090,7 @@ class WorkerObservationScreen(ConsoleShell):
         )
         yield Static("ГОТОВНОСТЬ СРЕДЫ", classes="context-label")
         yield Static(
-            "⚪ Не проверено",
+            "⁘ Не проверено",
             id="worker-readiness",
             classes="context-value no-i18n",
             markup=False,
@@ -1186,6 +1209,7 @@ class WorkerObservationScreen(ConsoleShell):
         rows = timeline_rows(timeline)
         if rows:
             log.write(timeline_table(rows), expand=True)
+            log.write(Group(Text(""), role_legend(rows)), expand=True)
 
     def _show_unavailable(self) -> None:
         self.query_one("#worker-status", Static).update(
@@ -1266,7 +1290,7 @@ class WorkerObservationScreen(ConsoleShell):
                 t(f"{warn} Истёк срок первого self-report; таймаут не доказывает остановку.")
             )
         if snapshot.get("stream_state") in {"unavailable", "waiting"}:
-            lines.append(t("⚪ Нет новых событий; это не проверка здоровья worker."))
+            lines.append(t("⁘ Нет новых событий; это не проверка здоровья worker."))
         if snapshot.get("steps_source") == "plain":
             lines.append(
                 t(f"{icons.PLAIN_LOG} Структура недоступна: показан хвост обычного лога worker.")
@@ -1365,7 +1389,7 @@ class WorkerObservationScreen(ConsoleShell):
             str(snapshot.get("runtime") or "runtime —"),
         )
         self.query_one("#worker-subtitle", Static).update(
-            f"{role} / {runtime} / {brand.shorten(str(snapshot.get('dispatch_id') or ''), 18)}"
+            f"{role} / {runtime} / {brand.shorten(brand.short_dispatch(str(snapshot.get('dispatch_id') or '')), 18)}"
         )
         pipeline = Text()
         for i, stage in enumerate(
@@ -1383,7 +1407,7 @@ class WorkerObservationScreen(ConsoleShell):
         self.query_one("#worker-pipeline", Static).update(pipeline)
         self.query_one(Breadcrumbs).set_crumbs(self._worker_crumbs(snapshot))
         self.query_one("#worker-selection", WrappedValue).set_value(
-            f"{ticket} · {role} · {snapshot.get('dispatch_id') or ''}"
+            f"{ticket} · {role} · {brand.short_dispatch(str(snapshot.get('dispatch_id') or ''))}"
         )
         facts = self.query_one("#worker-context-facts", Static)
         rows = context_rows(snapshot, facts.content_size.width - CONTEXT_LABEL_WIDTH - 1, t)

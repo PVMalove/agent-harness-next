@@ -480,7 +480,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
             self._show_batches(event.item.name)
 
     def menu_items(self) -> Sequence[tuple[str, str]]:
-        """Команды координатора по группам; необратимые отмечены 🔶."""
+        """Команды координатора по группам; необратимые отмечены ✤."""
         ordered = sorted(
             self._entries.values(),
             key=lambda entry: _GROUP_ORDER.index(_group_title(entry.group)),

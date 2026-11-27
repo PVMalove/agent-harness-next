@@ -54,7 +54,7 @@ DRIFT_LABELS_EN = {"clean": "none", "drift": "yes", "missing": "not installed"}
 
 
 def _status_label(status: str) -> str:
-    """A status as its symbol plus its word, so it never rests on colour alone: `❌ fail`."""
+    """A status as its symbol plus its word, so it never rests on colour alone: `✖ fail`."""
     return f"{icons.STATUS_ICONS.get(status, '·')} {status}"
 
 
@@ -130,7 +130,7 @@ def _render_summary_full(
         colors = {"fail": brand.PALETTE["error"], "warn": brand.PALETTE["warning"]}
         lines.extend(
             f"  [{colors.get(status, brand.PALETTE['muted'])}]"
-            f"{label}{' ' * max(0, 7 - cell_len(label))}[/] "
+            f"{label}{' ' * max(0, 6 - cell_len(label))}[/] "
             f"{escape(check_id)} — {escape(message)}"
             for status, check_id, message in data.problems
             for label in (_status_label(status),)

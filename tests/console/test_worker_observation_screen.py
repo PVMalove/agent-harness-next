@@ -315,19 +315,37 @@ def test_a_finished_qa_stage_shows_its_result_under_the_stage() -> None:
     def mark(text: str) -> str:
         return _plain(transcript_row({"kind": "stage-result", "text": text}))[0][:7]
 
-    assert mark("pytest: pass · exit 0") == "  ⎿  🟢 "
-    assert mark("pytest: fail · exit 1") == "  ⎿  🔴 "
-    assert mark("lint: not_run") == "  ⎿  ⚪ "
+    assert mark("pytest: pass · exit 0") == "  ⎿  ✦ "
+    assert mark("pytest: fail · exit 1") == "  ⎿  ✖ "
+    assert mark("lint: not_run") == "  ⎿  ⁘ "
+
+
+def test_the_batch_timeline_shows_a_role_as_its_icon_with_a_legend() -> None:
+    from harness.console.tui.screens.worker_observation import role_legend, timeline_table
+
+    rows = [
+        ("13:01:04", "decision", "-", "политика auto: dispatch"),
+        ("13:01:04", "dispatch", "architect", "architect: dispatch-b7fb27f0-e109-4359-a7d3-f9a12c2983ff, итог: reported"),
+        ("13:03:01", "report", "architect", "отчёт architect: completed"),
+        ("13:04:00", "dispatch", "developer", "developer: dispatch-c1"),
+    ]
+    assert _plain(timeline_table(rows), 80) == [
+        "13:01:04 decision   политика auto: dispatch",
+        "13:01:04 dispatch ◈ architect: db7fb27f0, итог: reported",
+        "13:03:01 report   ◈ отчёт architect: completed",
+        "13:04:00 dispatch ✎ developer: dispatch-c1",
+    ]
+    assert role_legend(rows).plain == "◈ architect   ✎ developer"
 
 
 def test_an_events_row_shows_the_chip_the_kind_and_the_first_line() -> None:
     from harness.console.tui.screens.worker_observation import event_row
 
     row = _plain(event_row({"kind": "tool", "text": "Bash pytest\nmore\nlines"}), 60)
-    assert row == [" 🔧  инструмент  Bash pytest  +2"]
+    assert row == [" ✣  инструмент  Bash pytest  +2"]
     # The kind column is as wide as the longest label of the language: «stage result».
     assert _plain(event_row({"kind": "error", "text": "boom"}, "en"), 60) == [
-        " ❌  error        boom"
+        " ✖  error        boom"
     ]
 
 
@@ -359,7 +377,7 @@ def test_the_context_names_the_block_reason_first_and_fits_long_values() -> None
     )
     shown = {label: value.plain for label, value in rows}
     assert rows[0][0] == "Причина" and shown["Причина"] == "permission denied"
-    assert shown["Dispatch"] == "dispatch-e98a4a72-50ac-4fd8-b…"
+    assert shown["Dispatch"] == "de98a4a72"
     assert shown["Роль"] == "developer · Claude Code"
     assert shown["Модель"] == "opus · high"
     assert shown["Сессия"] == "не наблюдалась"
@@ -380,10 +398,10 @@ def test_the_status_lines_word_the_process_ledger_stream_and_heartbeat() -> None
     }
     assert (
         process_line(snapshot, "live", "ru").plain
-        == "🤖 процесс работает · ledger ⏩ Выполняется · поток подключён"
+        == "► процесс работает · ledger ► Выполняется · поток подключён"
     )
     assert process_line(snapshot, "absent", "en").plain.startswith(
-        "💤 process not found"
+        "※ process not found"
     )
     assert (
         heartbeat_line(snapshot, "ru").plain

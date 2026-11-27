@@ -127,7 +127,7 @@ def test_status_caption_is_symbol_plus_words_in_the_status_colour() -> None:
 
     running = status.session_status("working")
     caption = session_card.status_caption(running, "en")
-    assert caption.plain == "⏩ Running"
+    assert caption.plain == "► Running"
     assert running.color in str(caption.style)
 
 
@@ -155,13 +155,13 @@ def test_session_card_carries_ticket_role_dispatch_and_caption() -> None:
     inline = card(stacked=False)
     assert inline.plain.splitlines() == [
         "#721  ·  developer",
-        "dispatch-e98a4a72-50a…  ·  ⏩ Выполняется",
+        "de98a4a72  ·  ► Выполняется",
     ]
     stacked = card(stacked=True)
     assert stacked.plain.splitlines() == [
         "#721  ·  developer",
-        "dispatch-e98a4a72-50a…",
-        "⏩ Выполняется",
+        "de98a4a72",
+        "► Выполняется",
     ]
     colors = {str(span.style) for span in inline.spans}
     assert f"bold {brand.ROLE_COLORS['developer']}" in colors

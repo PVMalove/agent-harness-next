@@ -609,7 +609,7 @@ Screen.shell { background: $background !important; }
 .shell .field { height: auto; margin-bottom: 1; }
 .shell.-spacious .context-panel { width: 38; }
 .shell.-spacious.-roomy .context-panel { width: 48; }
-.shell.-wide ShellSidebar { width: 27; }
+.shell.-wide ShellSidebar { width: 25; }
 .shell.-narrow .menu-toggle { display: block; }
 .shell.-narrow ShellSidebar { display: none; }
 .shell.-narrow.-menu-open ShellSidebar { display: block; }

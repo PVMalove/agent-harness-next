@@ -42,7 +42,7 @@ def _t(language: str, text: str) -> str:
 
 
 def render_row(row: Row, language: str, narrow: bool) -> str:
-    """`✅ ок  Label: value`; a multi-line value continues indented. On a narrow terminal the value
+    """`✦ ок  Label: value`; a multi-line value continues indented. On a narrow terminal the value
     starts on its own line, so a long ID, path or digest wraps instead of being cut."""
     status = _t(language, mark(row.state)) if row.state is not None else ""
     label = _t(language, row.label)
@@ -60,7 +60,7 @@ def render_row(row: Row, language: str, narrow: bool) -> str:
 def render_actions(actions: Sequence[Action], language: str) -> list[str]:
     """Every action that cannot run, with its reason: nothing is silently greyed out."""
     return [
-        f"{_t(language, '❌ недоступно')}: {_t(language, action.label)} — {_t(language, action.reason)}"
+        f"{_t(language, '✖ недоступно')}: {_t(language, action.label)} — {_t(language, action.reason)}"
         for action in actions
         if not action.enabled and action.reason
     ]
@@ -96,7 +96,7 @@ def render_body(
     Values are never shortened; the pane scrolls."""
     parts: list[str] = []
     if blockers:
-        parts.append(_t(language, "❌ Блокирует маршрут"))
+        parts.append(_t(language, "✖ Блокирует маршрут"))
         parts.extend(
             f"  {line}"
             for blocker in blockers
@@ -133,7 +133,7 @@ def render_view(view: StageView, language: str, narrow: bool) -> str:
 
 
 def tab_label(tab: Tab, language: str, current: bool) -> str:
-    """`✅ Preflight`: the state icon and the title; the current tab is bracketed."""
+    """`✦ Preflight`: the state icon and the title; the current tab is bracketed."""
     icon = icons.restyle_text(mark(tab.state)).split(" ", 1)[0]
     title = _t(language, tab.title)
     return f"[{icon} {title}]" if current else f"{icon} {title}"
