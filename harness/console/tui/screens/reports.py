@@ -365,7 +365,7 @@ class ReportsScreen(ConsoleShell):
         ledger has no stage yet, or that the filters matched nothing."""
         language = self._language()
         if self.refreshing and not self.view.stages:
-            return Text(i18n.tr(language, "Загрузка…"), style=brand.PALETTE["muted"])
+            return Text(icons.loading(i18n.tr(language, "Загрузка…")), style=brand.PALETTE["muted"])
         if self.view.unavailable:
             return Text(
                 f"{icons.STATUS_ICONS['fail']} {self.view.unavailable}",

@@ -758,15 +758,9 @@ class DashboardScreen(ConsoleShell):
         to the section that deals with it. Only the symbol carries the status colour."""
         rows: list[Widget] = []
         for status, check_id, message in data.problems:
-            route = check_route(check_id)
-            title = Static(
-                i18n.tr(self._language, route.title),
-                classes="problem-title no-i18n",
-                markup=False,
-            )
-            title.tooltip = (
-                f"{i18n.tr(self._language, route.title)}\n{check_id} · {message}"
-            )
+            route = check_route(check_id, self._language)
+            title = Static(route.title, classes="problem-title no-i18n", markup=False)
+            title.tooltip = f"{route.title}\n{check_id} · {message}"
             # A check without a readable title is titled by its id; its caption then names only
             # what happened, not the id a second time.
             caption = Static(
@@ -948,7 +942,7 @@ class DashboardScreen(ConsoleShell):
         running = (
             "онлайн-проверки выполняются…" if online else "офлайн-проверки выполняются…"
         )
-        attention.update(f"⏳ {running}")
+        attention.update(icons.loading(running))
         attention.display = True
         summary.update(running)
 

@@ -379,7 +379,7 @@ class RepoMapScreen(ConsoleShell):
         """Read the `repo_map.snapshot` of the server in a worker, then show it; `force` asks
         for fresh facts instead of the server's short cache."""
         self.query_one("#map-checks", Static).update(
-            i18n.tr_text(self._language, "Проверяю…")
+            icons.tr_text(self._language, icons.loading("Проверяю…"))
         )
 
         self._check_serial += 1
@@ -455,7 +455,7 @@ class RepoMapScreen(ConsoleShell):
     def _no_map_text(self) -> str:
         """What stands in for a missing map: still loading, not read, or really no map."""
         if self.facts is None:
-            return "снимок Repo Map не прочитан" if self._load_error else "Загрузка…"
+            return "снимок Repo Map не прочитан" if self._load_error else icons.loading("Загрузка…")
         return _NO_MAP
 
     def _render_map(self) -> None:

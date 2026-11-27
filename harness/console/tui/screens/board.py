@@ -417,7 +417,7 @@ class BoardScreen(ConsoleShell):
         self._busy = True
         self._epoch += 1
         epoch = self._epoch
-        self._set_status("Читаю спеки…")
+        self._set_status(icons.loading("Читаю спеки…"))
         client = self._client
 
         def work() -> None:
@@ -453,7 +453,7 @@ class BoardScreen(ConsoleShell):
         self._epoch += 1
         epoch = self._epoch
         self._busy = True
-        self._set_status("Читаю доску…")
+        self._set_status(icons.loading("Читаю доску…"))
         client = self._client
 
         def work() -> None:

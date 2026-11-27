@@ -52,7 +52,7 @@ _APPLY_LABEL = "Исправить"
 _CONFIRM_LABEL = "Подтвердить фиксы"
 _MANUAL_NOTE = "Команды «Как исправить» консоль не выполняет — запустите их вручную."
 _SUBTITLE = "Отчёт harness health. " + _MANUAL_NOTE
-_RUNNING = "health выполняется…"
+_RUNNING = icons.loading("health выполняется…")
 
 
 def _now() -> datetime:
@@ -502,7 +502,7 @@ class DiagnosticsScreen(ConsoleShell):
 
     def _render_state(self) -> None:
         def tr(text: str) -> str:
-            return i18n.tr(self._language, text)
+            return icons.tr(self._language, text)
 
         text = Text()
         if self._state == "running":
@@ -646,8 +646,7 @@ class DiagnosticsScreen(ConsoleShell):
 
     def _check_title(self, check: CheckResult) -> str:
         """The check's readable title in the console language; its id when it has none."""
-        ru, en = check_rationale.TITLES.get(check.id, (check.id, check.id))
-        return en if self._language == "en" else ru
+        return check_rationale.check_title(check.id, self._language)
 
     def _check_row(self, check: CheckResult) -> Text:
         """A list row: the status symbol and the check's readable title, the muted id and group,

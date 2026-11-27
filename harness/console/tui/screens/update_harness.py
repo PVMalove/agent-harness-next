@@ -244,7 +244,7 @@ def render_drift(
         return icons.tr_text(language, text)
 
     if loading:
-        text = Text(f"{icons.STATUS_ICONS['skipped']} {t(_LOADING)}", style=muted)
+        text = Text(icons.loading(t(_LOADING)), style=muted)
         text.append("\n" + t("Счётчики и список файлов появятся после проверки."))
         return text
     if payload is None:
@@ -655,7 +655,7 @@ class UpdateHarnessScreen(ConsoleShell):
         self._diff_for = relative
         self.query_one("#diff-why", Static).update("")
         self.query_one("#diff-view", Static).update(
-            Text(self._t("загружается…"), style=brand.PALETTE["muted"])
+            Text(icons.loading(self._t("загружается…")), style=brand.PALETTE["muted"])
         )
 
         def work() -> None:

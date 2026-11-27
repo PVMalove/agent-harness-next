@@ -7,6 +7,8 @@ the Web UI keep their shared contract unchanged.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from ..kernel import i18n
 from ..kernel.status import Status
 
@@ -42,6 +44,15 @@ LAUNCH_CONTEXT = "🎯"
 DELETE = "⛔"
 PLAIN_LOG = "📄"
 UNKNOWN = "❓"
+
+# The one "in progress" icon of every loading or running line: the running status kind's icon.
+LOADING = STATUS_KIND_ICONS["running"]
+
+
+def loading(text: str) -> str:
+    """`text` of a loading or running line, after the one "in progress" icon."""
+    return f"{LOADING} {text}"
+
 
 # Live source pulse (2 cells wide, matching `#worker-live { width: 2 }`).
 LIVE_ON = "🟢"
@@ -117,11 +128,30 @@ def to_kernel_glyphs(text: str) -> str:
     return text
 
 
+def _icon_and_text(text: str) -> tuple[str, str]:
+    """A leading kernel glyph and its space apart from the text after it; `("", text)` without."""
+    for _emoji, glyph in _TO_KERNEL:
+        if text.startswith(glyph + " "):
+            return glyph + " ", text[len(glyph) + 1 :]
+    return "", text
+
+
+def _translate(translate: Callable[[str, str], str], language: str, text: str) -> str:
+    """`translate` of `text`; a line after a status icon is looked up without its icon, so a
+    fixed string keeps its translation when a screen marks it (`⏩ Загрузка…`)."""
+    kernel = to_kernel_glyphs(text)
+    found = translate(language, kernel)
+    icon, rest = _icon_and_text(kernel)
+    if found == kernel and icon:
+        found = icon + translate(language, rest)
+    return restyle_text(found)
+
+
 def tr(language: str, text: str) -> str:
     """Translate a fixed TUI string via `kernel/i18n` and keep TUI emoji icons."""
-    return restyle_text(i18n.tr(language, to_kernel_glyphs(text)))
+    return _translate(i18n.tr, language, text)
 
 
 def tr_text(language: str, text: str) -> str:
     """Translate dynamic TUI text via `kernel/i18n` and keep TUI emoji icons."""
-    return restyle_text(i18n.tr_text(language, to_kernel_glyphs(text)))
+    return _translate(i18n.tr_text, language, text)

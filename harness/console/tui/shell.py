@@ -20,7 +20,7 @@ from textual.widget import Widget
 from textual.widgets import Button, Collapsible, Footer, ListItem, ListView, Static
 from typing_extensions import TypeVar
 
-from ..kernel import brand, i18n
+from ..kernel import brand, check_rationale, i18n
 from . import icons
 from .chrome import WorkspaceHeader
 from .crumbs import ELLIPSIS, Crumb, collapse_crumbs, split_path
@@ -76,163 +76,93 @@ class CheckRoute:
     section: str
 
 
-# Every health check -> its readable title and the menu section that deals with it. Home's
-# "Requires attention", Diagnostics and Open project use it for jumps like `Update Harness 2 →`.
-CHECK_ROUTES: dict[str, CheckRoute] = {
-    "files.skill_snapshot": CheckRoute(
-        "Скиллы отличаются от установленной версии Harness", "Update Harness"
-    ),
-    "files.skill_registry": CheckRoute(
-        "Реестр скиллов не совпадает со скиллами", "Update Harness"
-    ),
-    "files.agents_md": CheckRoute(
-        "AGENTS.md отсутствует или устарел", "Update Harness"
-    ),
-    "files.discovery_links": CheckRoute(
-        "Ссылки обнаружения скиллов нарушены", "Update Harness"
-    ),
-    "files.overlay_locks": CheckRoute(
-        "Блокировки оверлеев не совпадают", "Update Harness"
-    ),
-    "files.lock": CheckRoute("Harness не установлен в проект", "Open project"),
-    "files.seed_baseline": CheckRoute(
-        "Нет или повреждён baseline seed-файлов", "Update Harness"
-    ),
-    "files.project_json": CheckRoute("Ошибка в .harness/project.json", "Configuration"),
-    "files.integrations": CheckRoute(
-        "Нужно проверить настройки интеграций", "Configuration"
-    ),
-    "files.verification_routing": CheckRoute(
-        "Маршрутизация проверок настроена неверно", "Configuration"
-    ),
-    "tracker.project": CheckRoute("Трекер задач не определён", "Configuration"),
-    "tracker.auth": CheckRoute("Нет доступа к трекеру задач", "Configuration"),
-    "tracker.reachability": CheckRoute("Трекер задач недоступен", "Configuration"),
-    "tracker.permissions": CheckRoute(
-        "Недостаточно прав в трекере задач", "Configuration"
-    ),
-    "tracker.labels": CheckRoute("В трекере не хватает меток", "Configuration"),
-    "tracker.git_base": CheckRoute(
-        "В тикете не указана ветка интеграции", "Configuration"
-    ),
-    "files.orchestration_config": CheckRoute(
-        "Ошибка в настройках оркестрации", "Orchestration"
-    ),
-    "directories.orchestration_state": CheckRoute(
-        "Каталог состояния оркестрации недоступен", "Orchestration"
-    ),
-    "orchestration.runtime": CheckRoute("Runtime не отвечает", "Orchestration"),
-    "orchestration.ledger_summary": CheckRoute(
-        "Ledger оркестрации требует внимания", "Orchestration"
-    ),
-    "orchestration.unfinished_batches": CheckRoute(
-        "Есть незавершённые batch", "Orchestration"
-    ),
-    "orchestration.blocked_batches": CheckRoute(
-        "Есть заблокированные batch", "Orchestration"
-    ),
-    "orchestration.stale_dispatches": CheckRoute(
-        "Есть зависшие dispatch", "Orchestration"
-    ),
-    "orchestration.orphaned_worktrees": CheckRoute(
-        "Есть worktree без batch", "Orchestration"
-    ),
-    "orchestration.disposable_data": CheckRoute(
-        "Накопились временные данные оркестрации", "Orchestration"
-    ),
-    "orchestration.adapters": CheckRoute(
-        "Адаптеры worker не совпадают с версией harness", "Orchestration"
-    ),
-    "orchestration.worker_binaries": CheckRoute(
-        "Runtime не находит claude или codex", "Orchestration"
-    ),
-    "orchestration.rebaser_route": CheckRoute("Маршрут rebase недоступен", "Orchestration"),
-    "repo_map.tier": CheckRoute("Repo Map работает в ограниченном режиме", "Repo Map"),
-    "memory.index": CheckRoute("Индекс памяти проекта требует внимания", "Repo Map"),
-    "memory.model": CheckRoute("Модель памяти недоступна", "Repo Map"),
-    "environment.os": CheckRoute(
-        "Операционная система не поддерживается", "Diagnostics"
-    ),
-    "environment.git": CheckRoute("Git недоступен", "Diagnostics"),
-    "environment.git_identity": CheckRoute(
-        "Не настроен автор коммитов Git", "Diagnostics"
-    ),
-    "environment.gitattributes": CheckRoute("Нет файла .gitattributes", "Diagnostics"),
-    "environment.line_endings": CheckRoute(
-        "Переводы строк не совпадают с .gitattributes", "Diagnostics"
-    ),
-    "environment.python": CheckRoute("Неподходящая версия Python", "Diagnostics"),
-    "environment.uv": CheckRoute("uv недоступен", "Diagnostics"),
-    "environment.glab": CheckRoute("Версия glab устарела", "Diagnostics"),
-    "environment.dev_env": CheckRoute(
-        "Окружение .harness/.venv не совпадает с uv.lock", "Diagnostics"
-    ),
-    "environment.qa_executables": CheckRoute(
-        "Исполняемые файлы QA-команд не найдены", "Diagnostics"
-    ),
-    "environment.c_linker": CheckRoute("Нет C-компоновщика cc", "Diagnostics"),
-    "environment.runtime_socket_path": CheckRoute(
-        "Путь сокета runtime слишком длинный", "Diagnostics"
-    ),
-    "environment.output_encoding": CheckRoute(
-        "Кодировка вывода не UTF-8", "Diagnostics"
-    ),
-    "environment.git_config": CheckRoute(
-        ".git/config закрыт на запись", "Diagnostics"
-    ),
-    "environment.codex_sandbox": CheckRoute(
-        "Песочница Codex настроена неверно", "Diagnostics"
-    ),
-    "environment.claude_sandbox": CheckRoute(
-        "Песочница Claude настроена неверно", "Diagnostics"
-    ),
-    "environment.codex_uv_cache": CheckRoute(
-        "Кэш uv недоступен в песочнице Codex", "Diagnostics"
-    ),
-    "environment.claude_uv_cache": CheckRoute(
-        "Кэш uv недоступен в песочнице Claude", "Diagnostics"
-    ),
-    "environment.long_paths": CheckRoute(
-        "Длинные пути Windows выключены", "Diagnostics"
-    ),
-    "environment.path_length": CheckRoute(
-        "Путь к проекту слишком длинный", "Diagnostics"
-    ),
-    "environment.pytest_temp": CheckRoute(
-        "Временный каталог pytest недоступен", "Diagnostics"
-    ),
-    "environment.symlinks": CheckRoute(
-        "Символические ссылки недоступны", "Diagnostics"
-    ),
-    "environment.hook_bash": CheckRoute("Bash для hooks не найден", "Diagnostics"),
-    # The advisory warn of the second runtime survives `harness update`, so the route points to the
-    # check details in Diagnostics instead of Update Harness.
-    "hooks.policy": CheckRoute(
-        "Политика hooks проекта требует внимания", "Diagnostics"
-    ),
-    "hooks.test_author": CheckRoute("Тест-автор недоступен", "Diagnostics"),
-    "hooks.test_author_config": CheckRoute("Нет блока test_author", "Diagnostics"),
-    "hooks.test_author_root": CheckRoute("Корень проекта не совпадает с Git", "Diagnostics"),
-    "hooks.test_author_trust": CheckRoute("Проект не доверен для тест-автора", "Diagnostics"),
-    "hooks.test_author_guard": CheckRoute("Guard тест-автора недоступен", "Diagnostics"),
-    "hooks.test_author_runner": CheckRoute("Runner тест-автора недоступен", "Diagnostics"),
-    "hooks.test_author_probe": CheckRoute("Изоляция runner недоступна", "Diagnostics"),
-    "files.sandboxes": CheckRoute("Каталог .sandboxes настроен неверно", "Diagnostics"),
-    "directories.harness": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.sandboxes": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.cache": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.logs": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.scratch": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.pr_body": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.runs": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.reports": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
-    "directories.worktrees": CheckRoute("Каталог Harness недоступен", "Diagnostics"),
+# Every health check -> the menu section that deals with it; its title is
+# `check_rationale.TITLES`. Home's "Requires attention", Diagnostics and Open project use it for
+# jumps like `Update Harness 2 →`.
+CHECK_SECTIONS: dict[str, str] = {
+    "files.skill_snapshot": "Update Harness",
+    "files.skill_registry": "Update Harness",
+    "files.agents_md": "Update Harness",
+    "files.discovery_links": "Update Harness",
+    "files.overlay_locks": "Update Harness",
+    "files.lock": "Open project",
+    "files.seed_baseline": "Update Harness",
+    "files.project_json": "Configuration",
+    "files.integrations": "Configuration",
+    "files.verification_routing": "Configuration",
+    "tracker.project": "Configuration",
+    "tracker.auth": "Configuration",
+    "tracker.reachability": "Configuration",
+    "tracker.permissions": "Configuration",
+    "tracker.labels": "Configuration",
+    "tracker.git_base": "Configuration",
+    "files.orchestration_config": "Orchestration",
+    "directories.orchestration_state": "Orchestration",
+    "orchestration.runtime": "Orchestration",
+    "orchestration.ledger_summary": "Orchestration",
+    "orchestration.unfinished_batches": "Orchestration",
+    "orchestration.blocked_batches": "Orchestration",
+    "orchestration.stale_dispatches": "Orchestration",
+    "orchestration.orphaned_worktrees": "Orchestration",
+    "orchestration.disposable_data": "Orchestration",
+    "orchestration.adapters": "Orchestration",
+    "orchestration.worker_binaries": "Orchestration",
+    "orchestration.rebaser_route": "Orchestration",
+    "repo_map.tier": "Repo Map",
+    "memory.index": "Repo Map",
+    "memory.model": "Repo Map",
+    "environment.os": "Diagnostics",
+    "environment.git": "Diagnostics",
+    "environment.git_identity": "Diagnostics",
+    "environment.gitattributes": "Diagnostics",
+    "environment.line_endings": "Diagnostics",
+    "environment.python": "Diagnostics",
+    "environment.uv": "Diagnostics",
+    "environment.glab": "Diagnostics",
+    "environment.dev_env": "Diagnostics",
+    "environment.qa_executables": "Diagnostics",
+    "environment.c_linker": "Diagnostics",
+    "environment.runtime_socket_path": "Diagnostics",
+    "environment.output_encoding": "Diagnostics",
+    "environment.git_config": "Diagnostics",
+    "environment.codex_sandbox": "Diagnostics",
+    "environment.claude_sandbox": "Diagnostics",
+    "environment.codex_uv_cache": "Diagnostics",
+    "environment.claude_uv_cache": "Diagnostics",
+    "environment.long_paths": "Diagnostics",
+    "environment.path_length": "Diagnostics",
+    "environment.pytest_temp": "Diagnostics",
+    "environment.symlinks": "Diagnostics",
+    "environment.hook_bash": "Diagnostics",
+    "hooks.policy": "Diagnostics",
+    "hooks.test_author": "Diagnostics",
+    "hooks.test_author_config": "Diagnostics",
+    "hooks.test_author_root": "Diagnostics",
+    "hooks.test_author_trust": "Diagnostics",
+    "hooks.test_author_guard": "Diagnostics",
+    "hooks.test_author_runner": "Diagnostics",
+    "hooks.test_author_probe": "Diagnostics",
+    "files.sandboxes": "Diagnostics",
+    "directories.harness": "Diagnostics",
+    "directories.sandboxes": "Diagnostics",
+    "directories.cache": "Diagnostics",
+    "directories.logs": "Diagnostics",
+    "directories.scratch": "Diagnostics",
+    "directories.pr_body": "Diagnostics",
+    "directories.runs": "Diagnostics",
+    "directories.reports": "Diagnostics",
+    "directories.worktrees": "Diagnostics",
 }
 
 
-def check_route(check_id: str) -> CheckRoute:
-    """The route of `check_id`; a check outside the table keeps its id and opens Diagnostics."""
-    return CHECK_ROUTES.get(check_id) or CheckRoute(check_id, "Diagnostics")
+def check_route(check_id: str, language: str = "ru") -> CheckRoute:
+    """The route of `check_id`: its readable title in `language`, the same one Diagnostics and the
+    web console show, and its menu section; a check outside the table keeps its id and opens
+    Diagnostics."""
+    return CheckRoute(
+        check_rationale.check_title(check_id, language),
+        CHECK_SECTIONS.get(check_id, "Diagnostics"),
+    )
 
 
 class ShellSidebar(Vertical):

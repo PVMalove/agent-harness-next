@@ -384,6 +384,13 @@ TITLES: dict[str, tuple[str, str]] = {
 }
 
 
+def check_title(check_id: str, language: str = "ru") -> str:
+    """The readable title of `check_id` in `language`, the one Home, Diagnostics and the web
+    console show; a check outside the table keeps its id."""
+    ru, en = TITLES.get(check_id, (check_id, check_id))
+    return en if language == "en" else ru
+
+
 def titles() -> dict[str, dict[str, str]]:
     """The check titles as the SPA reads them: id -> {\"ru\": ..., \"en\": ...}."""
     return {check_id: {"ru": ru, "en": en} for check_id, (ru, en) in TITLES.items()}

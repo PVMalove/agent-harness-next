@@ -13,7 +13,7 @@ from ..client import ConsoleClientError, ScreenClient
 from ..shell import SHELL_CSS, ConsoleShell, Fold, SectionCard
 from .commands import call_from_worker
 
-READING = "Читаю справку…"
+READING = icons.loading("Читаю справку…")
 
 
 def guide_parts(
@@ -72,7 +72,7 @@ class HelpScreen(ConsoleShell):
             with SectionCard(title="Содержание", id="help-toc-card"):
                 yield ListView(id="help-toc")
             with VerticalScroll(id="help-scroll"):
-                yield Markdown(i18n.tr(language, READING), id="help-text")
+                yield Markdown(icons.tr(language, READING), id="help-text")
 
     def on_mount(self) -> None:
         self._update_source()

@@ -130,7 +130,7 @@ class CoordinatorCommandFormScreen(CommandForm):
 
 
 SERVER_UNAVAILABLE = "Сервер консоли не отдал данные оркестрации"
-LOADING = "Загрузка данных оркестрации…"
+LOADING = icons.loading("Загрузка данных оркестрации…")
 
 
 def _analytics_table(rows: Sequence[tuple[str, str]]) -> Table:
@@ -356,7 +356,7 @@ class OrchestrationScreen(ConsoleShell, CommandMenuScreen):
         with SectionCard(title="Состояние и статистика", id="pipeline-stats-card"):
             yield panel
         lock = Static(
-            "Загрузка…"
+            icons.loading("Загрузка…")
             if self._first_lock.lock_error == LOADING
             else lock_panel(
                 *ledger_lock.current_lock_view(

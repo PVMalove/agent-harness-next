@@ -640,7 +640,6 @@ def test_standalone_run_reports_a_missing_policy_file(repo: Path) -> None:
 
 
 def test_console_route_of_the_policy_warn_does_not_promise_that_update_fixes_it() -> None:
-    from harness.console.kernel import i18n
     from harness.console.tui.shell import check_route
 
     route = check_route("hooks.policy")
@@ -650,7 +649,7 @@ def test_console_route_of_the_policy_warn_does_not_promise_that_update_fixes_it(
     assert route.section == "Diagnostics"
     assert "неверно" not in route.title
     assert route.title != check_route("environment.hook_bash").title
-    assert i18n.tr("en", route.title) != route.title
+    assert check_route("hooks.policy", "en").title != route.title
 
 
 ENVELOPE = ".claude/hooks/hook_response.py"

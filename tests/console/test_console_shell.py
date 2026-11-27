@@ -139,17 +139,18 @@ def test_a_section_title_keeps_its_case_and_note() -> None:
 
 
 def test_every_health_check_has_a_readable_title_and_a_menu_section() -> None:
-    from harness.console.kernel import i18n
-    from harness.console.tui.shell import CHECK_ROUTES, check_route
+    from harness.console.kernel.check_rationale import TITLES
+    from harness.console.tui.shell import CHECK_SECTIONS, check_route
     from harness.health.registry import REGISTRY
 
     ids = [check_id for check_id, _check in REGISTRY]
-    assert set(ids) == set(CHECK_ROUTES)
+    assert set(ids) == set(CHECK_SECTIONS)
     for check_id in ids:
         route = check_route(check_id)
         assert route.section in SECTIONS and route.section != "Home", check_id
-        assert route.title != check_id
-        assert i18n.tr("en", route.title) != route.title, route.title
+        # One title source with Diagnostics and the web console.
+        assert route.title == TITLES[check_id][0] != check_id
+        assert check_route(check_id, "en").title == TITLES[check_id][1] != route.title
     assert check_route("files.skill_snapshot").section == "Update Harness"
     assert check_route("files.integrations").section == "Configuration"
     unknown = check_route("net.something")

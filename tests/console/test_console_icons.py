@@ -91,3 +91,20 @@ def test_tui_translation_maps_emoji_strings_through_kernel_i18n() -> None:
         )
         == "Warning: observation unavailable; worker outcome unknown. No second worker is started."
     )
+
+
+def test_every_loading_line_uses_the_one_running_icon() -> None:
+    from harness.console.tui import icons
+
+    assert icons.LOADING == icons.STATUS_KIND_ICONS["running"]
+    assert icons.loading("Загрузка…") == f"{icons.LOADING} Загрузка…"
+
+
+def test_a_line_after_a_status_icon_keeps_its_translation() -> None:
+    from harness.console.tui import icons
+
+    board = icons.tr_text("en", icons.loading("Читаю доску…"))
+    assert icons.tr("en", icons.loading("Загрузка…")) == f"{icons.LOADING} Loading…"
+    assert board == f"{icons.LOADING} Reading the board…"
+    # A text the table knows whole is still translated whole.
+    assert icons.tr("en", "Загрузка…") == "Loading…"

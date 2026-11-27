@@ -743,9 +743,9 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
                 ) + self._facts_error
             else:
                 line = (
-                    f"{icons.STATUS_ICONS['skipped']} Состояние харнесса загружается…"
+                    icons.loading("Состояние харнесса загружается…")
                     if ru
-                    else f"{icons.STATUS_ICONS['skipped']} Loading the Harness state…"
+                    else icons.loading("Loading the Harness state…")
                 )
             self.query_one("#harness-state", Static).update(
                 Text(line, style=brand.PALETTE["error" if self._facts_error else "muted"])
@@ -773,7 +773,7 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             )
             text.append(self._t(value), style="bold")
         drift_labels = {
-            "loading": f"{icons.STATUS_ICONS['skipped']} дрейф: проверяется…",
+            "loading": icons.loading("дрейф: проверяется…"),
             "clean": f"{icons.STATUS_ICONS['ok']} дрейфа нет",
             "drift": f"{icons.STATUS_ICONS['warn']} дрейф есть",
             "missing": f"{icons.STATUS_ICONS['skipped']} дрейф: нет lock",
@@ -871,9 +871,9 @@ class HarnessScreen(ConsoleShell, CommandMenuScreen):
             ) + self._maintenance_error
         elif view is None:
             text = (
-                "Статистика считается…"
+                icons.loading("Статистика считается…")
                 if language == "ru"
-                else "Calculating statistics…"
+                else icons.loading("Calculating statistics…")
             )
         else:
             # Full paths and skip reasons stay in the confirmation and tooltip.

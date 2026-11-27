@@ -149,7 +149,7 @@ class PublishScreen(ConsoleShell):
         self._epoch += 1
         epoch = self._epoch
         self._set_busy(True)
-        self._set_title("Читаю ledger…")
+        self._set_title(icons.loading("Читаю ledger…"))
         client = self._client
 
         def work() -> None:
