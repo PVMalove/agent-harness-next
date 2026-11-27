@@ -833,7 +833,9 @@ class WorkerObservationScreen(ConsoleShell):
     WorkerObservationScreen TabPane { padding: 0; }
     WorkerObservationScreen ContentSwitcher { height: 1fr; }
     WorkerObservationScreen Tabs { padding: 0 2; }
-    WorkerObservationScreen #worker-output, WorkerObservationScreen #worker-events { height: 1fr; border: none; margin: 0; padding: 0 2; }
+    /* 100%, not the default 1fr: a vertical layout takes the filter's side margins off an fr width,
+       so the events log stood 4 cells short of the pane and its scrollbar off the edge. */
+    WorkerObservationScreen #worker-output, WorkerObservationScreen #worker-events { width: 100%; height: 1fr; border: none; margin: 0; padding: 0 2; }
     WorkerObservationScreen #worker-filter { width: 30; height: 1; margin: 0 2; }
     WorkerObservationScreen #worker-access-scroll, WorkerObservationScreen #worker-execution-scroll { height: 1fr; padding: 0 2; }
     WorkerObservationScreen #worker-timeline { height: 1fr; border: none; margin: 0; padding: 0 2; }
@@ -922,7 +924,10 @@ class WorkerObservationScreen(ConsoleShell):
                 wrap_value(label, 18) + "\n\n", style=brand.PALETTE["foreground"]
             )
             return card.append_text(status_caption(session_status("unknown"), language))
-        room = self.query_one("#worker-picker", OptionList).content_size.width - 2
+        # The text room of an option: the list less the scrollbar it gets once the cards fill it
+        # (the cards are drawn before it shows) and the option's side padding.
+        picker = self.query_one("#worker-picker", OptionList)
+        room = picker.content_size.width - picker.styles.scrollbar_size_vertical - 2
         outcome = stage.report.outcome if stage.report is not None else ""
         caption = status_caption(session_status(stage.state, outcome), language).plain
         return session_card(
